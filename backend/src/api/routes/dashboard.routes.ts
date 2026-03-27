@@ -12,6 +12,7 @@ import { env } from '../../config/env';
 import { wrapAsync } from '../../utils/async-route-wrapper';
 import { getProductPerformance } from '../../services/product-performance.engine';
 import { cacheService } from '../../services/cache.service';
+import { buildOperationsTruthBundle } from '../../services/operations-truth.service';
 
 const router = Router();
 const DASHBOARD_STATS_CACHE_TTL = Number(process.env.DASHBOARD_STATS_CACHE_TTL_SECONDS) || 50;
@@ -387,6 +388,7 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
     const [
       productCounts,
       listingsByMp,
+      listingTruthRows,
       ordersByStatus,
       pendingPurchasesCount,
       salesDeliveredCount,
@@ -398,8 +400,29 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       }),
       prisma.marketplaceListing.groupBy({
         by: ['marketplace'],
-        where: { ...whereUser, status: 'active' },
+        where: {
+          ...whereUser,
+          status: 'active',
+          product: {
+            status: 'PUBLISHED',
+            targetCountry: { not: null },
+            aliexpressSku: { not: null },
+            shippingCost: { not: null },
+            totalCost: { not: null },
+          },
+        },
         _count: { id: true },
+      }),
+      prisma.marketplaceListing.findMany({
+        where: whereUser,
+        select: {
+          status: true,
+          product: {
+            select: {
+              status: true,
+            },
+          },
+        },
       }),
       prisma.order.groupBy({
         by: ['status'],
@@ -426,8 +449,18 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       total: productCounts.reduce((s, p) => s + p._count.id, 0),
       pending: productCounts.find(p => p.status === 'PENDING')?._count.id ?? 0,
       approved: productCounts.find(p => p.status === 'APPROVED')?._count.id ?? 0,
-      published: productCounts.find(p => p.status === 'PUBLISHED')?._count.id ?? 0,
+      legacyUnverified: productCounts.find(p => p.status === 'LEGACY_UNVERIFIED')?._count.id ?? 0,
+      validatedReady: productCounts.find(p => p.status === 'VALIDATED_READY')?._count.id ?? 0,
+      published: 0,
     };
+
+    const { getListingTruthBreakdown } = await import('../../services/operational-truth.service');
+    const listingTruth = getListingTruthBreakdown(
+      listingTruthRows.map((row) => ({
+        status: row.status,
+        productStatus: row.product?.status,
+      }))
+    );
 
     // Sum all groupBy rows per normalized marketplace (handles casing variants: ebay, EBAY, etc.)
     const listingsByMarketplaceFromDb = {
@@ -460,18 +493,19 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       }
     }
 
-    // Show real publications: use max(DB, API) so we never show 0 when either source has listings (e.g. DB synced later or API has count)
+    // Canonical active listings truth: prefer confirmed marketplace counts when available, otherwise use active listing rows.
     const listingsByMarketplace = {
-      ebay: Math.max(listingsByMarketplaceFromDb.ebay, ebayActiveCount ?? 0),
-      mercadolibre: Math.max(listingsByMarketplaceFromDb.mercadolibre, mercadolibreActiveCount ?? 0),
+      ebay: ebayActiveCount ?? listingsByMarketplaceFromDb.ebay,
+      mercadolibre: mercadolibreActiveCount ?? listingsByMarketplaceFromDb.mercadolibre,
       amazon: listingsByMarketplaceFromDb.amazon,
     };
 
     const listingsTotal =
       listingsByMarketplace.ebay + listingsByMarketplace.mercadolibre + listingsByMarketplace.amazon;
+    products.published = listingsTotal;
 
     const listingsSource =
-      ebayActiveCount !== null || mercadolibreActiveCount !== null ? 'api' : 'database';
+      ebayActiveCount !== null || mercadolibreActiveCount !== null ? 'marketplace_confirmed' : 'database';
 
     const ordersByStatusMap = {
       CREATED: ordersByStatus.find(o => o.status === 'CREATED')?._count.id ?? 0,
@@ -488,6 +522,7 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       listingsTotal,
       listingsSource,
       lastSyncAt: new Date().toISOString(),
+      listingTruth,
       ebayActiveCount: ebayActiveCount ?? undefined,
       mercadolibreActiveCount: mercadolibreActiveCount ?? undefined,
       ordersByStatus: ordersByStatusMap,
@@ -499,6 +534,30 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
     next(error);
   }
 });
+
+// GET /api/dashboard/operations-truth - Canonical frontend-facing operations truth
+router.get('/operations-truth', wrapAsync(async (req: Request, res: Response) => {
+  const userRole = req.user?.role?.toUpperCase();
+  const isAdmin = userRole === 'ADMIN';
+  const userId = isAdmin ? undefined : req.user?.userId;
+  const environment = environmentSchema.parse(req.query.environment);
+  const ids = String(req.query.ids || '')
+    .split(',')
+    .map((value) => Number.parseInt(value.trim(), 10))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .slice(0, 50);
+  const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit || '12'), 10) || 12, 50));
+
+  const truth = await buildOperationsTruthBundle({
+    userId,
+    productIds: ids.length > 0 ? ids : undefined,
+    limit,
+    environment,
+  });
+
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(truth);
+}, { route: '/api/dashboard/operations-truth', serviceName: 'dashboard' }));
 
 // GET /api/dashboard/autopilot-metrics - Active listings, daily sales, profit today/month, winning products count
 router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
@@ -541,7 +600,19 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
     const completedSaleStatusFilter = { status: { in: ['DELIVERED', 'COMPLETED'] } };
 
     const [activeListings, salesToday, salesMonth, productsWithSales] = await Promise.all([
-      prisma.marketplaceListing.count({ where: { ...whereUser, status: 'active' } }),
+      prisma.marketplaceListing.count({
+        where: {
+          ...whereUser,
+          status: 'active',
+          product: {
+            status: 'PUBLISHED',
+            targetCountry: { not: null },
+            aliexpressSku: { not: null },
+            shippingCost: { not: null },
+            totalCost: { not: null },
+          },
+        },
+      }),
       prisma.sale.count({
         where: {
           ...whereUser,

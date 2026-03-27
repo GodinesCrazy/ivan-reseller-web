@@ -7,6 +7,13 @@ import { orderFulfillmentService } from '../../services/order-fulfillment.servic
 import { MercadoLibreService } from '../../services/mercadolibre.service';
 import { CredentialsManager, clearCredentialsCache } from '../../services/credentials-manager.service';
 import { decrypt } from '../../utils/encryption';
+import { getWebhookStatusWithProof, getWebhookStatus } from '../../services/webhook-readiness.service';
+import { recordWebhookEventProof } from '../../services/webhook-event-proof.service';
+import {
+  buildEbayChallengeResponse,
+  resolveEbayWebhookEndpoint,
+  resolveEbayWebhookVerificationToken,
+} from '../../services/ebay-webhook.service';
 
 const router = Router();
 
@@ -15,15 +22,43 @@ const router = Router();
  * Returns whether webhook secrets are configured (for dashboard/circle checklist).
  * Does not expose secret values.
  */
-router.get('/status', (_req: Request, res: Response) => {
-  const ebaySecret = process.env.WEBHOOK_SECRET_EBAY?.trim();
-  const mlSecret = process.env.WEBHOOK_SECRET_MERCADOLIBRE?.trim();
-  const amazonSecret = process.env.WEBHOOK_SECRET_AMAZON?.trim();
-  res.json({
-    ebay: { configured: !!ebaySecret },
-    mercadolibre: { configured: !!mlSecret },
-    amazon: { configured: !!amazonSecret },
+router.get('/status', async (_req: Request, res: Response) => {
+  const status = await getWebhookStatusWithProof().catch(() => getWebhookStatus());
+  res.json(status);
+});
+
+router.get('/ebay', async (req: Request, res: Response) => {
+  const challengeCode = String(req.query.challenge_code || req.query.challengeCode || '').trim();
+  if (!challengeCode) {
+    return res.status(400).json({
+      success: false,
+      error: 'challenge_code missing',
+      message: 'eBay destination validation requires challenge_code in the query string.',
+    });
+  }
+
+  const verificationToken = resolveEbayWebhookVerificationToken();
+  const endpoint = resolveEbayWebhookEndpoint();
+  if (!verificationToken || !endpoint) {
+    logger.warn('[WEBHOOK_EBAY] Challenge requested but webhook configuration is incomplete', {
+      hasVerificationToken: !!verificationToken,
+      endpoint,
+    });
+    return res.status(503).json({
+      success: false,
+      error: 'ebay_webhook_not_configured',
+      hasVerificationToken: !!verificationToken,
+      endpoint,
+    });
+  }
+
+  const challengeResponse = buildEbayChallengeResponse({
+    challengeCode,
+    verificationToken,
+    endpoint,
   });
+
+  return res.status(200).json({ challengeResponse });
 });
 
 export interface MercadoLibreCredentialResult {
@@ -284,6 +319,12 @@ router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), as
     } : null;
 
     if (!listingId) return res.status(400).json({ success: false, error: 'listingId missing' });
+    await recordWebhookEventProof({
+      marketplace: 'mercadolibre',
+      eventType: String(body?.topic || body?.resource || 'mercadolibre_event'),
+      orderReference: orderId || null,
+      verified: true,
+    });
     await recordSaleFromWebhook(
       { marketplace: 'mercadolibre', listingId, amount, orderId: orderId || undefined, buyer, buyerEmail, shippingAddress },
       correlationId
@@ -349,6 +390,12 @@ router.post('/ebay', createWebhookSignatureValidator('ebay'), async (req: Reques
     const buyerEmail = body?.buyer?.email || body?.transaction?.buyer?.email || null;
 
     if (!listingId) return res.status(400).json({ success: false, error: 'listingId missing' });
+    await recordWebhookEventProof({
+      marketplace: 'ebay',
+      eventType: String(body?.notificationType || body?.eventType || 'ebay_event'),
+      orderReference: orderId || null,
+      verified: true,
+    });
     const result = await recordSaleFromWebhook(
       { marketplace: 'ebay', listingId, amount, orderId: orderId || undefined, buyer, buyerEmail, shippingAddress },
       correlationId

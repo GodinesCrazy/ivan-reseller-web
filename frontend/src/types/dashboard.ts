@@ -11,7 +11,14 @@ export const DEFAULT_ORDERS_BY_STATUS = {
 } as const;
 
 export interface InventorySummary {
-  products: { total: number; pending: number; approved: number; published: number };
+  products: {
+    total: number;
+    pending: number;
+    approved: number;
+    published: number;
+    validatedReady?: number;
+    legacyUnverified?: number;
+  };
   listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
   ordersByStatus?: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
   pendingPurchasesCount?: number;

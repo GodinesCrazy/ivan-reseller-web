@@ -42,6 +42,8 @@ Eso lee `APIS2.txt` y `rail.txt` (en la raíz del repo), extrae todas las claves
 | `STRIPE_SECRET_KEY` | APIS2: clave `sk_test_...` |
 | `ALIEXPRESS_DROPSHIPPING_APP_KEY` | APIS2: Drop Shipping → AppKey (522578) |
 | `ALIEXPRESS_DROPSHIPPING_APP_SECRET` | APIS2: Drop Shipping → App Secret |
+| `ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN` | **Obligatorio** para llamadas API dropshipping (OAuth). Sin esto el backend no puede “conectar” aunque existan KEY/SECRET. Alias: `ALIEXPRESS_DROPSHIPPING_TOKEN` |
+| `ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN` | Opcional; renovación. Alias: `ALIEXPRESS_DROPSHIPPING_REFRESH` |
 | `ALIEXPRESS_APP_KEY` | APIS2: Affiliates API → AppKey (524880) |
 | `ALIEXPRESS_APP_SECRET` | APIS2: Affiliates API → App Secret |
 | `ALIEXPRESS_AFFILIATE_APP_KEY` / `ALIEXPRESS_AFFILIATE_APP_SECRET` | Igual que APP_KEY/APP_SECRET Affiliate |

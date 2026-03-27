@@ -330,13 +330,16 @@ export class AliExpressAutoPurchaseService {
                 });
               }
 
-              // If no in-stock SKU: leave selectedSkuId undefined so placeOrder is called without sku_id (API may accept default SKU).
-              // Only use productId as skuId when product has no SKU list at all.
-              if (!selectedSkuId && (!productInfo.skus || productInfo.skus.length === 0)) {
-                selectedSkuId = String(productId);
-                logger.warn('[ALIEXPRESS-AUTO-PURCHASE] No SKUs from getProductInfo; using productId as skuId fallback', {
+              if (!selectedSkuId) {
+                logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Supplier validation failed: no valid SKU available for purchase', {
                   productId,
+                  userId,
+                  hasSkus: Array.isArray(productInfo.skus) && productInfo.skus.length > 0,
                 });
+                return {
+                  success: false,
+                  error: 'Supplier SKU validation failed. Manual intervention required before purchase.',
+                };
               }
               
               // Seleccionar método de envío
@@ -369,63 +372,40 @@ export class AliExpressAutoPurchaseService {
                   });
                 } catch (placeOrderErr: any) {
                   const msg = placeOrderErr?.message || String(placeOrderErr);
-                  const retryWithoutSku =
+                  if (
                     selectedSkuId &&
-                    (msg.includes('SKU_NOT_EXIST') || msg.includes('PRODUCT_NOT_EXIST') || msg.includes('Invalid sku'));
-                  if (retryWithoutSku) {
-                    logger.warn('[ALIEXPRESS-AUTO-PURCHASE] placeOrder failed; retrying without skuId', {
+                    (msg.includes('SKU_NOT_EXIST') || msg.includes('PRODUCT_NOT_EXIST') || msg.includes('Invalid sku'))
+                  ) {
+                    logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Blocking purchase after stale supplier SKU failure', {
                       productId,
                       userId,
                       skuId: selectedSkuId,
                       error: msg,
                     });
-                    placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
-                      productId,
-                      skuId: undefined,
-                      quantity: request.quantity,
-                      shippingAddress: request.shippingAddress,
-                      shippingMethodId,
-                      buyerMessage: request.notes,
-                    });
-                  } else {
-                    throw placeOrderErr;
+                    throw new Error(`MANUAL_INTERVENTION_REQUIRED:${msg}`);
                   }
+                  throw placeOrderErr;
                 }
               } catch (placeOrderFinalErr: any) {
                 const errMsg = placeOrderFinalErr?.message || String(placeOrderFinalErr);
-                const tryAlternative =
-                  userId &&
-                  (errMsg.includes('SKU_NOT_EXIST') ||
-                    errMsg.includes('missing order_id') ||
-                    errMsg.includes('PRODUCT_NOT_EXIST'));
-                if (tryAlternative) {
-                  const { findAlternativeWithStock } = await import('./aliexpress-alternative-product.service');
-                  const alternative = await findAlternativeWithStock({
+                if (errMsg.includes('MANUAL_INTERVENTION_REQUIRED:')) {
+                  return {
+                    success: false,
+                    error: 'Supplier SKU is stale or invalid. Manual intervention required before retrying fulfillment.',
+                  };
+                }
+                if (errMsg.includes('SKU_NOT_EXIST') || errMsg.includes('missing order_id') || errMsg.includes('PRODUCT_NOT_EXIST')) {
+                  logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Blocking alternative supplier substitution during fulfillment', {
+                    productId,
                     userId,
-                    originalProductId: productId,
-                    originalTitle: productInfo.productTitle || '',
-                    maxPriceUsd: request.maxPrice,
-                    shipToCountry: request.shippingAddress.country || 'US',
+                    error: errMsg,
                   });
-                  if (alternative) {
-                    logger.info('[ALIEXPRESS-AUTO-PURCHASE] Using alternative product with stock', {
-                      originalProductId: productId,
-                      alternativeProductId: alternative.productId,
-                      alternativeSkuId: alternative.skuId,
-                    });
-                    placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
-                      productId: alternative.productId,
-                      skuId: alternative.skuId,
-                      quantity: request.quantity,
-                      shippingAddress: request.shippingAddress,
-                      shippingMethodId: undefined,
-                      buyerMessage: request.notes,
-                    });
-                    usedProductUrl = alternative.productUrl;
-                  } else {
-                    throw placeOrderFinalErr;
-                  }
-                } else {
+                  return {
+                    success: false,
+                    error: 'Supplier validation failed during fulfillment. Manual intervention required.',
+                  };
+                }
+                {
                   throw placeOrderFinalErr;
                 }
               }

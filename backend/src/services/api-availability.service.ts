@@ -18,7 +18,7 @@ import { normalizeAPIName, resolveToCanonical } from '../utils/api-name-resolver
 
 export type APIHealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
 
-interface APIStatus {
+export interface APIStatus {
   apiName: string;
   name: string;
   isConfigured: boolean;
@@ -492,21 +492,14 @@ export class APIAvailabilityService {
     environment: 'sandbox' | 'production',
     credentials: Record<string, string>
   ): Promise<{ success: boolean; error?: string; latency?: number }> {
-    // ✅ FIX STABILITY: Hard isolation - NO ejecutar checks activos si SAFE_AUTH_STATUS_MODE=true
     const { env } = await import('../config/env');
     const isProduction = process.env.NODE_ENV === 'production';
     const safeAuthStatusMode = env.SAFE_AUTH_STATUS_MODE ?? isProduction;
-    
     if (safeAuthStatusMode) {
-      logger.info('[performEbayHealthCheck] SAFE_AUTH_STATUS_MODE enabled - returning degraded status without active check', {
+      logger.info('[performEbayHealthCheck] SAFE_AUTH_STATUS_MODE enabled - using lightweight operational probe', {
         userId,
         environment,
       });
-      return {
-        success: false,
-        error: 'Health check disabled (SAFE_AUTH_STATUS_MODE)',
-        latency: 0,
-      };
     }
     
     const correlationId = `ebay-health-${Date.now()}`;
@@ -520,7 +513,7 @@ export class APIAvailabilityService {
     // ✅ FIX STABILITY: Circuit breaker con timeout estricto de 1500ms
     const breaker = circuitBreakerManager.getBreaker(`ebay-${environment}`, {
       failureThreshold: 3,
-      timeout: 1500, // ✅ FIX: Timeout estricto de 1500ms (antes 60000ms)
+      timeout: 5000,
     });
 
     try {
@@ -535,7 +528,7 @@ export class APIAvailabilityService {
       return await breaker.execute(async () => {
         const checkStartTime = Date.now();
         
-        // ✅ FIX SIGSEGV: Timeout estricto de 1500ms con Promise.race
+        // Use a bounded timeout so connector truth stays real without risking long hangs.
         const healthCheckPromise = (async () => {
           const { MarketplaceService } = await import('./marketplace.service');
           const marketplaceService = new MarketplaceService();
@@ -559,15 +552,15 @@ export class APIAvailabilityService {
           };
         })();
         
-        // ✅ FIX SIGSEGV: Timeout de 1500ms - si excede, retornar degraded
+        // Return degraded if the lightweight live probe exceeds the hard timeout.
         const timeoutPromise = new Promise<{ success: boolean; error?: string; latency?: number }>((resolve) => {
           setTimeout(() => {
             resolve({
               success: false,
-              error: 'Health check timeout (1500ms)',
-              latency: 1500
+              error: 'Health check timeout (5000ms)',
+              latency: 5000
             });
-          }, 1500);
+          }, 5000);
         });
         
         const result = await Promise.race([healthCheckPromise, timeoutPromise]);
@@ -670,6 +663,8 @@ export class APIAvailabilityService {
 
     try {
       const requiredFields = ['appId', 'devId', 'certId'];
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      const integrity = await CredentialsManager.getCredentialIntegrityReport(userId, 'ebay', environment);
       let credentials = await this.getUserCredentials(userId, 'ebay', environment);
       
       // ✅ FALLBACK: Si no hay credenciales en DB, usar ENV
@@ -755,8 +750,7 @@ export class APIAvailabilityService {
         missing: validation.missing,
       });
 
-      // ✅ FIX SIGSEGV: Level 2: Real health check (only if fields are valid and not recently checked)
-      // NO ejecutar health checks activos si SAFE_AUTH_STATUS_MODE está activo
+      // Level 2: bounded live health check with cache protection.
       let healthCheckResult: { success: boolean; error?: string } | null = null;
       const lastHealthCheck = await this.getCached(healthCheckKey);
       // 🚀 PERFORMANCE: Usar TTL dinámico según criticidad
@@ -766,12 +760,16 @@ export class APIAvailabilityService {
         !lastHealthCheck || 
         Date.now() - lastHealthCheck.lastChecked.getTime() >= healthCheckTTL;
       
-      // ✅ FIX SIGSEGV: Verificar SAFE_AUTH_STATUS_MODE antes de ejecutar health check activo
       const { env } = await import('../config/env');
       const safeAuthStatusMode = env.SAFE_AUTH_STATUS_MODE ?? true;
 
-      if (validation.valid && shouldPerformHealthCheck && !safeAuthStatusMode) {
-        // ✅ FIX SIGSEGV: Solo ejecutar health check si SAFE_AUTH_STATUS_MODE está desactivado
+      if (validation.valid && shouldPerformHealthCheck) {
+        if (safeAuthStatusMode) {
+          logger.info('[checkEbayAPI] SAFE_AUTH_STATUS_MODE enabled - running bounded live health check', {
+            userId,
+            environment,
+          });
+        }
         try {
           healthCheckResult = await this.performEbayHealthCheck(userId, environment, normalizedCreds);
           // Cache health check result
@@ -794,16 +792,6 @@ export class APIAvailabilityService {
         healthCheckResult = {
           success: lastHealthCheck.isAvailable,
           error: lastHealthCheck.error,
-        };
-      } else if (safeAuthStatusMode && validation.valid) {
-        // ✅ FIX SIGSEGV: En SAFE_AUTH_STATUS_MODE, usar status "degraded" sin hacer health check activo
-        logger.info('[checkEbayAPI] SAFE_AUTH_STATUS_MODE enabled - skipping active health check', {
-          userId,
-          environment
-        });
-        healthCheckResult = {
-          success: false, // Asumir degraded hasta que se haga check activo
-          error: 'Health check skipped (SAFE_AUTH_STATUS_MODE)'
         };
       }
 
@@ -861,6 +849,16 @@ export class APIAvailabilityService {
         const missingList = validation.missing.join(', ');
         status.error = `Missing credentials: ${missingList}`;
         status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else if (integrity.state === 'undecryptable') {
+        status.isAvailable = false;
+        status.status = 'degraded';
+        status.error = 'Credenciales eBay almacenadas no se pueden descifrar con la ENCRYPTION_KEY actual';
+        status.message = 'La fila eBay activa es ilegible con la clave local actual. Reautoriza eBay o alinea ENCRYPTION_KEY con el entorno que escribió esos datos.';
+      } else if (integrity.state === 'parse_failed') {
+        status.isAvailable = false;
+        status.status = 'degraded';
+        status.error = 'Credenciales eBay almacenadas corruptas o en formato no compatible';
+        status.message = 'La fila eBay activa no pudo parsearse. Reautoriza eBay y reemplaza la fila actual.';
       } else if (!tokenLike && !refreshToken) {
         // ✅ CORRECCIÓN: Si las credenciales básicas están correctas pero falta OAuth,
         // NO marcar como "unhealthy", sino como "pending_oauth" (degraded)
@@ -1064,7 +1062,76 @@ export class APIAvailabilityService {
         status.error = 'Falta token OAuth de MercadoLibre';
         status.message = 'Credenciales básicas guardadas. Completa la autorización OAuth para activar.';
       } else {
-        status.message = 'API configurada correctamente';
+        const { default: axios } = await import('axios');
+        const verifyAccessToken = async (token: string) => {
+          await axios.get('https://api.mercadolibre.com/users/me', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            timeout: 15000,
+          });
+        };
+
+        try {
+          if (!accessToken && refreshToken) {
+            throw new Error('missing_access_token');
+          }
+          await verifyAccessToken(String(accessToken));
+          status.isAvailable = true;
+          status.status = 'healthy';
+          status.message = 'API configurada correctamente y verificada con users/me';
+        } catch (accessError: any) {
+          const canRefresh =
+            !!String(refreshToken || '').trim() &&
+            !!String(credentials['clientId'] || '').trim() &&
+            !!String(credentials['clientSecret'] || '').trim();
+
+          if (!canRefresh) {
+            status.isAvailable = false;
+            status.status = 'degraded';
+            status.error =
+              accessError?.response?.data?.message ||
+              accessError?.response?.data?.error ||
+              accessError?.message ||
+              'invalid_access_token';
+            status.message = 'MercadoLibre tiene tokens pero el access token no es usable y no hay refresh suficiente para recuperarlo.';
+          } else {
+            try {
+              const { MercadoLibreService } = await import('./mercadolibre.service');
+              const { CredentialsManager, clearCredentialsCache } = await import('./credentials-manager.service');
+              const ml = new MercadoLibreService({
+                clientId: String(credentials['clientId']),
+                clientSecret: String(credentials['clientSecret']),
+                accessToken: String(accessToken || ''),
+                refreshToken: String(refreshToken || ''),
+                siteId: String(credentials['siteId'] || process.env.MERCADOLIBRE_SITE_ID || 'MLC'),
+              });
+              const refreshed = await ml.refreshAccessToken();
+              const updatedCreds = {
+                ...credentials,
+                accessToken: refreshed.accessToken,
+                refreshToken: String(refreshToken || ''),
+                siteId: String(credentials['siteId'] || process.env.MERCADOLIBRE_SITE_ID || 'MLC'),
+              };
+              await CredentialsManager.saveCredentials(userId, 'mercadolibre', updatedCreds, environment);
+              clearCredentialsCache(userId, 'mercadolibre', environment);
+              await verifyAccessToken(refreshed.accessToken);
+              status.isAvailable = true;
+              status.status = 'healthy';
+              status.error = undefined;
+              status.message = 'MercadoLibre access token se refresco, persistio y verifico correctamente.';
+            } catch (refreshError: any) {
+              status.isAvailable = false;
+              status.status = 'degraded';
+              status.error =
+                refreshError?.response?.data?.message ||
+                refreshError?.response?.data?.error ||
+                refreshError?.message ||
+                'mercadolibre_refresh_failed';
+              status.message = 'MercadoLibre tiene refresh token, pero la recuperacion automatica aun no deja un runtime usable.';
+            }
+          }
+        }
       }
 
       this.cache.set(cacheKey, status);

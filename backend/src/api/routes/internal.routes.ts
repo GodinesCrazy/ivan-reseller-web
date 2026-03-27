@@ -391,8 +391,17 @@ router.get('/dropshipping-credential-debug', validateInternalSecret, async (req:
       processEnvHas_ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN: !!(
         process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || ''
       ).trim(),
+      processEnvHas_ALIEXPRESS_DROPSHIPPING_TOKEN_alias: !!(
+        process.env.ALIEXPRESS_DROPSHIPPING_TOKEN || ''
+      ).trim(),
+      processEnvHas_ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN: !!(
+        process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN || ''
+      ).trim(),
+      processEnvHas_ALIEXPRESS_DROPSHIPPING_REFRESH_alias: !!(
+        process.env.ALIEXPRESS_DROPSHIPPING_REFRESH || ''
+      ).trim(),
       message:
-        'Si processEnvHas_* son false, las variables no están en el servicio backend de Railway. Si DB tiene fila sin token, hace falta deploy con merge + ACCESS_TOKEN en env.',
+        'Railway debe tener ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN (o alias ALIEXPRESS_DROPSHIPPING_TOKEN). Key/Secret sin token no bastan. REFRESH_TOKEN o ALIEXPRESS_DROPSHIPPING_REFRESH ayudan a renovar.',
     });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e?.message || String(e) });
@@ -1305,8 +1314,18 @@ router.get('/aliexpress-ds-credential-state', validateInternalSecret, async (req
     const creds: Record<string, any> = (entry?.credentials as any) || {};
     const appKey = String(creds.appKey || process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
     const appSecret = String(creds.appSecret || process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || '').trim();
-    const accessToken = String(creds.accessToken || process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || '').trim();
-    const refreshToken = String(creds.refreshToken || process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN || '').trim();
+    const accessToken = String(
+      creds.accessToken ||
+        process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN ||
+        process.env.ALIEXPRESS_DROPSHIPPING_TOKEN ||
+        ''
+    ).trim();
+    const refreshToken = String(
+      creds.refreshToken ||
+        process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN ||
+        process.env.ALIEXPRESS_DROPSHIPPING_REFRESH ||
+        ''
+    ).trim();
     return res.status(200).json({
       success: true,
       userId,
@@ -1337,8 +1356,18 @@ router.post('/aliexpress-ds-bootstrap', validateInternalSecret, async (req: Requ
     const environment = String(req.body?.environment || 'production') as 'production' | 'sandbox';
     const appKey = String(req.body?.appKey || process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
     const appSecret = String(req.body?.appSecret || process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || '').trim();
-    const accessToken = String(req.body?.accessToken || process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || '').trim();
-    const refreshToken = String(req.body?.refreshToken || process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN || '').trim();
+    const accessToken = String(
+      req.body?.accessToken ||
+        process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN ||
+        process.env.ALIEXPRESS_DROPSHIPPING_TOKEN ||
+        ''
+    ).trim();
+    const refreshToken = String(
+      req.body?.refreshToken ||
+        process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN ||
+        process.env.ALIEXPRESS_DROPSHIPPING_REFRESH ||
+        ''
+    ).trim();
     if (!appKey || !appSecret) {
       return res.status(400).json({ success: false, error: 'ALIEXPRESS_DROPSHIPPING_APP_KEY/APP_SECRET missing' });
     }

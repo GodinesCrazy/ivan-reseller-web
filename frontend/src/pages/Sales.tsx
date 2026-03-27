@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -39,6 +39,9 @@ import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 import SalesReadinessPanel from '@/components/SalesReadinessPanel';
+import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
+import type { OperationsTruthResponse } from '@/types/operations';
+import { fetchOperationsTruth } from '@/services/operationsTruth.api';
 
 interface Sale {
   id: string;
@@ -126,6 +129,7 @@ export default function Sales() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
 
   const fetchSalesData = useCallback(async () => {
     try {
@@ -135,6 +139,9 @@ export default function Sales() {
         api.get('/api/sales/stats', { params: { days: dateRange, environment } }),
         api.get('/api/sales/sync-status').catch(() => ({ data: {} })),
       ]);
+      fetchOperationsTruth({ limit: 20, environment })
+        .then((data) => setOperationsTruth(data))
+        .catch(() => setOperationsTruth(null));
       setSales(salesResponse.data?.sales || salesResponse.data || []);
       setStats(statsResponse.data || {});
       setLastSyncAt(syncResponse?.data?.lastSyncAt ?? null);
@@ -257,7 +264,13 @@ export default function Sales() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Ventas</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">Ventas de productos publicados en marketplaces</p>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Ventas registradas. La ganancia realizada requiere proof de fondos liberados (proof ladder) — ver{' '}
+            <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+              Control Center
+            </Link>
+            {' '}y Finance.
+          </p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             Datos reales desde API · Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}
             {lastSyncAt && (
@@ -281,13 +294,26 @@ export default function Sales() {
 
       <SalesReadinessPanel onSyncComplete={fetchSalesData} />
 
-      {/* Stats Cards */}
+      {/* Proof ladder first — verdad operativa */}
+      {operationsTruth && (
+        <div className="mb-4">
+          <PostSaleProofLadderPanel
+            summary={operationsTruth.summary.proofCounts}
+            title="Post-sale proof ladder"
+            subtitle="Sales activity is not promoted to released-funds or realized-profit truth until the backend proves those stages."
+          />
+        </div>
+      )}
+
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+        Las tarjetas inferiores son agregados del período — no sustituyen proof de fondos liberados ni ganancia realizada.
+      </p>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Ingresos totales ({periodLabel})</p>
+                <p className="text-sm text-gray-600">Ingresos totales (agregado, {periodLabel})</p>
                 <p className="text-2xl font-bold">{formatCurrencySimple(stats.totalRevenue, 'USD')}</p>
                 <p className={`text-xs flex items-center gap-1 mt-1 ${stats.revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   <TrendingUp className="w-3 h-3" />
@@ -302,7 +328,8 @@ export default function Sales() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Beneficio total ({periodLabel})</p>
+                <p className="text-sm text-gray-600">Margen neto (agregado, {periodLabel})</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">No es ganancia realizada hasta proof de fondos liberados en proof ladder.</p>
                 <p className="text-2xl font-bold text-green-600">{formatCurrencySimple(stats.totalProfit, 'USD')}</p>
                 <p className={`text-xs flex items-center gap-1 mt-1 ${stats.profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   <TrendingUp className="w-3 h-3" />
@@ -366,7 +393,7 @@ export default function Sales() {
                     <Tooltip />
                     <Legend />
                     <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2} name="Revenue" />
-                    <Line type="monotone" dataKey="profit" stroke="#10B981" strokeWidth={2} name="Profit" />
+                    <Line type="monotone" dataKey="profit" stroke="#10B981" strokeWidth={2} name="Profit (agregado)" />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -413,21 +440,12 @@ export default function Sales() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Performance Metrics</CardTitle>
+                <CardTitle>Proof-aware Metrics</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600">Conversion Rate</span>
-                    <span className="text-sm font-medium">78%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-green-600 h-2 rounded-full" style={{ width: '78%' }}></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600">Profit Margin</span>
+                    <span className="text-sm text-gray-600">Recorded net margin ratio</span>
                     <span className="text-sm font-medium">
                       {stats.totalRevenue > 0 ? ((stats.totalProfit / stats.totalRevenue) * 100).toFixed(1) : 0}%
                     </span>
@@ -441,7 +459,7 @@ export default function Sales() {
                 </div>
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Fulfillment</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Fulfillment progress</span>
                     <span className="text-sm font-medium">
                       {salesInPeriod.length > 0
                         ? `${Math.round((salesInPeriod.filter((s) => s.status === 'SHIPPED' || s.status === 'DELIVERED').length / salesInPeriod.length) * 100)}%`
@@ -459,6 +477,17 @@ export default function Sales() {
                     />
                   </div>
                 </div>
+                {operationsTruth && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 text-sm">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">Released funds proved</p>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">
+                      {operationsTruth.summary.proofCounts.releasedFundsObtained} products with payout proof.
+                    </p>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">
+                      {operationsTruth.summary.proofCounts.realizedProfitObtained} products with realized profit proof.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -552,7 +581,7 @@ export default function Sales() {
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Origen</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Automatización</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="Margen registrado — ganancia realizada requiere proof de payout">Profit (registrado)</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Workflow</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
@@ -740,9 +769,10 @@ export default function Sales() {
                   <p className="font-medium">{new Date(selectedSale.createdAt).toLocaleString()}</p>
                 </div>
               </div>
-              {/* Composición financiera */}
-              <div className="border rounded-lg p-4 bg-gray-50 space-y-2">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Composición financiera</h3>
+              {/* Composición financiera — margen registrado, no necesariamente realizado */}
+              <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900/40 space-y-2">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Composición financiera (registrada)</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Margen inferido del ledger — la ganancia realizada requiere proof de payout en Finance.</p>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Precio de venta</span>
                   <span className="font-medium">{formatCurrencySimple(selectedSale.salePrice, 'USD')}</span>
@@ -768,9 +798,10 @@ export default function Sales() {
                   <span className="font-medium">{formatCurrencySimple(selectedSale.grossProfit ?? selectedSale.salePrice - selectedSale.cost, 'USD')}</span>
                 </div>
                 <div className="flex justify-between text-sm font-semibold">
-                  <span className="text-gray-900">Ganancia neta</span>
-                  <span className="text-green-600">+{formatCurrencySimple(selectedSale.profit, 'USD')}</span>
+                  <span className="text-gray-700 dark:text-gray-300">Ganancia neta (registrada)</span>
+                  <span className="text-gray-800 dark:text-gray-200">+{formatCurrencySimple(selectedSale.profit, 'USD')}</span>
                 </div>
+                <p className="text-[11px] text-gray-500 pt-1">No equivale a realized profit sin proof de fondos liberados.</p>
               </div>
             </div>
             <div className="p-6 border-t flex gap-3 justify-end">

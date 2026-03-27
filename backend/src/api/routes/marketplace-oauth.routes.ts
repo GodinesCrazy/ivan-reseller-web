@@ -21,6 +21,15 @@ function getFrontendReturnBaseUrl(): string {
   ).replace(/\/$/, '');
 }
 
+function getRequestBaseUrl(req: Request): string {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const protocol = forwardedProto || req.protocol || 'http';
+  const host = forwardedHost || req.get('host') || '';
+  if (!host) return '';
+  return `${protocol}://${host}`.replace(/\/$/, '');
+}
+
 /**
  * Canonical eBay OAuth redirect URI.
  * Prefer BACKEND_URL (direct callback, no proxy) when set; else EBAY_REDIRECT_URI.
@@ -68,6 +77,7 @@ router.get('/authorize/ebay', async (req: Request, res: Response) => {
       'https://api.ebay.com/oauth/api_scope/sell.marketing',
       'https://api.ebay.com/oauth/api_scope/sell.account',
       'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
+      'https://api.ebay.com/oauth/api_scope/commerce.notification.subscription',
     ].filter((v, i, a) => a.indexOf(v) === i).join(' ');
 
     const userId = 1;
@@ -111,7 +121,10 @@ router.get('/oauth/start/ebay', authenticate, async (req: Request, res: Response
     }
     const env = (req.query.environment as string)?.toLowerCase();
     const environment = env === 'sandbox' ? 'sandbox' as const : 'production' as const;
-    const url = await marketplaceService.getEbayOAuthStartUrl(userId, environment);
+    const url = await marketplaceService.getEbayOAuthStartUrl(userId, environment, {
+      requestBaseUrl: getRequestBaseUrl(req),
+      frontendBaseUrl: getFrontendReturnBaseUrl(),
+    });
     logger.info('[OAuth Start] Redirecting to eBay', { userId, environment });
     return res.redirect(302, url);
   } catch (e: any) {
@@ -120,6 +133,34 @@ router.get('/oauth/start/ebay', authenticate, async (req: Request, res: Response
       success: false,
       error: e?.message || 'No se pudo iniciar OAuth de eBay',
       message: 'Verifica EBAY_APP_ID, EBAY_CERT_ID y EBAY_REDIRECT_URI en Settings o variables de entorno.'
+    });
+  }
+});
+
+/**
+ * GET /api/marketplace-oauth/oauth/start/mercadolibre
+ * Redirects to MercadoLibre OAuth page. Requires auth.
+ */
+router.get('/oauth/start/mercadolibre', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized', message: 'Debes estar autenticado' });
+    }
+    const env = (req.query.environment as string)?.toLowerCase();
+    const environment = env === 'sandbox' ? 'sandbox' as const : 'production' as const;
+    const url = await marketplaceService.getMercadoLibreOAuthStartUrl(userId, environment, {
+      requestBaseUrl: getRequestBaseUrl(req),
+      frontendBaseUrl: getFrontendReturnBaseUrl(),
+    });
+    logger.info('[OAuth Start] Redirecting to MercadoLibre', { userId, environment });
+    return res.redirect(302, url);
+  } catch (e: any) {
+    logger.error('[OAuth Start] MercadoLibre OAuth start failed', { error: e?.message });
+    return res.status(400).json({
+      success: false,
+      error: e?.message || 'No se pudo iniciar OAuth de MercadoLibre',
+      message: 'Verifica clientId, clientSecret y MERCADOLIBRE_REDIRECT_URI en Settings o variables de entorno.',
     });
   }
 });
@@ -392,11 +433,57 @@ async function handleMercadoLibreCallback(req: Request, res: Response, code: str
     clearCredentialsCache(userId, 'mercadolibre', environment);
     clearCredentialsCache(userId, 'mercadolibre', environment === 'sandbox' ? 'production' : 'sandbox');
 
+    const persistedCreds = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);
+    const persistedAccessToken = String(
+      persistedCreds?.credentials?.accessToken || persistedCreds?.credentials?.access_token || '',
+    ).trim();
+    const persistedRefreshToken = String(
+      persistedCreds?.credentials?.refreshToken || persistedCreds?.credentials?.refresh_token || '',
+    ).trim();
+    const persistedUserId = String(persistedCreds?.credentials?.userId || tokens.userId || '').trim();
+    const dbSaveConfirmed = !!persistedAccessToken && !!persistedRefreshToken;
+
+    if (!dbSaveConfirmed) {
+      logger.error('[ML Callback] OAuth DB persistence validation failed', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        hasPersistedAccessToken: !!persistedAccessToken,
+        hasPersistedRefreshToken: !!persistedRefreshToken,
+      });
+      throw new Error('MercadoLibre OAuth persistence validation failed: access/refresh token not persisted');
+    }
+
+    const persistedMl = new MercadoLibreService({
+      clientId,
+      clientSecret,
+      accessToken: persistedAccessToken,
+      refreshToken: persistedRefreshToken,
+      userId: persistedUserId || tokens.userId,
+      siteId,
+    });
+    const runtimeCheck = await persistedMl.testConnection();
+    if (!runtimeCheck.success) {
+      logger.error('[ML Callback] OAuth runtime verification failed after save', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        message: runtimeCheck.message,
+      });
+      throw new Error(`MercadoLibre OAuth runtime verification failed: ${runtimeCheck.message}`);
+    }
+
     const { apiAvailability } = await import('../../services/api-availability.service');
     await apiAvailability.clearAPICache(userId, 'mercadolibre').catch(() => {});
     await apiAvailability.checkMercadoLibreAPI(userId, environment).catch(() => {});
 
-    logger.info('[ML Callback] Credentials saved', { service: 'marketplace-oauth', userId, duration: Date.now() - startTime });
+    logger.info('[ML Callback] Credentials saved', {
+      service: 'marketplace-oauth',
+      userId,
+      duration: Date.now() - startTime,
+      dbSaveConfirmed,
+      runtimeUsable: true,
+    });
 
     const safeReturnOrigin = returnOrigin || '';
     const baseForRedirect = safeReturnOrigin || getFrontendReturnBaseUrl();
@@ -1313,6 +1400,29 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
       clearCredentialsCache(userId, 'ebay', environment);
       clearCredentialsCache(userId, 'ebay', environment === 'sandbox' ? 'production' : 'sandbox');
+
+      const persistedCreds = await marketplaceService.getCredentials(userId, 'ebay', environment);
+      const persistedToken = String(
+        (persistedCreds?.credentials?.token ||
+          persistedCreds?.credentials?.authToken ||
+          persistedCreds?.credentials?.accessToken ||
+          '') as string
+      ).trim();
+      const persistedRefreshToken = String(
+        (persistedCreds?.credentials?.refreshToken || '') as string
+      ).trim();
+
+      if (!persistedToken || !persistedRefreshToken) {
+        logger.error('[OAuth Callback] eBay OAuth persistence validation failed', {
+          service: 'marketplace-oauth',
+          userId,
+          environment,
+          hasPersistedToken: !!persistedToken,
+          hasPersistedRefreshToken: !!persistedRefreshToken,
+          credentialIntegrity: persistedCreds?.credentialIntegrity,
+        });
+        throw new Error('eBay OAuth persistence validation failed: token and refreshToken were not readable after save');
+      }
       
       // ✅ CORRECCIÓN: Limpiar cache del singleton para que /api/credentials/status y la UI reflejen el token
       const { apiAvailability } = await import('../../services/api-availability.service');
@@ -1737,4 +1847,3 @@ router.get('/aliexpress/oauth/debug', async (req: Request, res: Response) => {
 });
 
 export default router;
-

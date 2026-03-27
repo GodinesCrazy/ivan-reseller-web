@@ -7,6 +7,7 @@ import {
   selectPurchasableSku,
   selectPurchasableSkuSoft,
   computeProfitAfterFees,
+  resolveCanonicalMlChileFreightTruth,
 } from '../pre-publish-validator.service';
 import type { DropshippingProductInfo } from '../aliexpress-dropshipping-api.service';
 
@@ -145,6 +146,100 @@ describe('pre-publish-validator.service', () => {
       expect(breakdown.paymentFee).toBeCloseTo(2.9, 5);
       expect(totalCost).toBeGreaterThan(40 + 5);
       expect(netProfit).toBe(100 - totalCost);
+    });
+  });
+
+  describe('resolveCanonicalMlChileFreightTruth', () => {
+    it('accepts fresh and internally consistent persisted freight truth', () => {
+      const result = resolveCanonicalMlChileFreightTruth(
+        {
+          id: 32690,
+          aliexpressUrl: 'https://www.aliexpress.com/item/1005000000000000.html',
+          targetCountry: 'CL',
+          shippingCost: 2.99,
+          productData: JSON.stringify({
+            mlChileFreight: {
+              freightSummaryCode: 'freight_quote_found_for_cl',
+              targetCountry: 'CL',
+              selectedServiceName: 'CAINIAO_FULFILLMENT_STD',
+              selectedFreightAmount: 2.99,
+              selectedFreightCurrency: 'USD',
+              checkedAt: '2026-03-22T22:45:09.762Z',
+            },
+          }),
+        },
+        'CL',
+        new Date('2026-03-23T00:45:09.762Z')
+      );
+
+      expect(result).toMatchObject({
+        ok: true,
+        status: 'freight_truth_ready_for_publish',
+        truth: {
+          selectedServiceName: 'CAINIAO_FULFILLMENT_STD',
+          selectedFreightAmount: 2.99,
+          selectedFreightCurrency: 'USD',
+          shippingUsd: 2.99,
+        },
+      });
+    });
+
+    it('rejects stale persisted freight truth', () => {
+      const result = resolveCanonicalMlChileFreightTruth(
+        {
+          id: 32690,
+          aliexpressUrl: 'https://www.aliexpress.com/item/1005000000000000.html',
+          targetCountry: 'CL',
+          shippingCost: 2.99,
+          productData: JSON.stringify({
+            mlChileFreight: {
+              freightSummaryCode: 'freight_quote_found_for_cl',
+              targetCountry: 'CL',
+              selectedServiceName: 'CAINIAO_FULFILLMENT_STD',
+              selectedFreightAmount: 2.99,
+              selectedFreightCurrency: 'USD',
+              checkedAt: '2026-03-18T22:45:09.762Z',
+            },
+          }),
+        },
+        'CL',
+        new Date('2026-03-23T00:45:09.762Z')
+      );
+
+      expect(result).toMatchObject({
+        ok: false,
+        status: 'freight_truth_stale',
+      });
+      expect(result.reason).toContain('stale');
+    });
+
+    it('rejects inconsistent top-level shipping cost', () => {
+      const result = resolveCanonicalMlChileFreightTruth(
+        {
+          id: 32690,
+          aliexpressUrl: 'https://www.aliexpress.com/item/1005000000000000.html',
+          targetCountry: 'CL',
+          shippingCost: 3.5,
+          productData: {
+            mlChileFreight: {
+              freightSummaryCode: 'freight_quote_found_for_cl',
+              targetCountry: 'CL',
+              selectedServiceName: 'CAINIAO_FULFILLMENT_STD',
+              selectedFreightAmount: 2.99,
+              selectedFreightCurrency: 'USD',
+              checkedAt: '2026-03-22T22:45:09.762Z',
+            },
+          },
+        },
+        'CL',
+        new Date('2026-03-23T00:45:09.762Z')
+      );
+
+      expect(result).toMatchObject({
+        ok: false,
+        status: 'freight_truth_inconsistent',
+      });
+      expect(result.reason).toContain('does not match');
     });
   });
 });

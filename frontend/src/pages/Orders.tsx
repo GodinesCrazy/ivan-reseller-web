@@ -3,7 +3,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X, Download, ClipboardCopy, ShoppingCart } from 'lucide-react';
 import api from '@/services/api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
@@ -332,7 +332,13 @@ export default function Orders() {
             </button>
           </div>
         </div>
-        <p className="text-gray-600 dark:text-gray-400 mt-0.5">Órdenes de compra al proveedor y seguimiento de envíos. Las nuevas compras de eBay, Mercado Libre o Amazon se muestran aquí automáticamente (por webhook o sincronización periódica). Tras una venta, compra en AliExpress desde <span className="font-medium">Compras pendientes</span> y el estado se actualiza aquí.</p>
+        <p className="text-gray-600 dark:text-gray-400 mt-0.5">
+          Órdenes de compra al proveedor y seguimiento de envíos. Estado real desde backend — sin éxito simulado. Para proof ladder (compra en proveedor, fondos liberados), usa{' '}
+          <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+            Control Center
+          </Link>
+          {' '}y el detalle de cada orden.
+        </p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
           Solo se muestran órdenes reales (eBay, Mercado Libre, Amazon). Datos actualizados en cada carga.
           {lastSyncAt && (

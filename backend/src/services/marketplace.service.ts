@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { trace } from '../utils/boot-trace';
 trace('loading marketplace.service');
 
@@ -96,9 +97,11 @@ import { env } from '../config/env';
 import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
 import { toNumber } from '../utils/decimal.utils';
+import { isAliExpressVideoOrNonStillImageUrl } from '../utils/aliexpress-listing-still-image-url';
 import { getEffectiveShippingCost } from '../utils/shipping.utils';
 import { fastHttpClient } from '../config/http-client'; // ✅ PRODUCTION READY: Usar cliente HTTP configurado
 import { resolveDestination } from './destination.service';
+import { getMercadoLibreRedirectUri } from '../utils/oauth-redirect-uris';
 import {
   sanitizeTitleForEbay,
   sanitizeDescriptionForEbay,
@@ -122,6 +125,11 @@ export interface MarketplaceCredentials {
   scope?: CredentialScope;
   issues?: string[];
   warnings?: string[];
+  credentialIntegrity?: {
+    state: string;
+    reasonCode: string;
+    source: string;
+  };
 }
 
 export interface PublishProductRequest {
@@ -192,6 +200,13 @@ export class MarketplaceService {
       let resolvedScope: CredentialScope | null = null;
       const warnings: string[] = [];
       const issues: string[] = [];
+      let credentialIntegrity:
+        | {
+            state: string;
+            reasonCode: string;
+            source: string;
+          }
+        | undefined;
 
       for (const env of environmentsToTry) {
         const entry = await CredentialsManager.getCredentialEntry(
@@ -222,6 +237,18 @@ export class MarketplaceService {
 
       // ✅ PRODUCTION: Env fallback for eBay when no DB credentials (Railway / APIS2.txt)
       if ((!resolvedEnv || !resolvedCredentials) && marketplace === 'ebay') {
+        const integrity = await CredentialsManager.getCredentialIntegrityReport(
+          userId,
+          'ebay',
+          preferredEnvironment
+        );
+        if (integrity.state !== 'missing' && integrity.state !== 'valid') {
+          credentialIntegrity = {
+            state: integrity.state,
+            reasonCode: integrity.reasonCode,
+            source: integrity.source,
+          };
+        }
         const clientId = (process.env.EBAY_CLIENT_ID || process.env.EBAY_APP_ID || '').trim();
         const clientSecret = (process.env.EBAY_CLIENT_SECRET || process.env.EBAY_CERT_ID || '').trim();
         const redirectUri = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
@@ -239,7 +266,13 @@ export class MarketplaceService {
           };
           const envWarnings: string[] = redirectUri ? [] : ['EBAY_REDIRECT_URI not set; OAuth may require it'];
           const envIssues: string[] = [];
-          if (!tokenVal && !refreshVal) {
+          if (integrity.state === 'undecryptable') {
+            envIssues.push('Las credenciales eBay almacenadas no se pueden descifrar con la ENCRYPTION_KEY local actual. Reautoriza localmente o alinea ENCRYPTION_KEY con el entorno que escribió esos datos.');
+            envWarnings.push('Se usaron credenciales base desde variables de entorno porque la fila eBay almacenada es ilegible localmente.');
+          } else if (integrity.state === 'parse_failed') {
+            envIssues.push('Las credenciales eBay almacenadas están corruptas o en formato no compatible. Reautoriza eBay y reemplaza la fila actual.');
+            envWarnings.push('Se usaron credenciales base desde variables de entorno porque la fila eBay almacenada no pudo parsearse.');
+          } else if (!tokenVal && !refreshVal) {
             envIssues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings → eBay.');
           }
           return {
@@ -252,6 +285,7 @@ export class MarketplaceService {
             scope: 'user',
             warnings: envWarnings.length ? envWarnings : undefined,
             issues: envIssues.length ? envIssues : undefined,
+            credentialIntegrity,
           };
         }
       }
@@ -324,6 +358,18 @@ export class MarketplaceService {
       // Normalizar campos por marketplace usando CredentialsManager (centralizado)
       if (marketplace === 'ebay') {
         const { CredentialsManager } = await import('./credentials-manager.service');
+        const integrity = await CredentialsManager.getCredentialIntegrityReport(
+          userId,
+          'ebay',
+          resolvedEnv || preferredEnvironment
+        );
+        if (integrity.state !== 'missing' && integrity.state !== 'valid') {
+          credentialIntegrity = {
+            state: integrity.state,
+            reasonCode: integrity.reasonCode,
+            source: integrity.source,
+          };
+        }
         const normalizedCreds = CredentialsManager.normalizeCredential(
           'ebay',
           resolvedCredentials as any,
@@ -344,7 +390,13 @@ export class MarketplaceService {
         // ✅ CORRECCIÓN CICLO COMPLETO: Sin token OAuth, la publicación falla. Marcar como issue para que
         // el autopilot skipee publicación y notifique al usuario (en lugar de intentar y fallar en EbayService).
         if (!hasValidToken && !hasValidRefreshToken) {
-          if (hasBasicCredentials) {
+          if (integrity.state === 'undecryptable') {
+            issues.push('Las credenciales eBay almacenadas no se pueden descifrar con la ENCRYPTION_KEY local actual. Reautoriza localmente o alinea ENCRYPTION_KEY con el entorno que escribió esos datos.');
+            warnings.push('La fila eBay activa existe pero es ilegible con la clave local actual.');
+          } else if (integrity.state === 'parse_failed') {
+            issues.push('Las credenciales eBay almacenadas están corruptas o en formato no compatible. Reautoriza eBay y reemplaza la fila actual.');
+            warnings.push('La fila eBay activa no pudo parsearse correctamente.');
+          } else if (hasBasicCredentials) {
             // Credenciales básicas guardadas pero falta OAuth - es un ISSUE para bloquear publicación
             issues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings → eBay.');
             warnings.push('Credenciales básicas guardadas. Completa la autorización OAuth para poder publicar.');
@@ -402,6 +454,7 @@ export class MarketplaceService {
         scope: resolvedScope ?? 'user',
         issues: issues.length ? issues : undefined,
         warnings: warnings.length ? warnings : undefined,
+        credentialIntegrity,
       };
     } catch (error) {
       throw new AppError(`Failed to get marketplace credentials: ${error.message}`, 500);
@@ -450,19 +503,36 @@ export class MarketplaceService {
    * Build eBay OAuth start URL for redirect (production: https://auth.ebay.com/oauth2/authorize)
    * Used by GET /api/marketplace-oauth/oauth/start/ebay
    */
-  async getEbayOAuthStartUrl(userId: number, environment?: 'sandbox' | 'production'): Promise<string> {
+  async getEbayOAuthStartUrl(
+    userId: number,
+    environment?: 'sandbox' | 'production',
+    options?: {
+      requestBaseUrl?: string;
+      frontendBaseUrl?: string;
+    }
+  ): Promise<string> {
     const cred = await this.getCredentials(userId, 'ebay', environment);
     const appId = (cred?.credentials?.appId || process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
     const certId = (cred?.credentials?.certId || process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
     const runame = (process.env.EBAY_RUNAME || '').trim();
     const explicitRedirect = (cred?.credentials?.redirectUri || process.env.EBAY_REDIRECT_URI || '').trim();
-    const backendUrl = (process.env.BACKEND_URL || process.env.RAILWAY_STATIC_URL || '').replace(/\/$/, '');
+    const requestBaseUrl = (options?.requestBaseUrl || '').replace(/\/$/, '');
+    const backendUrl = (requestBaseUrl || process.env.BACKEND_URL || process.env.RAILWAY_STATIC_URL || '').replace(/\/$/, '');
     const canonicalBackend = backendUrl ? `${backendUrl}/api/marketplace-oauth/oauth/callback/ebay` : '';
-    const frontendBase = (process.env.FRONTEND_URL || process.env.WEB_BASE_URL || 'https://www.ivanreseller.com').replace(/\/$/, '');
+    const frontendBase = (options?.frontendBaseUrl || process.env.FRONTEND_URL || process.env.WEB_BASE_URL || 'https://www.ivanreseller.com').replace(/\/$/, '');
     const defaultRedirect = canonicalBackend || explicitRedirect || `${frontendBase}/api/marketplace-oauth/oauth/callback/ebay`;
     // eBay OAuth 2.0 requires exact full URL. Prefer full URL (e.g. .../api/marketplace-oauth/c) over RuName to avoid invalid_request.
     const isFullUrl = (s: string) => /^https?:\/\//i.test(s);
-    const redirectUri = (explicitRedirect && isFullUrl(explicitRedirect)) ? explicitRedirect : (runame || explicitRedirect || canonicalBackend || defaultRedirect);
+    const isLocalRequestBase =
+      requestBaseUrl.startsWith('http://localhost') ||
+      requestBaseUrl.startsWith('https://localhost') ||
+      requestBaseUrl.startsWith('http://127.0.0.1') ||
+      requestBaseUrl.startsWith('https://127.0.0.1');
+    const redirectUri = isLocalRequestBase
+      ? (canonicalBackend || explicitRedirect || runame || defaultRedirect)
+      : (explicitRedirect && isFullUrl(explicitRedirect))
+        ? explicitRedirect
+        : (runame || explicitRedirect || canonicalBackend || defaultRedirect);
     // eBay requiere RuName (no URL). Configurar EBAY_RUNAME o EBAY_REDIRECT_URI en env.
     if (!appId || !certId || !redirectUri) {
       throw new AppError(
@@ -496,6 +566,7 @@ export class MarketplaceService {
       'https://api.ebay.com/oauth/api_scope/sell.marketing',
       'https://api.ebay.com/oauth/api_scope/sell.account',
       'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
+      'https://api.ebay.com/oauth/api_scope/commerce.notification.subscription',
     ];
     const needsEncoding = /[^a-zA-Z0-9\-_.]/.test(redirectUri);
     const encodedRedirectUri = needsEncoding ? encodeURIComponent(redirectUri) : redirectUri;
@@ -507,6 +578,77 @@ export class MarketplaceService {
       `state=${encodeURIComponent(state)}`
     ].join('&');
     return `${authBase}?${params}`;
+  }
+
+  async getMercadoLibreOAuthStartUrl(
+    userId: number,
+    environment?: 'sandbox' | 'production',
+    options?: {
+      requestBaseUrl?: string;
+      frontendBaseUrl?: string;
+    },
+  ): Promise<string> {
+    const cred = await this.getCredentials(userId, 'mercadolibre', environment);
+    const clientId = (
+      cred?.credentials?.clientId ||
+      process.env.MERCADOLIBRE_CLIENT_ID ||
+      process.env.MERCADOLIBRE_PRODUCTION_CLIENT_ID ||
+      ''
+    ).trim();
+    const clientSecret = (
+      cred?.credentials?.clientSecret ||
+      process.env.MERCADOLIBRE_CLIENT_SECRET ||
+      process.env.MERCADOLIBRE_PRODUCTION_CLIENT_SECRET ||
+      ''
+    ).trim();
+    const siteId = (
+      cred?.credentials?.siteId ||
+      process.env.MERCADOLIBRE_SITE_ID ||
+      'MLC'
+    ).trim() || 'MLC';
+    const redirectUri = (
+      cred?.credentials?.redirectUri ||
+      process.env.MERCADOLIBRE_REDIRECT_URI ||
+      process.env.MERCADOLIBRE_REDIRECT_URL ||
+      getMercadoLibreRedirectUri()
+    ).trim();
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      throw new AppError(
+        'MercadoLibre OAuth requiere clientId, clientSecret y redirectUri canónico.',
+        400,
+      );
+    }
+
+    const resolvedEnvironment = environment || cred?.environment || 'production';
+    const frontendBase = (
+      options?.frontendBaseUrl ||
+      process.env.FRONTEND_URL ||
+      process.env.WEB_BASE_URL ||
+      ''
+    ).replace(/\/$/, '');
+    const normalizedOrigin = frontendBase.toLowerCase();
+    let roFlag = '0';
+    if (normalizedOrigin === 'https://www.ivanreseller.com') roFlag = '1';
+    if (normalizedOrigin === 'https://ivanreseller.com') roFlag = '2';
+
+    const tsHex = Date.now().toString(16);
+    const nonce = crypto.randomBytes(6).toString('hex');
+    const envChar = resolvedEnvironment === 'sandbox' ? 's' : 'p';
+    const secret = process.env.OAUTH_STATE_SECRET || process.env.JWT_SECRET || 'default-key';
+    if (!secret || secret === 'default-key') {
+      throw new AppError('OAuth state secret is not configured for MercadoLibre re-auth.', 500);
+    }
+
+    const payload = `ml:${userId}:${tsHex}:${nonce}:${envChar}:${roFlag}`;
+    const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex').substring(0, 16);
+    const state = Buffer.from(`${payload}:${sig}`).toString('base64url');
+
+    const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
+    const authUrl = new URL(ml.getAuthUrl(redirectUri));
+    authUrl.searchParams.set('state', state);
+
+    return authUrl.toString();
   }
 
   /**
@@ -625,7 +767,7 @@ export class MarketplaceService {
       }
 
       // Get product from database
-      const product = await prisma.product.findFirst({
+      let product = await prisma.product.findFirst({
         where: {
           id: request.productId,
           userId: userId,
@@ -634,6 +776,13 @@ export class MarketplaceService {
 
       if (!product) {
         throw new AppError('Product not found', 404);
+      }
+
+      if (product.status === 'LEGACY_UNVERIFIED') {
+        throw new AppError(
+          'Legacy catalog is frozen. This product must not be published again; rebuild it through the validated catalog pipeline.',
+          400
+        );
       }
 
       // ✅ Validar estado del producto antes de publicar
@@ -663,9 +812,12 @@ export class MarketplaceService {
           }
           throw new AppError('Cannot publish a product in PENDING status. Please approve it first.', 400);
         }
-      } else if (product.status !== 'APPROVED') {
-        // Solo permitir publicar productos APPROVED (o PENDING en flujo automático)
-        throw new AppError(`Cannot publish a product with status: ${product.status}. Product must be APPROVED.`, 400);
+      } else if (product.status !== 'VALIDATED_READY') {
+        // P0: APPROVED ya no es suficiente para publicar de forma segura.
+        throw new AppError(
+          `Cannot publish a product with status: ${product.status}. Product must be VALIDATED_READY under the preventive engine.`,
+          400
+        );
       }
 
       // ✅ Verificar si el producto ya está publicado (permitir duplicateListing para ganadores)
@@ -702,17 +854,34 @@ export class MarketplaceService {
         throw new AppError(credentials.issues.join(' '), 400);
       }
 
-      // Phase 53: mandatory AliExpress DS validation (SKU/stock/destination, shipping, profit vs fees)
+      if (request.marketplace === 'mercadolibre' && env.ML_WEB_PUBLISH_REQUIRE_ML_WEBHOOK_SECRET) {
+        const { getWebhookStatus } = await import('./webhook-readiness.service');
+        if (!getWebhookStatus().mercadolibre.configured) {
+          throw new AppError(
+            'MercadoLibre webhook secret not configured (set WEBHOOK_SECRET_MERCADOLIBRE or set ML_WEB_PUBLISH_REQUIRE_ML_WEBHOOK_SECRET=false for non-production tests)',
+            400
+          );
+        }
+      }
+
+      // Phase 53 / Phase 7: mandatory preventive validation with real supplier fallback selection.
       {
-        const { assertProductValidForPublishing } = await import('./pre-publish-validator.service');
+        const {
+          prepareProductForSafePublishing,
+          persistPreventivePublishPreparation,
+        } = await import('./pre-publish-validator.service');
         const listingSalePrice = this.getEffectiveListingPrice(product, request.customData?.price);
         try {
-          await assertProductValidForPublishing({
+          const preparation = await prepareProductForSafePublishing({
             userId,
             product,
             marketplace: request.marketplace,
             credentials: credentials.credentials as Record<string, unknown> | undefined,
             listingSalePrice,
+          });
+          product = await persistPreventivePublishPreparation({
+            productId: product.id,
+            preparation,
           });
         } catch (err: unknown) {
           if (err instanceof AppError) throw err;
@@ -727,7 +896,13 @@ export class MarketplaceService {
           return await this.publishToEbay(product, credentials, request.customData, userId);
 
         case 'mercadolibre':
-          return await this.publishToMercadoLibre(product, credentials.credentials, request.customData, userId);
+          return await this.publishToMercadoLibre(
+            product,
+            credentials.credentials,
+            request.customData,
+            userId,
+            Boolean(request.duplicateListing)
+          );
 
         case 'amazon':
           return await this.publishToAmazon(product, credentials.credentials, request.customData, userId);
@@ -986,10 +1161,12 @@ export class MarketplaceService {
    * Publish to MercadoLibre
    */
   private async publishToMercadoLibre(
-    product: any, 
-    credentials: MercadoLibreCredentials, 
+    product: any,
+    credentials: MercadoLibreCredentials,
     customData?: any,
-    userId?: number
+    userId?: number,
+    /** When true, skip "already has marketplace_listing row" guard (e.g. ML listing deleted but DB row remains). */
+    allowDuplicateListing = false
   ): Promise<PublishResult> {
     try {
       // Merge primaryImageIndex from productData (set in ProductPreview) into customData
@@ -1005,8 +1182,8 @@ export class MarketplaceService {
         }
       }
 
-      // ML policy: no duplicate publications of same product with same conditions
-      if (userId) {
+      // App guard: block second publish for same productId while a listing row exists (duplicateListing bypasses when operator cleared ML but row lingers).
+      if (userId && !allowDuplicateListing) {
         const existing = await prisma.marketplaceListing.findFirst({
           where: { productId: product.id, userId, marketplace: 'mercadolibre' },
         });
@@ -1062,6 +1239,29 @@ export class MarketplaceService {
       const priceUsd = this.resolveListingPrice(product, mergedCustomData?.price);
       if (priceUsd <= 0) {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
+      }
+
+      try {
+        const pd =
+          typeof product.productData === 'string'
+            ? JSON.parse(product.productData || '{}')
+            : product.productData || {};
+        const pp = pd?.preventivePublish;
+        if (pp?.marketplace === 'mercadolibre' && typeof pp.listingSalePriceUsd === 'number') {
+          const snapshotUsd = pp.listingSalePriceUsd as number;
+          if (Math.abs(priceUsd - snapshotUsd) > 0.02) {
+            throw new AppError(
+              `Listing price (${priceUsd}) does not match validated preflight snapshot (${snapshotUsd}). Re-run preventive validation before publish.`,
+              400
+            );
+          }
+        }
+      } catch (e) {
+        if (e instanceof AppError) throw e;
+        logger.warn('[ML Publish] Could not verify preventive publish price snapshot', {
+          productId: product.id,
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
 
       const costNumMl = toNumber(product.aliexpressPrice);
@@ -2978,6 +3178,9 @@ export class MarketplaceService {
    * Returns all valid image URLs without truncation
    */
   private parseImageUrls(value: any): string[] {
+    const isStillImageHttpUrl = (url: string) =>
+      /^https?:\/\//i.test(url) && !isAliExpressVideoOrNonStillImageUrl(url);
+
     if (!value) {
       logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: value is null/undefined');
       return [];
@@ -2985,7 +3188,7 @@ export class MarketplaceService {
 
     // Si ya es un array, filtrar y retornar
     if (Array.isArray(value)) {
-      const validUrls = value.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+      const validUrls = value.filter((url) => typeof url === 'string' && isStillImageHttpUrl(url));
       logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Already array', { 
         originalLength: value.length, 
         validUrls: validUrls.length 
@@ -3006,7 +3209,7 @@ export class MarketplaceService {
         try {
           const parsed = JSON.parse(trimmed);
           if (Array.isArray(parsed)) {
-            const validUrls = parsed.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+            const validUrls = parsed.filter((url) => typeof url === 'string' && isStillImageHttpUrl(url));
             logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Parsed JSON array', { 
               originalLength: parsed.length, 
               validUrls: validUrls.length 
@@ -3023,7 +3226,7 @@ export class MarketplaceService {
       }
       
       // ✅ FALLBACK: Si es una sola URL válida, retornarla como array
-      if (/^https?:\/\//i.test(trimmed)) {
+      if (isStillImageHttpUrl(trimmed)) {
         logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Single URL found');
         return [trimmed];
       }
@@ -3033,7 +3236,7 @@ export class MarketplaceService {
       try {
         const parsed = JSON.parse(trimmed);
         if (Array.isArray(parsed)) {
-          const validUrls = parsed.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+          const validUrls = parsed.filter((url) => typeof url === 'string' && isStillImageHttpUrl(url));
           logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Parsed JSON array (no leading bracket)', { 
             originalLength: parsed.length, 
             validUrls: validUrls.length 
@@ -3051,6 +3254,35 @@ export class MarketplaceService {
       valuePreview: typeof value === 'string' ? value.substring(0, 100) : String(value).substring(0, 100)
     });
     return [];
+  }
+
+  /** Absolute paths to image files on disk (MercadoLibre publish only; matches uploadImage local-file branch). */
+  private parseMercadoLibreLocalFilesystemImagePaths(productImages: unknown): string[] {
+    const out: string[] = [];
+    const consider = (p: unknown) => {
+      if (typeof p !== 'string') return;
+      const t = p.trim();
+      if (!t || /^https?:\/\//i.test(t)) return;
+      if (!/\.(png|jpe?g|webp|gif)$/i.test(t)) return;
+      try {
+        if (fs.existsSync(t)) out.push(t);
+      } catch {
+        /* ignore */
+      }
+    };
+    if (Array.isArray(productImages)) {
+      productImages.forEach(consider);
+      return out;
+    }
+    if (typeof productImages === 'string' && productImages.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(productImages) as unknown;
+        if (Array.isArray(parsed)) parsed.forEach(consider);
+      } catch {
+        /* ignore */
+      }
+    }
+    return out;
   }
 
   /**
@@ -3077,7 +3309,14 @@ export class MarketplaceService {
     marketplace: MarketplaceName,
     customData?: { primaryImageIndex?: number }
   ): string[] {
-    const rawImages = this.parseImageUrls(productImages);
+    let rawImages = this.parseImageUrls(productImages);
+    // ML uploadImage accepts absolute local paths; parseImageUrls is HTTP-only — use disk paths when present (approved pack / remediation).
+    if (rawImages.length === 0 && marketplace === 'mercadolibre') {
+      rawImages = this.parseMercadoLibreLocalFilesystemImagePaths(productImages);
+      if (rawImages.length > 0) {
+        logger.info('[ML] Using local filesystem image paths for publish', { count: rawImages.length });
+      }
+    }
 
     if (rawImages.length === 0) {
       logger.warn('No valid images found for product', { marketplace });

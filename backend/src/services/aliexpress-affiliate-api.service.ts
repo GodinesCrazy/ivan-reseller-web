@@ -171,7 +171,15 @@ export class AliExpressAffiliateAPIService {
 
   /** Indica si la API está configurada (APP_KEY y APP_SECRET presentes). */
   isConfigured(): boolean {
-    return !!(this.appKey && this.appSecret);
+    return !!(this.getEffectiveAppKey() && this.getEffectiveAppSecret());
+  }
+
+  private getEffectiveAppKey(): string {
+    return (this.credentials?.appKey || this.appKey || '').trim();
+  }
+
+  private getEffectiveAppSecret(): string {
+    return (this.credentials?.appSecret || this.appSecret || '').trim();
   }
 
   /** Skip tracking_id when invalid (causes 402). User must set valid ALIEXPRESS_TRACKING_ID in portals.aliexpress.com. */
@@ -295,12 +303,13 @@ export class AliExpressAffiliateAPIService {
    * sign_method must be 'hmac-sha256' for this.
    */
   private generateSignature(params: Record<string, string>): string {
+    const appSecret = this.getEffectiveAppSecret();
     const sortedKeys = Object.keys(params)
       .filter((k) => k !== 'sign')
       .sort();
     const baseString = sortedKeys.map((k) => k + params[k]).join('');
     return crypto
-      .createHmac('sha256', this.appSecret)
+      .createHmac('sha256', appSecret)
       .update(baseString, 'utf8')
       .digest('hex')
       .toUpperCase();
@@ -313,8 +322,9 @@ export class AliExpressAffiliateAPIService {
     if (!this.isConfigured()) {
       throw new Error('ALIEXPRESS_API_NOT_CONFIGURED');
     }
+    const appKey = this.getEffectiveAppKey();
     const params: Record<string, string> = {
-      app_key: String(this.appKey),
+      app_key: String(appKey),
       method: String(method),
       format: 'json',
       sign_method: 'hmac-sha256',
@@ -641,4 +651,3 @@ export class AliExpressAffiliateAPIService {
 
 // Exportar instancia singleton
 export const aliexpressAffiliateAPIService = new AliExpressAffiliateAPIService();
-

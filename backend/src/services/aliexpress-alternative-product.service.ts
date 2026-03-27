@@ -30,6 +30,7 @@ export interface FindAlternativeParams {
   maxPriceUsd: number;
   shipToCountry: string;
   maxCandidates?: number;
+  forceEnabled?: boolean;
 }
 
 /**
@@ -78,6 +79,7 @@ export async function findAlternativeWithStock(
   params: FindAlternativeParams
 ): Promise<AlternativeProductResult | null> {
   const fallbackEnabled =
+    params.forceEnabled === true ||
     process.env.ALIEXPRESS_FALLBACK_ALTERNATIVE_PRODUCT === 'true' ||
     process.env.ALIEXPRESS_FALLBACK_ALTERNATIVE_PRODUCT === '1';
   if (!fallbackEnabled) {

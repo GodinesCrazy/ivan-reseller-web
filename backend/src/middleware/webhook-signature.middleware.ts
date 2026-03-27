@@ -7,6 +7,8 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { logger } from '../config/logger';
 import { env } from '../config/env';
+import { CredentialsManager } from '../services/credentials-manager.service';
+import { EbayWebhookService } from '../services/ebay-webhook.service';
 
 export type MarketplaceWebhook = 'ebay' | 'mercadolibre' | 'amazon';
 
@@ -15,39 +17,27 @@ interface SignatureValidationResult {
   error?: string;
 }
 
-/**
- * ✅ FASE 3: Validar firma HMAC para eBay
- * eBay usa header X-EBAY-SIGNATURE con HMAC-SHA256
- */
-function validateEbaySignature(
+async function validateEbaySignature(
   payload: string | Buffer,
-  signature: string,
-  secret: string
-): SignatureValidationResult {
-  if (!secret) {
-    return { valid: false, error: 'WEBHOOK_SECRET_EBAY not configured' };
-  }
-
+  signature: string
+): Promise<SignatureValidationResult> {
   if (!signature) {
     return { valid: false, error: 'X-EBAY-SIGNATURE header missing' };
   }
 
   try {
-    // eBay usa formato: sha256={hash}
-    const expectedHash = crypto
-      .createHmac('sha256', secret)
-      .update(payload)
-      .digest('hex');
-    
-    const expectedSignature = `sha256=${expectedHash}`;
-    
-    // Comparación segura (timing-safe)
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
+    const entry = await CredentialsManager.getCredentialEntry(1, 'ebay', 'production');
+    const credentials = entry?.credentials;
+    if (!credentials?.appId || !credentials?.certId) {
+      return { valid: false, error: 'eBay app credentials not configured for signature validation' };
+    }
 
-    return { valid: isValid, error: isValid ? undefined : 'Invalid signature' };
+    const validator = new EbayWebhookService({
+      ...(credentials as any),
+      sandbox: false,
+    });
+    const result = await validator.validateNotificationSignature(payload, signature);
+    return { valid: result.valid, error: result.error };
   } catch (error: any) {
     logger.warn('[WebhookSignature] Error validating eBay signature', {
       error: error.message,
@@ -184,8 +174,9 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
     const secretEnvVar = `WEBHOOK_SECRET_${marketplace.toUpperCase()}`;
     const secret = process.env[secretEnvVar];
     const secretEmpty = !secret || (typeof secret === 'string' && secret.trim() === '');
+    const requiresSharedSecret = marketplace !== 'ebay';
 
-    if (secretEmpty) {
+    if (requiresSharedSecret && secretEmpty) {
       logger.warn('[WebhookSignature] Webhook accepted without verification: secret not configured', {
         marketplace,
         envVar: secretEnvVar,
@@ -199,7 +190,7 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
 
     switch (marketplace) {
       case 'ebay':
-        validation = validateEbaySignature(payload, signatureHeader || '', secret || '');
+        validation = await validateEbaySignature(payload, signatureHeader || '');
         break;
       case 'mercadolibre':
         validation = validateMercadoLibreSignature(payload, signatureHeader || '', secret || '');
@@ -227,7 +218,7 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
           ip: req.ip,
         });
 
-        return res.status(401).json({
+        return res.status(marketplace === 'ebay' ? 412 : 401).json({
           success: false,
           error: 'Invalid signature',
         });

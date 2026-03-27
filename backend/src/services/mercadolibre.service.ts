@@ -4,6 +4,8 @@ trace('loading mercadolibre.service');
 
 import axios, { AxiosInstance } from 'axios';
 import FormData from 'form-data';
+import fs from 'fs/promises';
+import path from 'path';
 import { AppError } from '../middleware/error.middleware';
 import { retryMarketplaceOperation } from '../utils/retry.util';
 import { acquireMarketplaceRateLimit } from './marketplace-rate-limit.service';
@@ -145,6 +147,24 @@ export interface MLListingResponse {
   error?: string;
 }
 
+export interface MLItemPicture {
+  id?: string;
+  url?: string;
+  secure_url?: string;
+  max_size?: string;
+}
+
+export interface MLItemSnapshot {
+  id?: string;
+  category_id?: string;
+  title?: string;
+  status?: string;
+  sub_status?: string[];
+  health?: number;
+  permalink?: string;
+  pictures?: MLItemPicture[];
+}
+
 export class MercadoLibreService {
   private credentials: MercadoLibreCredentials;
   private apiClient: AxiosInstance;
@@ -176,6 +196,23 @@ export class MercadoLibreService {
       }
       return config;
     });
+  }
+
+  private isRemoteImageInput(input: string): boolean {
+    return /^https?:\/\//i.test(String(input || '').trim());
+  }
+
+  private getLocalImageContentType(inputPath: string): string {
+    switch (path.extname(inputPath).toLowerCase()) {
+      case '.png':
+        return 'image/png';
+      case '.webp':
+        return 'image/webp';
+      case '.jpeg':
+      case '.jpg':
+      default:
+        return 'image/jpeg';
+    }
   }
 
   /**
@@ -318,15 +355,21 @@ export class MercadoLibreService {
    */
   async uploadImage(imageUrl: string): Promise<string | null> {
     try {
-      const imgResp = await axios.get(imageUrl, {
-        responseType: 'arraybuffer',
-        timeout: 15000,
-        maxContentLength: 10 * 1024 * 1024,
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*' },
-      });
-
-      let buffer = Buffer.from(imgResp.data);
-      const contentType = imgResp.headers['content-type'] || 'image/jpeg';
+      let buffer: Buffer;
+      let contentType = 'image/jpeg';
+      if (this.isRemoteImageInput(imageUrl)) {
+        const imgResp = await axios.get(imageUrl, {
+          responseType: 'arraybuffer',
+          timeout: 15000,
+          maxContentLength: 10 * 1024 * 1024,
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*' },
+        });
+        buffer = Buffer.from(imgResp.data);
+        contentType = imgResp.headers['content-type'] || 'image/jpeg';
+      } else {
+        buffer = await fs.readFile(imageUrl);
+        contentType = this.getLocalImageContentType(imageUrl);
+      }
 
       // Phase 2: Image pipeline — resize (min 1200x1200), normalize to JPEG
       try {
@@ -604,12 +647,25 @@ export class MercadoLibreService {
   /**
    * Get full item details from ML API (category_id, title, etc.). For repair flow.
    */
-  async getItem(itemId: string): Promise<{ category_id?: string; title?: string } | null> {
+  async getItem(itemId: string): Promise<MLItemSnapshot | null> {
     try {
       const response = await this.apiClient.get(`/items/${itemId}`);
       return {
+        id: response.data?.id,
         category_id: response.data?.category_id,
         title: response.data?.title,
+        status: response.data?.status,
+        sub_status: response.data?.sub_status,
+        health: response.data?.health,
+        permalink: response.data?.permalink,
+        pictures: Array.isArray(response.data?.pictures)
+          ? response.data.pictures.map((picture: any) => ({
+              id: picture?.id,
+              url: picture?.url,
+              secure_url: picture?.secure_url,
+              max_size: picture?.max_size,
+            }))
+          : [],
       };
     } catch (err: any) {
       logger.warn('[MercadoLibre] getItem failed', {
@@ -665,6 +721,92 @@ export class MercadoLibreService {
       });
       return null;
     }
+  }
+
+  /**
+   * Replace item pictures with newly uploaded approved assets.
+   * Returns the verified item snapshot after the update.
+   */
+  async replaceListingPictures(itemId: string, imageInputs: string[]): Promise<MLItemSnapshot> {
+    if (!itemId || !String(itemId).trim()) {
+      throw new AppError('MercadoLibre item ID is required to replace pictures', 400);
+    }
+
+    const normalizedInputs = Array.from(
+      new Set(
+        (imageInputs || [])
+          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          .map((value) => value.trim())
+      )
+    );
+
+    if (normalizedInputs.length === 0) {
+      throw new AppError('At least one approved image is required to replace MercadoLibre pictures', 400);
+    }
+
+    const beforeSnap = await this.getItem(itemId);
+    const priorStatus = beforeSnap?.status ? String(beforeSnap.status).toLowerCase() : '';
+    if (priorStatus && priorStatus !== 'active') {
+      try {
+        await this.apiClient.put(`/items/${itemId}`, { status: 'active' });
+        logger.info('[MercadoLibre] Listing status set active before picture replace', {
+          itemId,
+          priorStatus: beforeSnap?.status,
+        });
+      } catch (activateErr: any) {
+        const mlMsg = activateErr.response?.data?.message || activateErr.message;
+        throw new AppError(
+          `Cannot replace MercadoLibre pictures while listing status is "${beforeSnap?.status}". ` +
+            `Reactivation via API failed: ${mlMsg}. Resolve moderation / policy holds in Mercado Libre seller center, then retry.`,
+          409
+        );
+      }
+      const afterActivate = await this.getItem(itemId);
+      const st = afterActivate?.status ? String(afterActivate.status).toLowerCase() : '';
+      if (st !== 'active') {
+        throw new AppError(
+          `Listing could not be switched to active for picture update (status after: ${afterActivate?.status}). ` +
+            `See seller center for moderation or account restrictions.`,
+          409
+        );
+      }
+    }
+
+    const uploadedIds = await this.uploadImages(normalizedInputs);
+    if (uploadedIds.length === 0) {
+      throw new AppError('MercadoLibre picture replacement failed: no images were uploaded successfully', 400);
+    }
+
+    await this.apiClient.put(`/items/${itemId}`, {
+      pictures: uploadedIds.map((id) => ({ id })),
+    });
+
+    const verified = await this.getItem(itemId);
+    if (!verified) {
+      throw new AppError('MercadoLibre picture replacement completed but verification failed', 400);
+    }
+
+    return verified;
+  }
+
+  /**
+   * Attempt to reactivate a listing after a repair/update flow.
+   */
+  async activateListing(itemId: string): Promise<MLItemSnapshot> {
+    if (!itemId || !String(itemId).trim()) {
+      throw new AppError('MercadoLibre item ID is required to activate listing', 400);
+    }
+
+    await this.apiClient.put(`/items/${itemId}`, {
+      status: 'active',
+    });
+
+    const verified = await this.getItem(itemId);
+    if (!verified) {
+      throw new AppError('MercadoLibre activate listing completed but verification failed', 400);
+    }
+
+    return verified;
   }
 
   /**

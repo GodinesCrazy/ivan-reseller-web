@@ -50,14 +50,19 @@ function calculateMercadoLibreChile(input: FeeIntelligenceInput): FeeIntelligenc
   const listingFee = 0; // ML no cobra fee por listar
   const finalValueFee = (listingPrice * commissionPct) / 100;
   const paymentProcessingFee = 0; // MercadoPago incluido en la comisión ML
-  let fixedCostUsd = 0;
-  if (input.currency === 'CLP' && listingPrice > 0) {
-    const fixedClp = listingPrice <= 9990 ? 700 : listingPrice <= 19990 ? 1000 : 0;
-    fixedCostUsd = fixedClp / 1000; // rough CLP->USD for breakdown (simplified)
+  let fixedCostMarketplaceCurrency = 0;
+  if (String(input.currency || '').toUpperCase() === 'CLP' && listingPrice > 0) {
+    const lowTierMax = Number(process.env.ML_CL_FIXED_FEE_LOW_TIER_MAX_CLP) || 9990;
+    const midTierMax = Number(process.env.ML_CL_FIXED_FEE_MID_TIER_MAX_CLP) || 19990;
+    const lowTierFixed = Number(process.env.ML_CL_FIXED_FEE_LOW_TIER_CLP) || 700;
+    const midTierFixed = Number(process.env.ML_CL_FIXED_FEE_MID_TIER_CLP) || 1000;
+    fixedCostMarketplaceCurrency =
+      listingPrice <= lowTierMax ? lowTierFixed : listingPrice <= midTierMax ? midTierFixed : 0;
   }
   const shippingSubsidyOrCost = shippingCostToCustomer;
 
-  const totalMarketplaceCost = finalValueFee + paymentProcessingFee + fixedCostUsd;
+  const totalMarketplaceCost =
+    finalValueFee + paymentProcessingFee + fixedCostMarketplaceCurrency;
   const totalOperationalCost = supplierCost + shippingSubsidyOrCost + totalMarketplaceCost;
   const expectedProfit = listingPrice - totalOperationalCost;
   const expectedMarginPercent = listingPrice > 0 ? (expectedProfit / listingPrice) * 100 : 0;
@@ -73,7 +78,7 @@ function calculateMercadoLibreChile(input: FeeIntelligenceInput): FeeIntelligenc
       paymentProcessingFee,
       shippingSubsidyOrCost,
       supplierCost,
-      taxesOrOther: fixedCostUsd,
+      taxesOrOther: fixedCostMarketplaceCurrency,
     },
   };
 }

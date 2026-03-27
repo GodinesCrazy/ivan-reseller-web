@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -323,12 +324,21 @@ export default function AdminPanel() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 p-4">
+        <p className="text-sm text-slate-700 dark:text-slate-300">
+          <strong>Panel técnico y de administración</strong> — gestión de usuarios, comisiones y configuración de plataforma. No sustituye verdad operativa canónica (Órdenes, Ventas, Finance,{' '}
+          <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+            Control Center
+          </Link>
+          ).
+        </p>
+      </div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Panel de Administración</h1>
         <p className="text-gray-600 dark:text-gray-400">Gestiona usuarios, comisiones y configuraciones del sistema</p>
       </div>
 
-      {/* Estadísticas */}
+      {/* Estadísticas — agregados admin */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md transition-colors">
           <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Total Usuarios</h3>
@@ -339,12 +349,14 @@ export default function AdminPanel() {
           <p className="text-3xl font-bold text-green-600 dark:text-green-400">{dashboardData.activeUsers}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md transition-colors">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Ingresos Totales</h3>
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Ingresos Totales (agregado admin)</h3>
           <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">${dashboardData.totalRevenue.toFixed(2)}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Desde ledger admin — no es proof operativo</p>
         </div>
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md transition-colors">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Comisiones Mensuales</h3>
+          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Comisiones Mensuales (agregado)</h3>
           <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">${dashboardData.monthlyCommissions.toFixed(2)}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Desde ledger admin</p>
         </div>
       </div>
 

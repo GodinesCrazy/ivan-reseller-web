@@ -17,6 +17,7 @@ import {
   ExternalLink,
   ClipboardCopy,
   Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import {
   getOrder,
@@ -36,6 +37,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
 import { useAuthStatusStore } from '@/stores/authStatusStore';
 import toast from 'react-hot-toast';
+import { isSimulatedSupplierOrderId } from '@/utils/simulated-order-id';
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -262,7 +264,12 @@ export default function OrderDetail() {
 
   if (!order) return null;
 
-  const isSuccess = order.status === 'PURCHASED' || order.aliexpressOrderId === 'SIMULATED_ORDER_ID';
+  const hasVerifiedSupplierPurchaseProof =
+    (!!order.aliexpressOrderId?.trim() && !isSimulatedSupplierOrderId(order.aliexpressOrderId)) ||
+    !!order.manualPurchaseDate;
+  const showPurchasedSuccessBanner = order.status === 'PURCHASED' && hasVerifiedSupplierPurchaseProof;
+  const purchasedWithoutVerifiableSupplierId =
+    order.status === 'PURCHASED' && !hasVerifiedSupplierPurchaseProof;
   let shippingObj: Record<string, string> | null = null;
   try {
     const parsed = JSON.parse(order.shippingAddress || '{}');
@@ -410,10 +417,36 @@ export default function OrderDetail() {
           <OrderStatusBadge status={order.status} />
         </div>
 
-        {isSuccess && (
+        {order.status === 'SIMULATED' && (
+          <div className="flex items-center gap-2 p-4 text-violet-900 dark:text-violet-100 bg-violet-50 dark:bg-violet-950/30 rounded-lg border border-violet-200 dark:border-violet-800">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span>
+              Orden simulada: no indica compra real en proveedor ni cobro verificado. No uses esta pantalla como prueba operativa.
+            </span>
+          </div>
+        )}
+
+        {showPurchasedSuccessBanner && (
           <div className="flex items-center gap-2 p-4 text-green-800 dark:text-green-200 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
             <CheckCircle className="w-5 h-5 flex-shrink-0" />
-            <span>Compra cumplida. AliExpress: {order.aliexpressOrderId || 'N/A'}</span>
+            <span>
+              Compra en proveedor registrada con prueba verificable
+              {order.aliexpressOrderId ? `: ${order.aliexpressOrderId}` : ' (marcado manual)'}.
+            </span>
+          </div>
+        )}
+
+        {purchasedWithoutVerifiableSupplierId && (
+          <div className="flex items-start gap-2 p-4 text-amber-900 dark:text-amber-100 bg-amber-50 dark:bg-amber-950/25 rounded-lg border border-amber-200 dark:border-amber-800">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div className="text-sm space-y-1">
+              <p className="font-medium">Estado &quot;Comprado&quot; sin ID de pedido proveedor verificable</p>
+              <p className="text-amber-800/90 dark:text-amber-200/90">
+                {isSimulatedSupplierOrderId(order.aliexpressOrderId)
+                  ? 'El ID de AliExpress es de simulación o prueba; no cuenta como compra real.'
+                  : 'Falta un ID de pedido AliExpress válido o marca de compra manual con fecha. Revisa la orden, el panel manual o sincroniza con el proveedor.'}
+              </p>
+            </div>
           </div>
         )}
 

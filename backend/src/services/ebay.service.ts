@@ -229,7 +229,19 @@ export class EbayService {
   /**
    * Get eBay authentication URL for OAuth flow
    */
-  getAuthUrl(redirectUri: string, scopes: string[] = ['sell.inventory.readonly', 'sell.inventory', 'sell.marketing.readonly', 'sell.marketing']): string {
+  getAuthUrl(
+    redirectUri: string,
+    scopes: string[] = [
+      'https://api.ebay.com/oauth/api_scope',
+      'https://api.ebay.com/oauth/api_scope/sell.inventory.readonly',
+      'https://api.ebay.com/oauth/api_scope/sell.inventory',
+      'https://api.ebay.com/oauth/api_scope/sell.marketing.readonly',
+      'https://api.ebay.com/oauth/api_scope/sell.marketing',
+      'https://api.ebay.com/oauth/api_scope/sell.account',
+      'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
+      'https://api.ebay.com/oauth/api_scope/commerce.notification.subscription',
+    ]
+  ): string {
     if (!this.credentials) {
       throw new Error('eBay credentials not configured');
     }
@@ -1117,6 +1129,69 @@ export class EbayService {
   }
 
   /**
+   * Verify the operational Sell APIs that matter for real order flow.
+   * We intentionally avoid relying on /sell/account/v1/account because it can
+   * return false negatives while orders/inventory/policies are fully usable.
+   */
+  private async verifyOperationalAccess(): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const invHeaders = { 'Content-Language': 'en-US' };
+    const recentFrom = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .replace(/\.\d{3}Z$/, '.000Z');
+
+    const checks = await Promise.allSettled([
+      this.apiClient.get('/sell/fulfillment/v1/order', {
+        params: {
+          limit: 1,
+          offset: 0,
+          filter: `creationdate:[${recentFrom}..]`,
+        },
+      }),
+      this.apiClient.get('/sell/inventory/v1/location?limit=1', {
+        headers: invHeaders,
+      }),
+      this.apiClient.get('/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_US', {
+        headers: invHeaders,
+      }),
+    ]);
+
+    const [ordersCheck, inventoryCheck, fulfillmentCheck] = checks;
+    const failures = [
+      { name: 'orders', result: ordersCheck },
+      { name: 'inventory', result: inventoryCheck },
+      { name: 'fulfillment', result: fulfillmentCheck },
+    ].filter((entry) => entry.result.status === 'rejected');
+
+    if (failures.length === 0) {
+      return {
+        success: true,
+        message: 'eBay orders, inventory, and fulfillment APIs are operational',
+      };
+    }
+
+    const details = failures
+      .map(({ name, result }) => {
+        const error = (result as PromiseRejectedResult).reason;
+        const status = error?.response?.status;
+        const apiMessage =
+          error?.response?.data?.errors?.[0]?.message ||
+          error?.response?.data?.error_description ||
+          error?.message ||
+          'Unknown error';
+        return `${name}${status ? `(${status})` : ''}: ${apiMessage}`;
+      })
+      .join('; ');
+
+    return {
+      success: false,
+      message: `eBay operational check failed - ${details}`,
+    };
+  }
+
+  /**
    * Test connection with current credentials
    */
   async testConnection(): Promise<{ success: boolean; message: string }> {
@@ -1140,8 +1215,7 @@ export class EbayService {
         return { success: false, message: msg };
       }
 
-      await this.getAccountInfo();
-      return { success: true, message: 'eBay connection successful' };
+      return await this.verifyOperationalAccess();
     } catch (error: any) {
       const status = error?.response?.status;
       const errorMessage = error.response?.data?.errors?.[0]?.message || error.message || 'Unknown error';

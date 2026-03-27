@@ -13,8 +13,10 @@ import { logger } from '../config/logger';
 export type ProductStatus = 
   | 'PENDING'      // Pendiente de revisión
   | 'APPROVED'     // Aprobado, listo para publicar
+  | 'VALIDATED_READY' // Validado preventivamente, listo para publicar
   | 'PUBLISHED'    // Publicado en marketplace(s)
   | 'REJECTED'     // Rechazado
+  | 'LEGACY_UNVERIFIED' // Catálogo legado congelado
   | 'ARCHIVED'     // Archivado
   | 'DELISTED';    // Deslistado (ya no disponible)
 
@@ -28,10 +30,12 @@ export interface ProductStateTransition {
  * ✅ FASE 5: Validar si una transición de estado es válida
  */
 const VALID_TRANSITIONS: Record<ProductStatus, ProductStatus[]> = {
-  PENDING: ['APPROVED', 'REJECTED', 'ARCHIVED'],
-  APPROVED: ['PUBLISHED', 'PENDING', 'ARCHIVED'], // Puede volver a PENDING si necesita revisión
+  PENDING: ['APPROVED', 'VALIDATED_READY', 'REJECTED', 'ARCHIVED'],
+  APPROVED: ['VALIDATED_READY', 'PUBLISHED', 'PENDING', 'ARCHIVED', 'LEGACY_UNVERIFIED'],
+  VALIDATED_READY: ['PUBLISHED', 'PENDING', 'ARCHIVED'],
   PUBLISHED: ['DELISTED', 'ARCHIVED'], // Una vez publicado, solo puede deslistarse o archivarse
   REJECTED: ['PENDING', 'ARCHIVED'], // Puede volver a PENDING si se corrige
+  LEGACY_UNVERIFIED: ['ARCHIVED'], // Catálogo legado queda congelado
   ARCHIVED: [], // Estado final (no se puede salir)
   DELISTED: ['PUBLISHED', 'ARCHIVED'], // Puede republicarse o archivarse
 };

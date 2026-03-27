@@ -13,6 +13,14 @@ export interface Product {
   sku: string;
   stock: number;
   isActive: boolean;
+  status?: string;
+  validationState?: string;
+  blockedReasons?: string[];
+  resolvedCountry?: string | null;
+  resolvedLanguage?: string | null;
+  resolvedCurrency?: string | null;
+  feeCompleteness?: number;
+  projectedMargin?: number | null;
   createdAt: string;
   updatedAt: string;
   winnerDetectedAt?: string | null;
@@ -52,6 +60,14 @@ function toProduct(raw: any): Product {
     sku: raw.sku ?? String(raw.id),
     stock: raw.stock ?? 0,
     isActive: raw.isActive ?? true,
+    status: raw.status,
+    validationState: raw.validationState,
+    blockedReasons: Array.isArray(raw.blockedReasons) ? raw.blockedReasons : [],
+    resolvedCountry: raw.resolvedCountry ?? null,
+    resolvedLanguage: raw.resolvedLanguage ?? null,
+    resolvedCurrency: raw.resolvedCurrency ?? null,
+    feeCompleteness: typeof raw.feeCompleteness === 'number' ? raw.feeCompleteness : undefined,
+    projectedMargin: typeof raw.projectedMargin === 'number' ? raw.projectedMargin : undefined,
     createdAt: raw.createdAt || new Date().toISOString(),
     updatedAt: raw.updatedAt || new Date().toISOString(),
   };
@@ -77,7 +93,9 @@ class ProductsAPI {
       description: productData.description,
       aliexpressUrl: productData.aliexpressUrl || productData.imageUrl || '',
       aliexpressPrice: productData.originalPrice || productData.price,
-      suggestedPrice: productData.price || productData.originalPrice * 1.5,
+      suggestedPrice:
+        productData.price ||
+        ((productData.originalPrice ?? productData.price ?? 0) * 1.5),
       imageUrl: productData.imageUrl,
       category: productData.category,
     });
@@ -101,7 +119,7 @@ class ProductsAPI {
     return toProduct(raw);
   }
 
-  async updateProductStatus(id: number, status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PUBLISHED'): Promise<Product> {
+  async updateProductStatus(id: number, status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PUBLISHED' | 'LEGACY_UNVERIFIED' | 'VALIDATED_READY'): Promise<Product> {
     const response = await api.patch(`/api/products/${id}/status`, { status });
     const raw = response.data?.data ?? response.data;
     return toProduct(raw);

@@ -1,14 +1,16 @@
 /**
- * Comprueba si eBay OAuth estù autorizado (accessToken en api_credentials).
+ * Comprueba si eBay OAuth es utilizable con la ruta real de credenciales.
  * Uso: cd backend && npx tsx scripts/check-ebay-oauth.ts
  */
 async function main() {
   const { prisma } = await import('../src/config/database');
-  const { decrypt } = await import('../src/utils/encryption');
+  const { CredentialsManager } = await import('../src/services/credentials-manager.service');
+  const { MarketplaceService } = await import('../src/services/marketplace.service');
 
   const rows = await prisma.apiCredential.findMany({
     where: { apiName: 'ebay', isActive: true },
-    select: { userId: true, environment: true, credentials: true, updatedAt: true },
+    select: { userId: true, environment: true, scope: true, updatedAt: true },
+    orderBy: [{ userId: 'asc' }, { environment: 'asc' }, { updatedAt: 'desc' }],
   });
 
   if (rows.length === 0) {
@@ -16,31 +18,41 @@ async function main() {
     process.exit(1);
   }
 
-  for (const row of rows) {
-    let parsed: Record<string, any> = {};
-    const raw = row.credentials;
-    try {
-      const decrypted = raw.includes(':') && /^[0-9a-f]+:/i.test(raw) ? decrypt(raw) : raw;
-      parsed = JSON.parse(decrypted) || {};
-    } catch {
-      console.log(`eBay (userId=${row.userId}, env=${row.environment}): error al descifrar/parsear.`);
-      continue;
-    }
-    const accessToken = parsed.accessToken && String(parsed.accessToken).trim();
-    const refreshToken = parsed.refreshToken != null ? String(parsed.refreshToken).trim() : '';
-    const expAt = parsed.accessTokenExpiresAt ? new Date(parsed.accessTokenExpiresAt).getTime() : 0;
-    const notExpired = !expAt || expAt > Date.now();
+  const marketplaceService = new MarketplaceService();
+  let usable = false;
 
-    if (accessToken && notExpired) {
-      console.log(`eBay (userId=${row.userId}, env=${row.environment}): Sù autorizado (accessToken presente, no expirado).`);
-      process.exit(0);
-    }
-    console.log(`eBay (userId=${row.userId}, env=${row.environment}): NO autorizado (${!accessToken ? 'falta accessToken' : 'token expirado'}).`);
+  for (const row of rows) {
+    const integrity = await CredentialsManager.getCredentialIntegrityReport(
+      row.userId,
+      'ebay',
+      row.environment,
+      { scope: row.scope }
+    );
+    const credentialsResult = await marketplaceService.getCredentials(
+      row.userId,
+      'ebay',
+      row.environment
+    );
+
+    const hasToken = !!String((credentialsResult && credentialsResult.credentials && credentialsResult.credentials.token) || '').trim();
+    const hasRefreshToken = !!String((credentialsResult && credentialsResult.credentials && credentialsResult.credentials.refreshToken) || '').trim();
+    const usableNow = !!(credentialsResult && credentialsResult.isActive) && (hasToken || hasRefreshToken);
+    if (usableNow) usable = true;
+
+    console.log(
+      'eBay (userId=' + row.userId + ', env=' + row.environment + ', scope=' + row.scope + '): ' +
+      'integrity=' + integrity.state + ' ' +
+      'reason=' + integrity.reasonCode + ' ' +
+      'token=' + (hasToken ? 'SI' : 'NO') + ' ' +
+      'refresh=' + (hasRefreshToken ? 'SI' : 'NO') + ' ' +
+      'usable=' + (usableNow ? 'SI' : 'NO')
+    );
   }
-  process.exit(1);
+
+  process.exit(usable ? 0 : 1);
 }
 
 main().catch((e) => {
-  console.error(e?.message || e);
+  console.error(e && e.message ? e.message : e);
   process.exit(1);
 });

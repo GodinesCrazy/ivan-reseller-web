@@ -4,6 +4,7 @@ import logger from '../../config/logger';
 import type { MarketplacePublisher } from './marketplace.publisher';
 import type { PublishMode, PublishResult, PublishableProduct, ValidationResult } from './marketplace.types';
 import { toNumber } from '../../utils/decimal.utils';
+import { resolveMercadoLibrePublishImageInputs } from '../../services/mercadolibre-image-remediation.service';
 
 export class MercadoLibrePublisher implements MarketplacePublisher {
   private userId?: number;
@@ -67,7 +68,7 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
     if (price <= 0) {
       return {
         status: 'failed',
-        message: 'Precio inválido para publicación.',
+        message: 'Precio invï¿½lido para publicaciï¿½n.',
       };
     }
 
@@ -86,7 +87,7 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
     if (!categoryId) {
       return {
         status: 'failed',
-        message: 'No se pudo resolver la categoría de MercadoLibre.',
+        message: 'No se pudo resolver la categorï¿½a de MercadoLibre.',
       };
     }
 
@@ -96,6 +97,21 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
       categoryId,
     });
 
+    const imageResolution = await resolveMercadoLibrePublishImageInputs({
+      userId: this.userId,
+      productId: product.id,
+      title: product.title,
+      images: product.images,
+      productData: product.productData,
+    });
+    if (!imageResolution.publishSafe) {
+      return {
+        status: 'failed',
+        message: `MercadoLibre image remediation blocked publish: ${imageResolution.blockingReason || 'compliant asset pack missing'}`,
+        rawResponse: imageResolution.remediation,
+      };
+    }
+
     const result = await mlService.createListing({
       title,
       description,
@@ -103,7 +119,7 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
       price,
       quantity: 1,
       condition: 'new',
-      images: this.parseImages(product.images),
+      images: imageResolution.images,
       shipping: {
         mode: 'me2',
         freeShipping: false,
@@ -160,7 +176,7 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
 
     if (!accessToken || !userId) {
       throw new Error(
-        'MercadoLibre no tiene access token o userId válido. Completa OAuth en API Settings.',
+        'MercadoLibre no tiene access token o userId vï¿½lido. Completa OAuth en API Settings.',
       );
     }
 
@@ -200,18 +216,5 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
     if (finalPrice > 0) return finalPrice;
     const suggestedPrice = product.suggestedPrice ? toNumber(product.suggestedPrice) : 0;
     return suggestedPrice;
-  }
-
-  private parseImages(raw?: string | null): string[] {
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((url) => typeof url === 'string' && url.startsWith('http'));
-      }
-    } catch {
-      // ignore parse errors
-    }
-    return [];
   }
 }

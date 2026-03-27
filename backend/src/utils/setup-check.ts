@@ -1,7 +1,5 @@
-import { APIAvailabilityService } from '../services/api-availability.service';
+import { prisma } from '../config/database';
 import { logger } from '../config/logger';
-
-const apiAvailability = new APIAvailabilityService();
 
 export interface SetupStatus {
   setupRequired: boolean;
@@ -16,59 +14,25 @@ export interface SetupStatus {
  */
 export async function checkSetupStatus(userId: number): Promise<SetupStatus> {
   try {
-    const allStatuses = await apiAvailability.getAllAPIStatus(userId);
-    
-    // ✅ FIX: Validar que allStatuses es un array válido
-    if (!Array.isArray(allStatuses)) {
-      logger.warn('[Setup Check] getAllAPIStatus returned non-array', {
-        userId,
-        type: typeof allStatuses,
-        value: allStatuses
-      });
-      return {
-        setupRequired: false,
-        hasMarketplace: false,
-        hasSearchAPI: false,
-        reason: 'invalid_status_format'
-      };
-    }
-    
-    // ✅ FIX: Filtrar entradas inválidas y loggear warnings
-    const validStatuses = allStatuses.filter((s, index) => {
-      if (!s) {
-        logger.warn('[Setup Check] Found undefined/null status entry', {
+    const [marketplaceCount, searchApiCount] = await Promise.all([
+      prisma.apiCredential.count({
+        where: {
           userId,
-          index,
-          totalStatuses: allStatuses.length
-        });
-        return false;
-      }
-      if (!s.apiName || typeof s.apiName !== 'string') {
-        logger.warn('[Setup Check] Found status entry without valid apiName', {
+          isActive: true,
+          apiName: { in: ['ebay', 'amazon', 'mercadolibre'] },
+        },
+      }),
+      prisma.apiCredential.count({
+        where: {
           userId,
-          index,
-          status: s,
-          apiNameType: typeof s.apiName,
-          apiNameValue: s.apiName
-        });
-        return false;
-      }
-      return true;
-    });
-    
-    // ✅ FIX: Validar con guards antes de acceder a propiedades
-    const hasMarketplace = validStatuses.some(s => {
-      if (!s || !s.apiName) return false;
-      const apiNameLower = s.apiName.toLowerCase();
-      return ['ebay', 'amazon', 'mercadolibre'].includes(apiNameLower) && s.isConfigured === true;
-    });
-    
-    const hasSearchAPI = validStatuses.some(s => {
-      if (!s || !s.apiName) return false;
-      const apiNameLower = s.apiName.toLowerCase();
-      return ['aliexpress-affiliate', 'scraperapi', 'zenrows'].includes(apiNameLower) && s.isConfigured === true;
-    });
-    
+          isActive: true,
+          apiName: { in: ['aliexpress-affiliate', 'scraperapi', 'zenrows'] },
+        },
+      }),
+    ]);
+
+    const hasMarketplace = marketplaceCount > 0;
+    const hasSearchAPI = searchApiCount > 0;
     const setupRequired = !hasMarketplace || !hasSearchAPI;
     
     return {

@@ -1,23 +1,18 @@
 import { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Brain, 
-  Send, 
-  ShoppingCart, 
-  Package, 
-  MessageCircle,
-  Globe,
-  Settings,
-  ChevronRight,
-  AlertCircle
+import {
+  AlertCircle,
+  Bot,
+  CheckCircle2,
+  CircleDashed,
+  ExternalLink,
+  ShieldAlert,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import WorkflowStageBadge from './WorkflowStageBadge';
-import WorkflowTimeline from './WorkflowTimeline';
 import LoadingSpinner from './ui/LoadingSpinner';
-import api from '@/services/api';
-import type { ProductWorkflowStatus, WorkflowStage } from '@/types/product-workflow.types';
+import { fetchOperationsTruth } from '@/services/operationsTruth.api';
+import type { OperationsTruthItem } from '@/types/operations';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface ProductWorkflowPipelineProps {
   productId: number;
@@ -26,38 +21,43 @@ interface ProductWorkflowPipelineProps {
   compact?: boolean;
 }
 
-const stageConfig: Record<WorkflowStage, { label: string; icon: any; description: string }> = {
-  scrape: {
-    label: 'SCRAPE',
-    icon: Search,
-    description: 'Búsqueda de Oportunidades',
-  },
-  analyze: {
-    label: 'ANALYZE',
-    icon: Brain,
-    description: 'Análisis IA',
-  },
-  publish: {
-    label: 'PUBLISH',
-    icon: Send,
-    description: 'Publicación',
-  },
-  purchase: {
-    label: 'PURCHASE',
-    icon: ShoppingCart,
-    description: 'Compra Automática',
-  },
-  fulfillment: {
-    label: 'FULFILLMENT',
-    icon: Package,
-    description: 'Cumplimiento',
-  },
-  customerService: {
-    label: 'SERVICE',
-    icon: MessageCircle,
-    description: 'Atención al Cliente',
-  },
-};
+const PROOF_STEPS = [
+  { key: 'orderIngested', label: 'Order ingested' },
+  { key: 'supplierPurchaseProved', label: 'Supplier purchase proved' },
+  { key: 'trackingAttached', label: 'Tracking attached' },
+  { key: 'deliveredTruthObtained', label: 'Delivered truth' },
+  { key: 'releasedFundsObtained', label: 'Released funds' },
+  { key: 'realizedProfitObtained', label: 'Realized profit' },
+] as const;
+
+function formatStateLabel(value: string | null | undefined): string {
+  const raw = String(value || '').trim();
+  if (!raw) return 'unknown';
+  return raw.replace(/_/g, ' ');
+}
+
+function getLiveStateBadge(state: string | null | undefined) {
+  const normalized = String(state || '').trim().toLowerCase();
+  if (normalized === 'active') return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">active</Badge>;
+  if (normalized === 'under_review') return <Badge variant="outline" className="text-amber-700 border-amber-300 dark:text-amber-300">under_review</Badge>;
+  if (normalized === 'paused') return <Badge variant="outline" className="text-orange-700 border-orange-300 dark:text-orange-300">paused</Badge>;
+  if (normalized === 'failed_publish' || normalized === 'not_found') return <Badge variant="destructive">{normalized}</Badge>;
+  return <Badge variant="outline" className="text-gray-500">unknown</Badge>;
+}
+
+function getBooleanBadge(value: boolean) {
+  return value ? (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-300">
+      <CheckCircle2 className="h-3.5 w-3.5" />
+      proved
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+      <CircleDashed className="h-3.5 w-3.5" />
+      missing
+    </span>
+  );
+}
 
 export default function ProductWorkflowPipeline({
   productId,
@@ -65,28 +65,34 @@ export default function ProductWorkflowPipeline({
   showTimeline = true,
   compact = false,
 }: ProductWorkflowPipelineProps) {
-  const [workflowStatus, setWorkflowStatus] = useState<ProductWorkflowStatus | null>(null);
+  const { environment } = useEnvironment();
+  const [operationsTruth, setOperationsTruth] = useState<OperationsTruthItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchWorkflowStatus();
-  }, [productId]);
+    void fetchOperationalTruth();
+  }, [productId, environment]);
 
-  const fetchWorkflowStatus = async () => {
+  const fetchOperationalTruth = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get(`/api/products/${productId}/workflow-status`);
-      
-      if (response.data?.success && response.data?.data) {
-        setWorkflowStatus(response.data.data);
-      } else {
-        setError('No se pudo cargar el estado del workflow');
+
+      const response = await fetchOperationsTruth({ ids: [productId], environment });
+      const item = response.items.find((candidate) => candidate.productId === productId) ?? null;
+
+      if (!item) {
+        setError('No se encontró verdad operativa canónica para este producto');
+        setOperationsTruth(null);
+        return;
       }
+
+      setOperationsTruth(item);
     } catch (err: any) {
-      console.error('Error fetching workflow status:', err);
-      setError(err?.response?.data?.error || 'Error al cargar estado del workflow');
+      console.error('Error fetching operations truth:', err);
+      setError(err?.response?.data?.error || 'Error al cargar verdad operativa');
+      setOperationsTruth(null);
     } finally {
       setLoading(false);
     }
@@ -104,14 +110,14 @@ export default function ProductWorkflowPipeline({
     );
   }
 
-  if (error || !workflowStatus) {
+  if (error || !operationsTruth) {
     return (
       <div className={`${className}`}>
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-2 text-red-600">
               <AlertCircle className="w-5 h-5" />
-              <span>{error || 'Estado del workflow no disponible'}</span>
+              <span>{error || 'Verdad operativa no disponible'}</span>
             </div>
           </CardContent>
         </Card>
@@ -119,109 +125,150 @@ export default function ProductWorkflowPipeline({
     );
   }
 
-  const stages: WorkflowStage[] = ['scrape', 'analyze', 'publish', 'purchase', 'fulfillment', 'customerService'];
+  const truth = operationsTruth;
+  const proofGridClass = compact ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3';
 
   return (
     <div className={`${className}`}>
-      <Card className="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xl font-bold text-gray-800">Estado del Workflow</CardTitle>
-            <div className="flex items-center gap-2">
-              {/* Badge de ambiente */}
-              <Badge
-                className={
-                  workflowStatus.environment === 'production'
-                    ? 'bg-green-600 text-white border-2 border-green-700 font-bold shadow-md'
-                    : 'bg-yellow-500 text-white border-2 border-yellow-600 font-bold shadow-md'
-                }
-              >
-                <Globe className="w-3 h-3 mr-1" />
-                {workflowStatus.environment.toUpperCase()}
-              </Badge>
-              
-              {/* Badge de modo general */}
-              <Badge className={
-                workflowStatus.stages[workflowStatus.currentStage]?.mode === 'automatic'
-                  ? 'bg-blue-600 text-white border-2 border-blue-700 font-bold shadow-md'
-                  : 'bg-orange-500 text-white border-2 border-orange-600 font-bold shadow-md'
-              }>
-                <Settings className="w-3 h-3 mr-1" />
-                Modo: {workflowStatus.stages[workflowStatus.currentStage]?.mode === 'automatic' ? 'Automático' : 'Manual'}
-              </Badge>
+      <Card className="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 shadow-lg dark:from-gray-900 dark:to-gray-800 dark:border-gray-700">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200 dark:from-gray-900 dark:to-gray-800 dark:border-gray-700">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-xl font-bold text-gray-800 dark:text-gray-100">Operational Lifecycle Truth</CardTitle>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Reemplaza el pipeline legacy y muestra el estado canónico de listing, blockers, proof, and agent decisions.
+              </p>
             </div>
+            {truth.listingUrl && (
+              <a
+                href={truth.listingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Listing
+              </a>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Pipeline de etapas */}
-          <div className="relative">
-            {/* Línea conectora (horizontal en desktop, vertical en mobile) */}
-            <div className="hidden md:block absolute top-12 left-0 right-0 h-1 bg-gradient-to-r from-blue-300 via-indigo-300 to-purple-300 z-0 shadow-sm" />
-            
-            {/* Etapas */}
-            <div className={`relative z-10 ${compact ? 'grid grid-cols-3 gap-4' : 'flex flex-wrap gap-6 md:flex-nowrap md:justify-between'}`}>
-              {stages.map((stage, index) => {
-                const config = stageConfig[stage];
-                const stageInfo = workflowStatus.stages[stage];
-                const isCurrent = workflowStatus.currentStage === stage;
-                const Icon = config.icon;
-
-                return (
-                  <div key={stage} className="flex flex-col items-center flex-1 min-w-[120px]">
-                    <WorkflowStageBadge
-                      status={stageInfo.status}
-                      mode={stageInfo.mode}
-                      label={config.label}
-                      isCurrent={isCurrent}
-                      className="w-full"
-                    />
-                    
-                    {!compact && (
-                      <div className="mt-2 text-center">
-                        <p className="text-xs text-gray-600 font-medium">{config.description}</p>
-                        {stageInfo.completedAt && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            {new Date(stageInfo.completedAt).toLocaleDateString('es-ES', {
-                              day: '2-digit',
-                              month: 'short',
-                            })}
-                          </p>
-                        )}
-                        {stageInfo.nextAction && (
-                          <p className="text-xs text-blue-600 mt-1 italic">
-                            {stageInfo.nextAction}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Conector (solo en desktop, entre etapas) */}
-                    {!compact && index < stages.length - 1 && (
-                      <div className="hidden md:block absolute top-12" style={{ left: `${((index + 1) * 100) / stages.length}%`, transform: 'translateX(-50%)' }}>
-                        <ChevronRight className="w-5 h-5 text-gray-300" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Listing and publication truth</h3>
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-xs text-gray-500 dark:text-gray-400">Local:</span>
+                <Badge variant="outline" className="text-gray-700 dark:text-gray-300">
+                  {formatStateLabel(truth.localListingState)}
+                </Badge>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Marketplace:</span>
+                {getLiveStateBadge(truth.externalMarketplaceState)}
+              </div>
+              {truth.externalMarketplaceSubStatus.length > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Sub-status: {truth.externalMarketplaceSubStatus.join(', ')}
+                </p>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400">Image remediation</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{formatStateLabel(truth.imageRemediationState)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400">Publication readiness</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{formatStateLabel(truth.publicationReadinessState)}</p>
+                </div>
+              </div>
+              {truth.lastMarketplaceSyncAt && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Last marketplace sync: {new Date(truth.lastMarketplaceSyncAt).toLocaleString()}
+                </p>
+              )}
             </div>
 
-            {/* Indicador de etapa actual */}
-            {!compact && (
-              <div className="mt-6 text-center">
-                <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-2 border-blue-700 px-4 py-2 shadow-lg">
-                  <span className="text-sm font-bold uppercase">
-                    ETAPA ACTUAL: {stageConfig[workflowStatus.currentStage]?.label}
-                  </span>
-                </Badge>
-              </div>
-            )}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Blocker and next action</h3>
+              {truth.blockerCode ? (
+                <>
+                  <div className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-300">
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    {truth.blockerCode}
+                  </div>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    {truth.blockerMessage || 'Canonical blocker recorded without expanded message.'}
+                  </p>
+                </>
+              ) : (
+                <div className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-300">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  No canonical blocker
+                </div>
+              )}
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Next action: {truth.nextAction || 'No explicit next action recorded'}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Sources: listing={truth.sourceLabels.listing} · blocker={truth.sourceLabels.blocker}
+              </p>
+            </div>
           </div>
 
-          {/* Timeline */}
-          {showTimeline && workflowStatus.timeline && workflowStatus.timeline.length > 0 && (
-            <div className="border-t pt-6">
-              <WorkflowTimeline events={workflowStatus.timeline} />
+          <div className={`border-t border-gray-200 dark:border-gray-700 pt-6 ${proofGridClass}`}>
+            {PROOF_STEPS.map((step) => (
+              <div key={step.key} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{step.label}</span>
+                  {getBooleanBadge(truth[step.key])}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {showTimeline && (
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Agent trace</h3>
+              {truth.agentTrace ? (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {truth.agentTrace.agentName} · {truth.agentTrace.stage}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {truth.agentTrace.decidedAt ? new Date(truth.agentTrace.decidedAt).toLocaleString() : 'Decision time unknown'}
+                      </p>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${
+                      truth.agentTrace.blocking
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                        : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                    }`}>
+                      {truth.agentTrace.blocking ? <ShieldAlert className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
+                      {truth.agentTrace.blocking ? 'blocking' : 'advisory'}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm text-gray-800 dark:text-gray-200">
+                    Decision: <span className="font-medium">{truth.agentTrace.decision}</span>
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Reason: {truth.agentTrace.reasonCode}
+                  </p>
+                  {truth.agentTrace.evidenceSummary.length > 0 && (
+                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-2">
+                      Evidence: {truth.agentTrace.evidenceSummary.join(' · ')}
+                    </p>
+                  )}
+                  {truth.agentTrace.nextAction && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+                      Next action: {truth.agentTrace.nextAction}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400">
+                  No canonical agent trace is available for this product yet.
+                </div>
+              )}
             </div>
           )}
         </CardContent>

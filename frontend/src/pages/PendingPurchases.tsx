@@ -1,18 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   ShoppingCart, 
   ExternalLink, 
   DollarSign,
   Package,
   AlertCircle,
-  CheckCircle,
   Clock,
   MapPin,
   User,
   Mail,
   TrendingUp
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,6 +23,10 @@ import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
+import { fetchOperationsTruth } from '@/services/operationsTruth.api';
+import type { OperationsTruthResponse } from '@/types/operations';
+import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
+import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
 
 interface PendingSale {
   id: number | string;
@@ -52,9 +55,35 @@ export default function PendingPurchases() {
   const { environment } = useEnvironment();
   const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState<Record<number, boolean>>({});
+  const [processing, setProcessing] = useState<Record<string, boolean>>({});
   const [trackingInput, setTrackingInput] = useState<Record<string, string>>({});
   const [submittingTracking, setSubmittingTracking] = useState<Record<string, boolean>>({});
+  const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
+
+  const pendingProductIds = useMemo(() => {
+    const ids = pendingSales
+      .map((s) => (typeof s.productId === 'number' ? s.productId : Number(s.productId)))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    return Array.from(new Set(ids)).slice(0, 50);
+  }, [pendingSales]);
+
+  useEffect(() => {
+    if (pendingProductIds.length === 0) {
+      setOperationsTruth(null);
+      return;
+    }
+    let cancelled = false;
+    fetchOperationsTruth({ ids: pendingProductIds, environment })
+      .then((data) => {
+        if (!cancelled) setOperationsTruth(data);
+      })
+      .catch(() => {
+        if (!cancelled) setOperationsTruth(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingProductIds, environment]);
 
   const fetchPendingPurchases = useCallback(async () => {
     try {
@@ -78,9 +107,12 @@ export default function PendingPurchases() {
     enabled: true,
   });
 
+  const saleRowKey = (sale: PendingSale) => String(sale.id);
+
   const handlePurchaseNow = async (sale: PendingSale) => {
+    const rowKey = saleRowKey(sale);
     try {
-      setProcessing(prev => ({ ...prev, [sale.id]: true }));
+      setProcessing((prev) => ({ ...prev, [rowKey]: true }));
       
       // Abrir AliExpress en nueva pestaña
       if (sale.aliexpressUrl) {
@@ -93,7 +125,7 @@ export default function PendingPurchases() {
       console.error('Error processing purchase:', error);
       toast.error('Error al procesar compra');
     } finally {
-      setProcessing(prev => ({ ...prev, [sale.id]: false }));
+      setProcessing((prev) => ({ ...prev, [rowKey]: false }));
     }
   };
 
@@ -145,6 +177,13 @@ export default function PendingPurchases() {
             </p>
           )}
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Prioriza acciones de fulfillment y la{' '}
+            <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline">
+              verdad operativa canónica
+            </Link>
+            ; las cifras de margen aquí son referenciales, no ganancia realizada.
+          </p>
           <p className="text-xs mt-1">
             <a href="/orders?import=ebay" className="text-amber-600 dark:text-amber-400 hover:underline">Importar orden eBay</a>
             {' '}si la venta no llegó por webhook.
@@ -159,6 +198,17 @@ export default function PendingPurchases() {
       </div>
 
       {/* Capital Info Card */}
+      {operationsTruth && pendingProductIds.length > 0 && (
+        <div className="space-y-4">
+          <OperationsTruthSummaryPanel data={operationsTruth} />
+          <PostSaleProofLadderPanel
+            summary={operationsTruth.summary.proofCounts}
+            title="Proof ladder (muestra de productos en esta cola)"
+            subtitle="Cada fila sigue siendo acción de compra en proveedor; el ladder resume pruebas registradas en backend."
+          />
+        </div>
+      )}
+
       {pendingSales.length > 0 && (
         <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
           <CardContent className="pt-6">
@@ -232,40 +282,40 @@ export default function PendingPurchases() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  {/* Información Financiera */}
-                  <div className="space-y-2">
+                  {/* Fulfillment primero: verdad de acción */}
+                  <div className="space-y-2 md:order-1">
                     <h3 className="font-semibold text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4" />
-                      Información Financiera
+                      <Package className="w-4 h-4" />
+                      Fulfillment — siguiente acción
                     </h3>
-                    <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded space-y-1">
-                      <div className="flex justify-between text-sm text-gray-900 dark:text-gray-100">
-                        <span className="text-gray-600 dark:text-gray-400">Costo AliExpress:</span>
-                        <span className="font-medium">{formatCurrencySimple(sale.aliexpressCost, 'USD')}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Capital Requerido:</span>
-                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                          {formatCurrencySimple(sale.requiredCapital, 'USD')}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Capital Disponible:</span>
-                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                          {formatCurrencySimple(sale.availableCapital, 'USD')}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm font-semibold pt-2 border-t border-gray-200 dark:border-gray-600">
-                        <span className="text-gray-700 dark:text-gray-300">Ganancia Estimada:</span>
-                        <span className="text-green-600 dark:text-green-400">
-                          {formatCurrencySimple(sale.salePrice - sale.aliexpressCost, 'USD')}
-                        </span>
+                    <div className="bg-slate-50 dark:bg-slate-900/30 p-3 rounded border border-slate-200 dark:border-slate-700 space-y-2 text-sm text-gray-800 dark:text-gray-200">
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Compra en proveedor pendiente o requiere envío de tracking. Los detalles de bloqueo y prueba están en la orden y en Control Center.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {sale.orderId && (
+                          <Link
+                            to={`/orders/${sale.orderId}`}
+                            className="inline-flex items-center justify-center rounded-lg text-xs font-semibold border-2 border-gray-300 bg-white text-gray-900 hover:bg-gray-50 dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 px-3 py-2"
+                          >
+                            Abrir orden (verdad de compra)
+                          </Link>
+                        )}
+                        {sale.aliexpressUrl && (
+                          <button
+                            type="button"
+                            onClick={() => window.open(sale.aliexpressUrl, '_blank')}
+                            className="inline-flex items-center justify-center rounded-lg text-xs font-semibold border-2 border-gray-300 bg-white text-gray-900 hover:bg-gray-50 dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 px-3 py-2"
+                          >
+                            Enlace proveedor
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Información del Comprador */}
-                  <div className="space-y-2">
+                  {/* Comprador */}
+                  <div className="space-y-2 md:order-2">
                     <h3 className="font-semibold text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
                       <User className="w-4 h-4" />
                       Información del Comprador
@@ -307,6 +357,41 @@ export default function PendingPurchases() {
                       )}
                     </div>
                   </div>
+
+                  {/* Referencia financiera — demoted */}
+                  <div className="space-y-2 md:col-span-2 md:order-3">
+                    <h3 className="font-semibold text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      Referencia de costos y capital (no es ganancia realizada)
+                    </h3>
+                    <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded space-y-1 border border-dashed border-gray-200 dark:border-gray-600">
+                      <div className="flex justify-between text-sm text-gray-900 dark:text-gray-100">
+                        <span className="text-gray-600 dark:text-gray-400">Costo AliExpress (ref.):</span>
+                        <span className="font-medium">{formatCurrencySimple(sale.aliexpressCost, 'USD')}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Capital requerido:</span>
+                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {formatCurrencySimple(sale.requiredCapital, 'USD')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Capital disponible:</span>
+                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {formatCurrencySimple(sale.availableCapital, 'USD')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs pt-2 border-t border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
+                        <span>Margen bruto referencial (estimado, venta − coste proveedor):</span>
+                        <span className="font-medium text-gray-800 dark:text-gray-200">
+                          {formatCurrencySimple(sale.salePrice - sale.aliexpressCost, 'USD')}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-500 pt-1">
+                        No sustituye proof de compra en proveedor ni fondos liberados. Usa la orden enlazada para el estado real.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Phase 41: Manual tracking — compré manualmente, enviar tracking */}
@@ -322,9 +407,9 @@ export default function PendingPurchases() {
                         className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 min-w-[180px]"
                       />
                       <Button
-                        size="sm"
                         onClick={() => handleSubmitTracking(sale)}
                         disabled={submittingTracking[sale.orderId]}
+                        className="text-sm h-9 px-3"
                       >
                         {submittingTracking[sale.orderId] ? 'Enviando...' : 'Enviar tracking'}
                       </Button>
@@ -362,11 +447,11 @@ export default function PendingPurchases() {
                     )}
                     <Button
                       onClick={() => handlePurchaseNow(sale)}
-                      disabled={!sale.canPurchase || processing[sale.id]}
+                      disabled={!sale.canPurchase || processing[saleRowKey(sale)]}
                       className="flex items-center gap-2"
                       variant={sale.canPurchase ? "default" : "destructive"}
                     >
-                      {processing[sale.id] ? (
+                      {processing[saleRowKey(sale)] ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                           Procesando...

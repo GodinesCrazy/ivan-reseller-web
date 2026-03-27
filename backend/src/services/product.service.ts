@@ -1,12 +1,21 @@
 import { trace } from '../utils/boot-trace';
 trace('loading product.service');
 
+import { Prisma } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
 import { prisma } from '../config/database';
+import { reconcileProductTruth } from './operational-truth.service';
 
 // ✅ Definir ProductStatus localmente si no está en Prisma
-type ProductStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PUBLISHED' | 'INACTIVE';
+type ProductStatus =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'PUBLISHED'
+  | 'INACTIVE'
+  | 'LEGACY_UNVERIFIED'
+  | 'VALIDATED_READY';
 
 export interface CreateProductDto {
   title: string;
@@ -545,48 +554,76 @@ export class ProductService {
         where,
         skip,
         take: limit,
-        include: {
-          user: {
-            select: { id: true, username: true, email: true },
-          },
-          sales: {
-            select: { id: true, orderId: true, status: true },
-          },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          status: true,
+          aliexpressUrl: true,
+          aliexpressPrice: true,
+          suggestedPrice: true,
+          finalPrice: true,
+          currency: true,
+          targetCountry: true,
+          shippingCost: true,
+          totalCost: true,
+          aliexpressSku: true,
+          productData: true,
+          images: true,
+          createdAt: true,
+          winnerDetectedAt: true,
           marketplaceListings: {
             select: { id: true, marketplace: true, listingId: true, listingUrl: true, publishedAt: true },
             orderBy: { publishedAt: 'desc' },
+            take: 5,
           },
         },
         orderBy: { [sortField]: sortDir },
       }),
       prisma.product.count({ where }),
-      prisma.product.groupBy({
-        by: ['status'],
-        where: baseWhere,
-        _count: { _all: true },
-      }),
-      prisma.product.findMany({
-        where: { ...baseWhere, category: { not: null } },
-        select: { category: true },
-        distinct: ['category'],
-        take: 200,
-      }),
+      prisma.$queryRaw<Array<{ status: string; count: number }>>(Prisma.sql`
+        SELECT "status", COUNT(*)::int AS "count"
+        FROM "products"
+        ${userId ? Prisma.sql`WHERE "userId" = ${userId}` : Prisma.empty}
+        GROUP BY "status"
+      `),
+      prisma.$queryRaw<Array<{ category: string | null }>>(Prisma.sql`
+        SELECT DISTINCT "category"
+        FROM "products"
+        ${
+          userId
+            ? Prisma.sql`WHERE "userId" = ${userId} AND "category" IS NOT NULL`
+            : Prisma.sql`WHERE "category" IS NOT NULL`
+        }
+        ORDER BY "category" ASC
+        LIMIT 50
+      `),
     ]);
 
     const byStatus: Record<string, number> = {};
     for (const g of statusGroups) {
-      byStatus[g.status] = g._count._all;
+      byStatus[g.status] = Number(g.count || 0);
     }
     const totalAll = Object.values(byStatus).reduce((s, n) => s + n, 0);
 
     // Mark products that share aliexpressUrl (possible duplicates) for UI
     let duplicateIds = new Set<number>();
     if (userId && products.length > 0) {
-      const counts = await prisma.product.groupBy({
+      const pageAliExpressUrls = Array.from(
+        new Set(
+          products
+            .map((product) => String(product.aliexpressUrl || '').trim())
+            .filter((url) => url.length > 0)
+        )
+      );
+      const counts = pageAliExpressUrls.length > 0 ? await prisma.product.groupBy({
         by: ['aliexpressUrl'],
-        where: { userId, aliexpressUrl: { not: null } },
+        where: {
+          userId,
+          aliexpressUrl: { in: pageAliExpressUrls },
+        },
         _count: { id: true },
-      });
+      }) : [];
       const duplicateUrls = counts.filter(c => (c._count.id ?? 0) > 1).map(c => c.aliexpressUrl).filter(Boolean) as string[];
       if (duplicateUrls.length > 0) {
         const dupProducts = await prisma.product.findMany({
@@ -598,7 +635,7 @@ export class ProductService {
     }
 
     return {
-      products: products.map(p => ({ ...p, isPossibleDuplicate: duplicateIds.has(p.id) })),
+      products: products.map(p => ({ ...p, isPossibleDuplicate: duplicateIds.has(p.id) })) as any[],
       pagination: {
         page,
         limit,
@@ -798,7 +835,19 @@ export class ProductService {
         isPublished: true,
         publishedAt: true, 
         title: true, 
-        userId: true 
+        userId: true,
+        targetCountry: true,
+        currency: true,
+        aliexpressSku: true,
+        totalCost: true,
+        shippingCost: true,
+        marketplaceListings: {
+          select: {
+            status: true,
+            listingId: true,
+            publishedAt: true,
+          },
+        },
       }
     });
 
@@ -821,14 +870,34 @@ export class ProductService {
       });
     }
 
+    let normalizedStatus = status;
+
+    if (status === 'APPROVED' || status === 'PUBLISHED') {
+      const reconciled = reconcileProductTruth({
+        ...currentProduct,
+        status,
+      } as any);
+
+      if (reconciled.nextStatus !== status) {
+        logger.warn('Unsafe publish-semantic status downgraded during updateProductStatusSafely', {
+          productId: id,
+          requestedStatus: status,
+          normalizedStatus: reconciled.nextStatus,
+          userId: currentProduct.userId,
+        });
+        normalizedStatus = reconciled.nextStatus as ProductStatus;
+      }
+    }
+
     // ✅ Validar consistencia: si status es PUBLISHED, isPublished debe ser true
-    const shouldBePublished = status === 'PUBLISHED';
+    const shouldBePublished = normalizedStatus === 'PUBLISHED';
     const finalIsPublished = isPublished !== undefined ? isPublished : shouldBePublished;
     
     // ✅ Log para debugging
     logger.debug('updateProductStatusSafely called', {
       productId: id,
       status,
+      normalizedStatus,
       isPublished,
       adminId,
       reason,
@@ -840,14 +909,13 @@ export class ProductService {
     // Si status no es PUBLISHED pero es APPROVED y había listings, mantener isPublished si corresponde
     // Si status es REJECTED o INACTIVE, isPublished DEBE ser false
     let correctedIsPublished: boolean;
-    if (status === 'PUBLISHED') {
+    if (normalizedStatus === 'PUBLISHED') {
       correctedIsPublished = true; // Siempre true para PUBLISHED
-    } else if (status === 'REJECTED' || status === 'INACTIVE') {
-      correctedIsPublished = false; // Siempre false para REJECTED/INACTIVE
-    } else if (status === 'APPROVED') {
-      // Para APPROVED, usar el valor proporcionado o mantener el actual si tenía listings
-      // Pero mejor usar el valor proporcionado explícitamente
-      correctedIsPublished = finalIsPublished;
+    } else if (normalizedStatus === 'REJECTED' || normalizedStatus === 'INACTIVE' || normalizedStatus === 'LEGACY_UNVERIFIED' || normalizedStatus === 'VALIDATED_READY') {
+      correctedIsPublished = false; // Siempre false para estados no publicados y catálogo congelado
+    } else if (normalizedStatus === 'APPROVED') {
+      // P0: APPROVED ya no debe representar semántica de publicación.
+      correctedIsPublished = false;
     } else {
       // Para PENDING u otros estados, false por defecto
       correctedIsPublished = false;
@@ -855,15 +923,15 @@ export class ProductService {
 
     // ✅ Preparar datos de actualización
     const updateData: any = {
-      status,
+      status: normalizedStatus,
       isPublished: correctedIsPublished,
     };
 
     // ✅ CORREGIDO: Actualizar publishedAt solo si cambia el estado a PUBLISHED o desde PUBLISHED
     // Asegurar que publishedAt se limpia cuando status !== 'PUBLISHED'
-    if (status === 'PUBLISHED' && !currentProduct.publishedAt) {
+    if (normalizedStatus === 'PUBLISHED' && !currentProduct.publishedAt) {
       updateData.publishedAt = new Date();
-    } else if (status !== 'PUBLISHED') {
+    } else if (normalizedStatus !== 'PUBLISHED') {
       // ✅ Limpiar publishedAt si el estado no es PUBLISHED
       updateData.publishedAt = null;
     }
@@ -884,13 +952,13 @@ export class ProductService {
 
     // Registrar actividad si hay adminId
     if (adminId) {
-      const metadataString = JSON.stringify({ productId: id, newStatus: status, isPublished: correctedIsPublished });
+      const metadataString = JSON.stringify({ productId: id, requestedStatus: status, newStatus: normalizedStatus, isPublished: correctedIsPublished });
 
       await prisma.activity.create({
         data: {
           userId: adminId,
           action: 'PRODUCT_STATUS_CHANGED',
-          description: `Estado del producto "${updated.title}" cambiado a ${status}`,
+          description: `Estado del producto "${updated.title}" cambiado a ${normalizedStatus}`,
           metadata: metadataString,
         },
       }).catch(() => {});
@@ -899,7 +967,7 @@ export class ProductService {
         data: {
           userId: updated.userId,
           action: 'PRODUCT_STATUS_CHANGED',
-          description: `Tu producto "${updated.title}" ahora está ${status}`,
+          description: `Tu producto "${updated.title}" ahora está ${normalizedStatus}`,
           metadata: metadataString,
         },
       }).catch(() => {});
@@ -917,7 +985,7 @@ export class ProductService {
       where: {
         OR: [
           { status: 'PUBLISHED', isPublished: false }, // PUBLISHED pero isPublished = false
-          { status: { notIn: ['PUBLISHED', 'APPROVED'] }, isPublished: true }, // No PUBLISHED/APPROVED pero isPublished = true (excepto APPROVED que puede tener listings)
+          { status: { notIn: ['PUBLISHED'] }, isPublished: true }, // Solo PUBLISHED puede quedar marcado como publicado
         ]
       },
       select: {
@@ -929,7 +997,7 @@ export class ProductService {
       }
     });
 
-    // También detectar APPROVED con isPublished = true pero sin listings activos
+    // También detectar APPROVED con isPublished = true (ya no permitido en P0)
     const approvedWithIsPublished = await prisma.product.findMany({
       where: {
         status: 'APPROVED',
@@ -980,30 +1048,24 @@ export class ProductService {
           });
           
           if (productWithListings && productWithListings.marketplaceListings.length > 0) {
-            // Tiene listings, corregir isPublished a true
-            correctIsPublished = true;
+            // Tiene listings; reconciliar hacia PUBLISHED solo si además tiene contexto seguro.
+            const reconciled = reconcileProductTruth(productWithListings as any);
+            correctStatus = reconciled.nextStatus;
+            correctIsPublished = reconciled.nextIsPublished;
           } else {
-            // No tiene listings, cambiar status a APPROVED
-            correctStatus = 'APPROVED';
+            // No tiene listings, no puede seguir apareciendo como publicado.
+            correctStatus = 'LEGACY_UNVERIFIED';
             correctIsPublished = false;
           }
         } else if (product.status !== 'PUBLISHED' && product.isPublished) {
           // Si isPublished = true pero status no es PUBLISHED
-          if (product.status === 'APPROVED') {
-            // Verificar si tiene listings
-            const productWithListings = await prisma.product.findUnique({
-              where: { id: product.id },
-              include: { marketplaceListings: true }
-            });
-            
-            if (!productWithListings || productWithListings.marketplaceListings.length === 0) {
-              // No tiene listings, corregir isPublished a false
-              correctIsPublished = false;
-            }
-          } else {
-            // Para otros estados (PENDING, REJECTED, INACTIVE), isPublished debe ser false
-            correctIsPublished = false;
-          }
+          const productWithListings = await prisma.product.findUnique({
+            where: { id: product.id },
+            include: { marketplaceListings: true }
+          });
+          const reconciled = reconcileProductTruth(productWithListings as any);
+          correctStatus = reconciled.nextStatus;
+          correctIsPublished = reconciled.nextIsPublished;
         }
 
         // Aplicar corrección usando updateProductStatusSafely
@@ -1033,6 +1095,63 @@ export class ProductService {
     }
 
     return { fixed, errors };
+  }
+
+  async reconcileUnsafeOperationalStates(): Promise<{
+    scanned: number;
+    normalizedToLegacy: number;
+    normalizedToValidatedReady: number;
+    normalizedToPublished: number;
+    unchanged: number;
+  }> {
+    const candidates = await prisma.product.findMany({
+      where: {
+        status: { in: ['APPROVED', 'PUBLISHED'] as string[] },
+      },
+      include: {
+        marketplaceListings: {
+          select: {
+            status: true,
+            listingId: true,
+            publishedAt: true,
+          },
+        },
+      },
+    });
+
+    let normalizedToLegacy = 0;
+    let normalizedToValidatedReady = 0;
+    let normalizedToPublished = 0;
+    let unchanged = 0;
+
+    for (const candidate of candidates) {
+      const reconciled = reconcileProductTruth(candidate as any);
+      if (
+        candidate.status === reconciled.nextStatus &&
+        candidate.isPublished === reconciled.nextIsPublished
+      ) {
+        unchanged += 1;
+        continue;
+      }
+
+      await this.updateProductStatusSafely(
+        candidate.id,
+        reconciled.nextStatus,
+        reconciled.nextIsPublished
+      );
+
+      if (reconciled.nextStatus === 'LEGACY_UNVERIFIED') normalizedToLegacy += 1;
+      if (reconciled.nextStatus === 'VALIDATED_READY') normalizedToValidatedReady += 1;
+      if (reconciled.nextStatus === 'PUBLISHED') normalizedToPublished += 1;
+    }
+
+    return {
+      scanned: candidates.length,
+      normalizedToLegacy,
+      normalizedToValidatedReady,
+      normalizedToPublished,
+      unchanged,
+    };
   }
 
   /**
@@ -1189,10 +1308,10 @@ export class ProductService {
       prisma.product.count({ where: { ...where, status: 'PENDING' } }),
       prisma.product.count({ where: { ...where, status: 'APPROVED' } }),
       prisma.product.count({ where: { ...where, status: 'REJECTED' } }),
-      prisma.product.count({ where: { ...where, status: 'PUBLISHED' } }),
+      prisma.marketplaceListing.count({ where: { ...where, status: 'active' } }),
     ]);
 
-    // ✅ FIX: Agregar timeout de 20 segundos a las queries
+    // Published products must reflect confirmed active marketplace listings, not stale product lifecycle rows.
     const [total, pending, approved, rejected, published] = await queryWithTimeout(queriesPromise, 20000);
 
     return {

@@ -11,6 +11,34 @@ import { apiAvailability } from '../../services/api-availability.service';
 
 const router = Router();
 
+async function withTimeoutFallback<T>(
+  label: string,
+  timeoutMs: number,
+  operation: () => Promise<T>,
+  fallback: T
+): Promise<{ value: T; timedOut: boolean; durationMs: number; label: string }> {
+  const startedAt = Date.now();
+  try {
+    const value = await Promise.race([
+      operation(),
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
+    ]);
+    return {
+      value,
+      timedOut: value === fallback,
+      durationMs: Date.now() - startedAt,
+      label,
+    };
+  } catch {
+    return {
+      value: fallback,
+      timedOut: true,
+      durationMs: Date.now() - startedAt,
+      label,
+    };
+  }
+}
+
 /**
  * GET /api/system/status
  * User status panel: PayPal, eBay, Mercado Libre, Amazon, AliExpress, Autopilot, Profit Guard.
@@ -416,7 +444,61 @@ router.get('/readiness-report', authenticate, async (req: Request, res: Response
     const { runSystemHealthCheck, isSystemReadyForAutonomous } = await import(
       '../../services/system-health.service'
     );
-    const health = await runSystemHealthCheck();
+    const {
+      summarizeConnectorReadinessFromStatuses,
+      getWebhookStatusWithProof,
+    } = await import('../../services/webhook-readiness.service');
+    const { getFastApiStatusesForUser } = await import('../../services/api-status-fast-path.service');
+    const sectionTimings: Record<string, number> = {};
+    const degradedSections: string[] = [];
+    const statusesSection = await withTimeoutFallback(
+      'apiStatuses',
+      4000,
+      () => getFastApiStatusesForUser(req.user!.userId),
+      { statuses: [], source: 'snapshot' as const, staleSnapshot: true }
+    );
+    sectionTimings.apiStatuses = statusesSection.durationMs;
+    if (statusesSection.timedOut) degradedSections.push('apiStatuses');
+    const statuses = statusesSection.value.statuses;
+    const readinessSource = statusesSection.value.source;
+    const staleSnapshot = statusesSection.value.staleSnapshot;
+
+    const webhookSection = await withTimeoutFallback(
+      'webhookStatus',
+      1500,
+      () => getWebhookStatusWithProof(),
+      {
+        ebay: { configured: false, verified: false, eventFlowReady: false, lastWebhookEventAt: null, lastWebhookVerificationAt: null, lastEventType: null },
+        mercadolibre: { configured: false, verified: false, eventFlowReady: false, lastWebhookEventAt: null, lastWebhookVerificationAt: null, lastEventType: null },
+        amazon: { configured: false, verified: false, eventFlowReady: false, lastWebhookEventAt: null, lastWebhookVerificationAt: null, lastEventType: null },
+      }
+    );
+    sectionTimings.webhookStatus = webhookSection.durationMs;
+    if (webhookSection.timedOut) degradedSections.push('webhookStatus');
+
+    const readiness = summarizeConnectorReadinessFromStatuses(statuses, webhookSection.value);
+    const healthSection = await withTimeoutFallback(
+      'systemHealth',
+      4000,
+      () =>
+        runSystemHealthCheck({
+          userId: req.user!.userId,
+          apiStatuses: statuses,
+        }),
+      {
+        database: 'unknown' as const,
+        redis: 'unknown' as const,
+        bullmq: 'unknown' as const,
+        workers: 'unknown' as const,
+        marketplaceApi: 'degraded' as const,
+        supplierApi: 'degraded' as const,
+        alerts: ['system_health_timeout'],
+        timestamp: new Date().toISOString(),
+      }
+    );
+    sectionTimings.systemHealth = healthSection.durationMs;
+    if (healthSection.timedOut) degradedSections.push('systemHealth');
+    const health = healthSection.value;
 
     const deploymentStatus =
       process.env.NODE_ENV === 'production'
@@ -426,18 +508,35 @@ router.get('/readiness-report', authenticate, async (req: Request, res: Response
       health.workers === 'ok' ? 'running' : health.workers === 'fail' ? 'degraded' : health.redis === 'ok' || health.bullmq === 'ok' ? 'degraded' : 'unknown';
 
     const { prisma } = await import('../../config/database');
-    const marketplaceCreds = await prisma.apiCredential.count({
-      where: {
-        apiName: { in: ['ebay', 'mercadolibre', 'amazon'] },
-        isActive: true,
+    const credentialsSection = await withTimeoutFallback(
+      'credentialCounts',
+      2500,
+      async () => {
+        const [marketplaceCreds, supplierCreds] = await Promise.all([
+          prisma.apiCredential.count({
+            where: {
+              apiName: { in: ['ebay', 'mercadolibre', 'amazon'] },
+              isActive: true,
+            },
+          }),
+          prisma.apiCredential.count({
+            where: { apiName: { in: ['aliexpress', 'aliexpress-dropshipping'] }, isActive: true },
+          }),
+        ]);
+        return { marketplaceCreds, supplierCreds };
       },
-    });
-    const supplierCreds = await prisma.apiCredential.count({
-      where: { apiName: 'aliexpress', isActive: true },
-    });
+      { marketplaceCreds: 0, supplierCreds: 0 }
+    );
+    sectionTimings.credentialCounts = credentialsSection.durationMs;
+    if (credentialsSection.timedOut) degradedSections.push('credentialCounts');
+    const { marketplaceCreds, supplierCreds } = credentialsSection.value;
 
     const autonomousModeEnabled = process.env.AUTONOMOUS_OPERATION_MODE === 'true';
-    const canEnableAutonomous = isSystemReadyForAutonomous(health) && !health.alerts.length;
+    const canEnableAutonomous =
+      isSystemReadyForAutonomous(health) &&
+      readiness.automationReadyCount > 0 &&
+      readiness.blockingIssues.length === 0 &&
+      !health.alerts.length;
 
     const salesOptimizationReadiness = {
       mercadolibreCompetitivePrice: true,
@@ -451,17 +550,23 @@ router.get('/readiness-report', authenticate, async (req: Request, res: Response
       strategy: 'Disabled',
       recentOptimizations: [],
     };
-    try {
-      const { getSalesAccelerationStatus } = await import('../../services/sales-acceleration-mode.service');
-      const acc = await getSalesAccelerationStatus();
-      salesAccelerationMode = {
-        enabled: acc.enabled,
-        strategy: acc.strategy,
-        recentOptimizations: acc.recentOptimizations,
-      };
-    } catch {
-      // non-fatal
-    }
+    const salesAccelerationSection = await withTimeoutFallback(
+      'salesAccelerationMode',
+      2500,
+      async () => {
+        const { getSalesAccelerationStatus } = await import('../../services/sales-acceleration-mode.service');
+        const acc = await getSalesAccelerationStatus();
+        return {
+          enabled: acc.enabled,
+          strategy: acc.strategy,
+          recentOptimizations: acc.recentOptimizations,
+        };
+      },
+      salesAccelerationMode
+    );
+    sectionTimings.salesAccelerationMode = salesAccelerationSection.durationMs;
+    if (salesAccelerationSection.timedOut) degradedSections.push('salesAccelerationMode');
+    salesAccelerationMode = salesAccelerationSection.value;
 
     return res.status(200).json({
       success: true,
@@ -474,10 +579,17 @@ router.get('/readiness-report', authenticate, async (req: Request, res: Response
         workers: health.workers,
         marketplaceApi: health.marketplaceApi,
         supplierApi: health.supplierApi,
+        webhookAutomation: readiness.automationReadyCount > 0 ? 'ok' : 'fail',
         alerts: health.alerts,
       },
       marketplaceIntegrations: { configured: marketplaceCreds > 0, count: marketplaceCreds },
       supplierIntegrations: { configured: supplierCreds > 0, count: supplierCreds },
+      connectorReadiness: readiness,
+      readinessSource,
+      readinessSnapshotStale: staleSnapshot,
+      degradedSections,
+      sectionTimings,
+      generationPath: 'snapshot_first_bounded',
       automationModeStatus: autonomousModeEnabled ? 'enabled' : 'disabled',
       canEnableAutonomous,
       salesOptimizationReadiness,

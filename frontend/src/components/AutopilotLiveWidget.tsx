@@ -27,7 +27,7 @@ interface AutopilotStatus {
 const PHASE_LABELS: Record<string, string> = {
   searching: 'Buscando oportunidades en AliExpress…',
   filtering: 'Filtrando productos asequibles…',
-  analyzing: 'Analizando rentabilidad y ROI…',
+  analyzing: 'Analizando rentabilidad (estim.)…',
   publishing: 'Publicando en marketplace…',
   idle: 'Entre ciclos',
 };
@@ -89,7 +89,8 @@ export default function AutopilotLiveWidget() {
           </div>
           <div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Autopilot</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="text-[10px] text-gray-500 dark:text-gray-400">Telemetría de ejecución — no sustituye verdad operativa</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               {status.running
                 ? (phase ? PHASE_SHORT[phase] ?? PHASE_LABELS[phase] ?? 'Ciclo activo' : 'Ciclo activo')
                 : 'Detenido'}

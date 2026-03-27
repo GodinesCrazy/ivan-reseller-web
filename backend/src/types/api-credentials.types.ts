@@ -125,6 +125,31 @@ export interface OpenAICredentials {
   
   /** Modelo a usar (e.g., gpt-4, gpt-3.5-turbo) */
   model?: string;
+
+  /** Base URL OpenAI-compatible (opcional) */
+  baseUrl?: string;
+
+  /** Modelo de generación de imágenes (opcional) */
+  imageModel?: string;
+
+  /** Modelo de revisión / visión (opcional) */
+  reviewModel?: string;
+}
+
+/**
+ * Credenciales de Gemini
+ *
+ * @see https://ai.google.dev/
+ */
+export interface GeminiCredentials {
+  /** Gemini API Key */
+  apiKey: string;
+
+  /** Modelo de generación de imágenes (opcional) */
+  model?: string;
+
+  /** Modelo de revisión / visión (opcional) */
+  reviewModel?: string;
 }
 
 /**
@@ -355,6 +380,7 @@ export type ApiCredentials =
   | MercadoLibreCredentials
   | GroqCredentials
   | OpenAICredentials
+  | GeminiCredentials
   | ScraperAPICredentials
   | ZenRowsCredentials
   | TwoCaptchaCredentials
@@ -377,6 +403,7 @@ export type ApiCredentialsMap = {
   mercadolibre: MercadoLibreCredentials;
   groq: GroqCredentials;
   openai: OpenAICredentials;
+  gemini: GeminiCredentials;
   scraperapi: ScraperAPICredentials;
   zenrows: ZenRowsCredentials;
   '2captcha': TwoCaptchaCredentials;

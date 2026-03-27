@@ -11,6 +11,7 @@ import {
   type PublishableProduct,
   type ValidationResult,
 } from './marketplace.types';
+import { isStrictPublishReady } from '../../utils/strict-publish-readiness';
 
 export type MarketplaceName = 'mercadolibre' | 'ebay' | 'amazon';
 
@@ -19,6 +20,7 @@ export interface PublishRequest {
   marketplace: MarketplaceName;
   limit?: number;
   mode?: PublishMode;
+  productIds?: number[];
 }
 
 export interface PublishExecutionResult {
@@ -51,6 +53,9 @@ export class MarketplacePublishService {
     const limit = Math.max(1, Math.min(request.limit || 1, 25));
     const marketplace = request.marketplace;
     const publisher = this.publishers[marketplace];
+    if ('setUserId' in publisher && typeof publisher.setUserId === 'function') {
+      publisher.setUserId(request.userId);
+    }
 
     logger.info('[MARKETPLACE] Validating credentials', {
       marketplace,
@@ -93,23 +98,31 @@ export class MarketplacePublishService {
     }
 
     const effectiveLimit = mode === PublishMode.STAGING_REAL ? 1 : limit;
-    const products = await this.getPublishableProducts(request.userId, effectiveLimit);
+    const products = await this.getPublishableProducts(request.userId, effectiveLimit, request.productIds);
+
+    const publishableProducts =
+      marketplace === 'mercadolibre'
+        ? products.map((product) => ({
+            ...product,
+            category: this.isMercadoLibreCategoryId(product.category) ? product.category : null,
+          }))
+        : products;
 
     const results: PublishExecutionResult['results'] = [];
 
-    if (products.length === 0) {
+    if (publishableProducts.length === 0) {
       return {
         marketplace,
         mode,
         attempted: 0,
         results,
-        skippedReason: 'No hay productos publishable para publicar.',
+        skippedReason: 'No hay productos VALIDATED_READY con destino, costos y SKU listos para publicar.',
       };
     }
 
     const { runFeeIntelligenceAndFlag } = await import('../../services/marketplace-fee-intelligence.service');
 
-    for (const product of products) {
+    for (const product of publishableProducts) {
       const listPrice = product.suggestedPrice ?? product.finalPrice ?? 0;
       const runFeeCheck = (marketplace === 'mercadolibre' || marketplace === 'ebay') && mode !== PublishMode.SIMULATED && listPrice;
       if (runFeeCheck) {
@@ -202,23 +215,41 @@ export class MarketplacePublishService {
     return {
       marketplace,
       mode,
-      attempted: products.length,
+      attempted: publishableProducts.length,
       results,
     };
   }
 
-  private async getPublishableProducts(userId: number, limit: number): Promise<PublishableProduct[]> {
+  private async getPublishableProducts(
+    userId: number,
+    limit: number,
+    productIds?: number[],
+  ): Promise<PublishableProduct[]> {
+    const normalizedProductIds = Array.isArray(productIds)
+      ? productIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0)
+      : [];
     const products = await prisma.product.findMany({
       where: {
         userId,
-        status: 'publishable',
+        status: 'VALIDATED_READY',
         isPublished: false,
+        targetCountry: { not: null },
+        shippingCost: { not: null },
+        importTax: { not: null },
+        totalCost: { not: null },
+        aliexpressSku: { not: null },
+        ...(normalizedProductIds.length > 0 ? { id: { in: normalizedProductIds } } : {}),
       },
       orderBy: { updatedAt: 'asc' },
-      take: limit,
+      take: Math.max(limit * 3, limit),
     });
 
-    return products.map((p) => ({
+    return products
+      .filter((product) => isStrictPublishReady(product))
+      .slice(0, limit)
+      .map((p) => ({
       id: p.id,
       userId: p.userId,
       title: p.title,
@@ -228,6 +259,7 @@ export class MarketplacePublishService {
       currency: p.currency,
       category: p.category,
       images: p.images,
+      productData: p.productData,
       targetCountry: p.targetCountry,
     }));
   }
@@ -246,6 +278,10 @@ export class MarketplacePublishService {
     }
 
     return true;
+  }
+
+  private isMercadoLibreCategoryId(category: string | null | undefined): boolean {
+    return /^[A-Z]{3}\d+$/.test(String(category || '').trim());
   }
 
   private formatMissingError(label: string, validation: ValidationResult): string {

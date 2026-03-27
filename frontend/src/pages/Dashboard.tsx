@@ -18,8 +18,6 @@ import {
   Activity,
   Play,
   Pause,
-  ToggleLeft,
-  ToggleRight,
   TestTube,
   Globe,
   CheckCircle,
@@ -35,12 +33,14 @@ import LoadingSpinner, { CardSkeleton } from '@/components/ui/LoadingSpinner';
 
 import AIOpportunityFinder from '../components/AIOpportunityFinder';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
-import WorkflowSummaryWidget from '@/components/WorkflowSummaryWidget';
 import InventorySummaryCard from '@/components/InventorySummaryCard';
 import SalesReadinessPanel from '@/components/SalesReadinessPanel';
 import AutopilotLiveWidget from '@/components/AutopilotLiveWidget';
 import BalanceSummaryWidget from '@/components/BalanceSummaryWidget';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
+import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
+import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
+import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
 import { log } from '@/utils/logger';
 import { getTrendingKeywords, type TrendKeyword } from '@/services/trends.api';
 import { useAuthStore } from '@stores/authStore';
@@ -48,6 +48,8 @@ import { useEnvironment } from '@/contexts/EnvironmentContext';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import type { InventorySummary } from '@/types/dashboard';
+import type { OperationsTruthResponse } from '@/types/operations';
+import { fetchOperationsTruth } from '@/services/operationsTruth.api';
 
 export default function Dashboard() {
   const { user } = useAuthStore();
@@ -55,7 +57,6 @@ export default function Dashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(tabParam && ['overview', 'trends', 'search', 'opportunities', 'suggestions', 'automation'].includes(tabParam) ? tabParam : 'overview');
-  const [isAutomaticMode, setIsAutomaticMode] = useState(true);
   const { environment, setEnvironment, isProduction: isProductionMode } = useEnvironment();
 
   // Real backend health state
@@ -176,6 +177,8 @@ export default function Dashboard() {
     executed: boolean;
     createdAt: string;
   }>>([]);
+  const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
+  const [autopilotRuntime, setAutopilotRuntime] = useState<{ running: boolean; status: string; lastRun?: string | null } | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -292,6 +295,10 @@ export default function Dashboard() {
         api.get('/api/analytics/scaling-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
         // Phase 11: Conversion Rate Optimization
         api.get('/api/analytics/conversion-optimization-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
+        // Canonical operations truth
+        fetchOperationsTruth({ limit: 12, environment }).catch(() => null),
+        // Real autopilot runtime
+        api.get('/api/autopilot/status').catch(() => ({ data: null })),
         // Última orden (para card "Estado de la única venta real")
         api.get('/api/orders', { params: { limit: 1, environment } }).catch(() => ({ data: [] })),
       ]);
@@ -302,7 +309,9 @@ export default function Dashboard() {
       const strategyRes = allResponses[12] as any;
       const scalingRes = allResponses[13] as any;
       const conversionOptimizationRes = allResponses[14] as any;
-      const ordersRes = allResponses[15] as { data?: Array<{ id: string; status: string; errorMessage?: string | null; paypalOrderId?: string | null; createdAt: string; title?: string | null }> };
+      const operationsTruthRes = allResponses[15] as OperationsTruthResponse | null;
+      const autopilotStatusRes = allResponses[16] as { data?: { running?: boolean; status?: string; lastRun?: string | null } | null };
+      const ordersRes = allResponses[17] as { data?: Array<{ id: string; status: string; errorMessage?: string | null; paypalOrderId?: string | null; createdAt: string; title?: string | null }> };
 
       // ✅ FIX-002: Si hay errores y no hay datos reales, mostrar mensaje informativo
       const hasRealData = statsRes.data && Object.keys(statsRes.data).length > 0;
@@ -437,6 +446,20 @@ export default function Dashboard() {
       if (strategyRes?.data?.decisions) setStrategyDecisions(strategyRes.data.decisions);
       if (scalingRes?.data?.actions) setScalingActions(scalingRes.data.actions);
       if (conversionOptimizationRes?.data?.actions) setConversionOptimizationActions(conversionOptimizationRes.data.actions);
+      if (operationsTruthRes && typeof operationsTruthRes === 'object' && Array.isArray(operationsTruthRes.items)) {
+        setOperationsTruth(operationsTruthRes);
+      } else {
+        setOperationsTruth(null);
+      }
+      if (autopilotStatusRes?.data) {
+        setAutopilotRuntime({
+          running: autopilotStatusRes.data.running === true,
+          status: autopilotStatusRes.data.status ?? 'unknown',
+          lastRun: autopilotStatusRes.data.lastRun ?? null,
+        });
+      } else {
+        setAutopilotRuntime(null);
+      }
     } catch (error: any) {
       log.error('Error loading dashboard data:', error);
       // ✅ FIX-002: No mostrar toast automático, solo marcar error
@@ -506,34 +529,59 @@ export default function Dashboard() {
 
   const renderOverview = () => (
     <div className="space-y-6">
-      {/* 5-second test (Phase 37): what is happening, what to do, where money is */}
+      {/* Canonical truth first; analytics clearly secondary — P56 */}
       {!loading && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/80 p-4">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-            <strong>Resumen:</strong> Ganancia neta <strong>${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+            {operationsTruth && operationsTruth.summary.proofCounts.realizedProfitObtained > 0 && (
+              <>
+                <strong>Proof-backed:</strong> {operationsTruth.summary.proofCounts.realizedProfitObtained} con ganancia realizada probada.
+                {' '}
+              </>
+            )}
+            <strong>Analytics (referencia):</strong> Margen neto agregado ${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             {dashboardData.salesCount > 0 && ` · ${dashboardData.salesCount} ventas`}
             {dashboardData.activeProducts > 0 && ` · ${dashboardData.activeProducts} publicados`}.
-            {dashboardData.totalProfit > 0 && ' Dinero en Finanzas y Ventas.'}
             {(inventorySummary?.pendingPurchasesCount ?? 0) > 0 && ' Acción: revisar Compras pendientes.'}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Los totales financieros son agregados del sales ledger; la verdad canónica (blockers, proof ladder) está en Control Center.
           </p>
         </div>
       )}
       <SalesReadinessPanel />
+      {operationsTruth && (
+        <>
+          <OperationsTruthSummaryPanel data={operationsTruth} />
+          <PostSaleProofLadderPanel
+            summary={operationsTruth.summary.proofCounts}
+            title="Post-sale Proof Truth"
+            subtitle="The dashboard now separates order/supplier/tracking/payout/profit proof from listing activity."
+          />
+          <AgentDecisionTracePanel items={operationsTruth.items} />
+        </>
+      )}
       {/* Métricas principales */}
       {loading ? (
         <CardSkeleton count={6} />
       ) : (
+        <>
+        <div className="mb-2">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Métricas de panel — agregados del sales ledger; no sustituyen proof canónico. Para blockers y proof ladder, usa Control Center.
+          </p>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {/* Profit-first: main metric */}
-          <div className="p-4 rounded-xl border-2 border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/80 dark:bg-emerald-950/30 shadow-card dark:shadow-card-dark transition-colors md:col-span-1" title="Utilidad real después de costos, comisiones, PayPal y comisión de plataforma.">
+          {/* Profit aggregate — analytics, not standalone proof */}
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors md:col-span-1" title="Agregado del sales ledger; ganancia realizada probada se ve en proof ladder.">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Ganancia neta</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Margen neto (agregado)</p>
                 <p className="mt-1 text-metric tabular-nums text-gray-900 dark:text-white">${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                <Link to="/finance" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline mt-1 inline-block font-medium">Ver finanzas →</Link>
+                <Link to="/finance" className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1 inline-block font-medium">Ver finanzas →</Link>
               </div>
-              <div className="w-11 h-11 shrink-0 bg-emerald-200/80 dark:bg-emerald-900/50 rounded-xl flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              <div className="w-11 h-11 shrink-0 bg-gray-200/80 dark:bg-slate-700 rounded-xl flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-gray-600 dark:text-gray-400" />
               </div>
             </div>
           </div>
@@ -621,7 +669,8 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-      </div>
+        </div>
+        </>
       )}
 
       {/* Data transparency (Phase 37 — Business Truth UX) */}
@@ -658,16 +707,16 @@ export default function Dashboard() {
       <BalanceSummaryWidget />
 
       {/* Acciones requeridas: compras pendientes y productos pendientes */}
-      {inventorySummary && (inventorySummary.pendingPurchasesCount > 0 || (inventorySummary.products?.pending ?? 0) > 0) && (
+      {inventorySummary && ((inventorySummary.pendingPurchasesCount ?? 0) > 0 || (inventorySummary.products?.pending ?? 0) > 0) && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
           <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2 flex items-center gap-2">
             <AlertCircle className="w-4 h-4" />
             Acciones requeridas
           </h3>
           <ul className="space-y-2 text-sm text-amber-800 dark:text-amber-200">
-            {inventorySummary.pendingPurchasesCount > 0 && (
+            {(inventorySummary.pendingPurchasesCount ?? 0) > 0 && (
               <li className="flex items-center justify-between gap-4 flex-wrap">
-                <span>Tienes {inventorySummary.pendingPurchasesCount} ventas pendientes de compra.</span>
+                <span>Tienes {inventorySummary.pendingPurchasesCount ?? 0} ventas pendientes de compra.</span>
                 <button
                   type="button"
                   onClick={() => navigate('/pending-purchases')}
@@ -908,11 +957,6 @@ export default function Dashboard() {
           )}
         </div>
       )}
-
-      {/* Workflow Summary Widget */}
-      <div className="mt-6">
-        <WorkflowSummaryWidget />
-      </div>
 
       {/* Phase 9: Autonomous Scaling — scaled products, scale score, marketplace expansion */}
       <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
@@ -1333,10 +1377,14 @@ export default function Dashboard() {
             <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200">
               <div className="flex items-center space-x-3">
                 <Settings className="h-4 w-4 text-purple-600" />
-                <span className="text-sm font-medium text-gray-900">Automatización</span>
+                <span className="text-sm font-medium text-gray-900">Autopilot runtime</span>
               </div>
               <span className="text-sm text-purple-600 font-medium">
-                {isAutomaticMode ? 'Activo' : 'Manual'}
+                {autopilotRuntime?.running
+                  ? 'Ejecutándose'
+                  : autopilotRuntime?.status
+                    ? `Detenido (${autopilotRuntime.status})`
+                    : 'Sin prueba runtime'}
               </span>
             </div>
             
@@ -1358,20 +1406,8 @@ export default function Dashboard() {
             </div>
             
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">Modo Automático</span>
-                </div>
-                <button
-                  onClick={() => setIsAutomaticMode(!isAutomaticMode)}
-                  className="relative"
-                >
-                  {isAutomaticMode ? (
-                    <ToggleRight className="h-6 w-6 text-blue-600" />
-                  ) : (
-                    <ToggleLeft className="h-6 w-6 text-gray-400" />
-                  )}
-                </button>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                El estado de automatización local fue retirado. Usa el runtime real de Autopilot y el contrato canónico de verdad operativa.
               </div>
               
               <div className="flex items-center justify-between">
@@ -1421,15 +1457,11 @@ export default function Dashboard() {
             {/* Indicadores de estado */}
             <div className="flex items-center space-x-4">
               <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
-                isAutomaticMode ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                autopilotRuntime?.running ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
               }`}>
-                {isAutomaticMode ? (
-                  <Brain className="h-4 w-4" />
-                ) : (
-                  <Users className="h-4 w-4" />
-                )}
+                <Brain className="h-4 w-4" />
                 <span className="text-sm font-medium">
-                  {isAutomaticMode ? 'IA Activa' : 'Manual'}
+                  {autopilotRuntime?.running ? 'Autopilot activo' : 'Autopilot detenido'}
                 </span>
               </div>
               

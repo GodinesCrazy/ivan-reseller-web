@@ -566,7 +566,19 @@ router.get('/control-center-funnel', async (req: Request, res: Response) => {
     ] = await Promise.all([
       prisma.demandSignal.count({ where: {} }),
       prisma.marketOpportunity.count({ where: whereUser }),
-      prisma.marketplaceListing.count({ where: { ...whereUser, publishedAt: { not: null } } }),
+      prisma.marketplaceListing.count({
+        where: {
+          ...whereUser,
+          status: 'active',
+          product: {
+            status: 'PUBLISHED',
+            targetCountry: { not: null },
+            aliexpressSku: { not: null },
+            shippingCost: { not: null },
+            totalCost: { not: null },
+          },
+        },
+      }),
       prisma.listingMetric.count({
         where: isAdmin ? {} : { marketplaceListing: { userId: userId! } },
       }),

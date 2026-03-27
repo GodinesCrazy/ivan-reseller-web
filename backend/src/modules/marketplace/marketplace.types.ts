@@ -33,5 +33,6 @@ export interface PublishableProduct {
   currency?: string | null;
   category?: string | null;
   images?: string | null;
+  productData?: unknown;
   targetCountry?: string | null;
 }

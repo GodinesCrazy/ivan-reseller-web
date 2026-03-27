@@ -7,7 +7,6 @@
 
 import { prisma } from '../config/database';
 import { toNumber } from '../utils/decimal.utils';
-import { getDefaultShippingCost } from '../utils/shipping.utils';
 import logger from '../config/logger';
 
 const COMPLETED_SALE_STATUSES = ['DELIVERED', 'COMPLETED'];
@@ -44,6 +43,19 @@ export interface RealProfitSummary {
   currency: string;
   periodDays: number;
   environment: 'production' | 'sandbox' | 'all';
+  profitClassification: 'finalized' | 'estimated';
+  feeCompleteness: {
+    completeOrders: number;
+    incompleteOrders: number;
+    missingShipping: number;
+    missingMarketplaceFees: number;
+    missingSupplierCost: number;
+  };
+  currencySafety: {
+    safeOrders: number;
+    unresolvedOrders: number;
+    state: 'safe' | 'unsafe';
+  };
 }
 
 export interface ProfitPerOrderRow {
@@ -59,6 +71,8 @@ export interface ProfitPerOrderRow {
   totalCost: number;
   netProfit: number;
   roiPercent: number;
+  profitClassification: 'finalized' | 'estimated';
+  feeComplete: boolean;
 }
 
 export interface ProfitPerProductRow {
@@ -111,13 +125,32 @@ export async function getRealProfitSummary(
     paymentFees: 0,
     total: 0,
   };
+  const feeCompleteness = {
+    completeOrders: 0,
+    incompleteOrders: 0,
+    missingShipping: 0,
+    missingMarketplaceFees: 0,
+    missingSupplierCost: 0,
+  };
+  const currencySafety = {
+    safeOrders: 0,
+    unresolvedOrders: 0,
+    state: 'safe' as 'safe' | 'unsafe',
+  };
 
   for (const s of sales) {
     const salePrice = toNumber(s.salePrice);
     const supplierCost = toNumber(s.aliexpressCost);
     const marketplaceFee = toNumber(s.marketplaceFee);
     const rawShipping = (s.product as { shippingCost?: unknown } | null)?.shippingCost;
-    const shipping = rawShipping != null ? toNumber(rawShipping as Parameters<typeof toNumber>[0]) : getDefaultShippingCost();
+    const shipping = rawShipping != null ? toNumber(rawShipping as Parameters<typeof toNumber>[0]) : 0;
+    const hasShipping = rawShipping != null;
+    const hasMarketplaceFee = s.marketplaceFee != null;
+    const hasSupplierCost = s.aliexpressCost != null;
+    const productTargetCountry = String((s.product as { targetCountry?: string | null } | null)?.targetCountry || '').trim().toUpperCase();
+    const productCurrency = String((s.product as { currency?: string | null } | null)?.currency || '').trim().toUpperCase();
+    const hasCurrencyContext = Boolean(productTargetCountry && productCurrency);
+    const feeComplete = hasShipping && hasMarketplaceFee && hasSupplierCost;
     const paymentFee = salePrice * DEFAULT_PAYMENT_FEE_PCT;
     const totalCost = supplierCost + shipping + marketplaceFee + paymentFee;
     moneyIn += salePrice;
@@ -126,6 +159,19 @@ export async function getRealProfitSummary(
     moneyOut.marketplaceFees += marketplaceFee;
     moneyOut.paymentFees += paymentFee;
     moneyOut.total += totalCost;
+    if (feeComplete) {
+      feeCompleteness.completeOrders += 1;
+    } else {
+      feeCompleteness.incompleteOrders += 1;
+      if (!hasShipping) feeCompleteness.missingShipping += 1;
+      if (!hasMarketplaceFee) feeCompleteness.missingMarketplaceFees += 1;
+      if (!hasSupplierCost) feeCompleteness.missingSupplierCost += 1;
+    }
+    if (hasCurrencyContext) {
+      currencySafety.safeOrders += 1;
+    } else {
+      currencySafety.unresolvedOrders += 1;
+    }
   }
 
   const totalProfit = moneyIn - moneyOut.total;
@@ -154,6 +200,12 @@ export async function getRealProfitSummary(
     currency: 'USD',
     periodDays: days,
     environment,
+    profitClassification: feeCompleteness.incompleteOrders === 0 ? 'finalized' : 'estimated',
+    feeCompleteness,
+    currencySafety: {
+      ...currencySafety,
+      state: currencySafety.unresolvedOrders === 0 ? 'safe' : 'unsafe',
+    },
   };
 }
 
@@ -192,7 +244,8 @@ export async function getRealProfitPerOrder(
     const supplierCost = toNumber(s.aliexpressCost);
     const marketplaceFee = toNumber(s.marketplaceFee);
     const rawShippingRow = (s.product as { shippingCost?: unknown } | null)?.shippingCost;
-    const shipping = rawShippingRow != null ? toNumber(rawShippingRow as Parameters<typeof toNumber>[0]) : getDefaultShippingCost();
+    const shipping = rawShippingRow != null ? toNumber(rawShippingRow as Parameters<typeof toNumber>[0]) : 0;
+    const feeComplete = rawShippingRow != null && s.marketplaceFee != null && s.aliexpressCost != null;
     const paymentFee = salePrice * DEFAULT_PAYMENT_FEE_PCT;
     const totalCost = supplierCost + shipping + marketplaceFee + paymentFee;
     const netProfit = salePrice - totalCost;
@@ -211,6 +264,8 @@ export async function getRealProfitPerOrder(
       totalCost,
       netProfit,
       roiPercent,
+      profitClassification: feeComplete ? 'finalized' : 'estimated',
+      feeComplete,
     };
   });
 

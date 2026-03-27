@@ -79,8 +79,7 @@ export async function getFreeWorkingCapital(): Promise<WorkingCapitalSnapshot> {
 
 /**
  * Verifica si hay capital libre suficiente para un coste de compra.
- * Si el saldo real no se pudo obtener (PayPal no configurado o API fallida), no bloquea:
- * permite la compra para no romper funcionalidad existente (degraded mode).
+ * Si el saldo real no se puede obtener, la compra se bloquea hasta revisión manual.
  */
 export async function hasSufficientFreeCapital(orderCost: number): Promise<{
   sufficient: boolean;
@@ -92,26 +91,13 @@ export async function hasSufficientFreeCapital(orderCost: number): Promise<{
   const snapshot = await getFreeWorkingCapital();
   const balanceUnavailable = snapshot.realAvailableBalance === 0 && snapshot.source === undefined;
   if (balanceUnavailable) {
-    logger.warn('[WORKING-CAPITAL] Real balance unavailable (PayPal not configured or API error); allowing purchase (degraded mode)');
+    logger.warn('[WORKING-CAPITAL] Real balance unavailable; blocking purchase until operator review');
     return {
-      sufficient: true,
+      sufficient: false,
       freeWorkingCapital: snapshot.freeWorkingCapital,
       required: orderCost,
       snapshot,
-    };
-  }
-  const maxOrderWhenLowBalance = env.PURCHASE_LOW_BALANCE_MAX_ORDER_USD ?? 500;
-  if (env.ALLOW_PURCHASE_WHEN_LOW_BALANCE && orderCost > 0 && orderCost <= maxOrderWhenLowBalance) {
-    logger.info('[WORKING-CAPITAL] ALLOW_PURCHASE_WHEN_LOW_BALANCE enabled; allowing purchase (PayPal may use linked card)', {
-      orderCost,
-      maxOrderWhenLowBalance,
-      freeWorkingCapital: snapshot.freeWorkingCapital,
-    });
-    return {
-      sufficient: true,
-      freeWorkingCapital: snapshot.freeWorkingCapital,
-      required: orderCost,
-      snapshot,
+      error: 'Real working capital balance is unavailable. Manual operator review required before purchase.',
     };
   }
   const sufficient = snapshot.freeWorkingCapital >= orderCost;

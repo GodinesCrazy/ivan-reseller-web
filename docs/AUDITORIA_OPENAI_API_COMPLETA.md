@@ -139,7 +139,7 @@ if (apiName === 'openai') {
 1. **Formato de API Key**:
    - Debe empezar con `sk-`
    - Debe tener al menos 20 caracteres de longitud
-   - Ejemplo válido: `sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+   - Ejemplo válido: `sk-example-redacted`
 
 2. **Campos Requeridos**:
    - `apiKey` es obligatorio

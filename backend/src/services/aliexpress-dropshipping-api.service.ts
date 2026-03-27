@@ -18,6 +18,17 @@ import axios, { type AxiosInstance } from 'axios';
 import { httpClient } from '../config/http-client';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
 import { generateTokenCreateSignatureHmacSystemInterface } from './aliexpress-signature.service';
+import {
+  normalizeAliExpressShippingMethods,
+  summarizeAliExpressLogisticsForensics,
+} from '../utils/aliexpress-logistics-normalizer';
+import { normalizeAliExpressRawSkus } from '../utils/aliexpress-raw-sku-normalizer';
+import {
+  normalizeAliExpressFreightQuoteResult,
+  type AliExpressFreightOption,
+  type AliExpressFreightQuoteResult,
+} from '../utils/aliexpress-freight-normalizer';
+import { isAliExpressVideoOrNonStillImageUrl } from '../utils/aliexpress-listing-still-image-url';
 
 // Tipos de datos de la API
 export interface DropshippingProductInfo {
@@ -29,6 +40,7 @@ export interface DropshippingProductInfo {
   currency: string;
   stock: number;
   skus?: DropshippingSKU[];
+  logisticsInfoDto?: Record<string, unknown>;
   shippingInfo?: {
     availableShippingMethods: ShippingMethod[];
     estimatedDeliveryDays?: number;
@@ -48,6 +60,73 @@ export interface ShippingMethod {
   methodName: string;
   cost: number;
   estimatedDays: number;
+}
+
+export interface BuyerFreightQuoteRequest {
+  countryCode: string;
+  productId: string;
+  productNum: number;
+  sendGoodsCountryCode: string;
+  skuId?: string;
+  price?: string;
+  priceCurrency?: string;
+}
+
+export type AliExpressFreightRequestVariant =
+  | 'top_session_gw'
+  | 'top_session_eco'
+  | 'sync_access_token';
+
+export interface AliExpressFreightRequestForensics {
+  variant: AliExpressFreightRequestVariant;
+  endpoint: string;
+  method: string;
+  tokenParamName: 'session' | 'access_token';
+  signMethod: 'md5' | 'hmac-sha256';
+  timestampShape: 'top_gmt8' | 'compact_iso_like';
+  timestampPreview: string;
+  signedParamKeys: string[];
+  dtoParamKey: string;
+  dtoJsonLength: number;
+  appKeyPrefix: string | null;
+  appSecretFingerprint: string | null;
+  appSecretLength: number;
+  hasAccessToken: boolean;
+  credentialSource: string | null;
+  tokenSource: string | null;
+  algorithmMatchesDeclared: boolean;
+  canonicalParamMap: Array<{
+    key: string;
+    valuePreview: string;
+    valueLength: number;
+    isEmpty: boolean;
+  }>;
+  stringToSignPreview: string;
+  stringToSignLength: number;
+  signPreview: string | null;
+}
+
+export interface AliExpressFreightVariantProbeResult {
+  variant: AliExpressFreightRequestVariant;
+  ok: boolean;
+  freightOptionsCount: number;
+  rawOptionNodeCount: number;
+  rawTopKeys: string[];
+  selectedDiagnostics: AliExpressFreightRequestForensics;
+  aliCode?: string | number | null;
+  aliSubCode?: string | null;
+  aliMsg?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface BuyerFreightQuoteResponse extends AliExpressFreightQuoteResult {
+  options: AliExpressFreightOption[];
+  requestForensics?: AliExpressFreightRequestForensics;
+  variantAudit?: AliExpressFreightVariantProbeResult[];
+}
+
+interface CalculateBuyerFreightOptions {
+  forensicProbeAllVariants?: boolean;
 }
 
 export interface PlaceOrderRequest {
@@ -98,6 +177,59 @@ export interface TrackingEvent {
   location?: string;
 }
 
+/** ds.product.get returns galleries under ae_multimedia_info_dto; simplequery often omits product_images. */
+function collectAliExpressDsProductImageUrls(multimediaRoot: unknown, skuRows: any[] | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const pushUrl = (raw: unknown) => {
+    if (typeof raw !== 'string') return;
+    const chunks = raw
+      .split(';')
+      .map((s) => s.trim())
+      .filter((s) => s.startsWith('http'));
+    const toAdd = chunks.length ? chunks : raw.trim().startsWith('http') ? [raw.trim()] : [];
+    for (const t of toAdd) {
+      if (isAliExpressVideoOrNonStillImageUrl(t)) continue;
+      if (!/ae-pic|alicdn|aliexpress-media|img\.alicdn/i.test(t)) continue;
+      if (seen.has(t)) continue;
+      seen.add(t);
+      out.push(t);
+    }
+  };
+  const walk = (node: unknown, depth: number) => {
+    if (depth > 14 || node == null) return;
+    if (typeof node === 'string') {
+      pushUrl(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const x of node) walk(x, depth + 1);
+      return;
+    }
+    if (typeof node === 'object') {
+      for (const v of Object.values(node as Record<string, unknown>)) walk(v, depth + 1);
+    }
+  };
+  walk(multimediaRoot, 0);
+  if (skuRows?.length) {
+    for (const s of skuRows) {
+      if (!s || typeof s !== 'object') continue;
+      const rec = s as Record<string, unknown>;
+      for (const c of [
+        rec.sku_image_url,
+        rec.skuImageUrl,
+        rec.image_url,
+        rec.imageUrl,
+        rec.ae_sku_property_image_path,
+        rec.sku_property_image,
+      ]) {
+        pushUrl(c);
+      }
+    }
+  }
+  return out;
+}
+
 export class AliExpressDropshippingAPIService {
   private client: AxiosInstance;
   private credentials: AliExpressDropshippingCredentials | null = null;
@@ -108,6 +240,7 @@ export class AliExpressDropshippingAPIService {
   // Endpoints base de la API
   private readonly ENDPOINT_LEGACY = 'https://gw.api.taobao.com/router/rest';
   private readonly ENDPOINT_NEW = 'https://api-sg.aliexpress.com/sync';
+  private readonly FREIGHT_TOP_COMPAT_ENDPOINT = 'https://eco.taobao.com/router/rest';
   // Prefer api-sg: legacy often ETIMEDOUT from many networks; api-sg is the same API and more reachable.
   private endpoint: string = (process.env.ALIEXPRESS_DROPSHIPPING_USE_LEGACY_ENDPOINT === 'true' ? this.ENDPOINT_LEGACY : this.ENDPOINT_NEW);
 
@@ -152,6 +285,99 @@ export class AliExpressDropshippingAPIService {
     }
   }
 
+  private getTopTimestamp(): string {
+    const now = new Date();
+    const gmt8 = new Date(now.getTime() + 8 * 3600000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return (
+      gmt8.getUTCFullYear() +
+      '-' +
+      pad(gmt8.getUTCMonth() + 1) +
+      '-' +
+      pad(gmt8.getUTCDate()) +
+      ' ' +
+      pad(gmt8.getUTCHours()) +
+      ':' +
+      pad(gmt8.getUTCMinutes()) +
+      ':' +
+      pad(gmt8.getUTCSeconds())
+    );
+  }
+
+  private getCompactTimestamp(): string {
+    return new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + '00';
+  }
+
+  private fingerprintSecret(secret: string | undefined): string | null {
+    const value = String(secret || '').trim();
+    if (!value) return null;
+    return crypto.createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 12);
+  }
+
+  private previewSensitiveValue(key: string, value: string): string {
+    if (!value) return '';
+    if (key === 'access_token' || key === 'session') {
+      if (value.length <= 10) return '<redacted_token>';
+      return `${value.slice(0, 4)}...${value.slice(-4)}`;
+    }
+    if (key === 'sign') {
+      return `${value.slice(0, 8)}...`;
+    }
+    if (key === 'param_aeop_freight_calculate_for_buyer_d_t_o') {
+      return value.length > 180 ? `${value.slice(0, 180)}...` : value;
+    }
+    return value.length > 120 ? `${value.slice(0, 120)}...` : value;
+  }
+
+  private redactStringToSign(
+    raw: string,
+    appSecret: string,
+    params: Record<string, string>,
+  ): string {
+    let redacted = raw;
+    if (appSecret) {
+      redacted = redacted.split(appSecret).join('<app_secret>');
+    }
+    for (const [key, value] of Object.entries(params)) {
+      if (!value) continue;
+      if (key === 'access_token') {
+        redacted = redacted.split(value).join('<access_token>');
+      } else if (key === 'session') {
+        redacted = redacted.split(value).join('<session>');
+      }
+    }
+    return redacted.length > 240 ? `${redacted.slice(0, 240)}...` : redacted;
+  }
+
+  private buildFreightCanonicalParamMap(params: Record<string, string>) {
+    return Object.keys(params)
+      .filter((key) => key !== 'sign')
+      .sort()
+      .map((key) => {
+        const rawValue = String(params[key] ?? '');
+        return {
+          key,
+          valuePreview: this.previewSensitiveValue(key, rawValue),
+          valueLength: rawValue.length,
+          isEmpty: rawValue.trim().length === 0,
+        };
+      });
+  }
+
+  private calculateTopHmacSha256Sign(params: Record<string, any>, appSecret: string): string {
+    const sortedKeys = Object.keys(params)
+      .filter((key) => key !== 'sign')
+      .sort();
+    const baseString = sortedKeys
+      .map((key) => `${key}${params[key]}`)
+      .join('');
+    return crypto
+      .createHmac('sha256', appSecret)
+      .update(baseString, 'utf8')
+      .digest('hex')
+      .toUpperCase();
+  }
+
   /** Retry on network errors (ETIMEDOUT, ECONNREFUSED, timeout). Max 3 attempts with 3s backoff.
    *  Additionally, failover endpoint legacy -> new when legacy host is unreachable.
    */
@@ -172,27 +398,38 @@ export class AliExpressDropshippingAPIService {
   /**
    * Realizar petición a la API con autenticación OAuth
    */
-  private async makeRequest(method: string, params: Record<string, any>): Promise<any> {
+  private async makeRequest(
+    method: string,
+    params: Record<string, any>,
+    options: { allowWithoutAccessToken?: boolean } = {},
+  ): Promise<any> {
     if (!this.credentials) {
       throw new Error('AliExpress Dropshipping API credentials not configured');
     }
 
-    if (!this.credentials.accessToken) {
+    if (!this.credentials.accessToken && !options.allowWithoutAccessToken) {
       throw new Error('AliExpress Dropshipping API access token not configured. OAuth authorization required.');
     }
 
-    const commonParams = {
+    const useTopAppKeyOnly = !this.credentials.accessToken && options.allowWithoutAccessToken;
+    const commonParams: Record<string, any> = {
       method,
       app_key: this.credentials.appKey,
-      access_token: this.credentials.accessToken, // ✅ OAuth token requerido
-      timestamp: new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + '00',
+      timestamp: useTopAppKeyOnly
+        ? this.getTopTimestamp()
+        : new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + '00',
       format: 'json',
       v: '2.0',
-      sign_method: 'md5',
+      sign_method: useTopAppKeyOnly ? 'hmac-sha256' : 'md5',
     };
+    if (this.credentials.accessToken && !useTopAppKeyOnly) {
+      commonParams.access_token = this.credentials.accessToken;
+    }
 
     const allParams: Record<string, any> = { ...commonParams, ...params };
-    const sign = this.calculateSign(allParams, this.credentials.appSecret, commonParams.sign_method as 'md5' | 'sha256');
+    const sign = useTopAppKeyOnly
+      ? this.calculateTopHmacSha256Sign(allParams, this.credentials.appSecret)
+      : this.calculateSign(allParams, this.credentials.appSecret, commonParams.sign_method as 'md5' | 'sha256');
     allParams.sign = sign;
 
     const maxAttempts = 3;
@@ -255,7 +492,20 @@ export class AliExpressDropshippingAPIService {
           throw new Error(`AliExpress Dropshipping API Error: ${error.msg || error.sub_msg || 'Unknown error'} (Code: ${error.code || 'UNKNOWN'})`);
         }
 
-        const result = response.data[`${method.replace(/\./g, '_')}_response`] || response.data.response?.result;
+        let result =
+          response.data[`${method.replace(/\./g, '_')}_response`] ||
+          response.data.response?.result;
+
+        if (!result && response.data && typeof response.data === 'object') {
+          const firstResponseKey = Object.keys(response.data).find((key) => key.endsWith('_response'));
+          if (firstResponseKey) {
+            result = response.data[firstResponseKey];
+          }
+        }
+
+        if (!result && response.data && typeof response.data === 'object') {
+          result = response.data;
+        }
 
         if (!result) {
           logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Unexpected response format', {
@@ -451,54 +701,116 @@ export class AliExpressDropshippingAPIService {
         (product as any).product_title = (product as any).product_title ?? baseInfo.subject ?? baseInfo.product_title ?? baseInfo.title;
       }
 
+      const normalizedShippingMethods = normalizeAliExpressShippingMethods(product as Record<string, unknown>);
+      const logisticsForensics = summarizeAliExpressLogisticsForensics(product as Record<string, unknown>);
+
       logger.info('[ALIEXPRESS-DROPSHIPPING-API] getProductInfo product shape (skus)', {
         productKeys: Object.keys(rawAny || {}).slice(0, 20),
         hasSkus: !!rawSkus,
         hasAeSkuDtos: !!aeSkuArray?.length,
         skuArrayLength: skuArray?.length ?? null,
+        hasClassicShippingInfo: logisticsForensics.hasClassicShippingInfo,
+        hasLogisticsInfoDto: logisticsForensics.hasLogisticsInfoDto,
+        logisticsInfoKeys: logisticsForensics.logisticsInfoKeys.slice(0, 20),
+        normalizedShippingMethodCount: normalizedShippingMethods.length,
       });
+
+      const normalizedSkus = normalizeAliExpressRawSkus(product as Record<string, unknown>).map((sku) => ({
+        skuId: sku.skuId,
+        salePrice: sku.salePrice,
+        stock: sku.stock,
+        attributes: sku.attributes || {},
+      }));
+
+      const legacyImages: string[] = Array.isArray((product as any).product_images?.string)
+        ? (product as any).product_images.string.filter(
+            (x: any) => typeof x === 'string' && x.startsWith('http') && !isAliExpressVideoOrNonStillImageUrl(x),
+          )
+        : (product as any).product_images && typeof (product as any).product_images === 'string'
+          ? [(product as any).product_images].filter(
+              (x: string) => x.startsWith('http') && !isAliExpressVideoOrNonStillImageUrl(x),
+            )
+          : [];
+      const dsExtraImages = collectAliExpressDsProductImageUrls(
+        rawAny?.ae_multimedia_info_dto,
+        skuArray
+      );
+      const mergedProductImages: string[] = [];
+      const imgSeen = new Set<string>();
+      for (const u of [...legacyImages, ...dsExtraImages]) {
+        if (!u || imgSeen.has(u) || isAliExpressVideoOrNonStillImageUrl(u)) continue;
+        imgSeen.add(u);
+        mergedProductImages.push(u);
+      }
 
       return {
         productId: String((product as any).product_id || productId),
         productTitle: String((product as any).product_title || ''),
-        productImages: Array.isArray(product.product_images?.string) 
-          ? product.product_images.string 
-          : (product.product_images ? [product.product_images] : []),
+        productImages: mergedProductImages,
         salePrice: parseFloat(product.sale_price || product.price || '0'),
         originalPrice: parseFloat(product.original_price || product.list_price || '0'),
         currency: product.currency || 'USD',
         stock: parseInt(product.stock || product.available_stock || '0', 10),
-        skus: skuArray
-          ? skuArray.map((s: any) => {
-              const skuIdRaw = s.sku_id ?? s.skuId ?? s.sku ?? s.id ?? '';
-              const skuId = String(skuIdRaw).trim();
-
-              const stockRaw = s.stock ?? s.available_stock ?? s.inventory ?? s.stock_quantity ?? '0';
-              const stock = parseInt(String(stockRaw), 10);
-
-              const salePriceRaw = s.sale_price ?? s.salePrice ?? s.price ?? '0';
-              const salePrice = parseFloat(String(salePriceRaw));
-
-              return {
-                skuId,
-                attributes: s.attributes || s.attr || {},
-                salePrice: Number.isNaN(salePrice) ? 0 : salePrice,
-                stock: Number.isNaN(stock) ? 0 : stock,
-                imageUrl: s.image_url ?? s.imageUrl,
-              };
-            })
-          : undefined,
-        shippingInfo: product.shipping_info ? {
-          availableShippingMethods: product.shipping_info.methods?.method?.map((m: any) => ({
-            methodId: String(m.method_id || ''),
-            methodName: m.method_name || '',
-            cost: parseFloat(m.cost || '0'),
-            estimatedDays: parseInt(m.estimated_days || '0', 10),
-          })) || [],
-          estimatedDeliveryDays: product.shipping_info.estimated_days 
-            ? parseInt(product.shipping_info.estimated_days, 10) 
+        logisticsInfoDto:
+          rawAny?.logistics_info_dto && typeof rawAny.logistics_info_dto === 'object'
+            ? (rawAny.logistics_info_dto as Record<string, unknown>)
             : undefined,
-        } : undefined,
+        skus:
+          normalizedSkus.length > 0
+            ? normalizedSkus
+            : skuArray
+            ? skuArray.map((s: any) => {
+                const skuIdRaw = s.sku_id ?? s.skuId ?? s.sku ?? s.id ?? '';
+                const skuId = String(skuIdRaw).trim();
+
+                const stockRaw =
+                  s.stock ??
+                  s.available_stock ??
+                  s.inventory ??
+                  s.stock_quantity ??
+                  s.sku_available_stock ??
+                  '0';
+                const stock = parseInt(String(stockRaw), 10);
+
+                const salePriceRaw =
+                  s.sale_price ??
+                  s.salePrice ??
+                  s.price ??
+                  s.offer_sale_price?.value ??
+                  s.offer_sale_price ??
+                  '0';
+                const salePrice = parseFloat(String(salePriceRaw));
+
+                const rawSkuImg =
+                  s.sku_image_url ??
+                  s.skuImageUrl ??
+                  s.image_url ??
+                  s.imageUrl ??
+                  s.ae_sku_property_image_path ??
+                  s.sku_property_image;
+                const skuImg =
+                  typeof rawSkuImg === 'string' && rawSkuImg.trim() && !isAliExpressVideoOrNonStillImageUrl(rawSkuImg)
+                    ? String(rawSkuImg).trim()
+                    : undefined;
+
+                return {
+                  skuId,
+                  attributes: s.attributes || s.attr || {},
+                  salePrice: Number.isNaN(salePrice) ? 0 : salePrice,
+                  stock: Number.isNaN(stock) ? 0 : stock,
+                  imageUrl: skuImg,
+                };
+              })
+            : undefined,
+        shippingInfo:
+          normalizedShippingMethods.length > 0
+            ? {
+                availableShippingMethods: normalizedShippingMethods,
+                estimatedDeliveryDays: product.shipping_info?.estimated_days
+                  ? parseInt(product.shipping_info.estimated_days, 10)
+                  : undefined,
+              }
+            : undefined,
       };
     } catch (error: any) {
       logger.error('[ALIEXPRESS-DROPSHIPPING-API] Get product info failed', {
@@ -507,6 +819,298 @@ export class AliExpressDropshippingAPIService {
       });
       throw error;
     }
+  }
+
+  private buildFreightDto(request: BuyerFreightQuoteRequest): Record<string, unknown> {
+    const dto: Record<string, unknown> = {
+      country_code: String(request.countryCode || '').trim().toUpperCase(),
+      product_id: Number(request.productId),
+      product_num: Number(request.productNum || 1),
+      send_goods_country_code: String(request.sendGoodsCountryCode || 'CN').trim().toUpperCase() || 'CN',
+    };
+
+    if (request.skuId) dto.sku_id = String(request.skuId).trim();
+    if (request.price) dto.price = String(request.price);
+    if (request.priceCurrency) dto.price_currency = String(request.priceCurrency).toUpperCase();
+
+    return dto;
+  }
+
+  private buildFreightVariantRequest(
+    request: BuyerFreightQuoteRequest,
+    variant: AliExpressFreightRequestVariant,
+  ): {
+    endpoint: string;
+    params: Record<string, string>;
+    diagnostics: AliExpressFreightRequestForensics;
+  } {
+    if (!this.credentials?.appKey || !this.credentials?.appSecret || !this.credentials?.accessToken) {
+      throw new Error('AliExpress freight calculation requires appKey, appSecret and accessToken');
+    }
+
+    const dtoParamKey = 'param_aeop_freight_calculate_for_buyer_d_t_o';
+    const dtoJson = JSON.stringify(this.buildFreightDto(request));
+    const timestamp = variant === 'sync_access_token' ? this.getCompactTimestamp() : this.getTopTimestamp();
+    const endpoint =
+      variant === 'top_session_gw'
+        ? this.ENDPOINT_LEGACY
+        : variant === 'top_session_eco'
+          ? this.FREIGHT_TOP_COMPAT_ENDPOINT
+          : this.ENDPOINT_NEW;
+    const params: Record<string, string> = {
+      method: 'aliexpress.logistics.buyer.freight.calculate',
+      app_key: String(this.credentials.appKey),
+      timestamp,
+      format: 'json',
+      v: '2.0',
+      sign_method: 'md5',
+      [dtoParamKey]: dtoJson,
+    };
+
+    if (variant === 'sync_access_token') {
+      params.access_token = String(this.credentials.accessToken);
+    } else {
+      params.session = String(this.credentials.accessToken);
+    }
+
+    const rawStringToSign = (() => {
+      const sortedKeys = Object.keys(params).sort();
+      const signString = sortedKeys.map((key) => `${key}${params[key]}`).join('');
+      return `${String(this.credentials.appSecret)}${signString}${String(this.credentials.appSecret)}`;
+    })();
+    params.sign = this.calculateSign(params, String(this.credentials.appSecret), 'md5');
+
+    const credentialMetadata = this.credentials as unknown as Record<string, unknown>;
+    const credentialSource =
+      String(credentialMetadata.credentialSource || '').trim() || null;
+    const tokenSource =
+      String(credentialMetadata.tokenSource || '').trim() || null;
+
+    return {
+      endpoint,
+      params,
+      diagnostics: {
+        variant,
+        endpoint,
+        method: 'aliexpress.logistics.buyer.freight.calculate',
+        tokenParamName: variant === 'sync_access_token' ? 'access_token' : 'session',
+        signMethod: 'md5',
+        timestampShape: variant === 'sync_access_token' ? 'compact_iso_like' : 'top_gmt8',
+        timestampPreview: timestamp,
+        signedParamKeys: Object.keys(params).filter((key) => key !== 'sign').sort(),
+        dtoParamKey,
+        dtoJsonLength: dtoJson.length,
+        appKeyPrefix: String(this.credentials.appKey).trim()
+          ? `${String(this.credentials.appKey).trim().slice(0, 6)}...`
+          : null,
+        appSecretFingerprint: this.fingerprintSecret(String(this.credentials.appSecret)),
+        appSecretLength: String(this.credentials.appSecret).trim().length,
+        hasAccessToken: Boolean(String(this.credentials.accessToken || '').trim()),
+        credentialSource,
+        tokenSource,
+        algorithmMatchesDeclared: true,
+        canonicalParamMap: this.buildFreightCanonicalParamMap(params),
+        stringToSignPreview: this.redactStringToSign(
+          rawStringToSign,
+          String(this.credentials.appSecret),
+          params,
+        ),
+        stringToSignLength: rawStringToSign.length,
+        signPreview: params.sign ? this.previewSensitiveValue('sign', params.sign) : null,
+      },
+    };
+  }
+
+  private async executeFreightVariant(
+    request: BuyerFreightQuoteRequest,
+    variant: AliExpressFreightRequestVariant,
+  ): Promise<BuyerFreightQuoteResponse> {
+    const built = this.buildFreightVariantRequest(request, variant);
+    const formBody = new URLSearchParams();
+    for (const [key, value] of Object.entries(built.params)) {
+      if (value === undefined || value === null || String(value).trim() === '') continue;
+      formBody.append(key, String(value));
+    }
+
+    const response = await this.client.post(built.endpoint, formBody.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+      },
+    });
+
+    if (response.data?.error_response) {
+      const error = response.data.error_response;
+      logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Freight API error_response', {
+        variant,
+        endpoint: built.endpoint,
+        code: error.code,
+        sub_code: error.sub_code,
+        msg: error.msg,
+        sub_msg: error.sub_msg,
+        signMethod: built.diagnostics.signMethod,
+        tokenParamName: built.diagnostics.tokenParamName,
+        signedParamKeys: built.diagnostics.signedParamKeys,
+        appKeyPrefix: built.diagnostics.appKeyPrefix,
+        appSecretFingerprint: built.diagnostics.appSecretFingerprint,
+        credentialSource: built.diagnostics.credentialSource,
+        tokenSource: built.diagnostics.tokenSource,
+        algorithmMatchesDeclared: built.diagnostics.algorithmMatchesDeclared,
+        stringToSignPreview: built.diagnostics.stringToSignPreview,
+      });
+      const freightError = new Error(
+        `AliExpress freight API error: ${error.msg || error.sub_msg || 'Unknown error'} (Code: ${error.code || 'UNKNOWN'})`,
+      );
+      (freightError as any).aliCode = error.code ?? null;
+      (freightError as any).aliSubCode = error.sub_code ?? null;
+      (freightError as any).aliMsg = error.msg ?? error.sub_msg ?? null;
+      (freightError as any).freightDiagnostics = built.diagnostics;
+      throw freightError;
+    }
+
+    const result =
+      response.data?.aliexpress_logistics_buyer_freight_calculate_response?.result ||
+      response.data?.result ||
+      response.data;
+    const normalized = normalizeAliExpressFreightQuoteResult(result as Record<string, unknown>);
+
+    logger.info('[ALIEXPRESS-DROPSHIPPING-API] Buyer freight calculation normalized', {
+      productId: request.productId,
+      countryCode: request.countryCode,
+      sendGoodsCountryCode: request.sendGoodsCountryCode,
+      variant,
+      endpoint: built.endpoint,
+      freightOptionsCount: normalized.options.length,
+      rawTopKeys: normalized.rawTopKeys,
+      rawOptionNodeCount: normalized.rawOptionNodeCount,
+    });
+
+    return {
+      ...normalized,
+      requestForensics: built.diagnostics,
+    };
+  }
+
+  async probeBuyerFreightVariants(
+    request: BuyerFreightQuoteRequest,
+    variants: AliExpressFreightRequestVariant[] = ['sync_access_token', 'top_session_gw', 'top_session_eco'],
+  ): Promise<AliExpressFreightVariantProbeResult[]> {
+    const results: AliExpressFreightVariantProbeResult[] = [];
+
+    for (const variant of variants) {
+      try {
+        const response = await this.executeFreightVariant(request, variant);
+        results.push({
+          variant,
+          ok: true,
+          freightOptionsCount: response.options.length,
+          rawOptionNodeCount: response.rawOptionNodeCount,
+          rawTopKeys: response.rawTopKeys,
+          selectedDiagnostics: response.requestForensics!,
+        });
+      } catch (error: any) {
+        const diagnostics =
+          (error?.freightDiagnostics as AliExpressFreightRequestForensics | undefined) ||
+          this.buildFreightVariantRequest(request, variant).diagnostics;
+        results.push({
+          variant,
+          ok: false,
+          freightOptionsCount: 0,
+          rawOptionNodeCount: 0,
+          rawTopKeys: [],
+          selectedDiagnostics: diagnostics,
+          aliCode: error?.aliCode ?? null,
+          aliSubCode: error?.aliSubCode ?? null,
+          aliMsg: error?.aliMsg ?? null,
+          errorMessage: error?.message ?? 'unknown_freight_error',
+        });
+      }
+    }
+
+    return results;
+  }
+
+  async calculateBuyerFreight(
+    request: BuyerFreightQuoteRequest,
+    options: CalculateBuyerFreightOptions = {},
+  ): Promise<BuyerFreightQuoteResponse> {
+    const countryCode = String(request.countryCode || '').trim().toUpperCase();
+    const productId = String(request.productId || '').trim();
+    const sendGoodsCountryCode = String(request.sendGoodsCountryCode || 'CN').trim().toUpperCase() || 'CN';
+    const productNum = Number(request.productNum || 1);
+
+    if (!countryCode || !productId || !Number.isFinite(productNum) || productNum <= 0) {
+      throw new Error('AliExpress freight calculation requires countryCode, productId and productNum > 0');
+    }
+
+    logger.info('[ALIEXPRESS-DROPSHIPPING-API] Calculating buyer freight', {
+      productId,
+      countryCode,
+      sendGoodsCountryCode,
+      productNum,
+      hasSkuId: Boolean(request.skuId),
+    });
+
+    const normalizedRequest: BuyerFreightQuoteRequest = {
+      ...request,
+      countryCode,
+      productId,
+      productNum,
+      sendGoodsCountryCode,
+    };
+    if (!options.forensicProbeAllVariants) {
+      try {
+        const syncResponse = await this.executeFreightVariant(normalizedRequest, 'sync_access_token');
+        if (syncResponse.options.length > 0) {
+          return {
+            ...syncResponse,
+            variantAudit: [
+              {
+                variant: 'sync_access_token',
+                ok: true,
+                freightOptionsCount: syncResponse.options.length,
+                rawOptionNodeCount: syncResponse.rawOptionNodeCount,
+                rawTopKeys: syncResponse.rawTopKeys,
+                selectedDiagnostics: syncResponse.requestForensics!,
+              },
+            ],
+          };
+        }
+      } catch (syncError: any) {
+        logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Sync freight attempt failed, falling back to forensic probe variants', {
+          productId,
+          countryCode,
+          aliCode: syncError?.aliCode ?? null,
+          aliSubCode: syncError?.aliSubCode ?? null,
+          aliMsg: syncError?.aliMsg ?? syncError?.message ?? null,
+          freightDiagnostics: syncError?.freightDiagnostics ?? null,
+        });
+      }
+    }
+
+    const variantAudit = await this.probeBuyerFreightVariants(normalizedRequest);
+    const firstSuccess = variantAudit.find((variant) => variant.ok && variant.freightOptionsCount > 0);
+
+    if (firstSuccess) {
+      const successful = await this.executeFreightVariant(normalizedRequest, firstSuccess.variant);
+      return {
+        ...successful,
+        variantAudit,
+      };
+    }
+
+    const primaryFailure =
+      variantAudit.find((variant) => variant.variant === 'top_session_gw' && !variant.ok) ||
+      variantAudit.find((variant) => !variant.ok) ||
+      null;
+    const freightError = new Error(
+      primaryFailure?.errorMessage || 'AliExpress freight API error: no usable freight quote returned',
+    );
+    (freightError as any).aliCode = primaryFailure?.aliCode ?? null;
+    (freightError as any).aliSubCode = primaryFailure?.aliSubCode ?? null;
+    (freightError as any).aliMsg = primaryFailure?.aliMsg ?? null;
+    (freightError as any).freightDiagnostics = primaryFailure?.selectedDiagnostics ?? null;
+    (freightError as any).freightVariantAudit = variantAudit;
+    throw freightError;
   }
 
   /**
@@ -1160,4 +1764,3 @@ export async function refreshAliExpressDropshippingToken(
 
 // Exportar instancia singleton
 export const aliexpressDropshippingAPIService = new AliExpressDropshippingAPIService();
-

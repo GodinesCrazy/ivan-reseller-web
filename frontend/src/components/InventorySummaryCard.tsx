@@ -90,6 +90,9 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
           <LayoutGrid className="w-5 h-5" />
           Resumen de inventario
         </CardTitle>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Recuentos del inventario API — para verdad canónica (blockers, proof ladder) usa Control Center.
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-sm">

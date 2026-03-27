@@ -10,6 +10,14 @@
     "smoke:prod": "node scripts/prod-smoke.mjs",
     "dev:reset": "powershell -ExecutionPolicy Bypass -File scripts/dev-reset.ps1",
     "test-full-dropshipping-cycle": "cd backend && npm run test-full-dropshipping-cycle",
+    "internal:smartwatch-mlc-cycle": "cd backend && npm run internal:smartwatch-mlc-cycle",
+    "internal:smartwatch-mlc-cycle:dry": "cd backend && npm run internal:smartwatch-mlc-cycle:dry",
+    "internal:smartwatch-mlc-cycle:validate": "cd backend && npm run internal:smartwatch-mlc-cycle:validate",
+    "internal:mlc-search-publish": "cd backend && npm run internal:mlc-search-publish",
+    "internal:mlc-search-publish:dry": "cd backend && npm run internal:mlc-search-publish:dry",
+    "internal:single-article": "cd backend && npm run internal:single-article",
+    "internal:single-article:dry": "cd backend && npm run internal:single-article:dry",
+    "dropshipping:railway-bootstrap": "cd backend && npm run dropshipping:railway-bootstrap",
     "release-check": "node scripts/release-check.mjs"
   },
   "dependencies": {

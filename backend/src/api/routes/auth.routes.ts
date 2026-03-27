@@ -48,6 +48,18 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction && username === 'admin' && password === 'admin123') {
+      logger.warn('[AUTH] Blocked default admin credentials in production', {
+        username,
+      });
+      return res.status(403).json({
+        success: false,
+        error: 'Default production credentials are disabled',
+        errorCode: 'DEFAULT_CREDENTIALS_DISABLED',
+      });
+    }
+
     const user = await prisma.user.findUnique({
       where: { username },
     });

@@ -24,6 +24,29 @@ export interface CredentialEntry {
   sharedByUserId?: number | null;
 }
 
+export type CredentialIntegrityState =
+  | 'missing'
+  | 'valid'
+  | 'undecryptable'
+  | 'parse_failed'
+  | 'expired';
+
+export interface CredentialIntegrityReport {
+  apiName: string;
+  environment: 'sandbox' | 'production';
+  source: 'user' | 'global' | 'env' | 'none';
+  state: CredentialIntegrityState;
+  reasonCode: string;
+  recordId?: number;
+  ownerUserId?: number;
+  hasEncryptedPayload: boolean;
+  hasBasicCredentials: boolean;
+  hasAccessToken: boolean;
+  hasRefreshToken: boolean;
+  tokenExpired: boolean;
+  updatedAt?: Date;
+}
+
 const credentialsCache = new Map<string, CredentialEntry | null>();
 
 function cacheKey(userId: number, apiName: string, environment: string): string {
@@ -36,6 +59,144 @@ function normalizeApiName(apiName: string): string {
   if (n === 'aliexpress_dropshipping') return 'aliexpress-dropshipping';
   if (n === 'googletrends' || n === 'google-trends' || n === 'google_trends') return 'serpapi';
   return n;
+}
+
+function normalizeCredentialShape(
+  apiName: string,
+  credentials: Record<string, any>,
+  environment: 'sandbox' | 'production'
+): Record<string, any> {
+  const n = normalizeApiName(apiName);
+  const out = { ...credentials };
+
+  if (n === 'ebay') {
+    out.appId = out.appId || out.clientId || out.EBAY_APP_ID;
+    out.certId = out.certId || out.clientSecret || out.EBAY_CERT_ID;
+    out.devId = out.devId || out.EBAY_DEV_ID;
+    const ru =
+      out.redirectUri ||
+      out.EBAY_RUNAME ||
+      out.ruName ||
+      out.RuName ||
+      process.env.EBAY_RUNAME ||
+      process.env.EBAY_REDIRECT_URI;
+    out.redirectUri = ru ? String(ru).trim() || undefined : undefined;
+    const envToken = (process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim() || undefined;
+    const envRefresh = (process.env.EBAY_REFRESH_TOKEN || '').trim() || undefined;
+    out.token = out.token || out.authToken || out.accessToken || out.EBAY_OAUTH_TOKEN || envToken;
+    if (!out.refreshToken && !out.EBAY_REFRESH_TOKEN && !out.token) {
+      out.refreshToken = envRefresh;
+    } else {
+      out.refreshToken = out.refreshToken || out.EBAY_REFRESH_TOKEN;
+    }
+    out.sandbox = environment === 'sandbox';
+  }
+
+  if (n === 'paypal') {
+    out.clientId = out.clientId || out.PAYPAL_CLIENT_ID;
+    out.clientSecret = out.clientSecret || out.PAYPAL_CLIENT_SECRET;
+  }
+
+  return out;
+}
+
+function looksEncryptedPayload(raw: string): boolean {
+  return raw.includes(':') && /^[0-9a-f]+:/i.test(raw);
+}
+
+function isTokenExpiredAt(credentials: Record<string, any>): boolean {
+  const raw =
+    credentials.expiresAt ||
+    credentials.accessTokenExpiresAt ||
+    credentials.tokenExpiresAt ||
+    null;
+  if (!raw) return false;
+  const timestamp = new Date(String(raw)).getTime();
+  if (Number.isNaN(timestamp)) return false;
+  return timestamp <= Date.now();
+}
+
+function inspectStoredCredentialPayload(
+  apiName: string,
+  raw: string,
+  environment: 'sandbox' | 'production'
+): {
+  report: Omit<CredentialIntegrityReport, 'source' | 'recordId' | 'ownerUserId' | 'updatedAt'>;
+  parsedCredentials: Record<string, any> | null;
+} {
+  const encrypted = looksEncryptedPayload(raw);
+  let payload = raw;
+
+  if (encrypted) {
+    try {
+      payload = decrypt(raw);
+    } catch {
+      return {
+        report: {
+          apiName,
+          environment,
+          state: 'undecryptable',
+          reasonCode: 'undecryptable_current_key',
+          hasEncryptedPayload: true,
+          hasBasicCredentials: false,
+          hasAccessToken: false,
+          hasRefreshToken: false,
+          tokenExpired: false,
+        },
+        parsedCredentials: null,
+      };
+    }
+  }
+
+  let parsed: Record<string, any>;
+  try {
+    const value = JSON.parse(payload);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('invalid_payload_shape');
+    }
+    parsed = value as Record<string, any>;
+  } catch {
+    return {
+      report: {
+        apiName,
+        environment,
+        state: 'parse_failed',
+        reasonCode: encrypted ? 'corrupted_decrypted_payload' : 'invalid_plaintext_payload',
+        hasEncryptedPayload: encrypted,
+        hasBasicCredentials: false,
+        hasAccessToken: false,
+        hasRefreshToken: false,
+        tokenExpired: false,
+      },
+      parsedCredentials: null,
+    };
+  }
+
+  const normalized = normalizeCredentialShape(apiName, parsed, environment);
+  const hasAccessToken = !!String(
+    normalized.token || normalized.authToken || normalized.accessToken || ''
+  ).trim();
+  const hasRefreshToken = !!String(normalized.refreshToken || '').trim();
+  const tokenExpired = isTokenExpiredAt(normalized);
+  const hasBasicCredentials =
+    normalizeApiName(apiName) === 'ebay'
+      ? !!String(normalized.appId || '').trim() && !!String(normalized.certId || '').trim()
+      : Object.keys(normalized).length > 0;
+
+  return {
+    report: {
+      apiName,
+      environment,
+      state: tokenExpired && hasAccessToken && !hasRefreshToken ? 'expired' : 'valid',
+      reasonCode: tokenExpired && hasAccessToken && !hasRefreshToken ? 'expired_access_token' : 'valid',
+      hasEncryptedPayload: encrypted,
+      hasBasicCredentials,
+      hasAccessToken,
+      hasRefreshToken,
+      tokenExpired,
+    },
+    parsedCredentials: normalized,
+  };
 }
 
 /**
@@ -75,8 +236,16 @@ function mergeDropshippingEnvIfTokenMissing(
   if (n !== 'aliexpress-dropshipping') return creds;
   if (String(creds.accessToken || '').trim()) return creds;
 
-  const envTokenOnly = (process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || '').trim();
-  const envRefreshOnly = (process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN || '').trim();
+  const envTokenOnly = (
+    process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN ||
+    process.env.ALIEXPRESS_DROPSHIPPING_TOKEN ||
+    ''
+  ).trim();
+  const envRefreshOnly = (
+    process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN ||
+    process.env.ALIEXPRESS_DROPSHIPPING_REFRESH ||
+    ''
+  ).trim();
   const envFull = loadFromEnv(apiName, environment);
 
   if (envFull?.accessToken) {
@@ -146,11 +315,19 @@ function loadFromEnv(
     const appKey = (process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
     const appSecret = (process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || '').trim();
     if (!appKey || !appSecret) return null;
+    const accessToken =
+      (process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN ||
+        process.env.ALIEXPRESS_DROPSHIPPING_TOKEN ||
+        '').trim() || undefined;
+    const refreshToken =
+      (process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN ||
+        process.env.ALIEXPRESS_DROPSHIPPING_REFRESH ||
+        '').trim() || undefined;
     return {
       appKey,
       appSecret,
-      accessToken: (process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || '').trim() || undefined,
-      refreshToken: (process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN || '').trim() || undefined,
+      accessToken,
+      refreshToken,
       sandbox: environment === 'sandbox',
     };
   }
@@ -228,6 +405,31 @@ function loadFromEnv(
     const apiKey = (process.env.GROQ_API_KEY || '').trim();
     if (!apiKey) return null;
     return { apiKey };
+  }
+
+  // OpenAI
+  if (n === 'openai') {
+    const apiKey = (process.env.OPENAI_API_KEY || '').trim();
+    if (!apiKey) return null;
+    return {
+      apiKey,
+      organization: (process.env.OPENAI_ORGANIZATION || '').trim() || undefined,
+      baseUrl: (process.env.OPENAI_BASE_URL || process.env.OPENAI_API_BASE || '').trim() || undefined,
+      imageModel: (process.env.OPENAI_IMAGE_MODEL || '').trim() || undefined,
+      reviewModel: (process.env.OPENAI_VISION_MODEL || '').trim() || undefined,
+      model: (process.env.OPENAI_MODEL || process.env.OPENAI_VISION_MODEL || '').trim() || undefined,
+    };
+  }
+
+  // Gemini
+  if (n === 'gemini') {
+    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+    if (!apiKey) return null;
+    return {
+      apiKey,
+      model: (process.env.GEMINI_IMAGE_MODEL || process.env.GEMINI_MODEL || '').trim() || undefined,
+      reviewModel: (process.env.GEMINI_REVIEW_MODEL || '').trim() || undefined,
+    };
   }
 
   // SerpAPI / Google Trends
@@ -500,36 +702,109 @@ export const CredentialsManager = {
     credentials: Record<string, any>,
     environment: 'sandbox' | 'production'
   ): Record<string, any> {
-    const n = normalizeApiName(apiName);
-    const out = { ...credentials };
+    return normalizeCredentialShape(apiName, credentials, environment);
+  },
 
-    if (n === 'ebay') {
-      out.appId = out.appId || out.clientId || out.EBAY_APP_ID;
-      out.certId = out.certId || out.clientSecret || out.EBAY_CERT_ID;
-      out.devId = out.devId || out.EBAY_DEV_ID;
-      // ✅ Aceptar tanto RuName como URL completa - eBay soporta ambos
-      const ru = out.redirectUri || out.EBAY_RUNAME || out.ruName || out.RuName || process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI;
-      out.redirectUri = ru ? String(ru).trim() || undefined : undefined;
-      // Token/refreshToken: DB first (token|authToken|accessToken), then env fallback (Railway)
-      const envToken = (process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim() || undefined;
-      const envRefresh = (process.env.EBAY_REFRESH_TOKEN || '').trim() || undefined;
-      out.token = out.token || out.authToken || out.accessToken || out.EBAY_OAUTH_TOKEN || envToken;
-      // If a concrete access token exists in stored credentials, do not inject refresh token from env.
-      // This allows controlled bypass when refresh token is stale/revoked.
-      if (!out.refreshToken && !out.EBAY_REFRESH_TOKEN && !out.token) {
-        out.refreshToken = envRefresh;
-      } else {
-        out.refreshToken = out.refreshToken || out.EBAY_REFRESH_TOKEN;
+  async getCredentialIntegrityReport(
+    userId: number,
+    apiName: ApiName | string,
+    environment: 'sandbox' | 'production',
+    options?: { includeGlobal?: boolean; scope?: 'user' | 'global' }
+  ): Promise<CredentialIntegrityReport> {
+    const name = normalizeApiName(String(apiName));
+    const includeGlobal = options?.includeGlobal !== false;
+
+    const buildMissing = (): CredentialIntegrityReport => {
+      const envCreds = loadFromEnv(name, environment);
+      if (envCreds) {
+        const normalized = normalizeCredentialShape(name, envCreds, environment);
+        return {
+          apiName: name,
+          environment,
+          source: 'env',
+          state: 'valid',
+          reasonCode: 'env_fallback',
+          hasEncryptedPayload: false,
+          hasBasicCredentials:
+            name === 'ebay'
+              ? !!String(normalized.appId || '').trim() && !!String(normalized.certId || '').trim()
+              : Object.keys(normalized).length > 0,
+          hasAccessToken: !!String(normalized.token || normalized.authToken || normalized.accessToken || '').trim(),
+          hasRefreshToken: !!String(normalized.refreshToken || '').trim(),
+          tokenExpired: isTokenExpiredAt(normalized),
+        };
       }
-      out.sandbox = environment === 'sandbox';
+
+      return {
+        apiName: name,
+        environment,
+        source: 'none',
+        state: 'missing',
+        reasonCode: 'missing',
+        hasEncryptedPayload: false,
+        hasBasicCredentials: false,
+        hasAccessToken: false,
+        hasRefreshToken: false,
+        tokenExpired: false,
+      };
+    };
+
+    const inspectRow = async (scope: 'user' | 'global') => {
+      return prisma.apiCredential.findFirst({
+        where: {
+          ...(scope === 'user' ? { userId } : {}),
+          apiName: name,
+          environment,
+          scope,
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          userId: true,
+          updatedAt: true,
+          credentials: true,
+          isActive: true,
+        },
+      });
+    };
+
+    const scopes: Array<'user' | 'global'> = options?.scope
+      ? [options.scope]
+      : includeGlobal
+        ? ['user', 'global']
+        : ['user'];
+    for (const scope of scopes) {
+      const row = await inspectRow(scope);
+      if (!row) continue;
+      if (!row.isActive) {
+        return {
+          apiName: name,
+          environment,
+          source: scope,
+          state: 'missing',
+          reasonCode: 'inactive',
+          recordId: row.id,
+          ownerUserId: row.userId,
+          updatedAt: row.updatedAt,
+          hasEncryptedPayload: looksEncryptedPayload(String(row.credentials || '')),
+          hasBasicCredentials: false,
+          hasAccessToken: false,
+          hasRefreshToken: false,
+          tokenExpired: false,
+        };
+      }
+
+      const inspected = inspectStoredCredentialPayload(name, String(row.credentials || ''), environment);
+      return {
+        ...inspected.report,
+        source: scope,
+        recordId: row.id,
+        ownerUserId: row.userId,
+        updatedAt: row.updatedAt,
+      };
     }
 
-    if (n === 'paypal') {
-      out.clientId = out.clientId || out.PAYPAL_CLIENT_ID;
-      out.clientSecret = out.clientSecret || out.PAYPAL_CLIENT_SECRET;
-    }
-
-    return out;
+    return buildMissing();
   },
 
   validateCredentials(
@@ -566,6 +841,12 @@ export const CredentialsManager = {
       if (!credentials?.clientSecret || String(credentials.clientSecret).trim() === '')
         err.push('clientSecret is required');
     } else if (n === 'groq') {
+      if (!credentials?.apiKey || String(credentials.apiKey).trim() === '')
+        err.push('apiKey is required');
+    } else if (n === 'openai') {
+      if (!credentials?.apiKey || String(credentials.apiKey).trim() === '')
+        err.push('apiKey is required');
+    } else if (n === 'gemini') {
       if (!credentials?.apiKey || String(credentials.apiKey).trim() === '')
         err.push('apiKey is required');
     } else if (n === 'scraperapi') {

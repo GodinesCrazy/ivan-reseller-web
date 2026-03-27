@@ -11,6 +11,7 @@ const STATUS_STYLES: Record<string, string> = {
   PURCHASING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
   PURCHASED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   FAILED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  SIMULATED: 'bg-violet-100 text-violet-900 dark:bg-violet-900/40 dark:text-violet-200',
   MANUAL_ACTION_REQUIRED: 'bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-200',
   FULFILLMENT_BLOCKED: 'bg-rose-100 text-rose-900 dark:bg-rose-900/40 dark:text-rose-200',
 };

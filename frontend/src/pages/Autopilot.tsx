@@ -27,11 +27,17 @@ import {
   ChevronUp,
   HelpCircle,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 import { formatLastRun } from '@/utils/date';
 import { useAuthStore } from '@stores/authStore';
+import { fetchOperationsTruth } from '@/services/operationsTruth.api';
+import type { OperationsTruthResponse } from '@/types/operations';
+import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
+import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
+import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
 
 interface Workflow {
   id: number;
@@ -144,6 +150,7 @@ export default function Autopilot() {
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatusResponse | null>(null);
   const [autopilotMetrics, setAutopilotMetrics] = useState<AutopilotMetrics | null>(null);
   const [inventoryListings, setInventoryListings] = useState<InventorySummaryListings | null>(null);
+  const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
 
   // Modals
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
@@ -370,6 +377,20 @@ export default function Autopilot() {
     checkAutopilotStatus();
     fetchStartReadiness();
   }, [environment, fetchStartReadiness]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchOperationsTruth({ limit: 24, environment })
+      .then((data) => {
+        if (!cancelled) setOperationsTruth(data);
+      })
+      .catch(() => {
+        if (!cancelled) setOperationsTruth(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [environment]);
 
   useEffect(() => {
     const ms = autopilotRunning ? 4000 : 10000;
@@ -947,8 +968,14 @@ export default function Autopilot() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Autopilot</h1>
-          <p className="text-gray-600 dark:text-gray-400">Configure and run automated workflows</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos en tiempo real desde el servidor.</p>
+          <p className="text-gray-600 dark:text-gray-400">
+            Runtime del programador (ciclos buscar/publicar). La verdad de listings, blockers y pruebas vive en{' '}
+            <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+              Control Center
+            </Link>
+            — no sustituye el contrato canónico.
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Contadores y fases aquí son telemetría de ejecución, no estado comercial probado.</p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-3">
@@ -1014,7 +1041,35 @@ export default function Autopilot() {
         </div>
       )}
 
-      {/* Estado del ciclo — Ciclo del Autopilot (1-4) separado de post-venta (5-7) */}
+      {operationsTruth && (
+        <div className="space-y-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/40 p-4">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Verdad operativa canónica (muestra reciente)</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Blockers, listing externo y pruebas — prioridad sobre narrativa de fases del Autopilot.
+              </p>
+            </div>
+            <Link
+              to="/control-center"
+              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Abrir Control Center →
+            </Link>
+          </div>
+          <OperationsTruthSummaryPanel data={operationsTruth} />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <PostSaleProofLadderPanel
+              summary={operationsTruth.summary.proofCounts}
+              title="Proof ladder (subset)"
+              subtitle="No confundir publicaciones u oportunidades con fondos liberados o beneficio realizado."
+            />
+            <AgentDecisionTracePanel items={operationsTruth.items} />
+          </div>
+        </div>
+      )}
+
+      {/* Estado del ciclo — telemetría de ejecución (1-4); post-venta probada arriba / en órdenes */}
       <div className="rounded-xl border-2 overflow-hidden">
         <div className={`px-4 py-3 font-semibold text-sm uppercase tracking-wide ${
           autopilotRunning ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
@@ -1056,7 +1111,7 @@ export default function Autopilot() {
                       let detail = '';
                       if (phase === 'searching') detail = 'Buscando oportunidades en AliExpress…';
                       else if (phase === 'filtering') detail = 'Filtrando por criterios de precio y calidad…';
-                      else if (phase === 'analyzing') detail = 'Analizando rentabilidad y ROI…';
+                      else if (phase === 'analyzing') detail = 'Analizando rentabilidad y ROI (estimaciones internas del ciclo, no proof comercial)…';
                       else if (phase === 'publishing') {
                         const curr = prog?.publishingCurrent;
                         const tot = prog?.publishingTotal;
@@ -1253,8 +1308,12 @@ export default function Autopilot() {
         </div>
       </div>
 
-      {/* Autopilot Dashboard - Business metrics */}
+      {/* Dashboard analytics — estimates / aggregates; not canonical proof */}
       {autopilotMetrics && (
+        <div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            Métricas de panel (ventas/proyecciones): referencia analítica; el margen mostrado no es ganancia realizada salvo proof en órdenes y finance.
+          </p>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
             <div className="flex items-center gap-3">
@@ -1289,7 +1348,7 @@ export default function Autopilot() {
                 <TrendingUp className="w-6 h-6 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Winning Products</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Productos “winning” (score heurístico)</div>
                 <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{autopilotMetrics.winningProductsCount}</div>
               </div>
             </div>
@@ -1300,7 +1359,7 @@ export default function Autopilot() {
                 <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Profit Today</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Margen proyectado hoy (estim.)</div>
                 <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                   ${autopilotMetrics.profitToday.toFixed(2)}
                 </div>
@@ -1313,7 +1372,7 @@ export default function Autopilot() {
                 <DollarSign className="w-6 h-6 text-teal-600 dark:text-teal-400" />
               </div>
               <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Profit Month</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Margen proyectado mes (estim.)</div>
                 <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                   ${autopilotMetrics.profitMonth.toFixed(2)}
                 </div>
@@ -1321,12 +1380,13 @@ export default function Autopilot() {
             </div>
           </div>
         </div>
+        </div>
       )}
 
       {/* Top winning products list */}
       {autopilotMetrics?.topWinningProducts && autopilotMetrics.topWinningProducts.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Top productos ganadores (WinningScore &gt; 75)</h3>
+          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Top productos por score heurístico (WinningScore &gt; 75, no es proof comercial)</h3>
           <ul className="space-y-2">
             {autopilotMetrics.topWinningProducts.map((p) => (
               <li key={p.productId} className="flex items-center justify-between py-1 border-b border-gray-100 dark:border-gray-700 last:border-0">

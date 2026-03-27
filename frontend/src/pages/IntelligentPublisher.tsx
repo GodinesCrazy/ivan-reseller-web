@@ -9,6 +9,11 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
+import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
+import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
+import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
+import { fetchOperationsTruth } from '@/services/operationsTruth.api';
+import type { OperationsTruthItem, OperationsTruthResponse } from '@/types/operations';
 
 // Usar proxy de imágenes para evitar bloqueo de hotlink de AliExpress
 function toProxyUrl(url: string): string {
@@ -28,6 +33,15 @@ function sanitizeProductTitle(title: string): string {
 
 function formatDateEs(date: Date | string): string {
   return new Date(date).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function getLiveStateBadge(state: string | null | undefined) {
+  const normalized = String(state || '').trim().toLowerCase();
+  if (normalized === 'active') return <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">active</span>;
+  if (normalized === 'under_review') return <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">under_review</span>;
+  if (normalized === 'paused') return <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">paused</span>;
+  if (normalized === 'failed_publish' || normalized === 'not_found') return <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">{normalized}</span>;
+  return <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">unknown</span>;
 }
 
 export default function IntelligentPublisher() {
@@ -51,6 +65,7 @@ export default function IntelligentPublisher() {
     canPublish: boolean;
     remainingExposure: number;
   } | null>(null);
+  const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
   const LISTINGS_PER_PAGE = 50;
   const PENDING_PER_PAGE = 20;
   const listingsTotalPages = Math.max(1, Math.ceil(listingsTotal / LISTINGS_PER_PAGE));
@@ -129,6 +144,58 @@ export default function IntelligentPublisher() {
     handlers: { PRODUCT_PUBLISHED: loadPublisherData },
     enabled: true,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    const productIds = Array.from(new Set([
+      ...pending.map((item: any) => Number(item.id)).filter((value) => Number.isFinite(value) && value > 0),
+      ...listings.map((item: any) => Number(item.productId)).filter((value) => Number.isFinite(value) && value > 0),
+    ]));
+
+    if (productIds.length === 0) {
+      setOperationsTruth(null);
+      return;
+    }
+
+    fetchOperationsTruth({ ids: productIds, environment })
+      .then((data) => {
+        if (!cancelled) setOperationsTruth(data);
+      })
+      .catch(() => {
+        if (!cancelled) setOperationsTruth(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pending, listings, environment]);
+
+  const operationsTruthByProduct = useMemo(() => {
+    const entries = operationsTruth?.items ?? [];
+    return new Map(entries.map((item) => [item.productId, item]));
+  }, [operationsTruth]);
+
+  const operationsTruthByListing = useMemo(() => {
+    const entries = operationsTruth?.items ?? [];
+    return new Map(
+      entries
+        .filter((item) => item.marketplace && item.listingId)
+        .map((item) => [`${item.marketplace}:${item.listingId}`, item] as const)
+    );
+  }, [operationsTruth]);
+
+  const resolveListingTruth = useCallback((listing: any): OperationsTruthItem | null => {
+    const productId = Number(listing?.productId);
+    if (Number.isFinite(productId) && operationsTruthByProduct.has(productId)) {
+      return operationsTruthByProduct.get(productId) ?? null;
+    }
+    const marketplace = String(listing?.marketplace || '').trim().toLowerCase();
+    const listingId = String(listing?.listingId || '').trim();
+    if (marketplace && listingId) {
+      return operationsTruthByListing.get(`${marketplace}:${listingId}`) ?? null;
+    }
+    return null;
+  }, [operationsTruthByListing, operationsTruthByProduct]);
 
   const approve = useCallback(async (productId: string, marketplaces: string[]) => {
     try {
@@ -263,7 +330,28 @@ export default function IntelligentPublisher() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-semibold mb-2">Publicador inteligente</h1>
-      <p className="text-gray-600 mb-4">Prepara, aprueba y publica anuncios en los marketplaces.</p>
+      <p className="text-gray-600 mb-4">
+        Prepara, aprueba y publica anuncios con verdad canónica de listing, blocker y next action. Las estimaciones comerciales siguen siendo secundarias y no equivalen a proof comercial.
+      </p>
+      {operationsTruth && (
+        <div className="space-y-4 mb-4">
+          <OperationsTruthSummaryPanel data={operationsTruth} />
+          <div className="grid grid-cols-1 xl:grid-cols-[1.05fr_1fr] gap-4">
+            <PostSaleProofLadderPanel
+              summary={operationsTruth.summary.proofCounts}
+              title="Proof ladder around current publishing sample"
+              subtitle="Publication activity no longer implies released funds or realized profit."
+            />
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Publishing truth rule</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Publishing surfaces must foreground external listing state, blockers, and next actions before any estimated margin.
+              </p>
+            </div>
+          </div>
+          <AgentDecisionTracePanel items={operationsTruth.items} />
+        </div>
+      )}
       {/* Bulk publish toolbar */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded mb-4 flex flex-col gap-3">
         <div className="text-sm font-medium">Publicación masiva seleccionada (encolar trabajos)</div>
@@ -386,6 +474,7 @@ export default function IntelligentPublisher() {
           <PendingProductCard
             key={p.id}
             product={p}
+            operationsTruth={operationsTruthByProduct.get(Number(p.id)) ?? null}
             selected={!!selected[p.id]}
             onSelectChange={(checked) => setSelected(s => ({ ...s, [p.id]: checked }))}
             onApprove={(marketplaces) => approve(p.id, marketplaces)}
@@ -458,6 +547,36 @@ export default function IntelligentPublisher() {
               <div className="flex-1 min-w-0 text-sm">
                 <div className="font-medium truncate">{l.productTitle || l.listingId}</div>
                 <div className="text-gray-500 text-xs">{l.marketplace.toUpperCase()} – {l.listingId} – {l.publishedAt ? formatDateEs(l.publishedAt) : ''}</div>
+                {(() => {
+                  const truth = resolveListingTruth(l);
+                  if (!truth) {
+                    return <div className="text-[11px] text-gray-400 mt-1">Sin canonical listing truth asociado</div>;
+                  }
+                  return (
+                    <div className="mt-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {getLiveStateBadge(truth.externalMarketplaceState)}
+                        {truth.externalMarketplaceSubStatus.length > 0 && (
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate" title={truth.externalMarketplaceSubStatus.join(', ')}>
+                            {truth.externalMarketplaceSubStatus.join(', ')}
+                          </span>
+                        )}
+                      </div>
+                      {truth.blockerCode ? (
+                        <div className="text-[11px] text-red-600 dark:text-red-400" title={truth.blockerMessage || truth.blockerCode}>
+                          Blocker: {truth.blockerCode}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-green-600 dark:text-green-400">Sin blocker actual</div>
+                      )}
+                      {truth.nextAction && (
+                        <div className="text-[11px] text-amber-700 dark:text-amber-300" title={truth.nextAction}>
+                          Next: {truth.nextAction}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               {l.listingUrl && (
                 <a href={l.listingUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 text-sm hover:underline flex-shrink-0">Abrir</a>
@@ -493,11 +612,13 @@ export default function IntelligentPublisher() {
 // ✅ Tarjeta de producto pendiente con imágenes y más detalle
 function PendingProductCard({
   product: p,
+  operationsTruth,
   selected,
   onSelectChange,
   onApprove,
 }: {
   product: any;
+  operationsTruth: OperationsTruthItem | null;
   selected: boolean;
   onSelectChange: (checked: boolean) => void;
   onApprove: (marketplaces: string[]) => void;
@@ -532,28 +653,63 @@ function PendingProductCard({
               )}
             </div>
           )}
-          <div className="text-xs text-gray-500 mt-1 space-y-1">
-            <div>
-              Cost: {formatCurrencySimple(p.estimatedCost ?? p.aliexpressPrice ?? 0, p.currency || 'USD')}
-              {p.shippingCost != null && p.shippingCost > 0 && (
-                <span> (+ {formatCurrencySimple(p.shippingCost, p.currency || 'USD')} ship)</span>
-              )}
-              {p.totalCost != null && p.totalCost !== (p.estimatedCost ?? p.aliexpressPrice ?? 0) && (
-                <span> = Total: {formatCurrencySimple(p.totalCost, p.currency || 'USD')}</span>
-              )}
-              {' → '}Suggested: {formatCurrencySimple(p.suggestedPrice ?? 0, p.currency || 'USD')}
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span>Profit: <span className="font-semibold text-green-600">{formatCurrencySimple(p.estimatedProfit ?? 0, p.currency || 'USD')}</span></span>
-              <span>ROI: <span className="font-semibold text-blue-600">{Number(p.estimatedROI ?? 0).toFixed(1)}%</span></span>
-            </div>
-            {p.estimatedProfitByMarketplace && (
-              <div className="flex items-center gap-2 flex-wrap text-xs">
-                {Object.entries(p.estimatedProfitByMarketplace).map(([mk, val]) => (
-                  <span key={mk}>{mk === 'mercadolibre' ? 'ML' : mk}: <span className="text-green-600">+{formatCurrencySimple(val, p.currency || 'USD')}</span></span>
-                ))}
+          <div className="text-xs text-gray-500 mt-1 space-y-2">
+            {operationsTruth && (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">Verdad operativa (listing / blocker)</p>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {getLiveStateBadge(operationsTruth.externalMarketplaceState)}
+                  {operationsTruth.externalMarketplaceSubStatus.length > 0 && (
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                      {operationsTruth.externalMarketplaceSubStatus.join(', ')}
+                    </span>
+                  )}
+                </div>
+                {operationsTruth.blockerCode ? (
+                  <p className="text-xs text-red-600 dark:text-red-400" title={operationsTruth.blockerMessage || operationsTruth.blockerCode}>
+                    Blocker: {operationsTruth.blockerCode}
+                    {operationsTruth.blockerMessage ? ` — ${operationsTruth.blockerMessage}` : ''}
+                  </p>
+                ) : (
+                  <p className="text-xs text-green-600 dark:text-green-400">Sin blocker canónico actual</p>
+                )}
+                {operationsTruth.nextAction && (
+                  <p className="text-xs text-amber-700 dark:text-amber-300">Siguiente acción: {operationsTruth.nextAction}</p>
+                )}
               </div>
             )}
+            <div className="rounded-md border border-dashed border-gray-200 dark:border-gray-600 p-2 space-y-1 text-[11px] text-gray-500 dark:text-gray-400">
+              <p className="font-medium text-gray-600 dark:text-gray-300">Costos y margen — solo estimación pre-publicación</p>
+              <div>
+                Coste: {formatCurrencySimple(p.estimatedCost ?? p.aliexpressPrice ?? 0, p.currency || 'USD')}
+                {p.shippingCost != null && p.shippingCost > 0 && (
+                  <span> (+ {formatCurrencySimple(p.shippingCost, p.currency || 'USD')} envío)</span>
+                )}
+                {p.totalCost != null && p.totalCost !== (p.estimatedCost ?? p.aliexpressPrice ?? 0) && (
+                  <span> = Total: {formatCurrencySimple(p.totalCost, p.currency || 'USD')}</span>
+                )}
+                {' → '}Sugerido: {formatCurrencySimple(p.suggestedPrice ?? 0, p.currency || 'USD')}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span>Margen bruto estimado: <span className="font-semibold text-gray-700 dark:text-gray-200">{formatCurrencySimple(p.estimatedProfit ?? 0, p.currency || 'USD')}</span></span>
+                <span>ROI estimado: <span className="font-semibold text-gray-700 dark:text-gray-200">{Number(p.estimatedROI ?? 0).toFixed(1)}%</span></span>
+              </div>
+              {p.estimatedProfitByMarketplace && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {Object.entries(p.estimatedProfitByMarketplace).map(([mk, val]) => (
+                    <span key={mk}>
+                      {mk === 'mercadolibre' ? 'ML' : mk} (estim.):{' '}
+                      <span className="text-gray-700 dark:text-gray-200">
+                        +{formatCurrencySimple(Number(val), p.currency || 'USD')}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="text-[10px] text-gray-500 dark:text-gray-500 pt-1">
+                No es ganancia realizada ni prueba de listing activo; prioriza el bloque de verdad operativa arriba.
+              </p>
+            </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className={`px-2 py-0.5 rounded text-xs ${p.source === 'autopilot' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
                 {p.source === 'autopilot' ? '🤖 Autopilot' : '👤 Manual'}

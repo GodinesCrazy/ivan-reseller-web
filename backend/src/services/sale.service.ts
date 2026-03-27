@@ -11,6 +11,7 @@ import { platformConfigService } from './platform-config.service';
 import { toNumber } from '../utils/decimal.utils';
 import { getEffectiveShippingCost } from '../utils/shipping.utils';
 import type { AutomatedOrder } from './automation.service';
+import { getOrderTruthFlags } from './order-truth.service';
 
 /** Statuses that count as "completed" for sales stats (ingresos, beneficio, total ventas). Aligns with delivered flow and inventory-summary. */
 const COMPLETED_SALE_STATUSES = ['DELIVERED', 'COMPLETED'] as const;
@@ -1292,10 +1293,31 @@ export class SaleService {
     }
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, userId: true, productId: true, productUrl: true, price: true, currency: true, customerEmail: true, shippingAddress: true, paypalOrderId: true },
+      select: {
+        id: true,
+        userId: true,
+        productId: true,
+        productUrl: true,
+        price: true,
+        currency: true,
+        customerEmail: true,
+        shippingAddress: true,
+        paypalOrderId: true,
+        fulfillmentNotes: true,
+        failureReason: true,
+        errorMessage: true,
+      },
     });
     if (!order || !order.userId) {
       logger.debug('[SALE] createSaleFromOrder skipped: no order or no userId', { orderId, timestamp: ts });
+      return null;
+    }
+    const orderTruth = getOrderTruthFlags(order);
+    if (!orderTruth.commercialProofEligible) {
+      logger.info('[SALE] createSaleFromOrder blocked: order excluded from commercial proof', {
+        orderId,
+        reason: orderTruth.operatorTruthReason,
+      });
       return null;
     }
     const userId = order.userId;

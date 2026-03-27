@@ -351,7 +351,7 @@ export default function FinanceDashboard() {
           <p className="text-gray-600 dark:text-gray-400">Consolidated KPIs: sales, commissions, payouts and balances</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1.5" title="Origen de los datos">
             <Info className="w-3.5 h-3.5 shrink-0" />
-            Los datos de Summary, Ledger, Cashflow y Tax provienen de ventas y comisiones registradas. La proyección de beneficio es una estimación. El capital disponible puede venir de la API de PayPal o de tu configuración.
+            <strong>Analytics vs proof:</strong> Summary/Ledger provienen de ventas registradas; la ganancia realizada probada requiere proof ladder (payout ejecutado). La proyección de beneficio es estimada. El capital puede venir de PayPal API o de tu configuración.
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga · Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}</p>
         </div>
@@ -430,7 +430,7 @@ export default function FinanceDashboard() {
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Estado de cuenta (Sales Ledger)</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {getDateRangeLabel()} · Solo ventas reales (excluye simulaciones)
+              {getDateRangeLabel()} · Solo ventas reales (excluye simulaciones). La columna Payout indica si hay proof de fondos liberados; la ganancia realizada probada se confirma con proof ladder.
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -571,7 +571,7 @@ export default function FinanceDashboard() {
       {activeTab === 'top-products' && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Top Products (WinningScore)</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Top Products (WinningScore heurístico)</h2>
             <button
               onClick={loadTopProducts}
               className="text-sm px-3 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-700 dark:text-gray-300"
@@ -651,17 +651,22 @@ export default function FinanceDashboard() {
 
       {activeTab === 'overview' && !isLoadingTab && (
         <>
-      {/* Main Stats Cards — same pattern as Dashboard */}
+      {/* Main Stats — from sales ledger; realized proof requires payoutExecuted in ledger / proof ladder */}
+      <div className="mb-2">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Los totales inferidos del sales ledger (ventas con payout); la ganancia realizada probada se confirma con proof ladder en Control Center.
+        </p>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl border-2 border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/80 dark:bg-emerald-950/30 shadow-card dark:shadow-card-dark transition-colors">
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Net Profit</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Net Profit (agregado ledger)</p>
               <p className="mt-1 text-metric tabular-nums text-gray-900 dark:text-white">{formatCurrency(financialData.netProfit)}</p>
-              <p className="text-xs text-gray-600 dark:text-slate-400 mt-1">After taxes & fees</p>
+              <p className="text-xs text-gray-600 dark:text-slate-400 mt-1">Ventas registradas; after taxes & fees</p>
             </div>
-            <div className="w-11 h-11 shrink-0 bg-emerald-200/80 dark:bg-emerald-900/50 rounded-xl flex items-center justify-center">
-              <Wallet className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            <div className="w-11 h-11 shrink-0 bg-gray-200/80 dark:bg-slate-700 rounded-xl flex items-center justify-center">
+              <Wallet className="h-6 w-6 text-gray-600 dark:text-gray-400" />
             </div>
           </div>
         </div>
@@ -669,7 +674,7 @@ export default function FinanceDashboard() {
         <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Gross Profit</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Gross Profit (ledger)</p>
               <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{formatCurrency(financialData.profit)}</p>
               <p className="text-xs text-gray-600 dark:text-slate-400 mt-1">Margin: {formatPercentage(financialData.margin)}</p>
             </div>
@@ -709,10 +714,11 @@ export default function FinanceDashboard() {
       {/* Monthly Profit Projection */}
       {profitProjection && (
         <div className="rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <Target className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            Proyección mensual estimada
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+            <Target className="w-5 h-5 text-gray-500" />
+            Proyección mensual (estimación)
           </h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">No es proof; es referencia analítica basada en histórico o defaults.</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Utilidad proyectada</div>

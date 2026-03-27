@@ -12,7 +12,9 @@ import { workflowConfigService } from './workflow-config.service';
 import { CredentialsManager } from './credentials-manager.service';
 import {
   evaluatePrePublishValidation,
+  prepareProductForSafePublishing,
   type PrePublishEvaluationResult,
+  type PreventivePublishPreparationResult,
 } from './pre-publish-validator.service';
 import { runActiveListingsRiskScan } from './active-listings-risk-scan.service';
 import type { OpportunityItem } from './opportunity-finder.types';
@@ -63,7 +65,7 @@ export interface SmartwatchConstrainedCycleResult {
   productId?: number;
   listingId?: string;
   listingUrl?: string;
-  prePublish?: PrePublishEvaluationResult;
+  prePublish?: PrePublishEvaluationResult | PreventivePublishPreparationResult;
   opportunity?: Pick<OpportunityItem, 'title' | 'aliexpressUrl' | 'costUsd' | 'suggestedPriceUsd'>;
   durationMs: number;
 }
@@ -322,11 +324,28 @@ export async function runSmartwatchMlcConstrainedCycle(
       continue;
     }
 
-    if (chosen.aliexpressSkuId) {
-      await prisma.product.update({
-        where: { id: productId },
-        data: { aliexpressSku: chosen.aliexpressSkuId },
+    let preventivePreparation: PreventivePublishPreparationResult;
+    try {
+      preventivePreparation = await prepareProductForSafePublishing({
+        userId,
+        marketplace: 'mercadolibre',
+        credentials: mlCredRecord,
+        listingSalePrice: chosen.listingSalePrice,
+        product: {
+          id: productRow.id,
+          title: productRow.title,
+          aliexpressUrl: productRow.aliexpressUrl || '',
+          aliexpressSku: productRow.aliexpressSku,
+          aliexpressPrice: productRow.aliexpressPrice,
+          importTax: productRow.importTax,
+          currency: productRow.currency,
+          targetCountry: productRow.targetCountry || 'CL',
+          shippingCost: productRow.shippingCost,
+        },
       });
+    } catch (e: any) {
+      await markRejected(productId, userId, `preventive publish preparation failed: ${e?.message || String(e)}`);
+      continue;
     }
 
     stages.stage3to6_selectedOpportunity = {
@@ -334,7 +353,7 @@ export async function runSmartwatchMlcConstrainedCycle(
       costUsd: opp.costUsd,
       aliexpressUrl: opp.aliexpressUrl,
     };
-    stages.stage5_prePublish = chosen;
+    stages.stage5_prePublish = preventivePreparation;
 
     // —— Stage 7–8: publish + verify DB listing ——
     if (validateOnly) {
@@ -345,7 +364,7 @@ export async function runSmartwatchMlcConstrainedCycle(
         stages,
         userId,
         productId,
-        prePublish: chosen,
+        prePublish: preventivePreparation,
         opportunity: {
           title: opp.title,
           aliexpressUrl: opp.aliexpressUrl,
@@ -369,7 +388,7 @@ export async function runSmartwatchMlcConstrainedCycle(
           marketplace: 'mercadolibre',
           customData: {
             title: uniqueTitle,
-            price: chosen.listingSalePrice,
+            price: preventivePreparation.listingSalePrice,
             quantity: 1,
           } as PublishProductRequest['customData'],
         },
@@ -388,7 +407,7 @@ export async function runSmartwatchMlcConstrainedCycle(
         stages,
         userId,
         productId,
-        prePublish: chosen,
+        prePublish: preventivePreparation,
         durationMs: Date.now() - t0,
       };
     }
@@ -407,7 +426,7 @@ export async function runSmartwatchMlcConstrainedCycle(
       productId,
       listingId: publishResult.listingId,
       listingUrl: publishResult.listingUrl || listingRow?.listingUrl || undefined,
-      prePublish: chosen,
+      prePublish: preventivePreparation,
       opportunity: {
         title: opp.title,
         aliexpressUrl: opp.aliexpressUrl,

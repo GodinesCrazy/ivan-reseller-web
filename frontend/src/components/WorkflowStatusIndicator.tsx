@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Workflow, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import ProductWorkflowPipeline from './ProductWorkflowPipeline';
-import api from '@/services/api';
+import { fetchOperationsTruth } from '@/services/operationsTruth.api';
+import type { OperationsTruthItem } from '@/types/operations';
 
 interface WorkflowStatusIndicatorProps {
   productId: number;
@@ -11,39 +12,44 @@ interface WorkflowStatusIndicatorProps {
   className?: string;
 }
 
-const stageLabels: Record<string, string> = {
-  scrape: 'SCRAPE',
-  analyze: 'ANALYZE',
-  publish: 'PUBLISH',
-  purchase: 'PURCHASE',
-  fulfillment: 'FULFILL',
-  customerService: 'SERVICE',
-};
+function getLiveStateLabel(state: string | null | undefined): string {
+  const normalized = String(state || '').trim().toLowerCase();
+  if (!normalized) return 'ops';
+  return normalized;
+}
+
+function getLiveStateBadgeClass(state: string | null | undefined): string {
+  const normalized = String(state || '').trim().toLowerCase();
+  if (normalized === 'active') return 'bg-green-100 text-green-700';
+  if (normalized === 'under_review') return 'bg-amber-100 text-amber-700';
+  if (normalized === 'paused') return 'bg-orange-100 text-orange-700';
+  if (normalized === 'failed_publish' || normalized === 'not_found') return 'bg-red-100 text-red-700';
+  return 'bg-blue-100 text-blue-700';
+}
 
 export default function WorkflowStatusIndicator({
   productId,
-  currentStage,
-  preloadedCurrentStage,
+  currentStage: _currentStage,
+  preloadedCurrentStage: _preloadedCurrentStage,
   className = '',
 }: WorkflowStatusIndicatorProps) {
   const [showModal, setShowModal] = useState(false);
-  const [fetchedStage, setFetchedStage] = useState<string | null>(null);
+  const [opsTruth, setOpsTruth] = useState<OperationsTruthItem | null>(null);
 
-  // Si hay preloadedCurrentStage o currentStage, no hacer fetch (reduce rate limit)
   useEffect(() => {
-    if (currentStage || preloadedCurrentStage !== undefined) return;
     if (!productId) return;
-    api.get(`/api/products/${productId}/workflow-status`)
-      .then(response => {
-        if (response.data?.success && response.data?.data?.currentStage) {
-          setFetchedStage(response.data.data.currentStage);
+    fetchOperationsTruth({ ids: [productId] })
+      .then((response) => {
+        const item = response.items.find((candidate) => candidate.productId === productId) ?? null;
+        if (item) {
+          setOpsTruth(item);
         }
       })
       .catch(() => {});
-  }, [productId, currentStage, preloadedCurrentStage]);
+  }, [productId]);
 
-  const displayStage = (currentStage || preloadedCurrentStage) ?? fetchedStage;
-  const showBadge = displayStage && stageLabels[displayStage];
+  const badgeLabel = opsTruth?.blockerCode || getLiveStateLabel(opsTruth?.externalMarketplaceState);
+  const badgeClass = getLiveStateBadgeClass(opsTruth?.externalMarketplaceState);
 
   return (
     <>
@@ -53,9 +59,9 @@ export default function WorkflowStatusIndicator({
         title="Ver estado del workflow completo"
       >
         <Workflow className="w-4 h-4 text-blue-600" />
-        {showBadge && (
-          <Badge className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5">
-            {stageLabels[displayStage!]}
+        {badgeLabel && (
+          <Badge className={`${badgeClass} text-xs px-1.5 py-0.5`}>
+            {badgeLabel}
           </Badge>
         )}
       </button>

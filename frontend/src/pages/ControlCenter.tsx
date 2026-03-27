@@ -1,36 +1,22 @@
-/**
- * Phase 12: Strategic Control Center
- * Unified operational dashboard: funnel, ROI, conversion trends, profit distribution, system readiness.
- */
-
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  BarChart3,
-  Layers,
   Activity,
-  CheckCircle,
-  XCircle,
   AlertCircle,
-  DollarSign,
-  Target,
-  Zap,
+  CheckCircle,
+  Layers,
   Loader2,
+  ShieldAlert,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import api from '@services/api';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
+import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
+import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
+import { fetchOperationsTruth } from '@/services/operationsTruth.api';
+import type { OperationsTruthResponse } from '@/types/operations';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
-
-interface FunnelStage {
-  stage: string;
-  count: number;
-  label: string;
-}
-
-interface ControlCenterFunnel {
-  funnel: FunnelStage[];
-  profitDistribution: { marketplace: string; totalProfit: number; salesCount: number }[];
-  counts: Record<string, number>;
-}
 
 interface SalesAccelerationMode {
   enabled: boolean;
@@ -58,13 +44,6 @@ interface ReadinessReport {
   salesOptimizationReadiness: Record<string, boolean>;
   salesAccelerationMode?: SalesAccelerationMode;
   timestamp?: string;
-}
-
-interface AutopilotMetrics {
-  profitToday: number;
-  profitMonth: number;
-  dailySales: number;
-  activeListings: number;
 }
 
 interface AutopilotStatus {
@@ -107,11 +86,38 @@ interface Phase32Status {
   maxNewListingsPerDay: number;
 }
 
+function formatStatusLabel(value: string | null | undefined): string {
+  const raw = String(value || '').trim();
+  if (!raw) return 'unknown';
+  return raw.replace(/_/g, ' ');
+}
+
+function statusTone(status: string) {
+  if (status === 'ok' || status === 'enabled' || status === 'running') {
+    return {
+      icon: <CheckCircle className="h-5 w-5 text-green-500" />,
+      card: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+      text: 'text-green-700 dark:text-green-300',
+    };
+  }
+  if (status === 'degraded' || status === 'disabled') {
+    return {
+      icon: <AlertCircle className="h-5 w-5 text-amber-500" />,
+      card: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800',
+      text: 'text-amber-700 dark:text-amber-300',
+    };
+  }
+  return {
+    icon: <ShieldAlert className="h-5 w-5 text-red-500" />,
+    card: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
+    text: 'text-red-700 dark:text-red-300',
+  };
+}
+
 export default function ControlCenter() {
   const { environment } = useEnvironment();
-  const [funnel, setFunnel] = useState<ControlCenterFunnel | null>(null);
+  const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
-  const [metrics, setMetrics] = useState<AutopilotMetrics | null>(null);
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus | null>(null);
   const [phase32Status, setPhase32Status] = useState<Phase32Status | null>(null);
   const [phase32Activating, setPhase32Activating] = useState(false);
@@ -125,7 +131,7 @@ export default function ControlCenter() {
   const fetchPhase32Status = () => {
     api
       .get('/api/system/phase32/status')
-      .then((r) => r.data && setPhase32Status({ ...r.data }))
+      .then((response) => response.data && setPhase32Status({ ...response.data }))
       .catch(() => setPhase32Status(null));
   };
 
@@ -136,11 +142,14 @@ export default function ControlCenter() {
     setLoadWarnings([]);
 
     const isDbLimit = (reason: unknown): boolean => {
-      const ax = reason as { response?: { status?: number; data?: { code?: string; error?: string } }; message?: string };
-      if (ax?.response?.data?.code === 'DB_CONNECTION_LIMIT') return true;
-      const msg = String(ax?.response?.data?.error ?? ax?.message ?? '').toLowerCase();
+      const axiosError = reason as {
+        response?: { status?: number; data?: { code?: string; error?: string } };
+        message?: string;
+      };
+      if (axiosError?.response?.data?.code === 'DB_CONNECTION_LIMIT') return true;
+      const msg = String(axiosError?.response?.data?.error ?? axiosError?.message ?? '').toLowerCase();
       return (
-        ax?.response?.status === 503 &&
+        axiosError?.response?.status === 503 &&
         (msg.includes('base de datos') || msg.includes('too many clients') || msg.includes('database'))
       );
     };
@@ -149,92 +158,73 @@ export default function ControlCenter() {
       'El servicio no pudo conectar con la base de datos (muchas conexiones). Intenta de nuevo en unos segundos.';
 
     Promise.allSettled([
-      api.get('/api/analytics/control-center-funnel', { params: { environment } }).then((r) => r.data),
-      api.get('/api/system/readiness-report').then((r) => r.data),
-      api.get('/api/dashboard/autopilot-metrics', { params: { environment } }).then((r) => r.data),
-      api.get('/api/autopilot/status').then((r) => r.data),
-      api.get('/api/system/phase32/status').then((r) => r.data),
-    ]).then((results) => {
-      if (cancelled) return;
+      fetchOperationsTruth({ limit: 12, environment }),
+      api.get('/api/system/readiness-report').then((response) => response.data),
+      api.get('/api/autopilot/status').then((response) => response.data),
+      api.get('/api/system/phase32/status').then((response) => response.data),
+    ])
+      .then((results) => {
+        if (cancelled) return;
 
-      const warnings: string[] = [];
-      let anyOk = false;
+        const warnings: string[] = [];
+        let anyOk = false;
 
-      if (results[0].status === 'fulfilled') {
-        setFunnel(results[0].value);
-        anyOk = true;
-      } else {
-        setFunnel(null);
-        const r = results[0].reason;
-        warnings.push(isDbLimit(r) ? friendlyDbMsg : 'No se pudo cargar el embudo (funnel) del Control Center.');
-      }
+        if (results[0].status === 'fulfilled') {
+          setOperationsTruth(results[0].value);
+          anyOk = true;
+        } else {
+          setOperationsTruth(null);
+          warnings.push('No se pudo cargar la verdad operativa canónica del Control Center.');
+        }
 
-      if (results[1].status === 'fulfilled') {
-        setReadiness(results[1].value);
-        anyOk = true;
-      } else {
-        setReadiness(null);
-        if (isDbLimit(results[1].reason)) warnings.push(friendlyDbMsg);
-      }
+        if (results[1].status === 'fulfilled') {
+          setReadiness(results[1].value);
+          anyOk = true;
+        } else {
+          setReadiness(null);
+          warnings.push(isDbLimit(results[1].reason) ? friendlyDbMsg : 'No se pudo cargar la salud técnica del sistema.');
+        }
 
-      if (results[2].status === 'fulfilled') {
-        const metricsData = results[2].value;
-        setMetrics({
-          profitToday: metricsData.profitToday ?? 0,
-          profitMonth: metricsData.profitMonth ?? 0,
-          dailySales: metricsData.dailySales ?? 0,
-          activeListings: metricsData.activeListings ?? 0,
-        });
-        anyOk = true;
-      } else {
-        setMetrics(null);
-        if (isDbLimit(results[2].reason)) warnings.push(friendlyDbMsg);
-      }
+        if (results[2].status === 'fulfilled') {
+          const runtime = results[2].value;
+          setAutopilotStatus({
+            running: runtime?.running === true,
+            status: runtime?.status ?? 'unknown',
+            lastRun: runtime?.lastRun ?? null,
+            config: runtime?.config,
+          });
+          anyOk = true;
+        } else {
+          setAutopilotStatus({ running: false, status: 'unknown', lastRun: null });
+        }
 
-      if (results[3].status === 'fulfilled') {
-        const autopilotData = results[3].value;
-        setAutopilotStatus({
-          running: autopilotData.running === true,
-          status: autopilotData.status ?? 'unknown',
-          lastRun: autopilotData.lastRun ?? null,
-          config: autopilotData.config,
-        });
-        anyOk = true;
-      } else {
-        setAutopilotStatus({ running: false, status: 'unknown', lastRun: null });
-      }
+        if (results[3].status === 'fulfilled') {
+          setPhase32Status(results[3].value ?? null);
+          anyOk = true;
+        } else {
+          setPhase32Status(null);
+        }
 
-      if (results[4].status === 'fulfilled') {
-        setPhase32Status(results[4].value ?? null);
-        anyOk = true;
-      } else {
-        setPhase32Status(null);
-      }
-
-      const uniqueWarnings = [...new Set(warnings)];
-      setLoadWarnings(uniqueWarnings);
-      if (!anyOk) {
-        const db = results.some((res) => res.status === 'rejected' && isDbLimit(res.reason));
-        setError(db ? friendlyDbMsg : 'No se pudo cargar el Control Center. Revisa la conexión e intenta de nuevo.');
-      }
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
+        const uniqueWarnings = [...new Set(warnings)];
+        setLoadWarnings(uniqueWarnings);
+        if (!anyOk) {
+          const dbBlocked = results.some((result) => result.status === 'rejected' && isDbLimit(result.reason));
+          setError(dbBlocked ? friendlyDbMsg : 'No se pudo cargar el Control Center. Revisa la conexión e intenta de nuevo.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     return () => {
       cancelled = true;
     };
   }, [environment]);
 
-  const statusIcon = (status: string) => {
-    if (status === 'ok' || status === 'enabled' || status === 'running') {
-      return <CheckCircle className="h-5 w-5 text-green-500" />;
-    }
-    if (status === 'degraded' || status === 'disabled') {
-      return <AlertCircle className="h-5 w-5 text-amber-500" />;
-    }
-    return <XCircle className="h-5 w-5 text-red-500" />;
-  };
+  const actionItems =
+    operationsTruth?.items
+      .filter((item) => item.blockerCode || item.nextAction)
+      .slice(0, 6) ?? [];
 
   if (loading) {
     return (
@@ -262,11 +252,16 @@ export default function ControlCenter() {
           Strategic Control Center
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Visión unificada del funnel, salud del sistema y modo autónomo.
+          Consola operativa canónica: estado real de listings, blockers, pruebas comerciales y decisiones de agentes.
         </p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Datos reales desde API · Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}
+          Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}
+          {operationsTruth?.generatedAt ? ` · Evidencia: ${new Date(operationsTruth.generatedAt).toLocaleString()}` : ''}
         </p>
+      </div>
+
+      <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 text-sm text-blue-900 dark:text-blue-200">
+        Este panel ya no usa funnel, utilidades o narrativas locales como verdad principal. La fuente dominante es el contrato canónico de operaciones; readiness y automatización quedan como subcapas técnicas.
       </div>
 
       {loadWarnings.length > 0 && (
@@ -274,205 +269,178 @@ export default function ControlCenter() {
           className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 text-amber-900 dark:text-amber-200"
           role="alert"
         >
-          {loadWarnings.map((w, i) => (
-            <p key={i} className={i > 0 ? 'mt-2' : ''}>
-              {w}
+          {loadWarnings.map((warning, index) => (
+            <p key={index} className={index > 0 ? 'mt-2' : ''}>
+              {warning}
             </p>
           ))}
         </div>
       )}
 
-      {/* System Readiness */}
+      {operationsTruth && (
+        <>
+          <OperationsTruthSummaryPanel data={operationsTruth} />
+
+          <div className="grid grid-cols-1 xl:grid-cols-[1.05fr_1fr] gap-4">
+            <PostSaleProofLadderPanel
+              summary={operationsTruth.summary.proofCounts}
+              title="Post-sale Proof Truth"
+              subtitle="La operación comercial solo avanza cuando cada evidencia existe en backend."
+            />
+
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Next Operator Actions</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Bloqueos y siguientes pasos tomados directamente del contrato canónico.
+                </p>
+              </div>
+              {actionItems.length === 0 ? (
+                <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-3 text-sm text-green-700 dark:text-green-300">
+                  No hay acciones operativas pendientes en la muestra actual.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {actionItems.map((item) => (
+                    <div key={item.productId} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                            {item.productTitle}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Local: {formatStatusLabel(item.localListingState)} · Live: {formatStatusLabel(item.externalMarketplaceState)}
+                          </p>
+                        </div>
+                        {item.blockerCode ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-1 text-xs text-red-700 dark:text-red-300">
+                            <ShieldAlert className="h-3.5 w-3.5" />
+                            {item.blockerCode}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-1 text-xs text-blue-700 dark:text-blue-300">
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            no blocker
+                          </span>
+                        )}
+                      </div>
+                      {item.nextAction && (
+                        <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                          Next action: {item.nextAction}
+                        </p>
+                      )}
+                      {item.lastMarketplaceSyncAt && (
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Última evidencia marketplace: {new Date(item.lastMarketplaceSyncAt).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <AgentDecisionTracePanel items={operationsTruth.items} />
+        </>
+      )}
+
       {readiness && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <Activity className="h-5 w-5 text-blue-500" />
-            System Readiness
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
-              {statusIcon(readiness.health.database)}
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">Database</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{readiness.health.database}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
-              {statusIcon(readiness.health.redis)}
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">Redis</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{readiness.health.redis}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
-              {statusIcon(readiness.health.workers ?? readiness.workerStatus)}
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">Workers</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {readiness.health.workers ?? readiness.workerStatus}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
-              {statusIcon(readiness.automationModeStatus === 'enabled' ? 'enabled' : 'disabled')}
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">Autonomous mode</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {readiness.automationModeStatus}
-                  {readiness.canEnableAutonomous && readiness.automationModeStatus === 'disabled'
-                    ? ' (ready to enable)'
-                    : ''}
-                </p>
-              </div>
-            </div>
-            {autopilotStatus != null && (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 sm:col-span-2 lg:col-span-1">
-                {statusIcon(autopilotStatus.running ? 'running' : 'disabled')}
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-900 dark:text-gray-100">Ciclos de dropshipping</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <Activity className="h-5 w-5 text-blue-500" />
+              Technical Readiness Sub-layer
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Salud técnica y conectores. Esta capa no reemplaza la verdad operativa del listing ni la prueba comercial.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {[
+              { label: 'Database', value: readiness.health.database },
+              { label: 'Redis', value: readiness.health.redis },
+              { label: 'Workers', value: readiness.health.workers ?? readiness.workerStatus },
+              { label: 'Marketplace API', value: readiness.health.marketplaceApi },
+              { label: 'Supplier API', value: readiness.health.supplierApi },
+              { label: 'Automation mode', value: readiness.automationModeStatus === 'enabled' ? 'enabled' : 'disabled' },
+            ].map((item) => {
+              const tone = statusTone(item.value);
+              return (
+                <div key={item.label} className={`flex items-center gap-3 rounded-lg border p-3 ${tone.card}`}>
+                  {tone.icon}
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{item.label}</p>
+                    <p className={`text-sm ${tone.text}`}>{item.value}</p>
+                  </div>
+                </div>
+              );
+            })}
+            {autopilotStatus && (
+              <div className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3">
+                {statusTone(autopilotStatus.running ? 'running' : 'disabled').icon}
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">Autopilot runtime</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
                     {autopilotStatus.running
-                      ? 'En ejecución (Autopilot activo)'
+                      ? 'Ejecutándose'
                       : autopilotStatus.config?.enabled
-                        ? 'Parados (revisar logs o iniciar en Autopilot)'
-                        : 'Parados (activar en Autopilot)'}
-                    {autopilotStatus.lastRun && (
-                      <> · Último ciclo: {new Date(autopilotStatus.lastRun).toLocaleString()}</>
-                    )}
+                        ? `Detenido (${autopilotStatus.status})`
+                        : 'No habilitado'}
                   </p>
+                  {autopilotStatus.lastRun && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Último ciclo: {new Date(autopilotStatus.lastRun).toLocaleString()}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
           </div>
-
-          {((readiness.health.redis === 'degraded' || readiness.health.redis === 'fail') ||
-            ((readiness.health.workers ?? readiness.workerStatus) === 'degraded' ||
-              (readiness.health.workers ?? readiness.workerStatus) === 'fail')) && (
-            <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <p className="font-medium text-amber-800 dark:text-amber-200">
-                Redis o Workers no disponibles
-              </p>
-              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                Los jobs del Dashboard (Demand Radar, Strategy Brain, etc.) no se ejecutan. Reinicia
-                Redis en Railway: servicio Redis → Deployments o Database → Restart/Redeploy. Si hace
-                falta, redeploya también el backend (ivan-reseller-backend).
-              </p>
-              <p className="text-sm text-amber-700 dark:text-amber-300 mt-2 font-mono bg-amber-100/50 dark:bg-amber-900/30 px-2 py-1 rounded">
-                railway service restart -s Redis -y
-                <br />
-                railway service redeploy -s ivan-reseller-backend -y
-              </p>
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                Ejecutar desde el directorio backend con Railway CLI enlazado. Ver más en
-                backend/docs/RAILWAY_REDIS_SETUP.md
-              </p>
-            </div>
-          )}
-
-          {/* Utilidades: indicador claro de si el sistema está generando ganancias */}
-          {metrics != null && (
-            <div className="mt-6 p-4 rounded-xl border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                Utilidades
-              </h3>
-              <div className="mt-3 flex flex-wrap items-baseline gap-6">
-                <div>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Hoy: </span>
-                  <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    ${metrics.profitToday.toFixed(2)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Este mes: </span>
-                  <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    ${metrics.profitMonth.toFixed(2)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Ventas hoy: </span>
-                  <span className="font-semibold text-gray-900 dark:text-gray-100">{metrics.dailySales}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {(metrics.profitMonth > 0 || metrics.profitToday > 0) ? (
-                    <>
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                      <span className="font-semibold text-green-700 dark:text-green-400">
-                        Generando utilidades: Sí
-                        {metrics.profitMonth > 0 && metrics.profitToday === 0 ? ' (este mes)' : ''}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="h-5 w-5 text-amber-500" />
-                      <span className="font-medium text-amber-700 dark:text-amber-400">
-                        Generando utilidades: No (aún no hay ventas con ganancia registradas este mes)
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {readiness.health.alerts && readiness.health.alerts.length > 0 && (
-            <div className="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Alerts</p>
-              <ul className="list-disc list-inside text-sm text-amber-700 dark:text-amber-300 mt-1">
-                {readiness.health.alerts.map((a, i) => (
-                  <li key={i}>{a}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <div className="mt-4 flex flex-wrap gap-4 text-sm">
-            <span className="text-gray-500 dark:text-gray-400">
+          <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-300">
+            <span>
               Deployment: <strong>{readiness.deploymentStatus}</strong>
             </span>
-            <span className="text-gray-500 dark:text-gray-400">
-              Marketplaces: <strong>{readiness.marketplaceIntegrations.count}</strong> configured
+            <span>
+              Marketplaces configured: <strong>{readiness.marketplaceIntegrations.count}</strong>
             </span>
-            <span className="text-gray-500 dark:text-gray-400">
-              Supplier: <strong>{readiness.supplierIntegrations.configured ? 'Yes' : 'No'}</strong>
+            <span>
+              Supplier configured: <strong>{readiness.supplierIntegrations.configured ? 'yes' : 'no'}</strong>
             </span>
+            {readiness.timestamp && (
+              <span>
+                Reported at: <strong>{new Date(readiness.timestamp).toLocaleString()}</strong>
+              </span>
+            )}
           </div>
-          {readiness.salesAccelerationMode && (
-            <div className="mt-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
-              <h3 className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <Target className="h-4 w-4" />
-                Sales Acceleration Mode
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {readiness.salesAccelerationMode.enabled ? 'Enabled' : 'Disabled'}
-                {readiness.salesAccelerationMode.enabled && readiness.salesAccelerationMode.strategy && (
-                  <> — {readiness.salesAccelerationMode.strategy}</>
-                )}
-              </p>
-              {readiness.salesAccelerationMode.recentOptimizations?.length > 0 && (
-                <ul className="mt-2 list-disc list-inside text-sm text-gray-600 dark:text-gray-300">
-                  {readiness.salesAccelerationMode.recentOptimizations.slice(0, 5).map((opt, i) => (
-                    <li key={i}>{opt}</li>
-                  ))}
-                </ul>
-              )}
+          {readiness.health.alerts && readiness.health.alerts.length > 0 && (
+            <div className="mt-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Technical alerts</p>
+              <ul className="list-disc list-inside text-sm text-amber-700 dark:text-amber-300 mt-2">
+                {readiness.health.alerts.map((alert, index) => (
+                  <li key={index}>{alert}</li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
       )}
 
-      {/* Modo autónomo de ventas */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <Zap className="h-5 w-5 text-amber-500" />
-          Modo autónomo de ventas
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          La activación inicial ejecuta un ciclo de ventas (prioridad de marketplaces y límite de 15 nuevos listados/día). El programador ejecuta el mismo ciclo cada 4–6 h automáticamente.
-        </p>
-        {phase32Status != null ? (
-          <div className="space-y-3 mb-4">
-            <div className="flex flex-wrap gap-4 text-sm">
-              <span className="text-gray-600 dark:text-gray-300">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <Zap className="h-5 w-5 text-amber-500" />
+            Automation Controls
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Controles reales de ejecución. Disparan flujos técnicos, pero no equivalen por sí solos a éxito comercial o listings activos.
+          </p>
+        </div>
+
+        {phase32Status ? (
+          <div className="space-y-3 mb-4 text-sm text-gray-600 dark:text-gray-300">
+            <div className="flex flex-wrap gap-4">
+              <span>
                 Última activación:{' '}
                 {phase32Status.lastActivation ? (
                   phase32Status.lastActivation.success ? (
@@ -484,15 +452,15 @@ export default function ControlCenter() {
                   <span className="text-gray-500 dark:text-gray-400">Nunca</span>
                 )}
               </span>
-              <span className="text-gray-600 dark:text-gray-300">
-                Scheduler: <strong>{phase32Status.schedulerCron}</strong> (ej. cada 5 h)
+              <span>
+                Scheduler: <strong>{phase32Status.schedulerCron}</strong>
               </span>
-              <span className="text-gray-600 dark:text-gray-300">
+              <span>
                 Máx. nuevos listados/día: <strong>{phase32Status.maxNewListingsPerDay}</strong>
               </span>
             </div>
             {phase32Status.lastScheduledRun && (
-              <div className="text-sm text-gray-600 dark:text-gray-300">
+              <div>
                 Última ejecución automática: {new Date(phase32Status.lastScheduledRun.at).toLocaleString()}
                 {phase32Status.lastScheduledRun.success ? (
                   <strong className="text-green-600 dark:text-green-400"> · OK</strong>
@@ -502,14 +470,12 @@ export default function ControlCenter() {
                 {phase32Status.lastScheduledRun.winnersDetected != null && (
                   <> · {phase32Status.lastScheduledRun.winnersDetected} winners</>
                 )}
-                {phase32Status.lastScheduledRun.durationMs != null && phase32Status.lastScheduledRun.durationMs > 0 && (
-                  <> · {phase32Status.lastScheduledRun.durationMs} ms</>
-                )}
               </div>
             )}
             {phase32Status.lastValidationCycle && (
-              <div className="text-sm text-gray-600 dark:text-gray-300">
-                Último ciclo de validación: {phase32Status.lastValidationCycle.success ? 'OK' : 'Con errores'}
+              <div>
+                Último ciclo de validación:{' '}
+                {phase32Status.lastValidationCycle.success ? 'OK' : 'Con errores'}
                 {phase32Status.lastValidationCycle.durationMs != null && (
                   <> · {phase32Status.lastValidationCycle.durationMs} ms</>
                 )}
@@ -521,6 +487,7 @@ export default function ControlCenter() {
             Inicia sesión para ver el estado y activar el modo autónomo.
           </p>
         )}
+
         {phase32Message && (
           <div
             className={`mb-4 p-3 rounded-lg text-sm ${
@@ -532,6 +499,7 @@ export default function ControlCenter() {
             {phase32Message}
           </div>
         )}
+
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
@@ -540,15 +508,17 @@ export default function ControlCenter() {
               setPhase32Activating(true);
               api
                 .post('/api/system/phase32/activate')
-                .then((res) => {
+                .then((response) => {
                   setPhase32Message(
-                    res.data?.success ? 'Activación completada.' : res.data?.errors?.join(' ') || 'Activación finalizada con avisos.'
+                    response.data?.success
+                      ? 'Activación completada.'
+                      : response.data?.errors?.join(' ') || 'Activación finalizada con avisos.'
                   );
-                  setPhase32MessageType(res.data?.success ? 'success' : 'error');
+                  setPhase32MessageType(response.data?.success ? 'success' : 'error');
                   fetchPhase32Status();
                 })
-                .catch((err) => {
-                  setPhase32Message(err.response?.data?.error || err.message || 'Error al activar');
+                .catch((requestError) => {
+                  setPhase32Message(requestError.response?.data?.error || requestError.message || 'Error al activar');
                   setPhase32MessageType('error');
                   fetchPhase32Status();
                 })
@@ -557,9 +527,7 @@ export default function ControlCenter() {
             disabled={phase32Activating}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm"
           >
-            {phase32Activating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : null}
+            {phase32Activating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Activar modo autónomo
           </button>
           <button
@@ -569,17 +537,19 @@ export default function ControlCenter() {
               setPhase32Validating(true);
               api
                 .post('/api/system/phase32/run-validation-cycle')
-                .then((res) => {
+                .then((response) => {
                   setPhase32Message(
-                    res.data?.success
+                    response.data?.success
                       ? 'Ciclo de validación completado.'
-                      : res.data?.errors?.join(' ') || 'Ciclo finalizado con avisos.'
+                      : response.data?.errors?.join(' ') || 'Ciclo finalizado con avisos.'
                   );
-                  setPhase32MessageType(res.data?.success ? 'success' : 'error');
+                  setPhase32MessageType(response.data?.success ? 'success' : 'error');
                   fetchPhase32Status();
                 })
-                .catch((err) => {
-                  setPhase32Message(err.response?.data?.error || err.message || 'Error en ciclo de validación');
+                .catch((requestError) => {
+                  setPhase32Message(
+                    requestError.response?.data?.error || requestError.message || 'Error en ciclo de validación'
+                  );
                   setPhase32MessageType('error');
                   fetchPhase32Status();
                 })
@@ -592,99 +562,11 @@ export default function ControlCenter() {
             Ejecutar ciclo de validación
           </button>
         </div>
-      </div>
 
-      {/* Platform Funnel */}
-      {funnel && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-primary-500" />
-            Platform Funnel
-          </h2>
-          <div className="overflow-x-auto">
-            <div className="flex flex-wrap gap-4 min-w-0">
-              {funnel.funnel.map((stage, i) => (
-                <div
-                  key={stage.stage}
-                  className="flex-shrink-0 w-36 p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 text-center"
-                >
-                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stage.count}</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{stage.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 text-xs text-gray-600 dark:text-gray-300">
+          Las acciones manuales disponibles aquí no sustituyen blocker truth, listing live state ni proof ladder.
+          Revisa siempre la capa canónica de arriba antes de concluir que la operación está lista.
         </div>
-      )}
-
-      {/* Profit distribution */}
-      {funnel && funnel.profitDistribution.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-emerald-500" />
-            Profit distribution (last 30 days)
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {funnel.profitDistribution.map((p) => (
-              <div
-                key={p.marketplace}
-                className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600"
-              >
-                <p className="font-medium text-gray-900 dark:text-gray-100 capitalize">{p.marketplace}</p>
-                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                  ${p.totalProfit.toFixed(2)}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{p.salesCount} ventas</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Sales optimization (MercadoLibre) */}
-      {readiness?.salesOptimizationReadiness && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <Target className="h-5 w-5 text-amber-500" />
-            Sales optimization (MercadoLibre)
-          </h2>
-          <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-            <li className="flex items-center gap-2">
-              {readiness.salesOptimizationReadiness.mercadolibreCompetitivePrice ? (
-                <CheckCircle className="h-4 w-4 text-green-500" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-500" />
-              )}
-              Competitive price positioning
-            </li>
-            <li className="flex items-center gap-2">
-              {readiness.salesOptimizationReadiness.mercadolibreShippingSignals ? (
-                <CheckCircle className="h-4 w-4 text-green-500" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-500" />
-              )}
-              Fast shipping advantage
-            </li>
-            <li className="flex items-center gap-2">
-              {readiness.salesOptimizationReadiness.mercadolibreAttributeCompleteness ? (
-                <CheckCircle className="h-4 w-4 text-green-500" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-500" />
-              )}
-              Listing attribute completeness
-            </li>
-          </ul>
-        </div>
-      )}
-
-      {/* Pipeline stages reminder */}
-      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Autonomous pipeline</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Trend Detection → Market Intelligence → Auto Listing Strategy → Publishing → Metrics → Dynamic
-          Optimization → Winner Detection → Strategy Brain → Autonomous Scaling → SEO Intelligence → Conversion
-          Optimization
-        </p>
       </div>
     </div>
   );

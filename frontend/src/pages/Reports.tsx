@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import api from '@services/api';
 import { Button } from '@/components/ui/button';
@@ -699,6 +700,15 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 p-4">
+        <p className="text-sm text-amber-900 dark:text-amber-100">
+          <strong>Analytics only — not operational proof.</strong> Los reportes aquí son datos agregados y analíticos. Para verdad operativa canónica (blockers, proof ladder, listing state), usa{' '}
+          <Link to="/control-center" className="font-medium text-amber-800 dark:text-amber-200 hover:underline">
+            Control Center
+          </Link>
+          , Órdenes y Finance.
+        </p>
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reportes y Analytics</h1>

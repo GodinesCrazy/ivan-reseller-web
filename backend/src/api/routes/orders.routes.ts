@@ -24,6 +24,10 @@ import { syncAmazonOrdersForUser } from '../../services/amazon-order-sync.servic
 import { buildRealOrdersWhere, REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES } from '../../utils/orders-real-filter';
 import { promoteOrderToManualQueue } from '../../services/manual-fulfillment.service';
 import { findBestSupplierForManualOrder } from '../../services/smart-supplier-selector.service';
+import {
+  getOrderTruthFlags,
+  markOrderCancelledOnMarketplace,
+} from '../../services/order-truth.service';
 
 const marketplaceService = new MarketplaceService();
 
@@ -33,6 +37,15 @@ const FAILED_INSUFFICIENT_FUNDS = 'FAILED_INSUFFICIENT_FUNDS';
 const MAX_RETRIES = 3;
 
 router.use(authenticate);
+
+function attachOrderTruth<T extends { fulfillmentNotes?: string | null }>(order: T): T & {
+  truthFlags: ReturnType<typeof getOrderTruthFlags>;
+} {
+  return {
+    ...order,
+    truthFlags: getOrderTruthFlags(order),
+  };
+}
 
 /** GET /api/orders/sync-status — Last marketplace order sync time (eBay/ML/Amazon). */
 router.get('/sync-status', async (_req: Request, res: Response) => {
@@ -362,7 +375,7 @@ router.get('/', async (req: Request, res: Response) => {
         product: { select: { id: true, title: true, images: true, aliexpressPrice: true, aliexpressUrl: true } },
       },
     });
-    return res.status(200).json(orders);
+    return res.status(200).json(orders.map((order) => attachOrderTruth(order)));
   } catch (err: any) {
     logger.error('[ORDERS] List failed', { error: err?.message });
     return res.status(500).json({ error: err?.message || 'Failed to list orders' });
@@ -391,12 +404,69 @@ router.get('/by-ebay-id/:ebayOrderId', async (req: Request, res: Response) => {
     }
     const sale = await prisma.sale.findUnique({ where: { orderId: order.id }, select: { id: true, status: true, trackingNumber: true } });
     return res.status(200).json({
-      ...order,
+      ...attachOrderTruth(order),
       marketplaceOrderId: ebayOrderId,
       sale: sale ? { id: sale.id, status: sale.status, trackingNumber: sale.trackingNumber } : null,
     });
   } catch (err: any) {
     logger.error('[ORDERS] Get by eBay ID failed', { error: err?.message });
+    return res.status(500).json({ error: err?.message || 'Failed' });
+  }
+});
+
+router.post('/by-ebay-id/:ebayOrderId/mark-marketplace-cancelled', async (req: Request, res: Response) => {
+  try {
+    const ebayOrderId = (req.params.ebayOrderId || '').trim();
+    if (!ebayOrderId) return res.status(400).json({ error: 'ebayOrderId required' });
+
+    const userId = req.user!.userId;
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+    const paypalOrderId = `ebay:${ebayOrderId}`;
+    const order = await prisma.order.findFirst({
+      where: { paypalOrderId },
+      select: { id: true, userId: true },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found', ebayOrderId });
+    }
+    if (order.userId != null && order.userId !== userId && !isAdmin) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    const body = req.body as {
+      reason?: string;
+      marketplaceObservedStatus?: string;
+    };
+    const reason =
+      typeof body?.reason === 'string' && body.reason.trim()
+        ? body.reason.trim()
+        : 'Order manually cancelled on eBay because it was not commercially viable.';
+    const marketplaceObservedStatus =
+      typeof body?.marketplaceObservedStatus === 'string' && body.marketplaceObservedStatus.trim()
+        ? body.marketplaceObservedStatus.trim()
+        : 'MANUALLY_CANCELLED_OPERATOR_CONFIRMED';
+
+    await markOrderCancelledOnMarketplace({
+      orderId: order.id,
+      actorUserId: userId,
+      marketplaceObservedStatus,
+      reason,
+    });
+
+    const full = await prisma.order.findUnique({ where: { id: order.id }, include: ORDER_DETAIL_INCLUDE });
+    const sale = await prisma.sale.findUnique({
+      where: { orderId: order.id },
+      select: { id: true, status: true, trackingNumber: true },
+    });
+
+    return res.status(200).json({
+      ...(full ? attachOrderTruth(full) : { id: order.id }),
+      marketplaceOrderId: ebayOrderId,
+      sale: sale ? { id: sale.id, status: sale.status, trackingNumber: sale.trackingNumber } : null,
+    });
+  } catch (err: any) {
+    logger.error('[ORDERS] mark-marketplace-cancelled failed', { error: err?.message });
     return res.status(500).json({ error: err?.message || 'Failed' });
   }
 });
@@ -832,7 +902,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     const marketplaceOrderId = pp.startsWith('ebay:') ? pp.slice(5) : pp.startsWith('mercadolibre:') ? pp.slice(13) : pp.startsWith('amazon:') ? pp.slice(7) : null;
     const sale = await prisma.sale.findUnique({ where: { orderId: order.id }, select: { id: true, status: true, trackingNumber: true } });
     return res.status(200).json({
-      ...order,
+      ...attachOrderTruth(order),
       marketplaceOrderId,
       sale: sale ? { id: sale.id, status: sale.status, trackingNumber: sale.trackingNumber } : null,
     });

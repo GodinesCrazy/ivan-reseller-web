@@ -12,6 +12,7 @@ import { listingStateReconciliationService } from './listing-state-reconciliatio
 import { fullListingAuditService } from './full-listing-audit.service';
 import { listingClassificationEngine } from './listing-classification-engine.service';
 import { listingRecoveryEngine } from './listing-recovery-engine.service';
+import { getConnectorReadinessForUser } from './webhook-readiness.service';
 
 export interface FullSyncResult {
   ok: boolean;
@@ -66,6 +67,9 @@ export interface AutopilotValidationResult {
   enabled: boolean;
   lastCycle: string | null;
   configEnabled: boolean;
+  webhookReady: boolean;
+  eventFlowReady: boolean;
+  connectorReadiness?: Awaited<ReturnType<typeof getConnectorReadinessForUser>>;
   issues: string[];
 }
 
@@ -77,6 +81,7 @@ export interface SystemReadyResult {
     metricsFlowing: boolean;
     profitReal: boolean;
     autopilotValid: boolean;
+    webhooksReady: boolean;
   };
   details: {
     fullSync?: FullSyncResult;
@@ -290,6 +295,9 @@ export async function validateAutopilot(options?: { userId?: number }): Promise<
   let enabled = false;
   let lastCycle: string | null = null;
   let configEnabled = false;
+  let webhookReady = false;
+  let eventFlowReady = false;
+  let connectorReadiness: Awaited<ReturnType<typeof getConnectorReadinessForUser>> | undefined;
 
   try {
     const { autopilotSystem } = await import('./autopilot.service');
@@ -305,13 +313,24 @@ export async function validateAutopilot(options?: { userId?: number }): Promise<
     issues.push(`Autopilot status error: ${e?.message ?? 'unknown'}`);
   }
 
-  const ok = (configEnabled && isRunning) || (!configEnabled && issues.length <= 1);
+  if (options?.userId) {
+    connectorReadiness = await getConnectorReadinessForUser(options.userId);
+    webhookReady = connectorReadiness.automationReadyCount > 0;
+    eventFlowReady = webhookReady;
+    if (!webhookReady) {
+      issues.push(...connectorReadiness.blockingIssues);
+    }
+  }
+
   return {
     ok: issues.length === 0,
     isRunning,
     enabled,
     lastCycle,
     configEnabled,
+    webhookReady,
+    eventFlowReady,
+    connectorReadiness,
     issues,
   };
 }
@@ -331,6 +350,7 @@ export async function runSystemReadyCheck(options?: {
     metricsFlowing: false,
     profitReal: false,
     autopilotValid: false,
+    webhooksReady: false,
   };
 
   // Workers first (no DB/Redis dependency for check)
@@ -371,6 +391,7 @@ export async function runSystemReadyCheck(options?: {
   const autopilot = await validateAutopilot({ userId: options?.userId });
   details.autopilot = autopilot;
   checks.autopilotValid = autopilot.ok;
+  checks.webhooksReady = autopilot.webhookReady;
   if (!autopilot.ok) issues.push(...autopilot.issues);
 
   // Phase 30 — Smart ready: if listings are active but metrics not yet available, still ready (initial phase)
@@ -381,6 +402,7 @@ export async function runSystemReadyCheck(options?: {
   const ready =
     checks.workersStable &&
     checks.profitReal &&
+    checks.webhooksReady &&
     (checks.listingsMatchMarketplaces || hasActiveListings) &&
     (checks.metricsFlowing || hasActiveListings);
 

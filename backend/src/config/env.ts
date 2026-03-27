@@ -389,14 +389,17 @@ const envSchema = z.object({
     return Number.isFinite(n) ? n : 0.01;
   }),
   /** Optional minimum margin netProfit/salePrice (0–1). 0 = only PRE_PUBLISH_MIN_NET_PROFIT applies. */
-  PRE_PUBLISH_MIN_MARGIN_RATIO: z.string().default('0').transform((v) => {
+  PRE_PUBLISH_MIN_MARGIN_RATIO: z.string().default('0.10').transform((v) => {
     const n = parseFloat(v);
     return Number.isFinite(n) && n >= 0 && n <= 1 ? n : 0;
   }),
   /** If AliExpress getProductInfo has no shipping methods with cost, use product effective default shipping. */
-  PRE_PUBLISH_SHIPPING_FALLBACK: z.enum(['true', 'false']).default('true').transform((val) => val === 'true'),
+  PRE_PUBLISH_SHIPPING_FALLBACK: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   /** When true, block publish if validation used shipping fallback (classification RISKY). Real E2E strict mode. */
-  PRE_PUBLISH_REJECT_RISKY: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  PRE_PUBLISH_REJECT_RISKY: z.enum(['true', 'false']).default('true').transform((val) => val === 'true'),
+
+  /** P89: when true, web/API publish to Mercado Libre is blocked if WEBHOOK_SECRET_MERCADOLIBRE is unset (post-sale honesty). */
+  ML_WEB_PUBLISH_REQUIRE_ML_WEBHOOK_SECRET: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
 });
 
 // Asegurar que DATABASE_URL esté en process.env

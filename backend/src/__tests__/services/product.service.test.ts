@@ -239,5 +239,36 @@ describe('ProductService', () => {
       );
     });
   });
+
+  describe('updateProductStatusSafely - P0 approval hardening', () => {
+    it('forces APPROVED to remain isPublished=false', async () => {
+      const productId = 1;
+      const currentProduct = {
+        id: productId,
+        userId: 1,
+        status: 'PENDING',
+        isPublished: false,
+        publishedAt: null,
+        title: 'Test',
+      };
+
+      const { prisma } = require('../../config/database');
+      prisma.product.findUnique.mockResolvedValue(currentProduct);
+      prisma.product.update.mockImplementation((args: any) =>
+        Promise.resolve({ ...currentProduct, ...args.data })
+      );
+
+      await productService.updateProductStatusSafely(productId, 'APPROVED', true, 1);
+
+      expect(prisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'APPROVED',
+            isPublished: false,
+          }),
+        })
+      );
+    });
+  });
 });
 

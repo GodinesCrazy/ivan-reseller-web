@@ -98,7 +98,7 @@ export default function BalanceSummaryWidget() {
           </div>
           <div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Balance</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Capital y exposición</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Capital y exposición — snapshot; proof de fondos liberados en Finance</p>
           </div>
         </div>
         <Link

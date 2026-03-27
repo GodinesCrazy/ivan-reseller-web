@@ -70,6 +70,11 @@ async function ensureWorkingCapital() {
 // Helper functions (moved from server.ts)
 async function ensureAdminUser() {
   try {
+    if (process.env.NODE_ENV === 'production') {
+      console.log('[BOOTSTRAP] ensureAdminUser skipped in production');
+      return;
+    }
+
     const adminExists = await prisma.user.findUnique({
       where: { username: 'admin' },
       select: {

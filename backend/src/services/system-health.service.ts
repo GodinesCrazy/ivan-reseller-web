@@ -7,8 +7,11 @@
 import { prisma } from '../config/database';
 import { redis, getBullMQRedisConnection } from '../config/redis';
 import { logger } from '../config/logger';
+import { APIAvailabilityService } from './api-availability.service';
 
 const REDIS_URL = process.env.REDIS_URL;
+const apiAvailability = new APIAvailabilityService();
+const HEALTH_CHECK_TIMEOUT_MS = 1200;
 
 export type HealthStatus = 'ok' | 'degraded' | 'fail' | 'unknown';
 
@@ -25,12 +28,39 @@ export interface SystemHealthResult {
 
 async function checkDatabase(): Promise<HealthStatus> {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('database_health_timeout')), HEALTH_CHECK_TIMEOUT_MS)
+      ),
+    ]);
     return 'ok';
   } catch (e: any) {
     logger.warn('[SYSTEM-HEALTH] Database check failed', { error: e?.message });
     return 'fail';
   }
+}
+
+async function getHealthApiStatuses(options?: {
+  userId?: number;
+  apiStatuses?: Awaited<ReturnType<APIAvailabilityService['getAllAPIStatus']>>;
+}) {
+  if (Array.isArray(options?.apiStatuses)) {
+    return options.apiStatuses;
+  }
+
+  const preferredUserId = options?.userId;
+  if (preferredUserId) {
+    return apiAvailability.getAllAPIStatus(preferredUserId);
+  }
+
+  const primaryUser = await prisma.user.findFirst({
+    where: { isActive: true },
+    orderBy: [{ role: 'desc' }, { id: 'asc' }],
+    select: { id: true },
+  });
+  if (!primaryUser) return [];
+  return apiAvailability.getAllAPIStatus(primaryUser.id);
 }
 
 /**
@@ -41,7 +71,12 @@ async function checkRedis(): Promise<HealthStatus> {
     return 'degraded'; // No Redis configured (was "unknown")
   }
   try {
-    const pong = await redis.ping();
+    const pong = await Promise.race([
+      redis.ping(),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('redis_health_timeout')), HEALTH_CHECK_TIMEOUT_MS)
+      ),
+    ]);
     return pong === 'PONG' ? 'ok' : 'degraded';
   } catch (e: any) {
     logger.warn('[SYSTEM-HEALTH] Redis check failed', { error: e?.message });
@@ -57,7 +92,12 @@ async function checkBullMQ(): Promise<HealthStatus> {
   const conn = getBullMQRedisConnection();
   if (!conn) return 'degraded';
   try {
-    const pong = await conn.ping();
+    const pong = await Promise.race([
+      conn.ping(),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('bullmq_health_timeout')), HEALTH_CHECK_TIMEOUT_MS)
+      ),
+    ]);
     return pong === 'PONG' ? 'ok' : 'degraded';
   } catch (e: any) {
     logger.warn('[SYSTEM-HEALTH] BullMQ Redis check failed', { error: e?.message });
@@ -78,16 +118,31 @@ function deriveWorkersStatus(redisStatus: HealthStatus, bullmq: HealthStatus): H
  * Marketplace API health: consider ok if at least one marketplace credential exists and is valid.
  * Detailed per-marketplace check is in api-availability; here we do a lightweight check.
  */
-async function checkMarketplaceApi(): Promise<HealthStatus> {
+function deriveApiHealthFromStatuses(
+  statuses: any[],
+  apiNames: string[]
+): HealthStatus {
+  const relevant = (Array.isArray(statuses) ? statuses : []).filter((status) =>
+    apiNames.includes(String(status.apiName).toLowerCase()) && status.environment !== 'sandbox'
+  );
+  if (relevant.some((status) => status.isConfigured && status.isAvailable)) {
+    return 'ok';
+  }
+  if (relevant.some((status) => status.isConfigured && !status.isAvailable)) {
+    return 'fail';
+  }
+  return 'degraded';
+}
+
+async function checkMarketplaceApi(options?: {
+  userId?: number;
+  apiStatuses?: Awaited<ReturnType<APIAvailabilityService['getAllAPIStatus']>>;
+}): Promise<HealthStatus> {
   try {
-    const count = await prisma.apiCredential.count({
-      where: {
-        apiName: { in: ['ebay', 'mercadolibre', 'amazon'] },
-        isActive: true,
-      },
-    });
-    return count > 0 ? 'ok' : 'degraded';
-  } catch {
+    const statuses = await getHealthApiStatuses(options);
+    return deriveApiHealthFromStatuses(statuses, ['ebay', 'mercadolibre', 'amazon']);
+  } catch (e: any) {
+    logger.warn('[SYSTEM-HEALTH] Marketplace API real check failed', { error: e?.message });
     return 'fail';
   }
 }
@@ -95,17 +150,19 @@ async function checkMarketplaceApi(): Promise<HealthStatus> {
 /**
  * Supplier (AliExpress) API health: credentials and optional ping.
  */
-async function checkSupplierApi(): Promise<HealthStatus> {
-  const hasKey =
-    Boolean((process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim()) &&
-    Boolean((process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim());
-  if (!hasKey) return 'degraded';
+async function checkSupplierApi(options?: {
+  userId?: number;
+  apiStatuses?: Awaited<ReturnType<APIAvailabilityService['getAllAPIStatus']>>;
+}): Promise<HealthStatus> {
   try {
-    const count = await prisma.apiCredential.count({
-      where: { apiName: 'aliexpress', isActive: true },
-    });
-    return count > 0 ? 'ok' : 'degraded';
-  } catch {
+    const statuses = await getHealthApiStatuses(options);
+    return deriveApiHealthFromStatuses(statuses, [
+      'aliexpress-dropshipping',
+      'aliexpress-affiliate',
+      'aliexpress',
+    ]);
+  } catch (e: any) {
+    logger.warn('[SYSTEM-HEALTH] Supplier API real check failed', { error: e?.message });
     return 'fail';
   }
 }
@@ -113,14 +170,17 @@ async function checkSupplierApi(): Promise<HealthStatus> {
 /**
  * Run full system health check and collect alerts.
  */
-export async function runSystemHealthCheck(): Promise<SystemHealthResult> {
+export async function runSystemHealthCheck(options?: {
+  userId?: number;
+  apiStatuses?: Awaited<ReturnType<APIAvailabilityService['getAllAPIStatus']>>;
+}): Promise<SystemHealthResult> {
   const alerts: string[] = [];
   const [database, redisStatus, bullmq, marketplaceApi, supplierApi] = await Promise.all([
     checkDatabase(),
     checkRedis(),
     checkBullMQ(),
-    checkMarketplaceApi(),
-    checkSupplierApi(),
+    checkMarketplaceApi(options),
+    checkSupplierApi(options),
   ]);
   const workers = deriveWorkersStatus(redisStatus, bullmq);
 
@@ -150,7 +210,7 @@ export function isSystemReadyForAutonomous(health: SystemHealthResult): boolean 
   return (
     health.database === 'ok' &&
     health.redis !== 'fail' &&
-    health.marketplaceApi !== 'fail' &&
-    health.supplierApi !== 'fail'
+    health.marketplaceApi === 'ok' &&
+    health.supplierApi === 'ok'
   );
 }
