@@ -17,25 +17,42 @@ const OPPORTUNITIES_CACHE_TTL = Number(process.env.OPPORTUNITIES_CACHE_TTL_SECON
 // Require authentication for all endpoints
 router.use(authenticate);
 
-// ✅ API-002: Validation schema para query parameters
-const opportunitiesQuerySchema = z.object({
-  query: z.string().optional().default(''),
-  /** Page size per request; AliExpress Affiliate API caps at 20 per page. */
-  maxItems: z
-    .string()
-    .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 20))
-    .pipe(z.number().int().min(1).max(20)),
-  /** 1-based page index for provider pagination (same query, next slice). */
-  page: z
-    .string()
-    .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 1))
-    .pipe(z.number().int().min(1).max(OPPORTUNITY_MAX_PAGE)),
-  marketplaces: z.string().optional().default('ebay,amazon,mercadolibre'),
-  region: z.string().optional().default('us'),
-  environment: z.enum(['sandbox', 'production']).optional(),
-});
+function queryParamScalar(v: unknown): unknown {
+  if (v === undefined || v === null) return undefined;
+  if (Array.isArray(v)) return v[0];
+  return v;
+}
+
+function parseOpportunitiesInt(v: unknown, fallback: number, min: number, max: number): number {
+  const raw = queryParamScalar(v);
+  if (raw === undefined || raw === '') return fallback;
+  const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(n)));
+}
+
+// ✅ API-002: Query parameters (coerce string | string[] | number — some gateways vary)
+const opportunitiesQuerySchema = z
+  .object({
+    query: z.preprocess((v) => {
+      const x = queryParamScalar(v);
+      return x === undefined || x === null ? '' : String(x).trim();
+    }, z.string()),
+    maxItems: z.preprocess(
+      (v) => parseOpportunitiesInt(v, 20, 1, 20),
+      z.number().int().min(1).max(20)
+    ),
+    page: z.preprocess(
+      (v) => parseOpportunitiesInt(v, 1, 1, OPPORTUNITY_MAX_PAGE),
+      z.number().int().min(1).max(OPPORTUNITY_MAX_PAGE)
+    ),
+    /** Skip Redis read when `1` / `true` / `yes` (fresh provider fetch for same query/page). */
+    refresh: z.preprocess((v) => queryParamScalar(v), z.string().optional()),
+    marketplaces: z.preprocess((v) => queryParamScalar(v), z.string().optional()).default('ebay,amazon,mercadolibre'),
+    region: z.preprocess((v) => queryParamScalar(v), z.string().optional()).default('us'),
+    environment: z.enum(['sandbox', 'production']).optional(),
+  })
+  .passthrough();
 
 // GET /api/opportunities
 // query params: query, maxItems, marketplaces (csv), region
@@ -53,6 +70,7 @@ router.get('/', async (req, res) => {
     const query = validatedQuery.query.trim();
     const maxItems = validatedQuery.maxItems;
     const page = validatedQuery.page;
+    const skipCache = ['1', 'true', 'yes'].includes(String(validatedQuery.refresh || '').toLowerCase());
     let region = validatedQuery.region;
     // Use RegionalConfig as default when region is default ('us')
     if (region === 'us') {
@@ -70,7 +88,9 @@ router.get('/', async (req, res) => {
     const marketplacesKey = [...marketplaces].sort().join(',');
     const envKey = environment ?? 'production';
     const cacheKey = `opportunities:${userId}:${query.toLowerCase().trim()}:p${page}:sz${maxItems}:${marketplacesKey}:${region}:${envKey}`;
-    const cached = await cacheService.get<{ items: any[]; count: number; timestamp: string }>(cacheKey);
+    const cached =
+      skipCache ? null : await cacheService.get<{ items: any[]; count: number; timestamp: string }>(cacheKey);
+    res.setHeader('Cache-Control', 'private, no-store');
     if (cached != null) {
       const returned = (cached.items ?? []).length;
       return res.json({
@@ -368,15 +388,14 @@ router.get('/', async (req, res) => {
 
 // --- Phase 2: Product Research API (lightweight search, no job notifications) ---
 const researchQuerySchema = z.object({
-  query: z.string().min(1, 'Query is required'),
-  maxItems: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 10)).pipe(z.number().int().min(1).max(20)),
-  page: z
-    .string()
-    .optional()
-    .transform((v) => (v ? parseInt(v, 10) : 1))
-    .pipe(z.number().int().min(1).max(OPPORTUNITY_MAX_PAGE)),
-  marketplaces: z.string().optional().default('ebay,amazon,mercadolibre'),
-  region: z.string().optional().default('us'),
+  query: z.preprocess((v) => String(queryParamScalar(v) ?? '').trim(), z.string().min(1, 'Query is required')),
+  maxItems: z.preprocess((v) => parseOpportunitiesInt(v, 10, 1, 20), z.number().int().min(1).max(20)),
+  page: z.preprocess(
+    (v) => parseOpportunitiesInt(v, 1, 1, OPPORTUNITY_MAX_PAGE),
+    z.number().int().min(1).max(OPPORTUNITY_MAX_PAGE)
+  ),
+  marketplaces: z.preprocess((v) => queryParamScalar(v), z.string().optional()).default('ebay,amazon,mercadolibre'),
+  region: z.preprocess((v) => queryParamScalar(v), z.string().optional()).default('us'),
   environment: z.enum(['sandbox', 'production']).optional(),
 });
 
@@ -409,6 +428,7 @@ router.get('/research', async (req, res) => {
     });
 
     const returned = (opportunities ?? []).length;
+    res.setHeader('Cache-Control', 'private, no-store');
     return res.json({
       success: true,
       items: opportunities ?? [],

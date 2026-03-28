@@ -26,7 +26,7 @@ import {
   OPTIONAL_MARKETPLACES,
 } from '../config/marketplaces.config';
 import type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
-import { normalizeOpportunityPagination } from '../utils/opportunity-search-pagination';
+import { normalizeOpportunityPagination, OPPORTUNITY_MAX_PAGE } from '../utils/opportunity-search-pagination';
 
 export type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
 
@@ -677,67 +677,122 @@ class OpportunityFinderService {
         if (affiliateCreds) {
           aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
           const countryCode = regionToCountryCode(region);
-          const affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
-            keywords: query,
-            pageNo,
-            pageSize: maxItems,
-            targetCurrency: baseCurrency || 'USD',
-            shipToCountry: countryCode,
-          });
-          const rawProducts = affiliateResult?.products;
-          const apiProducts = Array.isArray(rawProducts) ? rawProducts : [];
-          if (apiProducts.length > 0) {
-            console.log('[AUTOPILOT] Affiliate SUCCESS:', apiProducts.length);
-            const mapped = apiProducts
-              .map((p: any) => {
-                const sourceCurrency = String(p.currency || 'USD').toUpperCase();
-                const sourcePrice = Number(p.salePrice || p.originalPrice) || 0;
-                let priceInBase = sourcePrice;
-                try {
-                  priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
-                } catch { priceInBase = sourcePrice; }
-                const imgs = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(
-                  (x: any) => x && typeof x === 'string' && x.startsWith('http')
-                );
-                const deliveryDays = p.shipping_info?.delivery_days;
-                const shippingDaysMax = deliveryDays != null
-                  ? (typeof deliveryDays === 'string' && deliveryDays.includes('-')
-                      ? Math.max(...deliveryDays.split('-').map((d: string) => parseInt(d.trim(), 10) || 0))
-                      : parseInt(String(deliveryDays), 10))
-                  : undefined;
-                return {
-                  title: p.productTitle,
-                  price: priceInBase,
-                  priceMin: priceInBase,
-                  priceMax: priceInBase,
-                  priceMinSource: sourcePrice,
-                  priceMaxSource: sourcePrice,
-                  priceRangeSourceCurrency: sourceCurrency,
-                  currency: baseCurrency,
-                  sourcePrice,
-                  sourceCurrency,
-                  productUrl: p.productDetailUrl || p.promotionLink || '',
-                  imageUrl: imgs[0],
-                  images: imgs,
-                  productId: p.productId,
-                  supplierOrdersCount: p.volume != null ? Number(p.volume) : undefined,
-                  supplierRating: p.evaluate_score != null ? Number(p.evaluate_score) : undefined,
-                  supplierReviewsCount: p.volume != null ? Number(p.volume) : undefined,
-                  shippingDaysMax: Number.isFinite(shippingDaysMax) ? shippingDaysMax : undefined,
-                  supplierScorePct: p.evaluate_rate != null ? (Number(p.evaluate_rate) <= 1 ? Number(p.evaluate_rate) * 100 : Number(p.evaluate_rate)) : undefined,
-                };
-              })
-              .filter(
-                (p: any) =>
-                  p.title &&
-                  (p.price || 0) > 0 &&
-                  p.productUrl &&
-                  p.productUrl.length > 10 &&
-                  p.images &&
-                  p.images.length > 0
-              );
-            products = mapped;
-            logger.info('[OPPORTUNITY-FINDER] Affiliate API returned products', { count: products.length });
+          const affiliateProviderPagesPerUi = Math.max(
+            1,
+            Math.min(3, parseInt(process.env.OPPORTUNITY_AFFILIATE_PROVIDER_PAGES_PER_UI || '2', 10) || 2)
+          );
+          const mapAffiliateRow = (p: any) => {
+            const sourceCurrency = String(p.currency || 'USD').toUpperCase();
+            const sourcePrice = Number(p.salePrice || p.originalPrice) || 0;
+            let priceInBase = sourcePrice;
+            try {
+              priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
+            } catch {
+              priceInBase = sourcePrice;
+            }
+            const imgs = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(
+              (x: any) => x && typeof x === 'string' && x.startsWith('http')
+            );
+            const deliveryDays = p.shipping_info?.delivery_days;
+            const shippingDaysMax =
+              deliveryDays != null
+                ? typeof deliveryDays === 'string' && deliveryDays.includes('-')
+                  ? Math.max(...deliveryDays.split('-').map((d: string) => parseInt(d.trim(), 10) || 0))
+                  : parseInt(String(deliveryDays), 10)
+                : undefined;
+            return {
+              title: p.productTitle,
+              price: priceInBase,
+              priceMin: priceInBase,
+              priceMax: priceInBase,
+              priceMinSource: sourcePrice,
+              priceMaxSource: sourcePrice,
+              priceRangeSourceCurrency: sourceCurrency,
+              currency: baseCurrency,
+              sourcePrice,
+              sourceCurrency,
+              productUrl: p.productDetailUrl || p.promotionLink || '',
+              imageUrl: imgs[0],
+              images: imgs,
+              productId: p.productId,
+              supplierOrdersCount: p.volume != null ? Number(p.volume) : undefined,
+              supplierRating: p.evaluate_score != null ? Number(p.evaluate_score) : undefined,
+              supplierReviewsCount: p.volume != null ? Number(p.volume) : undefined,
+              shippingDaysMax: Number.isFinite(shippingDaysMax) ? shippingDaysMax : undefined,
+              supplierScorePct:
+                p.evaluate_rate != null
+                  ? Number(p.evaluate_rate) <= 1
+                    ? Number(p.evaluate_rate) * 100
+                    : Number(p.evaluate_rate)
+                  : undefined,
+            };
+          };
+          const filterMapped = (p: any) =>
+            p.title &&
+            (p.price || 0) > 0 &&
+            p.productUrl &&
+            p.productUrl.length > 10 &&
+            p.images &&
+            p.images.length > 0;
+
+          const providerStart = 1 + (pageNo - 1) * affiliateProviderPagesPerUi;
+          const seenKeys = new Set<string>();
+          const merged: Array<{
+            title: string;
+            price: number;
+            priceMin?: number;
+            priceMax?: number;
+            priceMinSource?: number;
+            priceMaxSource?: number;
+            priceRangeSourceCurrency?: string;
+            currency: string;
+            sourcePrice?: number;
+            sourceCurrency?: string;
+            productUrl: string;
+            imageUrl?: string;
+            images?: string[];
+            productId?: string;
+            shippingCost?: number;
+            supplierOrdersCount?: number;
+            supplierRating?: number;
+            supplierReviewsCount?: number;
+            shippingDaysMax?: number;
+            supplierScorePct?: number;
+          }> = [];
+
+          for (let step = 0; step < affiliateProviderPagesPerUi && merged.length < maxItems; step++) {
+            const pn = providerStart + step;
+            if (pn > OPPORTUNITY_MAX_PAGE) break;
+            const affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
+              keywords: query,
+              pageNo: pn,
+              pageSize: 20,
+              targetCurrency: baseCurrency || 'USD',
+              shipToCountry: countryCode,
+            });
+            const rawProducts = affiliateResult?.products;
+            const apiProducts = Array.isArray(rawProducts) ? rawProducts : [];
+            if (apiProducts.length === 0) break;
+            console.log('[AUTOPILOT] Affiliate batch', { providerPage: pn, count: apiProducts.length });
+            const mapped = apiProducts.map(mapAffiliateRow).filter(filterMapped);
+            for (const row of mapped) {
+              const key = String(row.productId || row.productUrl || '').trim();
+              if (!key || seenKeys.has(key)) continue;
+              seenKeys.add(key);
+              merged.push(row);
+              if (merged.length >= maxItems) break;
+            }
+            if (apiProducts.length < 20) break;
+          }
+
+          products = merged.slice(0, maxItems);
+          if (products.length > 0) {
+            logger.info('[OPPORTUNITY-FINDER] Affiliate API merged products', {
+              count: products.length,
+              uiPage: pageNo,
+              providerStart,
+              steps: affiliateProviderPagesPerUi,
+            });
           } else {
             console.log('[AUTOPILOT] Affiliate empty — activating fallback (eBay, Scraper, Cache, AI, Static)');
             sourcesTried.push('fallback');

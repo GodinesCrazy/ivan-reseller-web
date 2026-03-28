@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { api } from '../services/api';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { formatCurrencySimple } from '../utils/currency';
 import { Download, Info, Package, Truck, Receipt } from 'lucide-react';
@@ -74,9 +74,31 @@ interface OpportunitiesPagination {
   mayHaveMore: boolean;
 }
 
+function getInitialPage(): number {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const n = parseInt(params.get('page') || '1', 10);
+    if (Number.isFinite(n) && n >= 1) return n;
+  } catch {
+    /* ignore */
+  }
+  return 1;
+}
+
+function getInitialMaxItems(): number {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const n = parseInt(params.get('size') || '20', 10);
+    if (n === 10 || n === 20) return n;
+  } catch {
+    /* ignore */
+  }
+  return 20;
+}
+
 function getInitialQuery(): string {
   const params = new URLSearchParams(window.location.search);
-  const fromUrl = params.get('query') || params.get('keyword');
+  const fromUrl = params.get('q') || params.get('query') || params.get('keyword');
   if (fromUrl?.trim()) return fromUrl.trim();
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -104,11 +126,12 @@ function TableSkeleton({ rows, columns }: { rows: number; columns: number }) {
 
 export default function Opportunities() {
   const navigate = useNavigate();
+  const [, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState(getInitialQuery);
   const [region, setRegion] = useState('us');
   /** Results per page (AliExpress Affiliate caps at 20 per API request). */
-  const [maxItems, setMaxItems] = useState(20);
-  const [page, setPage] = useState(1);
+  const [maxItems, setMaxItems] = useState(getInitialMaxItems);
+  const [page, setPage] = useState(getInitialPage);
   const [paginationMeta, setPaginationMeta] = useState<OpportunitiesPagination | null>(null);
   const [marketplaces, setMarketplaces] = useState<Marketplace[]>(['ebay', 'amazon', 'mercadolibre']);
   const [loading, setLoading] = useState(false);
@@ -147,7 +170,11 @@ export default function Opportunities() {
         }`
     : null;
 
-  async function fetchOpportunitiesPage(pageNum: number, queryOverride?: string) {
+  async function fetchOpportunitiesPage(
+    pageNum: number,
+    queryOverride?: string,
+    opts?: { refresh?: boolean }
+  ) {
     const effectiveQuery = (queryOverride ?? query).trim();
     if (!effectiveQuery) return;
     // Cancel any in-flight search so its response cannot overwrite this one
@@ -160,8 +187,17 @@ export default function Opportunities() {
     setError(null);
     let requestCanceled = false;
     try {
+      const params: Record<string, string | number> = {
+        query: effectiveQuery,
+        maxItems,
+        page: pageNum,
+        marketplaces: marketplacesParam,
+        region,
+      };
+      if (opts?.refresh) params.refresh = 1;
+
       const response = await api.get('/api/opportunities', {
-        params: { query: effectiveQuery, maxItems, page: pageNum, marketplaces: marketplacesParam, region },
+        params,
         signal: controller.signal,
       });
 
@@ -207,6 +243,16 @@ export default function Opportunities() {
       } catch {
         /* ignore */
       }
+      setSearchParams(
+        (prev) => {
+          const n = new URLSearchParams(prev);
+          n.set('q', effectiveQuery);
+          n.set('page', String(pageNum));
+          n.set('size', String(maxItems));
+          return n;
+        },
+        { replace: true }
+      );
       await fetchAuthStatuses();
     } catch (e: any) {
       if (axios.isCancel(e)) {
@@ -263,7 +309,7 @@ export default function Opportunities() {
   /** New search from the form: always starts at page 1. */
   function runSearchFromForm() {
     setPage(1);
-    void fetchOpportunitiesPage(1);
+    void fetchOpportunitiesPage(1, undefined, { refresh: true });
   }
 
   // ✅ P0.3: Handler para abrir ventana de login después de confirmar en modal
@@ -382,7 +428,7 @@ export default function Opportunities() {
       }
     } else if (query.trim()) {
       // Si no hay keyword en params pero hay query inicial (URL o localStorage), ejecutar búsqueda
-      void fetchOpportunitiesPage(1);
+      void fetchOpportunitiesPage(getInitialPage());
     }
     return () => {
       if (searchAbortRef.current) {
@@ -633,8 +679,9 @@ export default function Opportunities() {
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Oportunidades</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Busca oportunidades de negocio desde tendencias o términos libres</p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Datos desde API. Usá «Siguiente» para ver más resultados del mismo término (paginación del proveedor). Sin recarga
-          automática.
+          Elegí <strong>20 por página</strong> y usá <strong>Siguiente</strong> para el siguiente lote (la URL guarda{' '}
+          <code className="text-[11px]">?q=…&amp;page=…&amp;size=…</code>). Cada clic en <strong>Search</strong> pide datos
+          frescos al servidor (<code className="text-[11px]">refresh=1</code>).
         </p>
         <div className="mt-3">
           <CycleStepsBreadcrumb currentStep={2} />
