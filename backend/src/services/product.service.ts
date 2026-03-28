@@ -7,6 +7,7 @@ import logger from '../config/logger';
 import { prisma } from '../config/database';
 import { reconcileProductTruth } from './operational-truth.service';
 import { aliExpressSupplierAdapter } from './adapters/aliexpress-supplier.adapter';
+import { extractAliExpressItemIdFromUrl } from '../utils/aliexpress-item-id';
 
 // ✅ Definir ProductStatus localmente si no está en Prisma
 type ProductStatus =
@@ -136,12 +137,22 @@ function mergeProductMetadata(dto: CreateProductDto | UpdateProductDto): Record<
     }
   }
 
-  const importSource = (dto as CreateProductDto).importSource;
-  if (importSource === 'opportunity_search' && typeof (dto as CreateProductDto).aliexpressUrl === 'string') {
-    const createDto = dto as CreateProductDto;
+  const createDto = dto as CreateProductDto;
+  const importSource = createDto.importSource;
+  const nestedOpportunity =
+    (createDto.productData as Record<string, any> | undefined)?.opportunityImport?.importSource ===
+    'opportunity_search';
+  const shouldApplyOpportunityBlock =
+    importSource === 'opportunity_search' ||
+    nestedOpportunity ||
+    (String(createDto.aliExpressItemId || '').trim().length > 0 &&
+      typeof createDto.aliexpressUrl === 'string');
+
+  if (shouldApplyOpportunityBlock && typeof createDto.aliexpressUrl === 'string') {
     const aeId =
       (createDto.aliExpressItemId && String(createDto.aliExpressItemId).trim()) ||
       aliExpressSupplierAdapter.getProductIdFromUrl(createDto.aliexpressUrl) ||
+      extractAliExpressItemIdFromUrl(createDto.aliexpressUrl) ||
       null;
     const tms = Array.isArray(createDto.targetMarketplaces) ? createDto.targetMarketplaces : [];
     const firstMp = normalizeTargetMarketplaceForMeta(tms[0]);

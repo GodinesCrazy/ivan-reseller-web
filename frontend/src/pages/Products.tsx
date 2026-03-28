@@ -46,6 +46,7 @@ import { useEnvironment } from '@/contexts/EnvironmentContext';
 import type { InventorySummary } from '@/types/dashboard';
 import type { OperationsTruthItem } from '@/types/operations';
 import { fetchOperationsTruth } from '@/services/operationsTruth.api';
+import { useAuthStore } from '@stores/authStore';
 
 interface MarketplaceListing {
   id: number;
@@ -142,6 +143,8 @@ const VALID_MARKETPLACES = ['ebay', 'mercadolibre', 'amazon', 'ml'];
 export default function Products() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user } = useAuthStore();
+  const isAdminUser = user?.role?.toUpperCase() === 'ADMIN';
   const { environment } = useEnvironment();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,6 +170,8 @@ export default function Products() {
   const [showPostSaleOverview, setShowPostSaleOverview] = useState(false);
   const [mlCanaryPanelOpen, setMlCanaryPanelOpen] = useState(false);
   const [mlCanaryLoading, setMlCanaryLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [mlCanaryData, setMlCanaryData] = useState<{
     scanned: number;
     candidates: Array<{
@@ -483,15 +488,21 @@ export default function Products() {
     }
   };
 
-  const handleDelete = async (productId: string) => {
-    if (!confirm('Eliminar este producto?')) return;
+  const confirmDeleteProduct = async () => {
+    if (!deleteTarget) return;
+    const productId = deleteTarget.id;
+    setDeleteLoading(true);
     try {
       const response = await api.delete(`/api/products/${productId}`);
       toast.success(response.data?.message || 'Producto eliminado');
+      setDeleteTarget(null);
       fetchProducts();
       fetchInventorySummary();
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Error al eliminar producto');
+      const msg = error?.response?.data?.error || error?.message || 'Error al eliminar producto';
+      toast.error(msg);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -1257,7 +1268,13 @@ export default function Products() {
                                 <Archive className="w-4 h-4" />
                               </button>
                             )}
-                            <button onClick={() => handleDelete(product.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Eliminar">
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(product)}
+                              disabled={deleteLoading}
+                              className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded disabled:opacity-50"
+                              title={isAdminUser ? 'Eliminar producto (admin / dueño)' : 'Eliminar producto (solo si no tiene ventas)'}
+                            >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
@@ -1295,6 +1312,43 @@ export default function Products() {
           )}
         </CardContent>
       </Card>
+
+      {/* Eliminar producto — confirmación explícita (no usar solo confirm() nativo) */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-product-title">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 space-y-4 border dark:border-gray-700">
+            <h2 id="delete-product-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Eliminar producto
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Vas a eliminar de forma permanente el producto <strong className="text-gray-900 dark:text-gray-100">#{deleteTarget.id}</strong>
+              {deleteTarget.title ? (
+                <>
+                  : <span className="italic">{deleteTarget.title.slice(0, 120)}{deleteTarget.title.length > 120 ? '…' : ''}</span>
+                </>
+              ) : null}
+              . No se puede deshacer.
+            </p>
+            <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded px-2 py-1.5">
+              El backend rechaza la eliminación si el producto tiene ventas asociadas. Si está publicado, revisá despublicar antes si tu flujo lo requiere.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => !deleteLoading && setDeleteTarget(null)} disabled={deleteLoading}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void confirmDeleteProduct()}
+                disabled={deleteLoading}
+                className="min-w-[7rem]"
+              >
+                {deleteLoading ? 'Eliminando…' : 'Eliminar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Product Detail Modal */}
       {showModal && selectedProduct && (

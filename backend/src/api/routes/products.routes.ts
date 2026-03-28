@@ -581,24 +581,46 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const userId = req.user!.userId;
-    const product = await productService.createProduct(userId, validatedData as CreateProductDto, isAdmin);
+    let product = await productService.createProduct(userId, validatedData as CreateProductDto, isAdmin);
+
+    let pdRoot: Record<string, any> = {};
+    try {
+      if (product.productData) pdRoot = JSON.parse(product.productData);
+    } catch {
+      pdRoot = {};
+    }
 
     const shouldEnrichOpportunityImport =
       validatedData.importSource === 'opportunity_search' ||
       (validatedData.productData as Record<string, any> | undefined)?.opportunityImport?.importSource ===
-        'opportunity_search';
+        'opportunity_search' ||
+      Boolean(String(validatedData.aliExpressItemId || '').trim()) ||
+      pdRoot.importSource === 'opportunity_search' ||
+      pdRoot.opportunityImport?.importSource === 'opportunity_search';
+
+    let opportunityImportEnrichment: {
+      ok: boolean;
+      reason: string;
+      skuResolved?: boolean;
+      shippingResolved?: boolean;
+    } | null = null;
+
     if (shouldEnrichOpportunityImport) {
       try {
         const { enrichProductAfterOpportunityImport } = await import(
           '../../services/opportunity-import-enrichment.service'
         );
-        const enrichResult = await enrichProductAfterOpportunityImport(product.id, userId);
+        opportunityImportEnrichment = await enrichProductAfterOpportunityImport(product.id, userId);
         logger.info('POST /api/products - Opportunity import enrichment', {
           productId: product.id,
           userId,
-          ...enrichResult,
+          ...opportunityImportEnrichment,
         });
       } catch (enrichErr: any) {
+        opportunityImportEnrichment = {
+          ok: false,
+          reason: enrichErr?.message || 'enrichment_exception',
+        };
         logger.warn('POST /api/products - Opportunity import enrichment error (product still created)', {
           productId: product.id,
           error: enrichErr?.message || String(enrichErr),
@@ -606,38 +628,63 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       }
     }
 
+    const opportunityImportFlow = shouldEnrichOpportunityImport;
+
     // ✅ CRÍTICO: Si analyze está en modo automatic, aprobar automáticamente el producto
-    // Esto permite que el workflow avance de ANALYZE a PUBLISH
+    // No degradar a LEGACY_UNVERIFIED: si el import viene de Opportunities y el enriquecimiento
+    // no completó contexto máquina, mantener PENDING hasta que SKU/shipping existan.
     if (product && product.status === 'PENDING') {
       try {
         const { workflowConfigService } = await import('../../services/workflow-config.service');
         const analyzeMode = await workflowConfigService.getStageMode(userId, 'analyze');
-        
+
         if (analyzeMode === 'automatic') {
-          await productService.updateProductStatusSafely(
-            product.id,
-            'APPROVED',
-            userId,
-            'Products API: Aprobación automática (analyze en modo automatic)'
-          );
-          
-          logger.info('POST /api/products - Producto aprobado automáticamente', {
-            productId: product.id,
-            userId,
-            analyzeMode
-          });
-          
-          // Actualizar el objeto product para devolver el estado correcto
-          product.status = 'APPROVED';
+          const skipAutoApproveBecauseImportIncomplete =
+            opportunityImportFlow &&
+            opportunityImportEnrichment &&
+            !opportunityImportEnrichment.ok;
+
+          if (skipAutoApproveBecauseImportIncomplete) {
+            logger.warn('POST /api/products - Skipping auto-approve: opportunity enrichment incomplete (avoid LEGACY)', {
+              productId: product.id,
+              userId,
+              opportunityImportEnrichment,
+            });
+          } else {
+            await productService.updateProductStatusSafely(product.id, 'APPROVED', false);
+
+            logger.info('POST /api/products - Producto aprobado automáticamente', {
+              productId: product.id,
+              userId,
+              analyzeMode,
+            });
+
+            product.status = 'APPROVED';
+          }
         }
       } catch (approveError: any) {
         logger.error('POST /api/products - Error aprobando producto automáticamente', {
           productId: product.id,
           userId,
-          error: approveError?.message || String(approveError)
+          error: approveError?.message || String(approveError),
         });
-        // No fallar el flujo si la aprobación automática falla
       }
+    }
+
+    const refreshed = await prisma.product.findUnique({
+      where: { id: product.id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            email: true,
+          },
+        },
+      },
+    });
+    if (refreshed) {
+      product = refreshed as typeof product;
     }
     
     // ✅ Función helper para extraer imageUrl del campo images (JSON)
@@ -673,8 +720,9 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       data: {
         id: product.id, // ✅ Asegurar que el ID esté explícitamente presente
         ...product,
-        imageUrl: imageUrl || undefined
-      }
+        imageUrl: imageUrl || undefined,
+        opportunityImportEnrichment: opportunityImportEnrichment ?? undefined,
+      },
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

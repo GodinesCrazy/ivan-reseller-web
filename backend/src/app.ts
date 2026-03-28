@@ -865,17 +865,21 @@ app.get('/api/connectivity', (_req: Request, res: Response) => {
 });
 
 // ✅ FASE 0: Version endpoint (for deployment verification)
-app.get('/version', (_req: Request, res: Response) => {
+const versionHandler = (_req: Request, res: Response) => {
   const buildInfo = getBuildInfo();
   res.status(200).json({
     gitSha: buildInfo.gitSha,
+    gitShaFull: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || null,
     buildTime: buildInfo.buildTime,
     node: buildInfo.nodeVersion,
     env: env.NODE_ENV,
     serviceName: 'ivan-reseller-backend',
     uptime: process.uptime(),
   });
-});
+};
+app.get('/version', versionHandler);
+// Same payload under /api for same-origin checks from the SPA (CORS)
+app.get('/api/version', versionHandler);
 
 // ✅ GO-LIVE: Config endpoint (diagnóstico seguro, sin secretos)
 app.get('/config', (_req: Request, res: Response) => {
