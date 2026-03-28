@@ -26,6 +26,7 @@ import {
   OPTIONAL_MARKETPLACES,
 } from '../config/marketplaces.config';
 import type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
+import { normalizeOpportunityPagination } from '../utils/opportunity-search-pagination';
 
 export type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
 
@@ -561,7 +562,8 @@ class OpportunityFinderService {
     const query = filters.query?.trim();
     if (!query) return [];
 
-    const maxItems = Math.min(Math.max(filters.maxItems || 10, 1), 10);
+    const { pageSize, pageNo } = normalizeOpportunityPagination(filters.maxItems, filters.pageNo);
+    const maxItems = pageSize;
     const requestedMarketplaces = (filters.marketplaces && filters.marketplaces.length > 0)
       ? filters.marketplaces
       : DEFAULT_COMPARATOR_MARKETPLACES;
@@ -589,6 +591,7 @@ class OpportunityFinderService {
       query,
       environment,
       maxItems,
+      pageNo,
       marketplaces: requestedMarketplaces
     });
 
@@ -676,7 +679,7 @@ class OpportunityFinderService {
           const countryCode = regionToCountryCode(region);
           const affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
             keywords: query,
-            pageNo: 1,
+            pageNo,
             pageSize: maxItems,
             targetCurrency: baseCurrency || 'USD',
             shipToCountry: countryCode,
@@ -806,7 +809,7 @@ class OpportunityFinderService {
           const countryCode = regionToCountryCode(region);
           const affiliateResultB = await aliexpressAffiliateAPIService.searchProducts({
             keywords: query,
-            pageNo: 1,
+            pageNo,
             pageSize: maxItems,
             targetCurrency: baseCurrency,
             shipToCountry: countryCode,
@@ -2225,11 +2228,20 @@ class OpportunityFinderService {
   async searchOpportunities(
     query: string,
     userId: number,
-    options?: { maxItems?: number; skipTrendsValidation?: boolean; relaxedMargin?: boolean; marketplaces?: Array<'ebay' | 'amazon' | 'mercadolibre'>; region?: string; environment?: 'sandbox' | 'production' }
+    options?: {
+      maxItems?: number;
+      pageNo?: number;
+      skipTrendsValidation?: boolean;
+      relaxedMargin?: boolean;
+      marketplaces?: Array<'ebay' | 'amazon' | 'mercadolibre'>;
+      region?: string;
+      environment?: 'sandbox' | 'production';
+    }
   ): Promise<OpportunityItem[]> {
     const opportunities = await this.findOpportunities(userId, {
       query,
-      maxItems: options?.maxItems ?? 10,
+      maxItems: options?.maxItems ?? 20,
+      pageNo: options?.pageNo,
       skipTrendsValidation: options?.skipTrendsValidation,
       relaxedMargin: options?.relaxedMargin,
       marketplaces: options?.marketplaces,

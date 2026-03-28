@@ -6,6 +6,8 @@
 export interface OpportunityFilters {
   query: string;
   maxItems?: number;
+  /** 1-based AliExpress Affiliate page (aliexpress.affiliate.product.query page_no). */
+  pageNo?: number;
   marketplaces?: Array<'ebay' | 'amazon' | 'mercadolibre'>;
   region?: string;
   environment?: 'sandbox' | 'production';

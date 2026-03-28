@@ -67,6 +67,13 @@ const formatMoney = (value: number, currency: string) => {
 
 const STORAGE_KEY = 'opportunities_last_query';
 
+interface OpportunitiesPagination {
+  page: number;
+  pageSize: number;
+  returned: number;
+  mayHaveMore: boolean;
+}
+
 function getInitialQuery(): string {
   const params = new URLSearchParams(window.location.search);
   const fromUrl = params.get('query') || params.get('keyword');
@@ -99,7 +106,10 @@ export default function Opportunities() {
   const navigate = useNavigate();
   const [query, setQuery] = useState(getInitialQuery);
   const [region, setRegion] = useState('us');
-  const [maxItems, setMaxItems] = useState(5);
+  /** Results per page (AliExpress Affiliate caps at 20 per API request). */
+  const [maxItems, setMaxItems] = useState(20);
+  const [page, setPage] = useState(1);
+  const [paginationMeta, setPaginationMeta] = useState<OpportunitiesPagination | null>(null);
   const [marketplaces, setMarketplaces] = useState<Marketplace[]>(['ebay', 'amazon', 'mercadolibre']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,8 +147,9 @@ export default function Opportunities() {
         }`
     : null;
 
-  async function search() {
-    if (!query.trim()) return;
+  async function fetchOpportunitiesPage(pageNum: number, queryOverride?: string) {
+    const effectiveQuery = (queryOverride ?? query).trim();
+    if (!effectiveQuery) return;
     // Cancel any in-flight search so its response cannot overwrite this one
     if (searchAbortRef.current) {
       searchAbortRef.current.abort();
@@ -150,7 +161,7 @@ export default function Opportunities() {
     let requestCanceled = false;
     try {
       const response = await api.get('/api/opportunities', {
-        params: { query, maxItems, marketplaces: marketplacesParam, region },
+        params: { query: effectiveQuery, maxItems, page: pageNum, marketplaces: marketplacesParam, region },
         signal: controller.signal,
       });
 
@@ -172,15 +183,27 @@ export default function Opportunities() {
         }
       }
 
-      const items =
+      const nextItems =
         response?.data?.items ??
         response?.data?.data ??
         response?.data?.opportunities ??
         [];
-      console.log('[FRONTEND] Opportunities received:', items.length);
-      setItems(items);
+      console.log('[FRONTEND] Opportunities received:', nextItems.length, 'page', pageNum);
+      setItems(nextItems);
+      setPage(pageNum);
+      const p = response?.data?.pagination as OpportunitiesPagination | undefined;
+      setPaginationMeta(
+        p && typeof p.page === 'number'
+          ? p
+          : {
+              page: pageNum,
+              pageSize: maxItems,
+              returned: nextItems.length,
+              mayHaveMore: nextItems.length >= maxItems,
+            }
+      );
       try {
-        localStorage.setItem(STORAGE_KEY, query.trim());
+        localStorage.setItem(STORAGE_KEY, effectiveQuery);
       } catch {
         /* ignore */
       }
@@ -229,11 +252,18 @@ export default function Opportunities() {
         await fetchAuthStatuses();
       }
       setItems([]);
+      setPaginationMeta(null);
     } finally {
       if (!requestCanceled) {
         setLoading(false);
       }
     }
+  }
+
+  /** New search from the form: always starts at page 1. */
+  function runSearchFromForm() {
+    setPage(1);
+    void fetchOpportunitiesPage(1);
   }
 
   // ✅ P0.3: Handler para abrir ventana de login después de confirmar en modal
@@ -347,12 +377,12 @@ export default function Opportunities() {
       if (autoSearch && keywordParam.trim()) {
         // Pequeño delay para asegurar que el estado se actualizó
         setTimeout(() => {
-          search();
+          void fetchOpportunitiesPage(1, keywordParam.trim());
         }, 100);
       }
     } else if (query.trim()) {
       // Si no hay keyword en params pero hay query inicial (URL o localStorage), ejecutar búsqueda
-      search();
+      void fetchOpportunitiesPage(1);
     }
     return () => {
       if (searchAbortRef.current) {
@@ -602,7 +632,10 @@ export default function Opportunities() {
       <div>
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Oportunidades</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Busca oportunidades de negocio desde tendencias o términos libres</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos desde API. Resultados actualizados en cada búsqueda.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          Datos desde API. Usá «Siguiente» para ver más resultados del mismo término (paginación del proveedor). Sin recarga
+          automática.
+        </p>
         <div className="mt-3">
           <CycleStepsBreadcrumb currentStep={2} />
         </div>
@@ -611,6 +644,12 @@ export default function Opportunities() {
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              runSearchFromForm();
+            }
+          }}
           placeholder="Buscar oportunidades (ej: auriculares, luces solares, organizador cocina)"
           className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
         />
@@ -622,15 +661,16 @@ export default function Opportunities() {
           <option value="es">ES</option>
           <option value="br">BR</option>
         </select>
-        <input
-          type="number"
-          min={1}
-          max={10}
+        <select
           value={maxItems}
-          onChange={e => setMaxItems(Math.max(1, Math.min(10, Number(e.target.value))))}
+          onChange={(e) => setMaxItems(Number(e.target.value))}
+          title="Resultados por página (máx. 20 por limitación de AliExpress Affiliate API)"
           className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-        />
-        <button onClick={search} disabled={loading} className="bg-primary-600 text-white rounded px-4 py-2">
+        >
+          <option value={10}>10 por página</option>
+          <option value={20}>20 por página</option>
+        </select>
+        <button type="button" onClick={runSearchFromForm} disabled={loading} className="bg-primary-600 text-white rounded px-4 py-2">
           {loading ? 'Searching…' : 'Search'}
         </button>
         <div className="md:col-span-4 flex items-center gap-4 text-sm">
@@ -743,6 +783,44 @@ export default function Opportunities() {
 
       {error && <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>}
 
+      {(items.length > 0 || paginationMeta != null) && !loading && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded px-4 py-2 text-sm">
+          <span className="text-gray-600 dark:text-gray-400">
+            Página <span className="font-semibold text-gray-900 dark:text-gray-100">{paginationMeta?.page ?? page}</span>
+            {' · '}
+            {paginationMeta?.returned ?? items.length} resultado(s) en esta vista
+            {' · '}
+            {maxItems} por página
+            {paginationMeta?.mayHaveMore ? (
+              <span className="text-amber-700 dark:text-amber-300 ml-1">— podés ir a la siguiente página</span>
+            ) : null}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1 || loading}
+              onClick={() => void fetchOpportunitiesPage(page - 1)}
+              className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-white dark:hover:bg-gray-800"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={
+                loading ||
+                (paginationMeta != null
+                  ? !paginationMeta.mayHaveMore
+                  : items.length < maxItems)
+              }
+              onClick={() => void fetchOpportunitiesPage(page + 1)}
+              className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 hover:bg-white dark:hover:bg-gray-800"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
         {loading ? (
           <div className="p-4">
@@ -770,7 +848,10 @@ export default function Opportunities() {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {items.map((it, idx) => (
-              <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+              <tr
+                key={String(it.productId || it.aliexpressUrl || `row-${paginationMeta?.page ?? page}-${idx}`)}
+                className="hover:bg-gray-50 dark:hover:bg-gray-700/50"
+              >
                 <td className="p-3 text-center">
                   {(it.image || it.imageUrl) ? (
                     <a

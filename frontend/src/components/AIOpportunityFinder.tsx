@@ -152,7 +152,8 @@ export default function AIOpportunityFinder() {
       const response = await api.get('/api/opportunities', {
         params: {
           query: searchQuery,
-          maxItems: 10,
+          maxItems: 20,
+          page: 1,
           marketplaces: selectedFilters.marketplace === 'all' ? 'ebay,amazon,mercadolibre' : selectedFilters.marketplace,
           region: 'us'
         }
