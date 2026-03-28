@@ -7,7 +7,7 @@
       "destination": "https://ivan-reseller-backend-production.up.railway.app/api/:path*"
     },
     {
-      "source": "/((?!api)(.*))",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
