@@ -6,6 +6,7 @@ import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
 import { prisma } from '../config/database';
 import { reconcileProductTruth } from './operational-truth.service';
+import { aliExpressSupplierAdapter } from './adapters/aliexpress-supplier.adapter';
 
 // ✅ Definir ProductStatus localmente si no está en Prisma
 type ProductStatus =
@@ -37,6 +38,9 @@ export interface CreateProductDto {
   originCountry?: string;
   estimatedDeliveryDays?: number;
   productData?: Record<string, any>;
+  importSource?: 'opportunity_search';
+  aliExpressItemId?: string;
+  targetMarketplaces?: string[];
 }
 
 export interface UpdateProductDto {
@@ -58,6 +62,15 @@ export interface UpdateProductDto {
   originCountry?: string;
   estimatedDeliveryDays?: number;
   productData?: Record<string, any>;
+}
+
+function normalizeTargetMarketplaceForMeta(mp?: string): string | null {
+  if (!mp || typeof mp !== 'string') return null;
+  const m = mp.trim().toLowerCase();
+  if (m === 'ml' || m === 'mercadolibre') return 'mercadolibre';
+  if (m === 'ebay') return 'ebay';
+  if (m === 'amazon') return 'amazon';
+  return m;
 }
 
 function buildImagePayload(primary?: string, additional?: string[]): string {
@@ -113,7 +126,44 @@ function mergeProductMetadata(dto: CreateProductDto | UpdateProductDto): Record<
   if (typeof dto.shippingCost === 'number') meta.shippingCost = dto.shippingCost;
   if (typeof dto.estimatedDeliveryDays === 'number') meta.estimatedDeliveryDays = dto.estimatedDeliveryDays;
   if (dto.productData && Object.keys(dto.productData).length) {
-    meta.sourceData = dto.productData;
+    const pd = dto.productData as Record<string, any>;
+    meta.sourceData = pd;
+    if (pd.preventivePublish && typeof pd.preventivePublish === 'object') {
+      meta.preventivePublish = { ...pd.preventivePublish };
+    }
+    if (pd.opportunityImport && typeof pd.opportunityImport === 'object') {
+      meta.opportunityImport = { ...pd.opportunityImport };
+    }
+  }
+
+  const importSource = (dto as CreateProductDto).importSource;
+  if (importSource === 'opportunity_search' && typeof (dto as CreateProductDto).aliexpressUrl === 'string') {
+    const createDto = dto as CreateProductDto;
+    const aeId =
+      (createDto.aliExpressItemId && String(createDto.aliExpressItemId).trim()) ||
+      aliExpressSupplierAdapter.getProductIdFromUrl(createDto.aliexpressUrl) ||
+      null;
+    const tms = Array.isArray(createDto.targetMarketplaces) ? createDto.targetMarketplaces : [];
+    const firstMp = normalizeTargetMarketplaceForMeta(tms[0]);
+    meta.importSource = 'opportunity_search';
+    meta.opportunityImport = {
+      ...(meta.opportunityImport || {}),
+      importSource: 'opportunity_search',
+      importedAt: new Date().toISOString(),
+      aliExpressItemId: aeId,
+      targetMarketplaces: tms,
+    };
+    meta.preventivePublish = {
+      ...(meta.preventivePublish || {}),
+      marketplace: meta.preventivePublish?.marketplace || firstMp || 'mercadolibre',
+      shipCountry: createDto.targetCountry || meta.preventivePublish?.shipCountry || null,
+      resolvedLanguage: meta.preventivePublish?.resolvedLanguage || 'es',
+      selectedSupplier: meta.preventivePublish?.selectedSupplier || {
+        productId: aeId,
+        skuId: null,
+        source: 'opportunity_import_pending_sku',
+      },
+    };
   }
 
   return Object.keys(meta).length ? meta : undefined;
@@ -151,6 +201,9 @@ export class ProductService {
       currency,
       productData,
       finalPrice,
+      importSource: _importSource,
+      aliExpressItemId: _aliExpressItemId,
+      targetMarketplaces: _targetMarketplaces,
       ...rest
     } = data;
 

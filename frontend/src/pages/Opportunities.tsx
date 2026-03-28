@@ -536,6 +536,9 @@ export default function Opportunities() {
         aliexpressPrice: item.costUsd,
         suggestedPrice: item.suggestedPriceUsd,
         currency: item.baseCurrency || 'USD',
+        importSource: 'opportunity_search',
+        aliExpressItemId: item.productId?.trim() || undefined,
+        targetMarketplaces: Array.isArray(item.targetMarketplaces) ? item.targetMarketplaces : [],
         // ✅ MEJORADO: Incluir costos adicionales si están disponibles
         shippingCost: item.shippingCost || undefined,
         importTax: item.importTax || undefined,
@@ -608,6 +611,9 @@ export default function Opportunities() {
         // ✅ MEJORADO: Usar costo total si está disponible para calcular precio sugerido
         suggestedPrice: item.suggestedPriceUsd, // Ya viene calculado con costo total desde backend
         currency: item.baseCurrency || 'USD',
+        importSource: 'opportunity_search',
+        aliExpressItemId: item.productId?.trim() || undefined,
+        targetMarketplaces: Array.isArray(item.targetMarketplaces) ? item.targetMarketplaces : [],
         // ✅ MEJORADO: Incluir costos adicionales si están disponibles
         shippingCost: item.shippingCost || undefined,
         importTax: item.importTax || undefined,

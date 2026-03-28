@@ -46,6 +46,10 @@ export function getProductValidationSnapshot(product: {
   const status = String(product.status || '').trim().toUpperCase();
   const meta = parseMeta(product.productData);
   const preventivePublish = meta.preventivePublish || {};
+  const isPendingOpportunityImport =
+    status === 'PENDING' &&
+    (meta.importSource === 'opportunity_search' ||
+      meta.opportunityImport?.importSource === 'opportunity_search');
   const validatedCatalog = meta.validatedCatalog || {};
   const profitability = preventivePublish.profitability || {};
   const feeLedger = preventivePublish.feeLedger || {};
@@ -95,7 +99,13 @@ export function getProductValidationSnapshot(product: {
         : null;
     if (reasonCode) blockedReasons.add(reasonCode);
   }
-  if (!preventivePublish.policyComplianceReady) blockedReasons.add('policyIncomplete');
+  if (!preventivePublish.policyComplianceReady) {
+    if (isPendingOpportunityImport) {
+      blockedReasons.add('preventiveAuditPending');
+    } else {
+      blockedReasons.add('policyIncomplete');
+    }
+  }
 
   const feeCompleteness =
     typeof feeLedger?.feeCompleteness === 'number'

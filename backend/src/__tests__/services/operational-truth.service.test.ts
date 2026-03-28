@@ -34,6 +34,21 @@ describe('operational-truth.service', () => {
     expect(result.nextIsPublished).toBe(false);
   });
 
+  it('treats free shipping (0) as resolved machine context when total cost is known', () => {
+    const result = reconcileProductTruth({
+      status: 'APPROVED',
+      isPublished: false,
+      targetCountry: 'CL',
+      aliexpressSku: 'sku-1',
+      shippingCost: 0,
+      totalCost: 12.5,
+      marketplaceListings: [],
+    });
+
+    expect(result.nextStatus).toBe('VALIDATED_READY');
+    expect(result.nextIsPublished).toBe(false);
+  });
+
   it('keeps safe active products as PUBLISHED', () => {
     const result = reconcileProductTruth({
       status: 'PUBLISHED',

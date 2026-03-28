@@ -24,17 +24,27 @@ export interface ReconciledProductTruth {
   hasMachineVerifiableContext: boolean;
 }
 
+function shippingCostIsResolved(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  const n = toNumber(value as Parameters<typeof toNumber>[0]);
+  return Number.isFinite(n) && n >= 0;
+}
+
+function totalCostIsResolved(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  const n = toNumber(value as Parameters<typeof toNumber>[0]);
+  return Number.isFinite(n) && n > 0;
+}
+
 export function hasMachineVerifiablePublishContext(product: ProductTruthSnapshot): boolean {
   const targetCountry = String(product.targetCountry || '').trim().toUpperCase();
   const aliexpressSku = String(product.aliexpressSku || '').trim();
-  const shippingCost = toNumber(product.shippingCost as Parameters<typeof toNumber>[0]);
-  const totalCost = toNumber(product.totalCost as Parameters<typeof toNumber>[0]);
 
   return Boolean(
     targetCountry &&
     aliexpressSku &&
-    shippingCost > 0 &&
-    totalCost > 0
+    shippingCostIsResolved(product.shippingCost) &&
+    totalCostIsResolved(product.totalCost)
   );
 }
 

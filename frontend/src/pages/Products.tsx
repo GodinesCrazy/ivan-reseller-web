@@ -506,6 +506,7 @@ export default function Products() {
       policyIncomplete: 'Politica incompleta',
       supplierUnavailable: 'Proveedor invalido',
       invalidMarketplaceContext: 'Contexto invalido',
+      preventiveAuditPending: 'Auditoría preventiva pendiente (import oportunidad)',
     };
     return labels[reason] || reason;
   };

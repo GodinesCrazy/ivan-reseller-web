@@ -69,6 +69,9 @@ const createProductSchema = z.object({
   targetCountry: z.string().optional(),
   estimatedDeliveryDays: z.number().optional(),
   productData: z.record(z.any()).optional(),
+  importSource: z.enum(['opportunity_search']).optional(),
+  aliExpressItemId: z.string().min(4).max(32).optional(),
+  targetMarketplaces: z.array(z.string()).optional(),
 });
 
 const updateProductSchema = createProductSchema.partial();
@@ -579,7 +582,30 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     const isAdmin = userRole === 'ADMIN';
     const userId = req.user!.userId;
     const product = await productService.createProduct(userId, validatedData as CreateProductDto, isAdmin);
-    
+
+    const shouldEnrichOpportunityImport =
+      validatedData.importSource === 'opportunity_search' ||
+      (validatedData.productData as Record<string, any> | undefined)?.opportunityImport?.importSource ===
+        'opportunity_search';
+    if (shouldEnrichOpportunityImport) {
+      try {
+        const { enrichProductAfterOpportunityImport } = await import(
+          '../../services/opportunity-import-enrichment.service'
+        );
+        const enrichResult = await enrichProductAfterOpportunityImport(product.id, userId);
+        logger.info('POST /api/products - Opportunity import enrichment', {
+          productId: product.id,
+          userId,
+          ...enrichResult,
+        });
+      } catch (enrichErr: any) {
+        logger.warn('POST /api/products - Opportunity import enrichment error (product still created)', {
+          productId: product.id,
+          error: enrichErr?.message || String(enrichErr),
+        });
+      }
+    }
+
     // ✅ CRÍTICO: Si analyze está en modo automatic, aprobar automáticamente el producto
     // Esto permite que el workflow avance de ANALYZE a PUBLISH
     if (product && product.status === 'PENDING') {
