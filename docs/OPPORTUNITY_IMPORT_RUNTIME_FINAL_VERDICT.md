@@ -6,8 +6,8 @@
 
 - Auto-approve guard + Dropshipping fallback + robust item id + `/api/version` + response `opportunityImportEnrichment`.
 
-After that commit is deployed to Railway and Vercel, the expected verdict is **PRODUCTION_IMPORT_FIX_ACTIVE_AND_OPERATIONAL** for users with **Dropshipping and/or Affiliate** credentials, modulo honest API failures.
+After commit **`b4756cb`** (and later) is deployed to Railway and Vercel, the expected verdict is **PRODUCTION_IMPORT_FIX_ACTIVE_AND_OPERATIONAL** for users with **Dropshipping and/or Affiliate** credentials, modulo honest API failures.
 
 ## Single sentence
 
-Production was running an older SHA; degradation matched that code — deploy the new commit and re-verify `/version` and `POST` diagnostics.
+Production was verified at **`eb2e8cd`** while fixes continued on `main`; ship **`b4756cb`** and re-check `/version` plus `POST /api/products` → `opportunityImportEnrichment`.
