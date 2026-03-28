@@ -5,7 +5,7 @@
 | Item | Result |
 |------|--------|
 | **Backend Railway** | Aligned (`99766fb` verified earlier). |
-| **Vercel `ivan-reseller-web.vercel.app`** | **Still stale** — entry assets ≠ local `dist` from `main` @ `9ad1225`. |
+| **Vercel `ivan-reseller-web.vercel.app`** | **Still stale** — entry assets ≠ local `dist` from `main` @ `3e80250`. |
 | **Vercel CLI deploy** | Initial attempt failed on **invalid rewrite pattern** (now **fixed** in `frontend/vercel.json`). |
 | **Authenticated import retest** | **Not executed** here (no JWT). |
 
@@ -15,7 +15,7 @@
 
 ## Why
 
-HTTP proof: live `index-txt1s9KR.js` / `index-C2CJxCcL.css` vs expected `index-CiVVXKXt.js` / `index-BI8lM2P0.css`.
+HTTP proof: live `index-txt1s9KR.js` / `index-C2CJxCcL.css` vs local `dist` `index-CiVVXKXt.js` / `index-BI8lM2P0.css` (fingerprints may change slightly after new commits; compare fresh `npm run build` vs live HTML after deploy).
 
 ## Path to FRONTEND_ALIGNED_AND_IMPORT_OPERATIONAL
 

@@ -4,10 +4,10 @@
 
 | Field | Value |
 |--------|--------|
-| **Commit** | `9ad122574164b61ba9ce7690f602fd6276f332cb` |
-| **Short** | `9ad1225` |
+| **Commit** | `3e80250` (tip at push; includes valid `vercel.json` rewrites) |
+| **Full SHA** | pull `git rev-parse origin/main` after fetch |
 
-*(Docs-only delta vs `99766fb`; SPA/import code unchanged from hardened commits.)*
+*(Includes `vercel.json` fix so `vercel deploy --prod` no longer fails on invalid `source` pattern.)*
 
 ## Expected entry fingerprints (local `npm run build`, `frontend/dist/index.html`)
 
