@@ -1624,12 +1624,25 @@ export class EbayService {
    * Doc: https://developer.ebay.com/api-docs/buy/browse/resources/item_summary/methods/search
    */
   async searchProducts(params: EBaySearchParams): Promise<EBaySearchProduct[]> {
-    // Ensure token
-    if (!this.credentials.token && this.credentials.refreshToken) {
+    // Prefer user OAuth when present; otherwise Browse API works with application client_credentials
+    // (same token path as searchProductsForArbitrage) so competition search does not require seller OAuth.
+    let token = this.credentials.token;
+    if (!token && this.credentials.refreshToken) {
       await this.refreshAccessToken().catch(() => undefined);
+      token = this.credentials.token;
     }
-    if (!this.credentials.token) {
-      throw new AppError('Missing eBay OAuth token', 400);
+    if (!token) {
+      try {
+        token = await this.getOAuthToken();
+      } catch (e: any) {
+        logger.warn('[eBay] Browse search: no user token and application token failed', {
+          message: e?.message || String(e),
+        });
+        throw new AppError(
+          'Missing eBay credentials for Browse search (need OAuth token or App ID + Cert ID for application token)',
+          400
+        );
+      }
     }
 
     const marketplaceId = params.marketplace_id || 'EBAY_US';
@@ -1644,7 +1657,7 @@ export class EbayService {
 
     const { data } = await this.apiClient.get(url, {
       headers: {
-        Authorization: `Bearer ${this.credentials.token}`,
+        Authorization: `Bearer ${token}`,
         'X-EBAY-C-MARKETPLACE-ID': marketplaceId,
       },
     });

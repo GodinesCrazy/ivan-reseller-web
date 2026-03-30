@@ -3,6 +3,20 @@
  * Used by opportunity-finder, and by discovery/enrichment modules when extracted.
  */
 
+/** Per-field classification for Opportunities UI (backend is source of truth). */
+export type CommercialFieldTruth = 'exact' | 'estimated' | 'unavailable';
+
+export interface CommercialTruthMeta {
+  /** AliExpress / supplier unit cost basis */
+  sourceCost: CommercialFieldTruth;
+  suggestedPrice: CommercialFieldTruth;
+  profitMargin: CommercialFieldTruth;
+  roi: CommercialFieldTruth;
+  competitionLevel: CommercialFieldTruth;
+  /** e.g. mercadolibre_public_catalog, ebay_browse_application_token */
+  competitionSources?: string[];
+}
+
 export interface OpportunityFilters {
   query: string;
   maxItems?: number;
@@ -50,6 +64,8 @@ export interface OpportunityItem {
   generatedAt: string;
   estimatedFields?: string[];
   estimationNotes?: string[];
+  /** Explicit exact vs estimated contract for commercial columns */
+  commercialTruth?: CommercialTruthMeta;
   category?: string;
   shippingCost?: number;
   importTax?: number;

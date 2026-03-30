@@ -170,6 +170,49 @@ export class MercadoLibreService {
   private apiClient: AxiosInstance;
   private baseUrl = 'https://api.mercadolibre.com';
 
+  /**
+   * Public site search — no user OAuth required. Used for opportunity competition / comparable pricing.
+   * https://api.mercadolibre.com/sites/{SITE_ID}/search?q=
+   */
+  static async searchSiteCatalogPublic(params: {
+    siteId: string;
+    q: string;
+    limit?: number;
+  }): Promise<
+    Array<{
+      id: string;
+      title: string;
+      price: number;
+      currency_id: string;
+      permalink: string;
+      seller_id?: number;
+      shipping?: { free_shipping?: boolean };
+    }>
+  > {
+    const site = params.siteId || 'MLM';
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), 50);
+    await acquireMarketplaceRateLimit('mercadolibre');
+    const q = new URLSearchParams();
+    q.set('q', params.q);
+    q.set('limit', String(limit));
+    const { data } = await axios.get(`${MercadoLibreService.publicBaseUrl}/sites/${encodeURIComponent(site)}/search?${q.toString()}`, {
+      timeout: 25000,
+      headers: { Accept: 'application/json' },
+    });
+    const results = (data?.results || []) as any[];
+    return results.map((r) => ({
+      id: String(r.id),
+      title: r.title,
+      price: Number(r.price) || 0,
+      currency_id: r.currency_id || '',
+      permalink: r.permalink || '',
+      seller_id: r.seller?.id,
+      shipping: r.shipping,
+    }));
+  }
+
+  private static readonly publicBaseUrl = 'https://api.mercadolibre.com';
+
   constructor(credentials: MercadoLibreCredentials) {
     this.credentials = {
       ...credentials,

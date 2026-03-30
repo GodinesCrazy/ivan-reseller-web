@@ -25,10 +25,22 @@ import {
   DEFAULT_COMPARATOR_MARKETPLACES,
   OPTIONAL_MARKETPLACES,
 } from '../config/marketplaces.config';
-import type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
+import type {
+  CommercialTruthMeta,
+  OpportunityFilters,
+  OpportunityItem,
+  PipelineDiagnostics,
+} from './opportunity-finder.types';
 import { normalizeOpportunityPagination, OPPORTUNITY_MAX_PAGE } from '../utils/opportunity-search-pagination';
 
 export type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
+
+function listingsToCompetitionLevel(n: number): 'low' | 'medium' | 'high' | 'unknown' {
+  if (!Number.isFinite(n) || n <= 0) return 'unknown';
+  if (n < 6) return 'low';
+  if (n < 15) return 'medium';
+  return 'high';
+}
 
 class OpportunityFinderService {
   private minMargin = Number(process.env.MIN_OPPORTUNITY_MARGIN || '0.10'); // ✅ Reducido de 0.20 a 0.10 para permitir más oportunidades válidas
@@ -1525,7 +1537,9 @@ class OpportunityFinderService {
         };
         bestBreakdown = {};
         estimatedFields = ['suggestedPriceUsd', 'profitMargin', 'roiPercentage'];
-        estimationNotes.push('Valores estimados por falta de datos de competencia real. Configura tus credenciales de Amazon, eBay o MercadoLibre para obtener precios exactos.');
+        estimationNotes.push(
+          'Valores estimados: no hubo listados comparables en catálogo (eBay Browse / Mercado Libre público / Amazon) para este título y región. Revisa región en Oportunidades, credenciales de Amazon (si aplica) y App ID/Cert ID de eBay en el servidor o en Ajustes.'
+        );
         for (const mp of marketplaces) {
           const diag = credentialDiagnostics[mp];
           if (diag?.issues?.length) {
@@ -1682,9 +1696,33 @@ class OpportunityFinderService {
       }
 
       const selectedDiag = credentialDiagnostics[best.mp];
-      if (selectedDiag?.warnings?.length) {
+      // Do not attach credential warnings to rows that already use real comparable prices (avoids misleading "estimado" messaging).
+      if ((!valid || (estimatedFields?.length ?? 0) > 0) && selectedDiag?.warnings?.length) {
         estimationNotes.push(...selectedDiag.warnings.map(warning => `[${best.mp}] ${warning}`));
       }
+
+      const competitionSources = [...new Set(
+        analyses
+          .filter((a: any) => a && a.listingsFound > 0 && a.competitivePrice > 0 && a.dataSource)
+          .map((a: any) => String(a.dataSource))
+      )];
+      const commercialTruth: CommercialTruthMeta = valid
+        ? {
+            sourceCost: 'exact',
+            suggestedPrice: 'exact',
+            profitMargin: 'exact',
+            roi: 'exact',
+            competitionLevel: 'exact',
+            competitionSources: competitionSources.length ? competitionSources : undefined,
+          }
+        : {
+            sourceCost: 'exact',
+            suggestedPrice: 'estimated',
+            profitMargin: 'estimated',
+            roi: 'estimated',
+            competitionLevel: 'unavailable',
+            competitionSources: [],
+          };
 
       // ✅ Validar que el producto tenga URL antes de crear la oportunidad
       if (!product.productUrl || product.productUrl.length < 10) {
@@ -1826,7 +1864,7 @@ class OpportunityFinderService {
         suggestedPriceCurrency: best.currency || baseCurrency,
         profitMargin: finalMargin, // ✅ MEJORADO: Margen basado en costo total
         roiPercentage: finalROI, // ✅ MEJORADO: ROI basado en costo total
-        competitionLevel: 'unknown',
+        competitionLevel: listingsToCompetitionLevel(valid?.listingsFound ?? 0),
         marketDemand: trendsValidation 
           ? (trendsValidation.trend === 'rising' ? 'high' : 
              trendsValidation.trend === 'stable' ? 'medium' : 'low')
@@ -1848,6 +1886,7 @@ class OpportunityFinderService {
         generatedAt: new Date().toISOString(),
         estimatedFields,
         estimationNotes,
+        commercialTruth,
         supplierOrdersCount: (product as any).supplierOrdersCount,
         supplierRating: (product as any).supplierRating,
         supplierReviewsCount: (product as any).supplierReviewsCount,

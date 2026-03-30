@@ -22,6 +22,14 @@ export interface MarketplaceListing {
   salesCount?: number;
 }
 
+/** How comparable prices were obtained (for commercial-truth contract). */
+export type CompetitionDataSource =
+  | 'ebay_browse_user_oauth'
+  | 'ebay_browse_application_token'
+  | 'mercadolibre_public_catalog'
+  | 'amazon_catalog'
+  | 'unknown';
+
 export interface MarketAnalysis {
   marketplace: string;
   region: string;
@@ -34,6 +42,14 @@ export interface MarketAnalysis {
   medianPrice: number;
   competitivePrice: number;
   topListings: MarketplaceListing[];
+  /** Provenance of listing prices for UI / audits */
+  dataSource?: CompetitionDataSource;
+}
+
+function resolveEbayAppKeys(raw: Record<string, unknown>): { appId: string; certId: string } {
+  const appId = String(raw.appId || process.env.EBAY_CLIENT_ID || process.env.EBAY_APP_ID || '').trim();
+  const certId = String(raw.certId || process.env.EBAY_CLIENT_SECRET || process.env.EBAY_CERT_ID || '').trim();
+  return { appId, certId };
 }
 
 export class CompetitorAnalyzerService {
@@ -50,26 +66,31 @@ export class CompetitorAnalyzerService {
         if (mp === 'ebay') {
           const marketplace = new MarketplaceService();
           const creds = await marketplace.getCredentials(userId, 'ebay');
-          if (!creds || !creds.isActive || !creds.credentials) {
-            logger.warn('Skipping eBay analysis - credentials missing or inactive', { userId, marketplace: mp });
-            continue;
-          }
-
-          if (creds.issues?.length) {
-            logger.warn('Skipping eBay analysis - credential issues detected', {
+          const raw = { ...(creds?.credentials || {}) } as Record<string, unknown>;
+          const { appId, certId } = resolveEbayAppKeys(raw);
+          if (!appId || !certId) {
+            logger.warn('Skipping eBay analysis - missing App ID / Cert ID (needed for Browse API)', {
               userId,
-              issues: creds.issues,
+              marketplace: mp,
             });
             continue;
           }
 
           const ebay = new EbayService({
-            ...(creds.credentials || {}),
-            sandbox: creds.environment === 'sandbox',
-          });
+            appId,
+            certId,
+            devId: String(raw.devId || process.env.EBAY_DEV_ID || ''),
+            token: raw.token ? String(raw.token) : undefined,
+            refreshToken: raw.refreshToken ? String(raw.refreshToken) : undefined,
+            sandbox: creds?.environment === 'sandbox',
+          } as any);
 
           const marketplace_id = REGION_TO_EBAY_MARKETPLACE[region] || 'EBAY_US';
           const res = await ebay.searchProducts({ keywords: productTitle, marketplace_id, limit: 20, sort: '-price' });
+          const usedUserOAuth = Boolean(raw.token || raw.refreshToken);
+          const dataSource: CompetitionDataSource = usedUserOAuth
+            ? 'ebay_browse_user_oauth'
+            : 'ebay_browse_application_token';
 
           const prices = res
             .map(r => parseFloat(r.price?.value || '0'))
@@ -108,29 +129,23 @@ export class CompetitorAnalyzerService {
             medianPrice,
             competitivePrice,
             topListings,
+            dataSource,
           };
         } else if (mp === 'mercadolibre') {
-          let siteId = REGION_TO_ML_SITE[region] || 'MLM';
-
+          // Comparable prices from Mercado Libre public catalog — does not require seller OAuth.
           const marketplace = new MarketplaceService();
           const rec = await marketplace.getCredentials(userId, 'mercadolibre');
-          if (!rec || !rec.isActive || !rec.credentials) {
-            logger.warn('Skipping MercadoLibre analysis - credentials missing or inactive', { userId });
-            continue;
-          }
+          let siteId =
+            (rec?.credentials as any)?.siteId ||
+            REGION_TO_ML_SITE[region] ||
+            (process.env.MERCADOLIBRE_SITE_ID || 'MLM').trim();
+          if (!siteId) siteId = 'MLM';
 
-          if (rec.issues?.length) {
-            logger.warn('Skipping MercadoLibre analysis - credential issues detected', {
-              userId,
-              issues: rec.issues,
-            });
-            continue;
-          }
-
-          siteId = rec.credentials.siteId || siteId;
-          const mlCreds: any = { ...rec.credentials, siteId };
-          const ml = new MercadoLibreService(mlCreds);
-          const res = await ml.searchProducts({ siteId, q: productTitle, limit: 20 });
+          const res = await MercadoLibreService.searchSiteCatalogPublic({
+            siteId,
+            q: productTitle,
+            limit: 20,
+          });
           const prices = res.map(r => r.price).filter(v => isFinite(v) && v > 0).sort((a, b) => a - b);
           const listingsFound = prices.length;
           const minPrice = listingsFound ? prices[0] : 0;
@@ -158,6 +173,7 @@ export class CompetitorAnalyzerService {
             medianPrice,
             competitivePrice,
             topListings,
+            dataSource: 'mercadolibre_public_catalog',
           };
         } else if (mp === 'amazon') {
           const config = AmazonService.getMarketplaceConfig(region.toUpperCase() === 'UK' ? 'UK' : (region.toUpperCase() === 'DE' ? 'DE' : 'US'));
@@ -211,10 +227,18 @@ export class CompetitorAnalyzerService {
             medianPrice,
             competitivePrice,
             topListings,
+            dataSource: 'amazon_catalog',
           };
         }
-      } catch (e) {
-        // continue with other marketplaces
+      } catch (e: any) {
+        logger.warn('[competitor-analyzer] marketplace search failed', {
+          userId,
+          marketplace: mp,
+          region,
+          titleSample: productTitle?.slice(0, 80),
+          error: e?.message || String(e),
+          status: e?.response?.status,
+        });
       }
     }
 

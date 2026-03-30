@@ -28,6 +28,39 @@ const createEmptyEnvStatus = (): EnvStatus => ({
   error: undefined,
 });
 
+type CommercialFieldTruth = 'exact' | 'estimated' | 'unavailable';
+
+interface CommercialTruthMeta {
+  sourceCost: CommercialFieldTruth;
+  suggestedPrice: CommercialFieldTruth;
+  profitMargin: CommercialFieldTruth;
+  roi: CommercialFieldTruth;
+  competitionLevel: CommercialFieldTruth;
+  competitionSources?: string[];
+}
+
+const COMPETITION_SOURCE_LABELS: Record<string, string> = {
+  mercadolibre_public_catalog: 'Mercado Libre (catálogo público)',
+  ebay_browse_application_token: 'eBay Browse (token de aplicación)',
+  ebay_browse_user_oauth: 'eBay Browse (tu OAuth)',
+  amazon_catalog: 'Amazon (catálogo)',
+};
+
+function isFieldEstimated(
+  truth: CommercialTruthMeta | undefined,
+  field: 'suggestedPrice' | 'profitMargin' | 'roi',
+  legacyEstimatedFields?: string[]
+): boolean {
+  if (truth) {
+    if (field === 'suggestedPrice') return truth.suggestedPrice === 'estimated';
+    if (field === 'profitMargin') return truth.profitMargin === 'estimated';
+    return truth.roi === 'estimated';
+  }
+  if (field === 'suggestedPrice') return Boolean(legacyEstimatedFields?.includes('suggestedPriceUsd'));
+  if (field === 'profitMargin') return Boolean(legacyEstimatedFields?.includes('profitMargin'));
+  return Boolean(legacyEstimatedFields?.includes('roiPercentage'));
+}
+
 interface OpportunityItem {
   productId?: string;
   title: string;
@@ -158,7 +191,18 @@ export default function Opportunities() {
 
   const marketplacesParam = useMemo(() => marketplaces.join(','), [marketplaces]);
   const hasEstimatedValues = useMemo(
-    () => items.some((it) => (it.estimatedFields?.length || 0) > 0),
+    () =>
+      items.some((it) => {
+        const t = it.commercialTruth;
+        if (t) {
+          return (
+            t.suggestedPrice === 'estimated' ||
+            t.profitMargin === 'estimated' ||
+            t.roi === 'estimated'
+          );
+        }
+        return (it.estimatedFields?.length || 0) > 0;
+      }),
     [items]
   );
   const aliStatus = authStatuses?.aliexpress;
@@ -947,6 +991,15 @@ export default function Opportunities() {
                       Fees: ${Number(Object.values(it.feesConsidered).reduce((a, b) => a + (Number(b ?? 0)), 0)).toFixed(2)}
                     </div>
                   )}
+                  {it.commercialTruth?.competitionSources &&
+                  it.commercialTruth.competitionSources.length > 0 ? (
+                    <div className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+                      Comparables:{' '}
+                      {it.commercialTruth.competitionSources
+                        .map((s) => COMPETITION_SOURCE_LABELS[s] || s)
+                        .join(' · ')}
+                    </div>
+                  ) : null}
                   {it.estimationNotes?.length ? (
                     <div className="text-xs text-amber-600 mt-1 space-y-1">
                       {it.estimationNotes.map((note, noteIdx) => (
@@ -1015,9 +1068,17 @@ export default function Opportunities() {
                         </span>
                       ) : null}
                     </div>
-                    {it.estimatedFields?.includes('suggestedPriceUsd') && (
+                    {isFieldEstimated(it.commercialTruth, 'suggestedPrice', it.estimatedFields) && (
                       <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase text-[10px] font-semibold">
                         Estimado
+                      </span>
+                    )}
+                    {it.commercialTruth?.suggestedPrice === 'exact' && (
+                      <span
+                        className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 uppercase text-[10px] font-semibold"
+                        title="Precio sugerido basado en listados comparables reales del marketplace"
+                      >
+                        Real
                       </span>
                     )}
                   </div>
@@ -1039,7 +1100,7 @@ export default function Opportunities() {
                     {it.totalCost && it.totalCost > it.costUsd && (
                       <Info className="w-3 h-3 text-gray-400 cursor-help group relative" title="Margen calculado con costo total (producto + envío + impuestos)" />
                     )}
-                    {it.estimatedFields?.includes('profitMargin') && (
+                    {isFieldEstimated(it.commercialTruth, 'profitMargin', it.estimatedFields) && (
                       <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase text-[10px] font-semibold">
                         Estimado
                       </span>
@@ -1059,7 +1120,7 @@ export default function Opportunities() {
                     >
                       {Number(it.roiPercentage ?? 0).toFixed(2)}%
                     </span>
-                    {it.estimatedFields?.includes('roiPercentage') && (
+                    {isFieldEstimated(it.commercialTruth, 'roi', it.estimatedFields) && (
                       <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase text-[10px] font-semibold">
                         Estimado
                       </span>
@@ -1131,7 +1192,7 @@ export default function Opportunities() {
       </div>
       {hasEstimatedValues && (
         <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded px-4 py-3">
-          <strong>Nota:</strong> Algunos valores se muestran como <span className="uppercase font-semibold">Estimado</span> porque faltan datos reales de los marketplaces de destino. Configura tus credenciales en <span className="font-semibold">Settings → API Settings</span> para obtener precios y márgenes exactos.
+          <strong>Nota:</strong> Las filas con <span className="uppercase font-semibold">Estimado</span> no obtuvieron listados comparables (eBay Browse, Mercado Libre público o Amazon) para ese título y región. Mercado Libre ya no exige tu OAuth para esos comparables; eBay usa App ID + Cert ID (token de aplicación o tu OAuth). Amazon sigue requiriendo credenciales completas. Tras cambiar credenciales, usa búsqueda con actualización o espera unos minutos (caché).
         </div>
       )}
     </div>

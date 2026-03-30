@@ -488,6 +488,18 @@ export class MarketplaceService {
       
       // ✅ CORRECCIÓN EBAY OAUTH: Limpiar cache de credenciales después de guardar para que los cambios se reflejen inmediatamente
       clearCredentialsCache(userId, marketplace as any, userEnvironment);
+
+      // Fresh OAuth must not reuse cached opportunity rows (Redis still had estimated-only payloads).
+      try {
+        const { cacheService } = await import('./cache.service');
+        await cacheService.invalidatePattern(`opportunities:${userId}:*`);
+      } catch (e) {
+        logger.warn('[MarketplaceService] opportunities cache invalidate after credential save failed', {
+          userId,
+          marketplace,
+          error: (e as Error)?.message,
+        });
+      }
       
       logger.debug('[MarketplaceService] Credentials saved and cache cleared', {
         userId,
