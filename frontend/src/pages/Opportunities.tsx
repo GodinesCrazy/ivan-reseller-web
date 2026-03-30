@@ -567,6 +567,37 @@ export default function Opportunities() {
     return normalizedChoice as EnvironmentKey;
   };
 
+  /** 409 duplicate import: show truthful UX (never "missing product id"). */
+  function handleDuplicateProductResponse(data: Record<string, unknown> | undefined): boolean {
+    const idRaw = data?.existingProductId ?? (data?.details as Record<string, unknown> | undefined)?.existingProductId;
+    const id = idRaw != null ? Number(idRaw) : NaN;
+    if (!Number.isFinite(id) || id <= 0) return false;
+    const titleRaw = (data?.existingProductTitle ??
+      (data?.details as Record<string, unknown> | undefined)?.existingProductTitle) as string | undefined;
+    const title = (titleRaw || '').trim();
+    const snippet = title.length > 72 ? `${title.slice(0, 72)}…` : title;
+    const backendMsg = typeof data?.error === 'string' ? data.error : '';
+    toast.error(`Ya está importado — producto #${id}`, {
+      description: [
+        backendMsg || 'Esta URL de AliExpress ya existe en tu cuenta.',
+        snippet ? `Título: ${snippet}` : null,
+        'No se creó un duplicado. Abrí el producto para revisar o publicar; el listado completo está en Productos.',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      duration: 14_000,
+      action: {
+        label: 'Abrir producto',
+        onClick: () => navigate(`/products/${id}/preview`),
+      },
+      cancel: {
+        label: 'Ir a Productos',
+        onClick: () => navigate('/products'),
+      },
+    });
+    return true;
+  }
+
   // ✅ FASE 3: Función para solo importar producto (sin publicar)
   async function importProduct(item: OpportunityItem) {
     const itemIndex = items.indexOf(item);
@@ -610,11 +641,14 @@ export default function Opportunities() {
       const productResponse = await api.post('/api/products', payload);
 
       // ✅ El backend devuelve { success: true, data: { id, ...product } }
-      const responseData = productResponse.data;
+      const responseData = productResponse.data as Record<string, unknown> | undefined;
+      if (responseData?.success === false && handleDuplicateProductResponse(responseData)) {
+        return;
+      }
       const product = responseData?.data || responseData;
       
       // ✅ Obtener el ID del producto
-      const productId = product?.id || responseData?.data?.id || responseData?.id;
+      const productId = (product as { id?: number })?.id || (responseData?.data as { id?: number })?.id || responseData?.id;
 
       if (!productId) {
         throw new Error('No se pudo obtener el ID del producto creado. El servidor no devolvió un ID válido.');
@@ -629,8 +663,14 @@ export default function Opportunities() {
       }, 1500);
     } catch (error: any) {
       console.error('Error importing product:', error);
-      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al importar producto';
-      toast.error(errorMessage);
+      const status = error.response?.status as number | undefined;
+      const data = error.response?.data as Record<string, unknown> | undefined;
+      if (status === 409 && handleDuplicateProductResponse(data)) {
+        return;
+      }
+      const errorMessage =
+        data?.error || data?.message || error.message || 'Error al importar producto';
+      toast.error(String(errorMessage));
     } finally {
       setPublishing(prev => ({ ...prev, [itemIndex]: false }));
     }
@@ -685,11 +725,14 @@ export default function Opportunities() {
       const productResponse = await api.post('/api/products', payload);
 
       // ✅ El backend devuelve { success: true, data: { id, ...product } }
-      const responseData = productResponse.data;
+      const responseData = productResponse.data as Record<string, unknown> | undefined;
+      if (responseData?.success === false && handleDuplicateProductResponse(responseData)) {
+        return;
+      }
       const product = responseData?.data || responseData;
       
       // ✅ Obtener el ID del producto - el backend ahora asegura que esté en data.id
-      const productId = product?.id || responseData?.data?.id || responseData?.id;
+      const productId = (product as { id?: number })?.id || (responseData?.data as { id?: number })?.id || responseData?.id;
 
       if (!productId) {
         throw new Error('No se pudo obtener el ID del producto creado. El servidor no devolvió un ID válido.');
@@ -713,8 +756,14 @@ export default function Opportunities() {
       }
     } catch (error: any) {
       console.error('Error creating/publishing product:', error);
-      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al crear o publicar producto';
-      toast.error(errorMessage);
+      const status = error.response?.status as number | undefined;
+      const data = error.response?.data as Record<string, unknown> | undefined;
+      if (status === 409 && handleDuplicateProductResponse(data)) {
+        return;
+      }
+      const errorMessage =
+        data?.error || data?.message || error.message || 'Error al crear o publicar producto';
+      toast.error(String(errorMessage));
     } finally {
       setPublishing(prev => ({ ...prev, [itemIndex]: false }));
       loadMarketplaceEnvStatus().catch(() => {

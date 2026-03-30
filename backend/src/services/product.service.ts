@@ -2,7 +2,7 @@ import { trace } from '../utils/boot-trace';
 trace('loading product.service');
 
 import { Prisma } from '@prisma/client';
-import { AppError } from '../middleware/error.middleware';
+import { AppError, ErrorCode } from '../middleware/error.middleware';
 import logger from '../config/logger';
 import { prisma } from '../config/database';
 import { reconcileProductTruth } from './operational-truth.service';
@@ -241,9 +241,17 @@ export class ProductService {
           select: { id: true, title: true, status: true },
         });
         if (existing) {
+          const titleSnippet = (existing.title || 'Sin título').slice(0, 120);
           throw new AppError(
-            `Ya existe un producto con la misma URL de AliExpress (ID: ${existing.id}, título: ${(existing.title || '').slice(0, 40)}...). Evita duplicados usando el producto existente.`,
-            409
+            `Ya importaste este producto: existe uno con la misma URL de AliExpress (ID ${existing.id}). Ábrelo en Productos en lugar de duplicar.`,
+            409,
+            ErrorCode.RESOURCE_CONFLICT,
+            {
+              existingProductId: existing.id,
+              existingProductTitle: existing.title ?? '',
+              existingProductStatus: existing.status,
+              duplicateBy: 'aliexpress_url',
+            }
           );
         }
       }

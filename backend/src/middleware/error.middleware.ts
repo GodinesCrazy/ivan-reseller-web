@@ -202,6 +202,19 @@ export const errorHandler = (
     }
   }
 
+  // Duplicate import / conflict: stable top-level fields for clients (e.g. Opportunities import)
+  if (
+    details &&
+    typeof (details as Record<string, unknown>).existingProductId === 'number' &&
+    typeof (details as Record<string, unknown>).duplicateBy === 'string'
+  ) {
+    const d = details as Record<string, unknown>;
+    response.existingProductId = d.existingProductId;
+    response.existingProductTitle = d.existingProductTitle;
+    response.existingProductStatus = d.existingProductStatus;
+    response.duplicateBy = d.duplicateBy;
+  }
+
   // Mensaje user-friendly
   if (statusCode >= 500) {
     response.message = 'Ha ocurrido un error interno. Por favor, intenta nuevamente. Si el problema persiste, contacta soporte con el código de error.';

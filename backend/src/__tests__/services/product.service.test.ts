@@ -1,5 +1,5 @@
 // ✅ E6: Tests unitarios para ProductService
-import { AppError } from '../../middleware/error.middleware';
+import { AppError, ErrorCode } from '../../middleware/error.middleware';
 import { ProductService } from '../../services/product.service';
 
 jest.mock('../../config/database', () => ({
@@ -80,6 +80,36 @@ describe('ProductService', () => {
       await expect(
         productService.createProduct(userId, invalidData as any)
       ).rejects.toThrow();
+    });
+
+    it('rejects with 409 RESOURCE_CONFLICT when AliExpress URL already exists', async () => {
+      const userId = 1;
+      const { prisma } = require('../../config/database');
+      prisma.product.findFirst.mockResolvedValue({
+        id: 42,
+        title: 'Producto existente',
+        status: 'PENDING',
+      });
+
+      let caught: unknown;
+      try {
+        await productService.createProduct(userId, {
+          title: 'Nuevo título',
+          aliexpressUrl: 'https://aliexpress.com/item/duplicate',
+          aliexpressPrice: 10,
+          suggestedPrice: 20,
+        });
+      } catch (e) {
+        caught = e;
+      }
+
+      expect(caught).toBeInstanceOf(AppError);
+      const err = caught as AppError;
+      expect(err.statusCode).toBe(409);
+      expect(err.errorCode).toBe(ErrorCode.RESOURCE_CONFLICT);
+      expect(err.details?.existingProductId).toBe(42);
+      expect(err.details?.duplicateBy).toBe('aliexpress_url');
+      expect(String(err.message)).toContain('42');
     });
   });
 

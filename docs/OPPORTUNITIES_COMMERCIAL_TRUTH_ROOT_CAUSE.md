@@ -46,3 +46,11 @@ Even when comparables existed, the built `OpportunityItem` hard-coded `competiti
 | eBay API | `backend/src/services/ebay.service.ts` |
 | Credentials | `backend/src/services/marketplace.service.ts` |
 | Cache | `backend/src/services/cache.service.ts` |
+
+## Related (duplicate import UX)
+
+Importar la misma URL de AliExpress devolvía **409** con mensaje útil en el backend, pero el cliente podía interpretar la respuesta como fallo genérico o mostrar texto incorrecto sobre “falta ID”. Ver `docs/OPPORTUNITIES_DUPLICATE_IMPORT_RUNTIME_FIX.md` y `docs/OPPORTUNITIES_DUPLICATE_IMPORT_UI_FLOW.md`.
+
+## Runtime fixes (exact vs estimated)
+
+Implementación y contrato de campos: `docs/OPPORTUNITIES_MARKET_INTELLIGENCE_PIPELINE_FIX.md`, `docs/OPPORTUNITIES_EXACT_VS_ESTIMATED_CONTRACT.md`, `docs/OPPORTUNITIES_EXACT_VS_ESTIMATED_RUNTIME_FIX.md`.
