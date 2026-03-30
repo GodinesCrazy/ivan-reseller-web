@@ -52,6 +52,15 @@ function resolveEbayAppKeys(raw: Record<string, unknown>): { appId: string; cert
   return { appId, certId };
 }
 
+/** Long AliExpress titles often return zero ML/eBay hits; shorten for catalog search. */
+function shortenForMarketplaceSearch(title: string, maxLen = 100): string {
+  const t = String(title || '').trim();
+  if (t.length <= maxLen) return t;
+  const cut = t.slice(0, maxLen);
+  const lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > 24 ? cut.slice(0, lastSpace) : cut).trim() || t.slice(0, 48);
+}
+
 export class CompetitorAnalyzerService {
   async analyzeCompetition(
     userId: number,
@@ -60,6 +69,7 @@ export class CompetitorAnalyzerService {
     region: string
   ): Promise<Record<string, MarketAnalysis>> {
     const results: Record<string, MarketAnalysis> = {};
+    const searchQ = shortenForMarketplaceSearch(productTitle);
 
     for (const mp of targetMarketplaces) {
       try {
@@ -86,7 +96,7 @@ export class CompetitorAnalyzerService {
           } as any);
 
           const marketplace_id = REGION_TO_EBAY_MARKETPLACE[region] || 'EBAY_US';
-          const res = await ebay.searchProducts({ keywords: productTitle, marketplace_id, limit: 20, sort: '-price' });
+          const res = await ebay.searchProducts({ keywords: searchQ, marketplace_id, limit: 20, sort: '-price' });
           const usedUserOAuth = Boolean(raw.token || raw.refreshToken);
           const dataSource: CompetitionDataSource = usedUserOAuth
             ? 'ebay_browse_user_oauth'
@@ -141,11 +151,20 @@ export class CompetitorAnalyzerService {
             (process.env.MERCADOLIBRE_SITE_ID || 'MLM').trim();
           if (!siteId) siteId = 'MLM';
 
-          const res = await MercadoLibreService.searchSiteCatalogPublic({
+          let res = await MercadoLibreService.searchSiteCatalogPublic({
             siteId,
-            q: productTitle,
+            q: searchQ,
             limit: 20,
           });
+          // Regional site can return 0 hits for generic terms; MLM often has broader inventory.
+          if (res.length === 0 && siteId !== 'MLM') {
+            logger.info('[competitor-analyzer] ML empty for primary site, retry MLM', { siteId, region, qLen: searchQ.length });
+            res = await MercadoLibreService.searchSiteCatalogPublic({
+              siteId: 'MLM',
+              q: searchQ,
+              limit: 20,
+            });
+          }
           const prices = res.map(r => r.price).filter(v => isFinite(v) && v > 0).sort((a, b) => a - b);
           const listingsFound = prices.length;
           const minPrice = listingsFound ? prices[0] : 0;
@@ -199,7 +218,7 @@ export class CompetitorAnalyzerService {
             marketplace: config.marketplaceId,
           } as any;
           await amazon.setCredentials(creds);
-          const res: any[] = await amazon.searchCatalog({ keywords: productTitle, marketplaceId: config.marketplaceId, limit: 10 });
+          const res: any[] = await amazon.searchCatalog({ keywords: searchQ, marketplaceId: config.marketplaceId, limit: 10 });
           const prices = res.map(r => r.price || 0).filter(v => isFinite(v) && v > 0).sort((a, b) => a - b);
           const listingsFound = prices.length;
           const minPrice = listingsFound ? prices[0] : 0;

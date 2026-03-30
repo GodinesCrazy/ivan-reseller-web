@@ -598,6 +598,46 @@ export default function Opportunities() {
     return true;
   }
 
+  /** Parse create-product response for numeric id (handles string JSON and odd nesting). */
+  function extractCreatedProductId(responseData: unknown): number | null {
+    if (!responseData || typeof responseData !== 'object') return null;
+    const root = responseData as Record<string, unknown>;
+    const inner = root.data;
+    const blob =
+      inner && typeof inner === 'object' ? (inner as Record<string, unknown>) : root;
+    const raw = blob.id ?? root.id;
+    if (raw == null) return null;
+    const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  /** Duplicate/conflict from API body or message (proxies may alter HTTP status). */
+  function tryHandleDuplicateImportError(
+    data: Record<string, unknown> | undefined,
+    errMsg: string
+  ): boolean {
+    if (data && handleDuplicateProductResponse(data)) return true;
+    const detailsErr =
+      data?.details && typeof data.details === 'object'
+        ? (data.details as Record<string, unknown>).error
+        : undefined;
+    const text = [data?.error, data?.message, detailsErr, errMsg]
+      .filter((x): x is string => typeof x === 'string')
+      .join(' ');
+    const m =
+      text.match(/\bID\s*[:\#]?\s*(\d{1,12})\b/i) ||
+      text.match(/producto\s*#\s*(\d{1,12})/i) ||
+      text.match(/\(ID\s*(\d{1,12})\s*[,\)]/i);
+    if (!m) return false;
+    const id = parseInt(m[1], 10);
+    if (!Number.isFinite(id) || id <= 0) return false;
+    return handleDuplicateProductResponse({
+      ...data,
+      existingProductId: id,
+      error: typeof data?.error === 'string' ? data.error : errMsg || text,
+    });
+  }
+
   // ✅ FASE 3: Función para solo importar producto (sin publicar)
   async function importProduct(item: OpportunityItem) {
     const itemIndex = items.indexOf(item);
@@ -645,13 +685,16 @@ export default function Opportunities() {
       if (responseData?.success === false && handleDuplicateProductResponse(responseData)) {
         return;
       }
-      const product = responseData?.data || responseData;
-      
-      // ✅ Obtener el ID del producto
-      const productId = (product as { id?: number })?.id || (responseData?.data as { id?: number })?.id || responseData?.id;
+      const productId = extractCreatedProductId(responseData);
 
       if (!productId) {
-        throw new Error('No se pudo obtener el ID del producto creado. El servidor no devolvió un ID válido.');
+        if (tryHandleDuplicateImportError(responseData as Record<string, unknown>, '')) {
+          return;
+        }
+        console.error('[Opportunities] importProduct: 2xx sin id parseable', responseData);
+        throw new Error(
+          'El servidor respondió sin ID de producto. Si acabás de importar el mismo artículo, puede ser duplicado: revisá Productos o intentá de nuevo.'
+        );
       }
 
       // ✅ FASE 3: Solo importar, NO publicar. Mostrar mensaje y redirigir a /products
@@ -665,7 +708,11 @@ export default function Opportunities() {
       console.error('Error importing product:', error);
       const status = error.response?.status as number | undefined;
       const data = error.response?.data as Record<string, unknown> | undefined;
-      if (status === 409 && handleDuplicateProductResponse(data)) {
+      const errMsg = String(error.message || '');
+      if (
+        tryHandleDuplicateImportError(data, errMsg) ||
+        (status === 409 && handleDuplicateProductResponse(data))
+      ) {
         return;
       }
       const errorMessage =
@@ -729,13 +776,15 @@ export default function Opportunities() {
       if (responseData?.success === false && handleDuplicateProductResponse(responseData)) {
         return;
       }
-      const product = responseData?.data || responseData;
-      
-      // ✅ Obtener el ID del producto - el backend ahora asegura que esté en data.id
-      const productId = (product as { id?: number })?.id || (responseData?.data as { id?: number })?.id || responseData?.id;
+      const productId = extractCreatedProductId(responseData);
 
       if (!productId) {
-        throw new Error('No se pudo obtener el ID del producto creado. El servidor no devolvió un ID válido.');
+        if (tryHandleDuplicateImportError(responseData as Record<string, unknown>, '')) {
+          return;
+        }
+        throw new Error(
+          'El servidor respondió sin ID de producto. Si el artículo ya estaba importado, abrí Productos.'
+        );
       }
 
       // 2. Publicar a marketplace
@@ -758,7 +807,11 @@ export default function Opportunities() {
       console.error('Error creating/publishing product:', error);
       const status = error.response?.status as number | undefined;
       const data = error.response?.data as Record<string, unknown> | undefined;
-      if (status === 409 && handleDuplicateProductResponse(data)) {
+      const errMsg = String(error.message || '');
+      if (
+        tryHandleDuplicateImportError(data, errMsg) ||
+        (status === 409 && handleDuplicateProductResponse(data))
+      ) {
         return;
       }
       const errorMessage =
