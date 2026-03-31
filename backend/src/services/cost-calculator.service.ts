@@ -17,44 +17,47 @@ import { logger } from '../config/logger';
 import { getDefaultShippingCost } from '../utils/shipping.utils';
 
 export class CostCalculatorService {
-  // Base default fees; region can override
+  // FASE 0 Fix: fees canónicos alineados con canonical-cost-engine y realidad del mercado.
+  // Antes: eBay 12.5%, ML 11%, payment 2.9% flat (sin fijo $0.49).
+  // Ahora: eBay 12.85%, ML 13.9%, Amazon 15%, payment 3.49% + $0.49 fijo.
   private defaults = {
-    ebay: { fee: 0.125, paymentFee: 0.029 },
-    amazon: { fee: 0.15, paymentFee: 0.029 },
-    mercadolibre: { fee: 0.11, paymentFee: 0.029 },
+    ebay: { fee: 0.1285, paymentFee: 0.0349, paymentFixed: 0.49 },
+    amazon: { fee: 0.15, paymentFee: 0.0349, paymentFixed: 0.49 },
+    mercadolibre: { fee: 0.139, paymentFee: 0.0349, paymentFixed: 0.49 },
   } as const;
 
-  // Region overrides
+  // Region overrides (FASE 0: alineados con canonical-cost-engine)
   private regionFees: Record<string, Partial<Record<'ebay' | 'amazon' | 'mercadolibre', { fee?: number; paymentFee?: number }>>> = {
-    uk: { ebay: { fee: 0.13 } },
-    de: { ebay: { fee: 0.13 } },
-    mx: { mercadolibre: { fee: 0.13 } },
+    uk: { ebay: { fee: 0.1285 } },
+    de: { ebay: { fee: 0.1285 } },
+    mx: { mercadolibre: { fee: 0.139 } },
     br: { mercadolibre: { fee: 0.16 } },
+    cl: { mercadolibre: { fee: 0.139 } },
+    ar: { mercadolibre: { fee: 0.139 } },
   };
 
   calculate(
     marketplace: 'ebay' | 'amazon' | 'mercadolibre',
     salePriceUsd: number,
     sourceCostUsd: number,
-    opts?: { 
-      shippingCost?: number; 
-      importTax?: number; // ✅ MEJORADO: Impuestos de importación (IVA/aranceles) como cantidad fija
-      taxesPct?: number; // Otros impuestos como porcentaje (mantener para compatibilidad)
+    opts?: {
+      shippingCost?: number;
+      importTax?: number;   // Impuestos de importación como cantidad fija en USD
+      taxesPct?: number;    // Otros impuestos como porcentaje
       otherCosts?: number;
     }
   ) {
     const cfg = this.defaults[marketplace] || this.defaults.ebay;
     const marketplaceFee = salePriceUsd * cfg.fee;
-    const paymentFee = salePriceUsd * cfg.paymentFee;
+    // FASE 0 Fix: payment fee ahora incluye componente fijo $0.49 (era solo porcentual)
+    const paymentFee = salePriceUsd * cfg.paymentFee + cfg.paymentFixed;
     const shippingCost = opts?.shippingCost ?? getDefaultShippingCost();
-    const importTax = opts?.importTax ?? 0; // ✅ MEJORADO: Impuestos de importación
-    const taxes = salePriceUsd * (opts?.taxesPct ?? 0); // Otros impuestos como porcentaje
+    const importTax = opts?.importTax ?? 0;
+    const taxes = salePriceUsd * (opts?.taxesPct ?? 0);
     const otherCosts = opts?.otherCosts ?? 0;
-    
-    // ✅ MEJORADO: Costo total incluye producto + envío + impuestos + fees
+
     const totalCost = sourceCostUsd + shippingCost + importTax + marketplaceFee + paymentFee + taxes + otherCosts;
     const netProfit = salePriceUsd - totalCost;
-    // ✅ Redondear margen a 4 decimales para evitar problemas de precisión (mantener precisión para cálculos)
     const margin = salePriceUsd > 0 ? Math.round((netProfit / salePriceUsd) * 10000) / 10000 : 0;
 
     const breakdown: CostBreakdown = {
@@ -62,7 +65,7 @@ export class CostCalculatorService {
       marketplaceFee,
       paymentFee,
       shippingCost,
-      importTax, // ✅ MEJORADO
+      importTax,
       taxes,
       otherCosts,
       totalCost,

@@ -574,6 +574,20 @@ class OpportunityFinderService {
     const query = filters.query?.trim();
     if (!query) return [];
 
+    // FASE 0E: Log active thresholds on every pipeline run so operators can verify env vars are applied.
+    logger.info('[OPPORTUNITY-FINDER] Active thresholds', {
+      minMargin: this.minMargin,
+      duplicateThreshold: this.duplicateThreshold,
+      minSearchVolume: this.minSearchVolume,
+      minTrendConfidence: this.minTrendConfidence,
+      minSupplierOrders: this.minSupplierOrders,
+      minSupplierRating: this.minSupplierRating,
+      minSupplierReviews: this.minSupplierReviews,
+      maxShippingDays: this.maxShippingDays,
+      minSupplierScorePct: this.minSupplierScorePct,
+      minSalesCompetitionRatio: this.minSalesCompetitionRatio,
+    });
+
     const { pageSize, pageNo } = normalizeOpportunityPagination(filters.maxItems, filters.pageNo);
     const maxItems = pageSize;
     const requestedMarketplaces = (filters.marketplaces && filters.marketplaces.length > 0)
