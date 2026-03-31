@@ -32,6 +32,7 @@ import type {
   PipelineDiagnostics,
 } from './opportunity-finder.types';
 import { normalizeOpportunityPagination, OPPORTUNITY_MAX_PAGE } from '../utils/opportunity-search-pagination';
+import { computeMinimumViablePrice } from './canonical-cost-engine.service';
 
 export type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
 
@@ -1528,38 +1529,70 @@ class OpportunityFinderService {
           continue;
         }
       } else {
-        // No pudimos obtener datos de competencia, crear una estimación heurística
-        const fallbackPriceBase = product.price * 1.45;
-        const fallbackMargin = (fallbackPriceBase - product.price) / product.price;
-        logger.debug('Margen estimado (sin datos de competencia)', {
-          service: 'opportunity-finder',
-          margin: (fallbackMargin * 100).toFixed(1),
-          minRequired: (effectiveMinMargin * 100).toFixed(1),
-          costPrice: product.price.toFixed(2),
-          estimatedPrice: fallbackPriceBase.toFixed(2)
+        // Sin datos de competencia — usar canonical engine para calcular precio mínimo viable
+        // con fees reales (marketplace fee + payment fee + duties) y target margin.
+        // Garantiza que el precio sugerido no genere pérdida neta.
+        const targetMarginPct = effectiveMinMargin * 100; // e.g. 18
+        const fallbackMp = (marketplaces[0] || 'mercadolibre') as 'ebay' | 'amazon' | 'mercadolibre';
+        const canonicalFallback = computeMinimumViablePrice({
+          supplierPriceRaw: product.price,
+          supplierCurrency: baseCurrency,
+          saleCurrency: baseCurrency,
+          shippingToCustomerRaw: productShippingCost,
+          marketplace: fallbackMp,
+          region: (region || 'us').toUpperCase(),
+          targetMarginPct,
         });
-        if (fallbackMargin < effectiveMinMargin) {
+
+        const fallbackPriceBase = canonicalFallback.minSalePriceUsd;
+        // Compute actual margin from canonical breakdown
+        const netProfit = fallbackPriceBase - canonicalFallback.breakdown.totalCostUsd;
+        const fallbackMargin = fallbackPriceBase > 0 ? netProfit / fallbackPriceBase : 0;
+
+        logger.info('[OPPORTUNITY-FINDER] Fallback canónico (sin competitor data)', {
+          service: 'opportunity-finder',
+          title: product.title.substring(0, 50),
+          targetMarginPct,
+          marketplace: fallbackMp,
+          region,
+          supplierPrice: product.price.toFixed(2),
+          minSalePrice: fallbackPriceBase.toFixed(2),
+          canonicalMarginPct: (fallbackMargin * 100).toFixed(1),
+          totalCostUsd: canonicalFallback.breakdown.totalCostUsd.toFixed(2),
+          marketplaceFeeUsd: canonicalFallback.breakdown.marketplaceFeeUsd.toFixed(2),
+          paymentFeeUsd: canonicalFallback.breakdown.paymentFeeUsd.toFixed(2),
+          importDutiesUsd: canonicalFallback.breakdown.importDutiesUsd.toFixed(2),
+          warnings: canonicalFallback.warnings,
+        });
+
+        if (fallbackMargin < effectiveMinMargin || fallbackPriceBase <= 0) {
           skippedLowMargin++;
-          logger.info('Producto descartado por margen estimado bajo', {
+          logger.info('Producto descartado por margen canónico insuficiente (sin competitor data)', {
             service: 'opportunity-finder',
             title: product.title.substring(0, 50),
-            marginEstimated: (fallbackMargin * 100).toFixed(1) + '%',
+            marginCanonical: (fallbackMargin * 100).toFixed(1) + '%',
             minRequired: (effectiveMinMargin * 100).toFixed(1) + '%',
-            costPrice: product.price.toFixed(2),
-            estimatedPrice: fallbackPriceBase.toFixed(2),
-            note: 'Sin datos de competencia - usando estimación heurística'
+            supplierPrice: product.price.toFixed(2),
+            minSalePrice: fallbackPriceBase.toFixed(2),
           });
           continue;
         }
-        // ✅ No convertir baseCurrency → baseCurrency (conversión redundante)
+
         best = {
           margin: fallbackMargin,
-          price: fallbackPriceBase, // Ya está en baseCurrency
+          price: fallbackPriceBase,
           priceBase: fallbackPriceBase,
-          mp: marketplaces[0],
+          mp: fallbackMp,
           currency: baseCurrency,
         };
-        bestBreakdown = {};
+        bestBreakdown = {
+          marketplaceFee: canonicalFallback.breakdown.marketplaceFeeUsd,
+          paymentFee: canonicalFallback.breakdown.paymentFeeUsd,
+          importDuties: canonicalFallback.breakdown.importDutiesUsd,
+          supplierCost: canonicalFallback.breakdown.supplierCostUsd,
+          shippingToCustomer: canonicalFallback.breakdown.shippingToCustomerUsd,
+          totalCost: canonicalFallback.breakdown.totalCostUsd,
+        };
         estimatedFields = ['suggestedPriceUsd', 'profitMargin', 'roiPercentage'];
         estimationNotes.push(
           'Valores estimados: no hubo listados comparables en catálogo (eBay Browse / Mercado Libre público / Amazon) para este título y región. Revisa región en Oportunidades, credenciales de Amazon (si aplica) y App ID/Cert ID de eBay en el servidor o en Ajustes.'
