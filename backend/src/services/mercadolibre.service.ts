@@ -197,7 +197,10 @@ export class MercadoLibreService {
     q.set('limit', String(limit));
     const { data } = await axios.get(`${MercadoLibreService.publicBaseUrl}/sites/${encodeURIComponent(site)}/search?${q.toString()}`, {
       timeout: 25000,
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'IvanReseller-Backend/1.0 (+https://www.ivanreseller.com)',
+      },
     });
     const results = (data?.results || []) as any[];
     return results.map((r) => ({

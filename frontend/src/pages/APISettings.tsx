@@ -60,6 +60,8 @@ interface APICredential {
   } | null;
 }
 
+type OpportunityComparableFlowState = 'unknown' | 'operational' | 'degraded' | 'error';
+
 interface APIStatus {
   apiName: string;
   name?: string; // El backend puede retornar 'name' además de 'apiName'
@@ -75,6 +77,25 @@ interface APIStatus {
   trustScore?: number; // Score de confianza 0-100
   optional?: boolean;
   isOptional?: boolean; // El backend puede usar 'isOptional'
+  /** Publish/OAuth vs Opportunities comparable-search (backend probe). */
+  flowOperational?: {
+    opportunityComparables?: {
+      state: OpportunityComparableFlowState;
+      httpStatus?: number;
+      message?: string;
+      checkedAt?: string;
+      sampleResultCount?: number;
+    };
+  };
+}
+
+function opportunityComparablesBlocked(statusInfo?: APIStatus): boolean {
+  const s = statusInfo?.flowOperational?.opportunityComparables?.state;
+  return s === 'degraded' || s === 'error';
+}
+
+function opportunityComparablesDetail(statusInfo?: APIStatus): string | undefined {
+  return statusInfo?.flowOperational?.opportunityComparables?.message;
 }
 
 // Tipos para datos del backend
@@ -1339,6 +1360,19 @@ export default function APISettings() {
       
       // ✅ FIX: status ya está declarado arriba
       if (hasToken && status === 'healthy') {
+        const si = statusInfo as APIStatus | undefined;
+        if (
+          (apiName === 'mercadolibre' || apiName === 'ebay') &&
+          opportunityComparablesBlocked(si)
+        ) {
+          return {
+            status: 'partially_configured',
+            message: 'Publicación / OAuth verificados',
+            actionMessage:
+              opportunityComparablesDetail(si) ||
+              'Opportunities usa otra llamada (comparables). Esa ruta falló desde el servidor aunque la cuenta esté conectada.',
+          };
+        }
         return {
           status: 'configured',
           message: 'Configurado y funcionando',
@@ -1390,6 +1424,19 @@ export default function APISettings() {
     // Si no hay credential pero status indica que está configurado (credenciales globales), mostrar como configurado
     if (!credential) {
       if (otherStatus === 'healthy' || isAvailable || isConfigured) {
+        const si = statusInfo as APIStatus | undefined;
+        if (
+          (apiName === 'mercadolibre' || apiName === 'ebay') &&
+          opportunityComparablesBlocked(si)
+        ) {
+          return {
+            status: 'partially_configured',
+            message: 'Credenciales globales activas',
+            actionMessage:
+              opportunityComparablesDetail(si) ||
+              'Comparables para Opportunities no operativos desde este backend.',
+          };
+        }
         return {
           status: 'configured',
           message: statusInfo && 'message' in statusInfo && statusInfo.message 
@@ -1406,6 +1453,19 @@ export default function APISettings() {
     }
     
     if (otherStatus === 'healthy' || isAvailable) {
+      const si = statusInfo as APIStatus | undefined;
+      if (
+        (apiName === 'mercadolibre' || apiName === 'ebay') &&
+        opportunityComparablesBlocked(si)
+      ) {
+        return {
+          status: 'partially_configured',
+          message: 'Integración conectada',
+          actionMessage:
+            opportunityComparablesDetail(si) ||
+            'Opportunities: comparables de mercado no verificados desde el servidor.',
+        };
+      }
       return {
         status: 'configured',
         message: 'Configurado y funcionando',

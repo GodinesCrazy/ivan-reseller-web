@@ -18,6 +18,22 @@ import { normalizeAPIName, resolveToCanonical } from '../utils/api-name-resolver
 
 export type APIHealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
 
+/** Runtime probe for the same paths Opportunities uses for comparable listing prices (honest vs OAuth-only checks). */
+export type OpportunityComparableFlowState = 'unknown' | 'operational' | 'degraded' | 'error';
+
+export interface OpportunityComparableProbeResult {
+  state: OpportunityComparableFlowState;
+  httpStatus?: number;
+  message?: string;
+  checkedAt: string;
+  /** Count from a tiny probe query (informational; 0 can still be operational). */
+  sampleResultCount?: number;
+}
+
+export interface APIStatusFlowOperational {
+  opportunityComparables?: OpportunityComparableProbeResult;
+}
+
 export interface APIStatus {
   apiName: string;
   name: string;
@@ -32,6 +48,8 @@ export interface APIStatus {
   isOptional?: boolean;
   latency?: number; // Latencia en ms
   trustScore?: number; // Score de confianza 0-100
+  /** Separates publish/auth health from Opportunities comparable-search health. */
+  flowOperational?: APIStatusFlowOperational;
 }
 
 interface APICapabilities {
@@ -45,6 +63,16 @@ interface APICapabilities {
   canAutoPurchaseAliExpress: boolean;
   /** Optional: legacy eBay Trading (SOAP) API detected. Not required for Autopilot; REST APIs are used for publishing. */
   ebayTradingApi?: boolean;
+  /**
+   * Health of Browse / public ML search from the backend IP — same surfaces Opportunities uses for real comparables.
+   * Distinct from OAuth / publish checks.
+   */
+  opportunityComparables?: {
+    mercadolibre: OpportunityComparableFlowState;
+    ebay: OpportunityComparableFlowState;
+    messages?: Partial<Record<'mercadolibre' | 'ebay', string>>;
+    checkedAt?: string;
+  };
 }
 
 export class APIAvailabilityService {
@@ -670,6 +698,13 @@ export class APIAvailabilityService {
       // ✅ FALLBACK: Si no hay credenciales en DB, usar ENV
       if (!credentials || !credentials.appId) {
         if (process.env.EBAY_APP_ID?.trim()) {
+          const normalizedFromEnv: Record<string, string> = {
+            appId: process.env.EBAY_APP_ID.trim(),
+            devId: (process.env.EBAY_DEV_ID || '').trim(),
+            certId: (process.env.EBAY_CERT_ID || '').trim(),
+            token: '',
+            refreshToken: '',
+          };
           const status: APIStatus = {
             apiName: 'ebay',
             name: 'eBay Trading API',
@@ -678,8 +713,16 @@ export class APIAvailabilityService {
             status: 'healthy',
             environment,
             lastChecked: new Date(),
-            message: 'API configurada desde variables de entorno'
+            message: 'API configurada desde variables de entorno',
           };
+          if (normalizedFromEnv.appId && normalizedFromEnv.certId) {
+            status.flowOperational = {
+              opportunityComparables: await this.probeEbayOpportunityComparables(
+                normalizedFromEnv,
+                environment === 'sandbox'
+              ),
+            };
+          }
           await this.setCached(cacheKey, status);
           return status;
         }
@@ -878,6 +921,15 @@ export class APIAvailabilityService {
           : 'API funcionando con problemas menores';
       } else {
         status.message = 'API configurada correctamente';
+      }
+
+      if (validation.valid && normalizedCreds.appId && normalizedCreds.certId) {
+        status.flowOperational = {
+          opportunityComparables: await this.probeEbayOpportunityComparables(
+            normalizedCreds,
+            environment === 'sandbox'
+          ),
+        };
       }
 
       // Persist to database
@@ -1134,6 +1186,22 @@ export class APIAvailabilityService {
         }
       }
 
+      if (validation.valid) {
+        const siteId = String(credentials['siteId'] || process.env.MERCADOLIBRE_SITE_ID || 'MLM').trim() || 'MLM';
+        let credsForAuth: Record<string, any> | null = null;
+        if (status.isAvailable) {
+          credsForAuth =
+            (await this.getUserCredentials(userId, 'mercadolibre', environment)) || credentials;
+        }
+        status.flowOperational = {
+          opportunityComparables: await this.probeMercadoLibreOpportunityComparables(
+            siteId,
+            credsForAuth,
+            environment === 'sandbox'
+          ),
+        };
+      }
+
       this.cache.set(cacheKey, status);
       return status;
     } catch (error) {
@@ -1149,6 +1217,105 @@ export class APIAvailabilityService {
       };
       this.cache.set(cacheKey, status);
       return status;
+    }
+  }
+
+  /**
+   * Same HTTP path as Opportunities competitor analysis: public /sites/{site}/search, optional authenticated fallback.
+   */
+  private async probeMercadoLibreOpportunityComparables(
+    siteId: string,
+    credentials: Record<string, any> | null,
+    sandbox: boolean
+  ): Promise<OpportunityComparableProbeResult> {
+    const checkedAt = new Date().toISOString();
+    const { MercadoLibreService } = await import('./mercadolibre.service');
+    try {
+      const rows = await MercadoLibreService.searchSiteCatalogPublic({
+        siteId,
+        q: 'phone',
+        limit: 5,
+      });
+      return {
+        state: 'operational',
+        message: `GET /sites/${siteId}/search responde desde este servidor; comparables ML en Opportunities pueden ser exactos cuando haya coincidencias de título.`,
+        checkedAt,
+        sampleResultCount: rows.length,
+      };
+    } catch (pubErr: any) {
+      const http = pubErr?.response?.status as number | undefined;
+      if (credentials && String(credentials['accessToken'] || '').trim()) {
+        try {
+          const ml = new MercadoLibreService({
+            clientId: String(credentials['clientId'] || ''),
+            clientSecret: String(credentials['clientSecret'] || ''),
+            accessToken: String(credentials['accessToken'] || ''),
+            refreshToken: String(credentials['refreshToken'] || ''),
+            siteId: String(credentials['siteId'] || siteId || 'MLM'),
+            sandbox,
+          } as any);
+          const rows = await ml.searchProducts({ siteId, q: 'phone', limit: 5 });
+          return {
+            state: 'operational',
+            message:
+              'Catálogo público falló desde esta IP; búsqueda con tu token OAuth responde. Opportunities usará la ruta autenticada cuando esté disponible.',
+            checkedAt,
+            sampleResultCount: rows.length,
+          };
+        } catch {
+          /* use public error below */
+        }
+      }
+      const state: 'degraded' | 'error' = http === 403 || http === 401 ? 'degraded' : 'error';
+      return {
+        state,
+        httpStatus: http,
+        message:
+          http === 403
+            ? 'Mercado Libre devolvió 403 en catálogo público desde la IP del backend. OAuth /users/me puede estar bien; comparables en Opportunities no serán fiables hasta resolver red o usar token en búsqueda.'
+            : `Fallo catálogo público ML (${http ?? pubErr?.message ?? 'unknown'}).`,
+        checkedAt,
+      };
+    }
+  }
+
+  /** Browse API item_summary/search — same stack as Opportunities eBay comparables. */
+  private async probeEbayOpportunityComparables(
+    normalizedCreds: Record<string, string>,
+    sandbox: boolean
+  ): Promise<OpportunityComparableProbeResult> {
+    const checkedAt = new Date().toISOString();
+    try {
+      const { EbayService } = await import('./ebay.service');
+      const ebay = new EbayService({
+        appId: normalizedCreds.appId,
+        certId: normalizedCreds.certId,
+        devId: normalizedCreds.devId || process.env.EBAY_DEV_ID || '',
+        token: normalizedCreds.token || undefined,
+        refreshToken: normalizedCreds.refreshToken || undefined,
+        sandbox,
+      } as any);
+      await ebay.searchProducts({
+        keywords: 'phone',
+        marketplace_id: 'EBAY_US',
+        limit: 5,
+        sort: '-price',
+      });
+      return {
+        state: 'operational',
+        message:
+          'eBay Browse API responde; cero resultados en una búsqueda concreta no implica fallo de API (solo sin coincidencias).',
+        checkedAt,
+      };
+    } catch (e: any) {
+      const http = e?.response?.status as number | undefined;
+      const state: 'degraded' | 'error' = http === 401 || http === 403 ? 'degraded' : 'error';
+      return {
+        state,
+        httpStatus: http,
+        message: e?.message || String(e),
+        checkedAt,
+      };
     }
   }
 
@@ -2785,7 +2952,11 @@ export class APIAvailabilityService {
         canUseAI: false,
         canSolveCaptchas: false,
         canPayCommissions: false,
-        canAutoPurchaseAliExpress: false
+        canAutoPurchaseAliExpress: false,
+        opportunityComparables: {
+          mercadolibre: 'unknown',
+          ebay: 'unknown',
+        },
       };
     }
     
@@ -2818,6 +2989,20 @@ export class APIAvailabilityService {
 
     const ebayTradingApiDetected = ebayStatuses.some((status) => status && status.isAvailable === true);
 
+    const mlProd =
+      mercadolibreStatuses.find((s) => s && s.environment !== 'sandbox') || mercadolibreStatuses[0];
+    const ebayProd = ebayStatuses.find((s) => s && s.environment !== 'sandbox') || ebayStatuses[0];
+
+    const comparableState = (
+      st: APIStatus | undefined
+    ): { state: OpportunityComparableFlowState; message?: string; checkedAt?: string } => {
+      const p = st?.flowOperational?.opportunityComparables;
+      if (!p) return { state: 'unknown' };
+      return { state: p.state, message: p.message, checkedAt: p.checkedAt };
+    };
+    const mlComp = comparableState(mlProd);
+    const ebComp = comparableState(ebayProd);
+
     return {
       canPublishToEbay: ebayTradingApiDetected || ebayFromEnv,
       canPublishToAmazon: amazonStatuses.some((status) => status && status.isAvailable === true),
@@ -2827,7 +3012,16 @@ export class APIAvailabilityService {
       canSolveCaptchas: Boolean(captcha?.isAvailable),
       canPayCommissions: Boolean(paypal?.isAvailable),
       canAutoPurchaseAliExpress: Boolean(aliexpress?.isAvailable),
-      ebayTradingApi: ebayTradingApiDetected
+      ebayTradingApi: ebayTradingApiDetected,
+      opportunityComparables: {
+        mercadolibre: mlComp.state,
+        ebay: ebComp.state,
+        messages: {
+          ...(mlComp.message ? { mercadolibre: mlComp.message } : {}),
+          ...(ebComp.message ? { ebay: ebComp.message } : {}),
+        },
+        checkedAt: mlComp.checkedAt || ebComp.checkedAt,
+      },
     };
   }
 

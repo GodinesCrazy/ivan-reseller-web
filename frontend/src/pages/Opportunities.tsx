@@ -41,6 +41,7 @@ interface CommercialTruthMeta {
 
 const COMPETITION_SOURCE_LABELS: Record<string, string> = {
   mercadolibre_public_catalog: 'Mercado Libre (catálogo público)',
+  mercadolibre_authenticated_catalog: 'Mercado Libre (búsqueda con tu token)',
   ebay_browse_application_token: 'eBay Browse (token de aplicación)',
   ebay_browse_user_oauth: 'eBay Browse (tu OAuth)',
   amazon_catalog: 'Amazon (catálogo)',
@@ -214,6 +215,13 @@ export default function Opportunities() {
   const [showAliExpressModal, setShowAliExpressModal] = useState(false);
   const [pendingSearchUrl, setPendingSearchUrl] = useState<string | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
+  type ComparableHealth = {
+    mercadolibre: string;
+    ebay: string;
+    messages?: Partial<Record<'mercadolibre' | 'ebay', string>>;
+    checkedAt?: string;
+  };
+  const [comparableHealth, setComparableHealth] = useState<ComparableHealth | null>(null);
 
   useEffect(() => {
     if (items.length >= 0) console.log('[UI] Opportunities rendered:', items.length);
@@ -441,6 +449,19 @@ export default function Opportunities() {
       });
 
       setMarketplaceEnvStatus(normalized);
+
+      const caps = response.data?.data?.capabilities;
+      const oc = caps?.opportunityComparables;
+      if (oc && typeof oc.mercadolibre === 'string' && typeof oc.ebay === 'string') {
+        setComparableHealth({
+          mercadolibre: oc.mercadolibre,
+          ebay: oc.ebay,
+          messages: oc.messages,
+          checkedAt: oc.checkedAt,
+        });
+      } else {
+        setComparableHealth(null);
+      }
       
       // ✅ Mostrar advertencia si hay problemas pero no bloquear
       if (response.data?.data?.warnings && response.data.data.warnings.length > 0) {
@@ -936,6 +957,43 @@ export default function Opportunities() {
           <label className="flex items-center gap-2"><input type="checkbox" checked={marketplaces.includes('mercadolibre')} onChange={() => toggleMarketplace('mercadolibre')} /> MercadoLibre</label>
         </div>
       </div>
+
+      {comparableHealth &&
+        (comparableHealth.mercadolibre === 'degraded' ||
+          comparableHealth.mercadolibre === 'error' ||
+          comparableHealth.ebay === 'degraded' ||
+          comparableHealth.ebay === 'error') &&
+        marketplaces.some((m) => m === 'mercadolibre' || m === 'ebay') && (
+          <div className="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 text-sm rounded space-y-2">
+            <div className="font-semibold">Comparables de mercado (misma ruta que Opportunities)</div>
+            <p className="text-xs opacity-90">
+              Publicación u OAuth pueden estar bien; esta advertencia es solo sobre la búsqueda de listados comparables desde el servidor.
+            </p>
+            <ul className="text-xs list-disc list-inside space-y-1">
+              {(comparableHealth.mercadolibre === 'degraded' ||
+                comparableHealth.mercadolibre === 'error') &&
+                marketplaces.includes('mercadolibre') && (
+                  <li>
+                    <strong>Mercado Libre:</strong>{' '}
+                    {comparableHealth.messages?.mercadolibre ||
+                      'Catálogo público / comparables no responde correctamente desde este backend.'}
+                  </li>
+                )}
+              {(comparableHealth.ebay === 'degraded' || comparableHealth.ebay === 'error') &&
+                marketplaces.includes('ebay') && (
+                  <li>
+                    <strong>eBay Browse:</strong>{' '}
+                    {comparableHealth.messages?.ebay ||
+                      'Browse API no verificada para comparables desde este entorno.'}
+                  </li>
+                )}
+            </ul>
+            <p className="text-[11px] opacity-80">
+              Revisá <strong>API Settings</strong> para el estado separado (publicación vs comparables). Mientras tanto, columnas con{' '}
+              <strong>ESTIMADO</strong> reflejan ausencia de datos reales de comparables.
+            </p>
+          </div>
+        )}
 
       {aliStatus?.status === 'refreshing' && (
         <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-sm rounded flex flex-col gap-1">
