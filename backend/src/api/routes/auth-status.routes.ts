@@ -245,6 +245,9 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
       },
       warnings: setupCheckPassed ? undefined : ['Setup check failed, but auth status is available'],
       _safeMode: safeMode,
+      _integrationTruthHint: safeMode
+        ? 'SAFE_AUTH_STATUS_MODE: filas marketplace (p. ej. aliexpress) vienen de DB sin llamadas live. Para probes ML/eBay comparables y estado de APIs usa GET /api/credentials/status.'
+        : undefined,
       _timestamp: new Date().toISOString()
     });
   } catch (error: any) {

@@ -341,6 +341,8 @@ const envSchema = z.object({
   ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN: z.string().optional(),
   ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN: z.string().optional(),
   ALIEXPRESS_DROPSHIPPING_REDIRECT_URI: z.string().url().optional(),
+  /** Product ID for post-OAuth / health read-only probe (dropshipping TOP). Default used if unset. */
+  ALIEXPRESS_DROPSHIPPING_VERIFY_PRODUCT_ID: z.string().optional(),
 
   // Legacy OAuth settings used by /api/aliexpress module
   ALIEXPRESS_REDIRECT_URI: z.string().url().default('https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback'),

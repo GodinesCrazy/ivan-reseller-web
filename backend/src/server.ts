@@ -190,8 +190,17 @@ function logConfiguration(env: any, port: number, portSourceStr: string): void {
   const hasAppKey = !!(process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim();
   const hasAppSecret = !!(process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim();
   const hasRedirectUri = !!(process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
-  if (!hasAppKey || !hasAppSecret || !hasRedirectUri) {
-    console.warn('[ALIEXPRESS] Disabled - missing affiliate or dropshipping settings (APP_KEY/APP_SECRET/REDIRECT_URI).');
+  if (!hasAppKey || !hasAppSecret) {
+    console.warn(
+      '[ALIEXPRESS-AFFILIATE-ENV] No ALIEXPRESS_AFFILIATE_APP_KEY/SECRET (ni legacy ALIEXPRESS_APP_*) en process.env. ' +
+        'Oportunidades/Affiliate pueden depender de credenciales por usuario en BD o de otras rutas.'
+    );
+  }
+  if (!hasRedirectUri) {
+    console.warn(
+      '[ALIEXPRESS-OAUTH-ENV] No ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ni ALIEXPRESS_REDIRECT_URI en env; ' +
+        'el callback OAuth puede resolverse igualmente con BACKEND_URL / WEB_BASE_URL si está configurado.'
+    );
   }
 }
 

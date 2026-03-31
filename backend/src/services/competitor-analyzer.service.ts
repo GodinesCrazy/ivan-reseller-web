@@ -175,7 +175,7 @@ export class CompetitorAnalyzerService {
                 : { code: 'EBAY_ZERO_RESULTS', detail: 'Browse API no devolvió precios para la consulta acortada.' },
           };
         } else if (mp === 'mercadolibre') {
-          // Comparable prices: prefer public catalog (no OAuth); fallback to authenticated /sites/{id}/search when public is blocked (e.g. 403 from host IP).
+          // Comparable prices: OAuth /sites/{id}/search first (evita 403 de IP en ruta pública en hosting); luego catálogo público.
           const marketplace = new MarketplaceService();
           const rec = await marketplace.getCredentials(userId, 'mercadolibre');
           let siteId =
@@ -212,15 +212,60 @@ export class CompetitorAnalyzerService {
             }
           };
 
+          const rawCreds = (rec?.credentials || {}) as Record<string, unknown>;
+          const accessTok = String(rawCreds.accessToken || '').trim();
+          const tryAuthSearch = async (sid: string) => {
+            if (!accessTok || !rawCreds.clientId || !rawCreds.clientSecret) return [];
+            const envSandbox = rec?.environment === 'sandbox';
+            const ml = new MercadoLibreService({
+              clientId: String(rawCreds.clientId),
+              clientSecret: String(rawCreds.clientSecret),
+              accessToken: accessTok,
+              refreshToken: String(rawCreds.refreshToken || ''),
+              siteId: String(rawCreds.siteId || sid || 'MLM'),
+              sandbox: envSandbox,
+            } as any);
+            return ml.searchProducts({ siteId: sid, q: searchQ, limit: 20 });
+          };
+
           try {
-            res = await loadPublic(siteId);
-            if (res.length > 0) publicError = null;
-          } catch {
+            res = await tryAuthSearch(siteId);
+            if (res.length > 0) {
+              dataSource = 'mercadolibre_authenticated_catalog';
+              publicError = null;
+            }
+          } catch (authSearchErr: any) {
+            logger.warn('[competitor-analyzer] ML authenticated search (primary site) failed', {
+              userId,
+              message: authSearchErr?.message,
+            });
             res = [];
+          }
+
+          if (res.length === 0 && siteId !== 'MLM') {
+            try {
+              res = await tryAuthSearch('MLM');
+              if (res.length > 0) {
+                siteId = 'MLM';
+                dataSource = 'mercadolibre_authenticated_catalog';
+                publicError = null;
+              }
+            } catch (e: any) {
+              logger.warn('[competitor-analyzer] ML authenticated search MLM failed', { userId, message: e?.message });
+            }
+          }
+
+          if (res.length === 0) {
+            try {
+              res = await loadPublic(siteId);
+              if (res.length > 0) publicError = null;
+            } catch {
+              res = [];
+            }
           }
           if (res.length === 0 && siteId !== 'MLM') {
             try {
-              logger.info('[competitor-analyzer] ML empty or failed for primary site, retry MLM', {
+              logger.info('[competitor-analyzer] ML public empty or failed for primary site, retry MLM', {
                 siteId,
                 region,
                 qLen: searchQ.length,
@@ -230,32 +275,6 @@ export class CompetitorAnalyzerService {
               if (res.length > 0) publicError = null;
             } catch {
               res = [];
-            }
-          }
-
-          const rawCreds = (rec?.credentials || {}) as Record<string, unknown>;
-          const accessTok = String(rawCreds.accessToken || '').trim();
-          if (res.length === 0 && accessTok && rawCreds.clientId && rawCreds.clientSecret) {
-            try {
-              const envSandbox = rec?.environment === 'sandbox';
-              const ml = new MercadoLibreService({
-                clientId: String(rawCreds.clientId),
-                clientSecret: String(rawCreds.clientSecret),
-                accessToken: accessTok,
-                refreshToken: String(rawCreds.refreshToken || ''),
-                siteId: String(rawCreds.siteId || siteId || 'MLM'),
-                sandbox: envSandbox,
-              } as any);
-              res = await ml.searchProducts({ siteId, q: searchQ, limit: 20 });
-              if (res.length > 0) {
-                dataSource = 'mercadolibre_authenticated_catalog';
-                publicError = null;
-              }
-            } catch (authSearchErr: any) {
-              logger.warn('[competitor-analyzer] ML authenticated search fallback failed', {
-                userId,
-                message: authSearchErr?.message,
-              });
             }
           }
 
@@ -281,7 +300,7 @@ export class CompetitorAnalyzerService {
               competitionProbe = {
                 code: 'ML_PUBLIC_CATALOG_HTTP_FORBIDDEN',
                 detail:
-                  'Mercado Libre rechazó la búsqueda pública desde este servidor (403/401). Si tienes OAuth ML, el sistema intentó búsqueda autenticada; sin resultados, probá otra región o término más corto.',
+                  'Se intentó primero búsqueda ML con tu OAuth; luego catálogo público, que Mercado Libre rechazó (403/401) desde esta IP. Sin listados: probá región CL/MLM o un término más corto, o revisá token ML.',
               };
             } else if (publicError) {
               competitionProbe = {

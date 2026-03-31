@@ -1188,11 +1188,13 @@ export class APIAvailabilityService {
 
       if (validation.valid) {
         const siteId = String(credentials['siteId'] || process.env.MERCADOLIBRE_SITE_ID || 'MLM').trim() || 'MLM';
-        let credsForAuth: Record<string, any> | null = null;
-        if (status.isAvailable) {
-          credsForAuth =
-            (await this.getUserCredentials(userId, 'mercadolibre', environment)) || credentials;
-        }
+        const fresh = (await this.getUserCredentials(userId, 'mercadolibre', environment)) || credentials;
+        const credsForAuth =
+          String(fresh?.accessToken || '').trim() &&
+          String(fresh?.clientId || '').trim() &&
+          String(fresh?.clientSecret || '').trim()
+            ? fresh
+            : null;
         status.flowOperational = {
           opportunityComparables: await this.probeMercadoLibreOpportunityComparables(
             siteId,
@@ -1230,53 +1232,111 @@ export class APIAvailabilityService {
   ): Promise<OpportunityComparableProbeResult> {
     const checkedAt = new Date().toISOString();
     const { MercadoLibreService } = await import('./mercadolibre.service');
-    try {
-      const rows = await MercadoLibreService.searchSiteCatalogPublic({
-        siteId,
-        q: 'phone',
+    const qProbe = 'phone';
+
+    const tryAuth = async (sid: string) => {
+      if (
+        !credentials ||
+        !String(credentials['accessToken'] || '').trim() ||
+        !String(credentials['clientId'] || '').trim() ||
+        !String(credentials['clientSecret'] || '').trim()
+      ) {
+        return null;
+      }
+      const ml = new MercadoLibreService({
+        clientId: String(credentials['clientId'] || ''),
+        clientSecret: String(credentials['clientSecret'] || ''),
+        accessToken: String(credentials['accessToken'] || ''),
+        refreshToken: String(credentials['refreshToken'] || ''),
+        siteId: String(credentials['siteId'] || sid || 'MLM'),
+        sandbox,
+      } as any);
+      return ml.searchProducts({ siteId: sid, q: qProbe, limit: 5 });
+    };
+
+    const tryPublic = async (sid: string) =>
+      MercadoLibreService.searchSiteCatalogPublic({
+        siteId: sid,
+        q: qProbe,
         limit: 5,
       });
+
+    // 1) Auth first — evita 403 de IP en ruta pública cuando el usuario ya tiene token ML.
+    let authRows = await tryAuth(siteId).catch(() => null);
+    if (authRows && authRows.length > 0) {
       return {
         state: 'operational',
-        message: `GET /sites/${siteId}/search responde desde este servidor; comparables ML en Opportunities pueden ser exactos cuando haya coincidencias de título.`,
+        message: `Búsqueda ML con OAuth responde (sitio ${siteId}); Opportunities usará esta vía preferente cuando haya token.`,
+        checkedAt,
+        sampleResultCount: authRows.length,
+      };
+    }
+    if (!authRows || authRows.length === 0) {
+      authRows = await tryAuth('MLM').catch(() => null);
+      if (authRows && authRows.length > 0) {
+        return {
+          state: 'operational',
+          message:
+            'Búsqueda ML autenticada responde en MLM aunque el sitio regional falle o esté vacío; comparables pueden usar token.',
+          checkedAt,
+          sampleResultCount: authRows.length,
+        };
+      }
+    }
+
+    let pubErr: any = null;
+    try {
+      const rows = await tryPublic(siteId);
+      return {
+        state: 'operational',
+        message: `GET /sites/${siteId}/search (público) responde; si además tienes OAuth, el analizador intenta token primero en runtime.`,
         checkedAt,
         sampleResultCount: rows.length,
       };
-    } catch (pubErr: any) {
-      const http = pubErr?.response?.status as number | undefined;
-      if (credentials && String(credentials['accessToken'] || '').trim()) {
-        try {
-          const ml = new MercadoLibreService({
-            clientId: String(credentials['clientId'] || ''),
-            clientSecret: String(credentials['clientSecret'] || ''),
-            accessToken: String(credentials['accessToken'] || ''),
-            refreshToken: String(credentials['refreshToken'] || ''),
-            siteId: String(credentials['siteId'] || siteId || 'MLM'),
-            sandbox,
-          } as any);
-          const rows = await ml.searchProducts({ siteId, q: 'phone', limit: 5 });
-          return {
-            state: 'operational',
-            message:
-              'Catálogo público falló desde esta IP; búsqueda con tu token OAuth responde. Opportunities usará la ruta autenticada cuando esté disponible.',
-            checkedAt,
-            sampleResultCount: rows.length,
-          };
-        } catch {
-          /* use public error below */
-        }
+    } catch (e: any) {
+      pubErr = e;
+    }
+
+    let http = pubErr?.response?.status as number | undefined;
+    if (siteId !== 'MLM') {
+      try {
+        const rows = await tryPublic('MLM');
+        return {
+          state: 'operational',
+          message: `Público OK en MLM (sitio regional ${siteId} falló); probe reintentó catálogo amplio.`,
+          checkedAt,
+          sampleResultCount: rows.length,
+        };
+      } catch (e2: any) {
+        pubErr = e2;
+        http = e2?.response?.status;
       }
-      const state: 'degraded' | 'error' = http === 403 || http === 401 ? 'degraded' : 'error';
+    }
+
+    let authAgain = await tryAuth(siteId).catch(() => null);
+    if (!authAgain || authAgain.length === 0) {
+      authAgain = await tryAuth('MLM').catch(() => null);
+    }
+    if (Array.isArray(authAgain) && authAgain.length > 0) {
       return {
-        state,
-        httpStatus: http,
+        state: 'operational',
         message:
-          http === 403
-            ? 'Mercado Libre devolvió 403 en catálogo público desde la IP del backend. OAuth /users/me puede estar bien; comparables en Opportunities no serán fiables hasta resolver red o usar token en búsqueda.'
-            : `Fallo catálogo público ML (${http ?? pubErr?.message ?? 'unknown'}).`,
+          'Tras fallo público, búsqueda con token OAuth devolvió resultados; Opportunities puede usar comparables autenticados.',
         checkedAt,
+        sampleResultCount: authAgain.length,
       };
     }
+
+    const state: 'degraded' | 'error' = http === 403 || http === 401 ? 'degraded' : 'error';
+    return {
+      state,
+      httpStatus: http,
+      message:
+        http === 403
+          ? 'Mercado Libre: 403 en catálogo público y sin resultados en búsqueda autenticada de probe. Revisá token ML y permisos; Opportunities seguirá intentando OAuth antes que público en cada request.'
+          : `Fallo probe ML público (${http ?? pubErr?.message ?? 'unknown'}).`,
+      checkedAt,
+    };
   }
 
   /** Browse API item_summary/search — same stack as Opportunities eBay comparables. */
@@ -2102,6 +2162,25 @@ export class APIAvailabilityService {
         status.message = 'Credenciales básicas guardadas. Completa la autorización OAuth para activar.';
       } else {
         status.message = 'API configurada correctamente';
+        if (forceRefresh && hasToken) {
+          try {
+            const { aliexpressDropshippingAPIService } = await import('./aliexpress-dropshipping-api.service');
+            aliexpressDropshippingAPIService.setCredentials({
+              appKey: String(credentials['appKey'] || ''),
+              appSecret: String(credentials['appSecret'] || ''),
+              accessToken: String(accessToken || ''),
+              refreshToken: String(refreshToken || ''),
+              sandbox: environment === 'sandbox',
+            } as any);
+            await aliexpressDropshippingAPIService.verifyOAuthTokenWithProductProbe();
+            status.message =
+              'API configurada; token verificado con lectura dropshipping (product probe), no con account.get obsoleto.';
+          } catch (ve: any) {
+            status.status = 'degraded';
+            status.message = `Token guardado pero verificación activa falló: ${ve?.message || String(ve)}`;
+            status.error = ve?.message || String(ve);
+          }
+        }
       }
 
       this.cache.set(cacheKey, status);

@@ -1653,38 +1653,68 @@ export class AliExpressDropshippingAPIService {
   }
 
   /**
-   * 🔥 PASO 6: Obtener información de cuenta de AliExpress
-   * 
-   * Llamada de prueba para verificar que el access_token funciona correctamente.
-   * 
-   * @param accessToken - Access token a verificar (opcional, usa el configurado si no se proporciona)
+   * Verifica que el access_token puede llamar APIs dropshipping reales.
+   * `aliexpress.ds.account.get` devuelve InvalidApiPath en TOP actual — no usar.
+   * Usa lectura de producto (mismo stack que fulfillment) con ID configurable.
    */
-  async getAccountInfo(accessToken?: string): Promise<any> {
+  async verifyOAuthTokenWithProductProbe(accessToken?: string): Promise<{
+    ok: true;
+    method: string;
+    productId: string;
+  }> {
     const token = accessToken || this.credentials?.accessToken;
-    
+
     if (!token) {
-      throw new Error('Access token is required to get account info');
+      throw new Error('Access token is required for dropshipping verification');
     }
 
-    logger.info('[ALIEXPRESS-DROPSHIPPING-API] Getting account info', {
+    const productId =
+      (process.env.ALIEXPRESS_DROPSHIPPING_VERIFY_PRODUCT_ID || '').trim() || '1005009130509159';
+
+    logger.info('[ALIEXPRESS-DROPSHIPPING-API] OAuth verify via read-only product probe', {
       hasAccessToken: !!token,
+      productId,
     });
 
-    try {
-      // Usar el método aliexpress.ds.account.get según documentación
-      const result = await this.makeRequest('aliexpress.ds.account.get', {});
-      
-      logger.info('[ALIEXPRESS-DROPSHIPPING-API] Account info retrieved successfully', {
-        hasResult: !!result,
-      });
+    const apiParams: Record<string, any> = {
+      product_id: productId,
+      ship_to_country: 'US',
+      shipToCountry: 'US',
+    };
 
-      return result;
-    } catch (error: any) {
-      logger.error('[ALIEXPRESS-DROPSHIPPING-API] Get account info failed', {
-        error: error.message,
+    try {
+      const result = await this.makeRequest('aliexpress.offer.ds.product.simplequery', apiParams);
+      const product = (result as any)?.product || result;
+      if (product && ((product as any).product_id || (product as any).product_title)) {
+        logger.info('[ALIEXPRESS-DROPSHIPPING-API] Product probe OK (simplequery)', { productId });
+        return { ok: true, method: 'aliexpress.offer.ds.product.simplequery', productId };
+      }
+    } catch (e1: any) {
+      logger.warn('[ALIEXPRESS-DROPSHIPPING-API] simplequery probe failed, trying dropshipping.product.info.get', {
+        message: e1?.message,
       });
-      throw error;
     }
+
+    try {
+      await this.makeRequest('aliexpress.dropshipping.product.info.get', apiParams);
+      logger.info('[ALIEXPRESS-DROPSHIPPING-API] Product probe OK (dropshipping.product.info.get)', { productId });
+      return { ok: true, method: 'aliexpress.dropshipping.product.info.get', productId };
+    } catch (e2: any) {
+      logger.error('[ALIEXPRESS-DROPSHIPPING-API] Product probe failed', {
+        productId,
+        error: e2?.message || String(e2),
+      });
+      throw new Error(
+        `Dropshipping token verification failed (product probes). Set ALIEXPRESS_DROPSHIPPING_VERIFY_PRODUCT_ID to a valid DS product. Last error: ${e2?.message || e2}`
+      );
+    }
+  }
+
+  /**
+   * Compat: antes llamaba `aliexpress.ds.account.get` (InvalidApiPath). Ahora delega al product probe.
+   */
+  async getAccountInfo(accessToken?: string): Promise<any> {
+    return this.verifyOAuthTokenWithProductProbe(accessToken);
   }
 }
 

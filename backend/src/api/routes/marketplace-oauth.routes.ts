@@ -912,15 +912,15 @@ router.get('/callback', async (req: Request, res: Response) => {
       // Opcional: Verificar que el token funciona
       try {
         aliexpressDropshippingAPIService.setCredentials(updatedCreds);
-        await aliexpressDropshippingAPIService.getAccountInfo();
-        logger.info('[OAuth Callback] Account info verification successful', {
+        await aliexpressDropshippingAPIService.verifyOAuthTokenWithProductProbe();
+        logger.info('[OAuth Callback] Dropshipping token verified (product probe)', {
           service: 'marketplace-oauth',
           correlationId,
           userId,
           environment,
         });
       } catch (verifyError: any) {
-        logger.warn('[OAuth Callback] Account info verification failed (non-critical)', {
+        logger.warn('[OAuth Callback] Dropshipping product probe failed (non-critical)', {
           service: 'marketplace-oauth',
           correlationId,
           userId,
@@ -1601,14 +1601,14 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         // Opcional: Verificar que el token funciona (PASO 6)
         try {
           aliexpressDropshippingAPIService.setCredentials(updatedCreds);
-          await aliexpressDropshippingAPIService.getAccountInfo();
-          logger.info('[OAuth Callback] Account info verification successful', {
+          await aliexpressDropshippingAPIService.verifyOAuthTokenWithProductProbe();
+          logger.info('[OAuth Callback] Dropshipping token verified (product probe)', {
             service: 'marketplace-oauth',
             userId,
             environment,
           });
         } catch (verifyError: any) {
-          logger.warn('[OAuth Callback] Account info verification failed (non-critical)', {
+          logger.warn('[OAuth Callback] Dropshipping product probe failed (non-critical)', {
             service: 'marketplace-oauth',
             userId,
             environment,
