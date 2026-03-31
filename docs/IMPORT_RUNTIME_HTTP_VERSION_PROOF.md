@@ -29,6 +29,15 @@ See `docs/VERCEL_FRONTEND_DEPLOY_VERIFICATION.md` for the observed mismatch at v
 Backend: trust **`gitSha` / `gitShaFull`**.  
 Frontend: trust **deployment SHA from Vercel** or **asset hash parity** with local `dist/`.
 
+### AliExpress Affiliate OAuth token (`/api/aliexpress/callback`)
+
+If AliExpress returns **`IncompleteSignature`** on `GET .../rest/auth/token/create`, the backend tries **multiple strategies** in order (see `backend/src/services/aliexpress-oauth.service.ts`):
+
+1. **HMAC-SHA256** with sign path **`/auth/token/create`** + **POST** (same approach as Dropshipping OAuth in `aliexpress-dropshipping-api.service.ts`).
+2. HMAC-SHA256 with sign path **`/rest/auth/token/create`** + POST.
+3. Legacy **Case 2** plain SHA256 (no secret) + GET.
+4. **MD5** + GMT+8 timestamp + `redirect_uri` + GET (per `ALIEXPRESS_FINAL_WORKING_REPORT.md`).
+
 ---
 
 ## Verification run — target `271d7b3` (2026-03-30)
