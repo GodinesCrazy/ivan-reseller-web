@@ -22,6 +22,22 @@ import env from '../../config/env';
 import { prisma } from '../../config/database';
 import { getAuthorizationUrl, exchangeCodeForToken, getOAuthStatus, getAliExpressAffiliateRedirectUri } from '../../services/aliexpress-oauth.service';
 import { getToken } from '../../services/aliexpress-token.store';
+
+/** Same sources as marketplace-oauth.routes (return to web app after OAuth). */
+function getFrontendReturnBaseUrlForAffiliateOAuth(): string {
+  return (
+    process.env.FRONTEND_URL ||
+    process.env.WEB_BASE_URL ||
+    'https://www.ivanreseller.com'
+  ).replace(/\/$/, '');
+}
+
+/** JSON body only when explicitly requested (curl / integraciones); browsers get HTML redirect. */
+function affiliateOAuthCallbackWantsJson(req: Request): boolean {
+  const f = req.query.format;
+  if (f === 'json' || f === '1' || f === 'true') return true;
+  return false;
+}
 /**
  * Endpoint para generar un link afiliado
  * POST /api/aliexpress/generate-link
@@ -597,14 +613,28 @@ export const getOAuthStart = async (_req: Request, res: Response) => {
 };
 
 /**
- * OAuth callback: exchange code for tokens, persist to store + DB, return success.
+ * OAuth callback: exchange code for tokens, persist to store + DB, then return to frontend API Settings
+ * (same UX as Mercado Libre / AliExpress Dropshipping). Use ?format=json for machine-readable response.
  * GET /api/aliexpress/callback?code=...
  */
 export const oauthCallback = async (req: Request, res: Response) => {
+  const wantsJson = affiliateOAuthCallbackWantsJson(req);
+  const webBase = getFrontendReturnBaseUrlForAffiliateOAuth();
+  const successPath = '/api-settings?oauth=success&provider=aliexpress-affiliate';
+  const successUrl = `${webBase}${successPath}`;
+
+  const buildErrorRedirect = (reason: string) => {
+    const r = encodeURIComponent(String(reason).slice(0, 450));
+    return `${webBase}/api-settings?oauth=error&provider=aliexpress-affiliate&reason=${r}`;
+  };
+
   const code = typeof req.query.code === 'string' ? req.query.code.trim() : '';
   if (!code) {
     logger.warn('[AliExpress OAuth] Callback missing code', { query: req.query });
-    return res.status(400).json({ success: false, error: 'MISSING_CODE' });
+    if (wantsJson) {
+      return res.status(400).json({ success: false, error: 'MISSING_CODE' });
+    }
+    return res.redirect(302, buildErrorRedirect('MISSING_CODE'));
   }
 
   try {
@@ -638,7 +668,62 @@ export const oauthCallback = async (req: Request, res: Response) => {
     }
 
     console.log('[ALIEXPRESS-OAUTH] TOKEN STORED OK', { expiresAt: expiresAt.toISOString() });
-    return res.status(200).json({ success: true, message: 'Authorization successful', expiresAt: expiresAt.toISOString() });
+
+    if (wantsJson) {
+      return res.status(200).json({
+        success: true,
+        message: 'Authorization successful',
+        expiresAt: expiresAt.toISOString(),
+      });
+    }
+
+    const successUrlJson = JSON.stringify(successUrl);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>AliExpress Affiliate — autorizado</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 24px; text-align: center; max-width: 520px; margin: 2rem auto; }
+    .ok { color: #15803d; font-size: 1.125rem; margin: 1rem 0; }
+    .muted { color: #64748b; font-size: 0.875rem; margin-top: 1rem; }
+    a.btn { display: inline-block; margin-top: 1rem; padding: 12px 24px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 600; }
+    a.btn:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div class="ok">Autorización AliExpress Affiliate completada</div>
+  <p class="muted" id="msg">Volviendo a la app…</p>
+  <p><a class="btn" href="${successUrl.replace(/"/g, '&quot;')}">Ir a API Settings</a></p>
+  <script>
+    (function () {
+      var u = ${successUrlJson};
+      function notify() {
+        if (window.opener && !window.opener.closed) {
+          try {
+            window.opener.postMessage({ type: 'oauth_success', marketplace: 'aliexpress-affiliate', timestamp: Date.now() }, '*');
+            return true;
+          } catch (e) { return false; }
+        }
+        return false;
+      }
+      notify();
+      setTimeout(notify, 300);
+      setTimeout(notify, 800);
+      if (window.opener && !window.opener.closed) {
+        var el = document.getElementById('msg');
+        if (el) el.textContent = 'Cerrando ventana…';
+        setTimeout(function () { window.close(); }, 600);
+      } else {
+        var el2 = document.getElementById('msg');
+        if (el2) el2.textContent = 'Redirigiendo a API Settings…';
+        setTimeout(function () { window.location.href = u; }, 1200);
+      }
+    })();
+  </script>
+</body>
+</html>`);
   } catch (err: any) {
     const status = err?.response?.status ?? 500;
     const data = err?.response?.data;
@@ -662,6 +747,13 @@ export const oauthCallback = async (req: Request, res: Response) => {
       if (requestId) body.requestId = requestId;
     }
     if (tokenRequestUrl) body.tokenRequestUrl = tokenRequestUrl;
-    return res.status(status).json(body);
+
+    if (wantsJson) {
+      const httpStatus = status >= 400 && status < 600 ? status : 500;
+      return res.status(httpStatus).json(body);
+    }
+
+    const redirectReason = aliCode ? `${userMsg} (${aliCode})` : userMsg;
+    return res.redirect(302, buildErrorRedirect(redirectReason));
   }
 };
