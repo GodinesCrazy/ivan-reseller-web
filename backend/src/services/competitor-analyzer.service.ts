@@ -7,6 +7,7 @@ import { MercadoLibreService } from './mercadolibre.service';
 import { REGION_TO_EBAY_MARKETPLACE, REGION_TO_ML_SITE } from './destination.service';
 import { prisma } from '../config/database';
 import { MarketplaceService } from './marketplace.service';
+import scraperBridge from './scraper-bridge.service';
 import logger from '../config/logger';
 
 export interface MarketplaceListing {
@@ -28,6 +29,7 @@ export type CompetitionDataSource =
   | 'ebay_browse_application_token'
   | 'mercadolibre_public_catalog'
   | 'mercadolibre_authenticated_catalog'
+  | 'mercadolibre_scraper_bridge'
   | 'amazon_catalog'
   | 'unknown';
 
@@ -95,6 +97,9 @@ export class CompetitorAnalyzerService {
   ): Promise<Record<string, MarketAnalysis>> {
     const results: Record<string, MarketAnalysis> = {};
     const searchQ = shortenForMarketplaceSearch(productTitle);
+    const mlDebugEnabled = process.env.ML_COMPARABLES_DEBUG === '1';
+    const mlDebugUserIdEnv = process.env.ML_COMPARABLES_DEBUG_USER_ID;
+    const mlDebugUserId = mlDebugUserIdEnv ? Number(mlDebugUserIdEnv) : null;
 
     for (const mp of targetMarketplaces) {
       try {
@@ -196,26 +201,98 @@ export class CompetitorAnalyzerService {
           let dataSource: CompetitionDataSource = 'mercadolibre_public_catalog';
           let publicError: { httpStatus?: number; message: string } | null = null;
 
-          const loadPublic = async (sid: string) => {
+          const mlDebugTraceId = `ml-comp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const mlDebug: any =
+            mlDebugEnabled && (!mlDebugUserId || mlDebugUserId === userId)
+              ? {
+                  traceId: mlDebugTraceId,
+                  userId,
+                  region,
+                  rawTitleSample: productTitle?.slice(0, 120),
+                  normalizedQuery: searchQ,
+                  credentialsPresent: Boolean(rec?.credentials),
+                  accessTokenPresent: Boolean((rec?.credentials as any)?.accessToken),
+                  refreshTokenPresent: Boolean((rec?.credentials as any)?.refreshToken),
+                  siteIdInitial: siteId,
+                  auth: {
+                    attemptedPrimary: false,
+                    attemptedMLM: false,
+                    statusPrimary: 'skipped',
+                    statusMLM: 'skipped',
+                    httpStatusPrimary: undefined as number | undefined,
+                    httpStatusMLM: undefined as number | undefined,
+                    listingsPrimary: 0,
+                    listingsMLM: 0,
+                    errorPrimary: undefined as string | undefined,
+                    errorMLM: undefined as string | undefined,
+                  },
+                  pub: {
+                    attemptedPrimary: false,
+                    attemptedMLM: false,
+                    httpStatusPrimary: undefined as number | undefined,
+                    httpStatusMLM: undefined as number | undefined,
+                    listingsPrimary: 0,
+                    listingsMLM: 0,
+                    errorPrimary: undefined as string | undefined,
+                    errorMLM: undefined as string | undefined,
+                  },
+                  finalDecision: undefined as string | undefined,
+                }
+              : null;
+
+          const loadPublic = async (sid: string, tag: 'primary' | 'mlm') => {
             try {
-              return await MercadoLibreService.searchSiteCatalogPublic({
+              const out = await MercadoLibreService.searchSiteCatalogPublic({
                 siteId: sid,
                 q: searchQ,
                 limit: 20,
               });
+              if (mlDebug) {
+                const count = Array.isArray(out) ? out.length : 0;
+                if (tag === 'primary') {
+                  mlDebug.pub.attemptedPrimary = true;
+                  mlDebug.pub.listingsPrimary = count;
+                } else {
+                  mlDebug.pub.attemptedMLM = true;
+                  mlDebug.pub.listingsMLM = count;
+                }
+              }
+              return out;
             } catch (e: any) {
               publicError = {
                 httpStatus: e?.response?.status,
                 message: e?.message || String(e),
               };
+              if (mlDebug) {
+                if (tag === 'primary') {
+                  mlDebug.pub.attemptedPrimary = true;
+                  mlDebug.pub.httpStatusPrimary = e?.response?.status;
+                  mlDebug.pub.errorPrimary =
+                    e?.response?.data?.message || e?.response?.data?.error || e?.message || String(e);
+                } else {
+                  mlDebug.pub.attemptedMLM = true;
+                  mlDebug.pub.httpStatusMLM = e?.response?.status;
+                  mlDebug.pub.errorMLM =
+                    e?.response?.data?.message || e?.response?.data?.error || e?.message || String(e);
+                }
+              }
               throw e;
             }
           };
 
           const rawCreds = (rec?.credentials || {}) as Record<string, unknown>;
           const accessTok = String(rawCreds.accessToken || '').trim();
-          const tryAuthSearch = async (sid: string) => {
-            if (!accessTok || !rawCreds.clientId || !rawCreds.clientSecret) return [];
+          const tryAuthSearch = async (sid: string, tag: 'primary' | 'mlm') => {
+            if (!accessTok || !rawCreds.clientId || !rawCreds.clientSecret) {
+              if (mlDebug) {
+                if (tag === 'primary') {
+                  mlDebug.auth.statusPrimary = 'skipped_no_credentials';
+                } else {
+                  mlDebug.auth.statusMLM = 'skipped_no_credentials';
+                }
+              }
+              return [];
+            }
             const envSandbox = rec?.environment === 'sandbox';
             const ml = new MercadoLibreService({
               clientId: String(rawCreds.clientId),
@@ -225,39 +302,124 @@ export class CompetitorAnalyzerService {
               siteId: String(rawCreds.siteId || sid || 'MLM'),
               sandbox: envSandbox,
             } as any);
-            return ml.searchProducts({ siteId: sid, q: searchQ, limit: 20 });
+            try {
+              let out = await ml.searchProducts({ siteId: sid, q: searchQ, limit: 20 });
+
+              // If token expired (401), attempt refresh then retry once.
+              if (!Array.isArray(out) || out.length === 0) {
+                // out=[] may be fine; but if we got 401 from the catch below, we handle it there.
+              }
+
+              if (mlDebug) {
+                const count = Array.isArray(out) ? out.length : 0;
+                if (tag === 'primary') {
+                  mlDebug.auth.attemptedPrimary = true;
+                  mlDebug.auth.statusPrimary = 'ok';
+                  mlDebug.auth.listingsPrimary = count;
+                } else {
+                  mlDebug.auth.attemptedMLM = true;
+                  mlDebug.auth.statusMLM = 'ok';
+                  mlDebug.auth.listingsMLM = count;
+                }
+              }
+              return out;
+            } catch (authSearchErr: any) {
+              const httpStatus = authSearchErr?.response?.status;
+
+              // FASE 0D: On 401, attempt OAuth token refresh and retry once.
+              if (httpStatus === 401 && rawCreds.refreshToken && rawCreds.clientId && rawCreds.clientSecret) {
+                logger.info('[competitor-analyzer] ML 401 — attempting token refresh', { userId, siteId: sid, tag });
+                try {
+                  const mlForRefresh = new MercadoLibreService({
+                    clientId: String(rawCreds.clientId),
+                    clientSecret: String(rawCreds.clientSecret),
+                    accessToken: accessTok,
+                    refreshToken: String(rawCreds.refreshToken),
+                    siteId: String(rawCreds.siteId || sid || 'MLM'),
+                    sandbox: envSandbox,
+                  } as any);
+                  const refreshed = await mlForRefresh.refreshAccessToken();
+                  const mlRetry = new MercadoLibreService({
+                    clientId: String(rawCreds.clientId),
+                    clientSecret: String(rawCreds.clientSecret),
+                    accessToken: refreshed.accessToken,
+                    refreshToken: String(rawCreds.refreshToken),
+                    siteId: String(rawCreds.siteId || sid || 'MLM'),
+                    sandbox: envSandbox,
+                  } as any);
+                  const retryOut = await mlRetry.searchProducts({ siteId: sid, q: searchQ, limit: 20 });
+                  if (Array.isArray(retryOut) && retryOut.length > 0) {
+                    logger.info('[competitor-analyzer] ML token refresh + retry succeeded', { userId, siteId: sid, tag, count: retryOut.length });
+                    if (mlDebug) {
+                      if (tag === 'primary') { mlDebug.auth.attemptedPrimary = true; mlDebug.auth.statusPrimary = 'ok_after_refresh'; mlDebug.auth.listingsPrimary = retryOut.length; }
+                      else { mlDebug.auth.attemptedMLM = true; mlDebug.auth.statusMLM = 'ok_after_refresh'; mlDebug.auth.listingsMLM = retryOut.length; }
+                    }
+                    return retryOut;
+                  }
+                } catch (refreshErr: any) {
+                  logger.warn('[competitor-analyzer] ML token refresh failed', { userId, siteId: sid, tag, error: refreshErr?.message });
+                }
+              }
+
+              if (mlDebug) {
+                if (tag === 'primary') {
+                  mlDebug.auth.attemptedPrimary = true;
+                  mlDebug.auth.statusPrimary = 'failed';
+                  mlDebug.auth.httpStatusPrimary = httpStatus;
+                  mlDebug.auth.errorPrimary =
+                    authSearchErr?.response?.data?.message ||
+                    authSearchErr?.response?.data?.error ||
+                    authSearchErr?.message ||
+                    String(authSearchErr);
+                } else {
+                  mlDebug.auth.attemptedMLM = true;
+                  mlDebug.auth.statusMLM = 'failed';
+                  mlDebug.auth.httpStatusMLM = httpStatus;
+                  mlDebug.auth.errorMLM =
+                    authSearchErr?.response?.data?.message ||
+                    authSearchErr?.response?.data?.error ||
+                    authSearchErr?.message ||
+                    String(authSearchErr);
+                }
+              }
+              logger.warn('[competitor-analyzer] ML authenticated search failed', {
+                userId,
+                siteId: sid,
+                tag,
+                message: authSearchErr?.message,
+                status: httpStatus,
+              });
+              return [];
+            }
           };
 
           try {
-            res = await tryAuthSearch(siteId);
+            res = await tryAuthSearch(siteId, 'primary');
             if (res.length > 0) {
               dataSource = 'mercadolibre_authenticated_catalog';
               publicError = null;
             }
-          } catch (authSearchErr: any) {
-            logger.warn('[competitor-analyzer] ML authenticated search (primary site) failed', {
-              userId,
-              message: authSearchErr?.message,
-            });
+          } catch {
+            // errors already logged inside tryAuthSearch
             res = [];
           }
 
           if (res.length === 0 && siteId !== 'MLM') {
             try {
-              res = await tryAuthSearch('MLM');
+              res = await tryAuthSearch('MLM', 'mlm');
               if (res.length > 0) {
                 siteId = 'MLM';
                 dataSource = 'mercadolibre_authenticated_catalog';
                 publicError = null;
               }
-            } catch (e: any) {
-              logger.warn('[competitor-analyzer] ML authenticated search MLM failed', { userId, message: e?.message });
+            } catch {
+              // errors already logged inside tryAuthSearch
             }
           }
 
           if (res.length === 0) {
             try {
-              res = await loadPublic(siteId);
+              res = await loadPublic(siteId, 'primary');
               if (res.length > 0) publicError = null;
             } catch {
               res = [];
@@ -270,11 +432,50 @@ export class CompetitorAnalyzerService {
                 region,
                 qLen: searchQ.length,
               });
-              res = await loadPublic('MLM');
+              res = await loadPublic('MLM', 'mlm');
               siteId = 'MLM';
               if (res.length > 0) publicError = null;
             } catch {
               res = [];
+            }
+          }
+
+          // FASE 0D — Fix #2: scraper-bridge ML fallback when public catalog 403 from Railway IPs.
+          // Only attempted when: all OAuth + public catalog attempts returned 0 results AND error was 403/401.
+          if (res.length === 0 && (publicError?.httpStatus === 403 || publicError?.httpStatus === 401)) {
+            logger.info('[competitor-analyzer] ML 403/401 from all catalog routes — attempting scraper-bridge ML fallback', {
+              userId, siteId, region,
+            });
+            try {
+              const bridgeAvailable = await scraperBridge.isAvailable();
+              if (bridgeAvailable) {
+                const bridgeResults = await scraperBridge.searchMLCompetitors({
+                  siteId,
+                  q: searchQ,
+                  limit: 20,
+                });
+                if (bridgeResults.length > 0) {
+                  res = bridgeResults;
+                  dataSource = 'mercadolibre_scraper_bridge';
+                  publicError = null;
+                  logger.info('[competitor-analyzer] ML scraper-bridge fallback succeeded', {
+                    userId, siteId, count: res.length,
+                  });
+                  if (mlDebug) mlDebug.finalDecision = 'scraper_bridge_comparables_used';
+                } else {
+                  logger.warn('[competitor-analyzer] ML scraper-bridge returned 0 results', { userId, siteId });
+                }
+              } else {
+                logger.warn(
+                  '[competitor-analyzer] ML 403 and scraper-bridge unavailable (SCRAPER_BRIDGE_ENABLED != true or bridge not reachable). ' +
+                  'Set SCRAPER_BRIDGE_ENABLED=true and SCRAPER_BRIDGE_URL to restore ML competitor data from Railway.',
+                  { userId, siteId }
+                );
+              }
+            } catch (bridgeErr: any) {
+              logger.warn('[competitor-analyzer] ML scraper-bridge fallback failed', {
+                userId, siteId, error: bridgeErr?.message, code: bridgeErr?.code,
+              });
             }
           }
 
@@ -300,19 +501,43 @@ export class CompetitorAnalyzerService {
               competitionProbe = {
                 code: 'ML_PUBLIC_CATALOG_HTTP_FORBIDDEN',
                 detail:
-                  'Se intentó primero búsqueda ML con tu OAuth; luego catálogo público, que Mercado Libre rechazó (403/401) desde esta IP. Sin listados: probá región CL/MLM o un término más corto, o revisá token ML.',
+                  'Se intentó OAuth ML + catálogo público, pero Mercado Libre rechazó (403/401) desde esta IP de Railway. ' +
+                  'Activá SCRAPER_BRIDGE_ENABLED=true con SCRAPER_BRIDGE_URL para desbloquear competencia ML, o conectá credenciales OAuth ML válidas.',
               };
+              if (mlDebug) {
+                mlDebug.finalDecision = 'estimated_due_to_public_403_after_auth_zero';
+              }
             } else if (publicError) {
               competitionProbe = {
                 code: 'ML_PUBLIC_CATALOG_REQUEST_FAILED',
                 detail: publicError.message,
               };
+              if (mlDebug) {
+                mlDebug.finalDecision = 'estimated_due_to_public_error_after_auth_zero';
+              }
             } else {
               competitionProbe = {
                 code: 'ML_PUBLIC_CATALOG_ZERO_RESULTS',
                 detail: `Sin listados en ${siteId} para el título acortado; probá otra región o término más corto.`,
               };
+              if (mlDebug) {
+                mlDebug.finalDecision = 'estimated_due_to_zero_results';
+              }
             }
+          } else if (dataSource === 'mercadolibre_authenticated_catalog') {
+            if (mlDebug) {
+              mlDebug.finalDecision = 'auth_comparables_used';
+            }
+          } else {
+            if (mlDebug) {
+              mlDebug.finalDecision = 'public_comparables_used';
+            }
+          }
+
+          if (mlDebug) {
+            mlDebug.siteIdFinal = siteId;
+            mlDebug.totalListings = listingsFound;
+            logger.info('[competitor-analyzer] ML comparables telemetry', mlDebug);
           }
 
           results[`${mp}_${region}`] = {

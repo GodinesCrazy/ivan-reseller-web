@@ -73,7 +73,24 @@ export function computeSuggestedPrice(input: PricingEngineInput): PricingEngineR
     candidatePrice = Math.round(supplierPriceUsd * 1.5 * 100) / 100;
   }
 
-  const totalCost = supplierPriceUsd + (taxUsd || 0) + (shippingUsd || 0);
+  // FASE 0 Fix: totalCost ahora incluye marketplace fee + payment fee canónicos
+  // (antes solo sumaba supplier + tax + shipping, ignorando ~16-18% de fees reales)
+  const { marketplace: mp = 'ebay' } = input;
+  const marketplaceFeeRate = Number(process.env[`${mp.toUpperCase()}_FEE_RATE`] || '0');
+  const effectiveMarketplaceFeeRate = marketplaceFeeRate > 0
+    ? marketplaceFeeRate
+    : (mp === 'mercadolibre' ? 0.139 : mp === 'amazon' ? 0.15 : 0.1285);
+  const marketplaceFeeOnCandidate = candidatePrice * effectiveMarketplaceFeeRate;
+  // PayPal: 3.49% + $0.49 fijo (canónico)
+  const paymentFeeOnCandidate = candidatePrice * 0.0349 + 0.49;
+
+  const totalCost =
+    supplierPriceUsd +
+    (taxUsd || 0) +
+    (shippingUsd || 0) +
+    marketplaceFeeOnCandidate +
+    paymentFeeOnCandidate;
+
   let marginPercent = candidatePrice > 0 ? ((candidatePrice - totalCost) / candidatePrice) * 100 : 0;
 
   const minMarginPct = Math.max(0, Math.min(100, MIN_MARGIN_PCT));

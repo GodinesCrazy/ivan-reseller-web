@@ -167,6 +167,48 @@ export class ScraperBridgeService {
   }
 
   /**
+   * Search MercadoLibre competitor listings via scraper bridge.
+   * Used as fallback when ML public catalog returns 403 from Railway shared IPs.
+   * Requires bridge to expose POST /scraping/mercadolibre/search.
+   */
+  async searchMLCompetitors(params: {
+    siteId: string;
+    q: string;
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    title: string;
+    price: number;
+    currency_id: string;
+    permalink: string;
+  }>> {
+    if (!this.enabled) {
+      const error: any = new Error('Scraper bridge is disabled');
+      error.code = 'BRIDGE_DISABLED';
+      throw error;
+    }
+    const response = await Promise.race([
+      this.getClient().post('/scraping/mercadolibre/search', {
+        site_id: params.siteId,
+        query: params.q,
+        limit: Math.min(Math.max(params.limit ?? 20, 1), 20),
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('ML scraper bridge search timeout after 30s')), 30000)
+      ),
+    ]);
+    const data = (response as any).data;
+    const items = (data?.results || data?.items || []) as any[];
+    return items.map((r: any) => ({
+      id: String(r.id || r.item_id || ''),
+      title: r.title || '',
+      price: Number(r.price) || 0,
+      currency_id: r.currency_id || r.currency || 'MXN',
+      permalink: r.permalink || r.url || '',
+    })).filter((r) => r.price > 0);
+  }
+
+  /**
    * Fetch single AliExpress product by URL (primary datasource when SCRAPER_BRIDGE_ENABLED=true)
    */
   async fetchAliExpressProduct(aliexpressUrl: string): Promise<ScrapedProductFromBridge> {
