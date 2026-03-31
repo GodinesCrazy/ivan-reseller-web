@@ -46,6 +46,26 @@ const COMPETITION_SOURCE_LABELS: Record<string, string> = {
   amazon_catalog: 'Amazon (catálogo)',
 };
 
+/** Map Opportunities region selector → ISO country for import / AliExpress ship-to / ML site alignment. */
+function regionToIsoCountry(region: string): string | undefined {
+  const r = String(region || '').toLowerCase();
+  const map: Record<string, string> = {
+    cl: 'CL',
+    us: 'US',
+    mx: 'MX',
+    uk: 'GB',
+    de: 'DE',
+    es: 'ES',
+    fr: 'FR',
+    it: 'IT',
+    br: 'BR',
+    ar: 'AR',
+    co: 'CO',
+    pe: 'PE',
+  };
+  return map[r];
+}
+
 function isFieldEstimated(
   truth: CommercialTruthMeta | undefined,
   field: 'suggestedPrice' | 'profitMargin' | 'roi',
@@ -90,6 +110,16 @@ interface OpportunityItem {
   generatedAt: string;
   estimatedFields?: string[];
   estimationNotes?: string[];
+  commercialTruth?: CommercialTruthMeta;
+  competitionDiagnostics?: Array<{
+    marketplace: string;
+    region: string;
+    listingsFound: number;
+    competitivePrice: number;
+    dataSource?: string;
+    probeCode?: string;
+    probeDetail?: string;
+  }>;
 }
 
 // ✅ Usar utilidad centralizada de formateo de moneda
@@ -577,17 +607,18 @@ export default function Opportunities() {
     const title = (titleRaw || '').trim();
     const snippet = title.length > 72 ? `${title.slice(0, 72)}…` : title;
     const backendMsg = typeof data?.error === 'string' ? data.error : '';
-    toast.error(`Ya está importado — producto #${id}`, {
+    toast.error('Ya existe', {
       description: [
-        backendMsg || 'Esta URL de AliExpress ya existe en tu cuenta.',
+        `Producto #${id} en tu catálogo (misma URL de AliExpress).`,
+        backendMsg || 'No se creó un duplicado.',
         snippet ? `Título: ${snippet}` : null,
-        'No se creó un duplicado. Abrí el producto para revisar o publicar; el listado completo está en Productos.',
+        'Abrí el producto existente o andá a Productos.',
       ]
         .filter(Boolean)
         .join(' '),
       duration: 14_000,
       action: {
-        label: 'Abrir producto',
+        label: 'Abrir producto existente',
         onClick: () => navigate(`/products/${id}/preview`),
       },
       cancel: {
@@ -658,7 +689,20 @@ export default function Opportunities() {
         shippingCost: item.shippingCost || undefined,
         importTax: item.importTax || undefined,
         totalCost: item.totalCost || undefined,
-        targetCountry: item.targetCountry || undefined,
+        targetCountry: item.targetCountry || regionToIsoCountry(region),
+        productData: {
+          source: 'opportunities_page',
+          opportunitySnapshot: {
+            capturedAt: new Date().toISOString(),
+            searchRegion: region,
+            commercialTruth: item.commercialTruth ?? null,
+            estimatedFields: item.estimatedFields ?? [],
+            estimationNotes: item.estimationNotes ?? [],
+            competitionDiagnostics: item.competitionDiagnostics ?? [],
+            feesConsidered: item.feesConsidered ?? {},
+            targetMarketplaces: item.targetMarketplaces ?? [],
+          },
+        },
       };
 
       // ✅ MEJORADO: Pasar TODAS las imágenes disponibles, no solo una
@@ -749,7 +793,20 @@ export default function Opportunities() {
         shippingCost: item.shippingCost || undefined,
         importTax: item.importTax || undefined,
         totalCost: item.totalCost || undefined,
-        targetCountry: item.targetCountry || undefined,
+        targetCountry: item.targetCountry || regionToIsoCountry(region),
+        productData: {
+          source: 'opportunities_page',
+          opportunitySnapshot: {
+            capturedAt: new Date().toISOString(),
+            searchRegion: region,
+            commercialTruth: item.commercialTruth ?? null,
+            estimatedFields: item.estimatedFields ?? [],
+            estimationNotes: item.estimationNotes ?? [],
+            competitionDiagnostics: item.competitionDiagnostics ?? [],
+            feesConsidered: item.feesConsidered ?? {},
+            targetMarketplaces: item.targetMarketplaces ?? [],
+          },
+        },
       };
 
       // ✅ MEJORADO: Pasar TODAS las imágenes disponibles, no solo una
@@ -854,6 +911,7 @@ export default function Opportunities() {
         />
         <select value={region} onChange={e => setRegion(e.target.value)} className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
           <option value="us">US</option>
+          <option value="cl">CL / Chile (Mercado Libre MLC)</option>
           <option value="uk">UK</option>
           <option value="mx">MX</option>
           <option value="de">DE</option>
@@ -1293,8 +1351,19 @@ export default function Opportunities() {
         )}
       </div>
       {hasEstimatedValues && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded px-4 py-3">
-          <strong>Nota:</strong> Las filas con <span className="uppercase font-semibold">Estimado</span> no obtuvieron listados comparables (eBay Browse, Mercado Libre público o Amazon) para ese título y región. Mercado Libre ya no exige tu OAuth para esos comparables; eBay usa App ID + Cert ID (token de aplicación o tu OAuth). Amazon sigue requiriendo credenciales completas. Tras cambiar credenciales, usa búsqueda con actualización o espera unos minutos (caché).
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs rounded px-4 py-3 space-y-1">
+          <p>
+            <strong>Nota:</strong> Las filas con <span className="uppercase font-semibold">Estimado</span> no obtuvieron precios comparables reales (eBay Browse, catálogo público Mercado Libre o Amazon) para ese título y región.
+          </p>
+          <p>
+            El servidor añade en <strong>notas de estimación</strong> códigos por marketplace cuando puede diagnosticar el motivo (por ejemplo{' '}
+            <code className="text-[11px]">EBAY_BROWSE_NOT_CONFIGURED</code>,{' '}
+            <code className="text-[11px]">ML_PUBLIC_CATALOG_ZERO_RESULTS</code>,{' '}
+            <code className="text-[11px]">AMAZON_CREDENTIALS_MISSING</code>). Para Chile/canary ML, elegí región <strong>CL</strong> y términos de búsqueda más cortos si ML no devuelve listados.
+          </p>
+          <p className="text-amber-700/90 dark:text-amber-300/90">
+            Tras corregir credenciales o región, reintentá la búsqueda (refresh); puede haber caché breve en el servidor.
+          </p>
         </div>
       )}
     </div>

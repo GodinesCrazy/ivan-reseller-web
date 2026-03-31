@@ -1330,7 +1330,7 @@ export default function Products() {
               . No se puede deshacer.
             </p>
             <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded px-2 py-1.5">
-              El backend rechaza la eliminación si el producto tiene ventas asociadas. Si está publicado, revisá despublicar antes si tu flujo lo requiere.
+              El backend rechaza la eliminación si el producto tiene ventas u órdenes asociadas (historial). Si está publicado, podés despublicar antes si tu flujo lo requiere.
             </p>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => !deleteLoading && setDeleteTarget(null)} disabled={deleteLoading}>

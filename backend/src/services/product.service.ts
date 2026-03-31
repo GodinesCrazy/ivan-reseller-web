@@ -241,7 +241,6 @@ export class ProductService {
           select: { id: true, title: true, status: true },
         });
         if (existing) {
-          const titleSnippet = (existing.title || 'Sin título').slice(0, 120);
           throw new AppError(
             `Ya importaste este producto: existe uno con la misma URL de AliExpress (ID ${existing.id}). Ábrelo en Productos en lugar de duplicar.`,
             409,
@@ -251,6 +250,7 @@ export class ProductService {
               existingProductTitle: existing.title ?? '',
               existingProductStatus: existing.status,
               duplicateBy: 'aliexpress_url',
+              userMessage: `Ya existe en tu catálogo (producto #${existing.id}).`,
             }
           );
         }
@@ -1352,6 +1352,16 @@ export class ProductService {
     });
     if (salesCount > 0) {
       throw new AppError('No se puede eliminar un producto con ventas asociadas', 400);
+    }
+
+    const ordersCount = await prisma.order.count({
+      where: { productId: id }
+    });
+    if (ordersCount > 0) {
+      throw new AppError(
+        'No se puede eliminar un producto con órdenes asociadas (historial de ventas/fulfillment).',
+        400
+      );
     }
 
     await prisma.product.delete({

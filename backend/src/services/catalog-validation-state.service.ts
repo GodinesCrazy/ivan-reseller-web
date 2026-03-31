@@ -34,12 +34,36 @@ function parseMeta(raw: unknown): Record<string, any> {
   return raw && typeof raw === 'object' ? (raw as Record<string, any>) : {};
 }
 
+function num(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** When DB totalCost is null but unit + shipping + tax are known, treat fees as computable (import pipeline). */
+function inferredTotalCost(product: {
+  totalCost?: unknown;
+  aliexpressPrice?: unknown;
+  shippingCost?: unknown;
+  importTax?: unknown;
+}): number | null {
+  const stored = num(product.totalCost);
+  if (stored !== null) return stored;
+  const base = num(product.aliexpressPrice);
+  const ship = product.shippingCost !== null && product.shippingCost !== undefined ? num(product.shippingCost) : null;
+  const tax = num(product.importTax) ?? 0;
+  if (base === null || ship === null) return null;
+  return Number((base + ship + tax).toFixed(2));
+}
+
 export function getProductValidationSnapshot(product: {
   status?: string | null;
   currency?: string | null;
   targetCountry?: string | null;
   shippingCost?: unknown;
   totalCost?: unknown;
+  aliexpressPrice?: unknown;
+  importTax?: unknown;
   aliexpressSku?: string | null;
   productData?: unknown;
 }): ProductValidationSnapshot {
@@ -83,7 +107,8 @@ export function getProductValidationSnapshot(product: {
   if (!resolvedCountry) blockedReasons.add('unsupportedCountry');
   if (!resolvedLanguage) blockedReasons.add('unsupportedLanguage');
   if (!resolvedCurrency) blockedReasons.add('unresolvedCurrency');
-  if (product.totalCost == null) blockedReasons.add('incompleteFees');
+  const effectiveTotal = inferredTotalCost(product);
+  if (effectiveTotal === null) blockedReasons.add('incompleteFees');
   if (feeLedger?.blockedByFinancialIncompleteness === true) blockedReasons.add('incompleteFees');
   if (Array.isArray(feeLedger?.blockingReasons) && feeLedger.blockingReasons.length > 0) {
     blockedReasons.add('incompleteFees');

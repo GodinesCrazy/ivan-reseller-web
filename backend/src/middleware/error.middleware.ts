@@ -213,6 +213,11 @@ export const errorHandler = (
     response.existingProductTitle = d.existingProductTitle;
     response.existingProductStatus = d.existingProductStatus;
     response.duplicateBy = d.duplicateBy;
+    response.code = 'DUPLICATE_PRODUCT_IMPORT';
+    response.userMessage =
+      typeof d.userMessage === 'string'
+        ? d.userMessage
+        : 'Este artículo ya está en tu catálogo (misma URL de AliExpress). Abrí el producto existente en lugar de importar de nuevo.';
   }
 
   // Mensaje user-friendly

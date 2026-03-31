@@ -1364,6 +1364,16 @@ class OpportunityFinderService {
         analysis = {};
       }
 
+      const competitionDiagnostics = Object.values(analysis || {}).map((a: any) => ({
+        marketplace: String(a?.marketplace || ''),
+        region: String(a?.region || region),
+        listingsFound: typeof a?.listingsFound === 'number' ? a.listingsFound : 0,
+        competitivePrice: typeof a?.competitivePrice === 'number' ? a.competitivePrice : 0,
+        dataSource: a?.dataSource as string | undefined,
+        probeCode: a?.competitionProbe?.code as string | undefined,
+        probeDetail: a?.competitionProbe?.detail as string | undefined,
+      }));
+
       // Agregar oportunidades solo si existe algún marketplace con datos reales
       const analyses = Object.values(analysis || {});
       const valid = analyses.find(a => a && a.listingsFound > 0 && a.competitivePrice > 0);
@@ -1540,6 +1550,13 @@ class OpportunityFinderService {
         estimationNotes.push(
           'Valores estimados: no hubo listados comparables en catálogo (eBay Browse / Mercado Libre público / Amazon) para este título y región. Revisa región en Oportunidades, credenciales de Amazon (si aplica) y App ID/Cert ID de eBay en el servidor o en Ajustes.'
         );
+        for (const d of competitionDiagnostics) {
+          if (d.probeCode) {
+            estimationNotes.push(
+              `[${d.marketplace}] ${d.probeCode}${d.probeDetail ? `: ${d.probeDetail}` : ''}`
+            );
+          }
+        }
         for (const mp of marketplaces) {
           const diag = credentialDiagnostics[mp];
           if (diag?.issues?.length) {
@@ -1887,6 +1904,7 @@ class OpportunityFinderService {
         estimatedFields,
         estimationNotes,
         commercialTruth,
+        competitionDiagnostics,
         supplierOrdersCount: (product as any).supplierOrdersCount,
         supplierRating: (product as any).supplierRating,
         supplierReviewsCount: (product as any).supplierReviewsCount,

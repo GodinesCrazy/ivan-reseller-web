@@ -10,9 +10,9 @@ export interface Product {
   imageUrl: string;
   category: string;
   aliexpressUrl?: string;
-  sku: string;
-  stock: number;
-  isActive: boolean;
+  sku?: string;
+  stock?: number;
+  isActive?: boolean;
   status?: string;
   validationState?: string;
   blockedReasons?: string[];
@@ -20,10 +20,9 @@ export interface Product {
   resolvedLanguage?: string | null;
   resolvedCurrency?: string | null;
   feeCompleteness?: number;
-  projectedMargin?: number | null;
-  createdAt: string;
-  updatedAt: string;
-  winnerDetectedAt?: string | null;
+  projectedMargin?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateProductRequest {
@@ -119,7 +118,10 @@ class ProductsAPI {
     return toProduct(raw);
   }
 
-  async updateProductStatus(id: number, status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PUBLISHED' | 'LEGACY_UNVERIFIED' | 'VALIDATED_READY'): Promise<Product> {
+  async updateProductStatus(
+    id: number,
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PUBLISHED' | 'LEGACY_UNVERIFIED' | 'VALIDATED_READY'
+  ): Promise<Product> {
     const response = await api.patch(`/api/products/${id}/status`, { status });
     const raw = response.data?.data ?? response.data;
     return toProduct(raw);

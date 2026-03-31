@@ -66,6 +66,16 @@ export interface OpportunityItem {
   estimationNotes?: string[];
   /** Explicit exact vs estimated contract for commercial columns */
   commercialTruth?: CommercialTruthMeta;
+  /** Per-marketplace probe outcome (credentials missing, zero hits, API error). */
+  competitionDiagnostics?: Array<{
+    marketplace: string;
+    region: string;
+    listingsFound: number;
+    competitivePrice: number;
+    dataSource?: string;
+    probeCode?: string;
+    probeDetail?: string;
+  }>;
   category?: string;
   shippingCost?: number;
   importTax?: number;

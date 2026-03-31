@@ -44,6 +44,30 @@ export interface MarketAnalysis {
   topListings: MarketplaceListing[];
   /** Provenance of listing prices for UI / audits */
   dataSource?: CompetitionDataSource;
+  /** Why this marketplace contributed no comparable price (honest diagnostics for Opportunities UI). */
+  competitionProbe?: { code: string; detail?: string };
+}
+
+function emptyAnalysis(
+  mp: string,
+  region: string,
+  currency: string,
+  probe: { code: string; detail?: string }
+): MarketAnalysis {
+  return {
+    marketplace: mp,
+    region,
+    currency,
+    listingsFound: 0,
+    prices: [],
+    averagePrice: 0,
+    minPrice: 0,
+    maxPrice: 0,
+    medianPrice: 0,
+    competitivePrice: 0,
+    topListings: [],
+    competitionProbe: probe,
+  };
 }
 
 function resolveEbayAppKeys(raw: Record<string, unknown>): { appId: string; certId: string } {
@@ -82,6 +106,10 @@ export class CompetitorAnalyzerService {
             logger.warn('Skipping eBay analysis - missing App ID / Cert ID (needed for Browse API)', {
               userId,
               marketplace: mp,
+            });
+            results[`${mp}_${region}`] = emptyAnalysis('ebay', region, 'USD', {
+              code: 'EBAY_BROWSE_NOT_CONFIGURED',
+              detail: 'Faltan EBAY_CLIENT_ID / EBAY_CLIENT_SECRET (o App ID / Cert ID en credenciales).',
             });
             continue;
           }
@@ -140,6 +168,10 @@ export class CompetitorAnalyzerService {
             competitivePrice,
             topListings,
             dataSource,
+            competitionProbe:
+              listingsFound > 0
+                ? undefined
+                : { code: 'EBAY_ZERO_RESULTS', detail: 'Browse API no devolvió precios para la consulta acortada.' },
           };
         } else if (mp === 'mercadolibre') {
           // Comparable prices from Mercado Libre public catalog — does not require seller OAuth.
@@ -193,6 +225,13 @@ export class CompetitorAnalyzerService {
             competitivePrice,
             topListings,
             dataSource: 'mercadolibre_public_catalog',
+            competitionProbe:
+              listingsFound > 0
+                ? undefined
+                : {
+                    code: 'ML_PUBLIC_CATALOG_ZERO_RESULTS',
+                    detail: `Sin listados en ${siteId} para el título acortado; probá otra región o término más corto.`,
+                  },
           };
         } else if (mp === 'amazon') {
           const config = AmazonService.getMarketplaceConfig(region.toUpperCase() === 'UK' ? 'UK' : (region.toUpperCase() === 'DE' ? 'DE' : 'US'));
@@ -200,6 +239,10 @@ export class CompetitorAnalyzerService {
           const rec = await marketplace.getCredentials(userId, 'amazon');
           if (!rec || !rec.isActive || !rec.credentials) {
             logger.warn('Skipping Amazon analysis - credentials missing or inactive', { userId });
+            results[`${mp}_${region}`] = emptyAnalysis('amazon', region, 'USD', {
+              code: 'AMAZON_CREDENTIALS_MISSING',
+              detail: 'Credenciales Amazon no configuradas o inactivas.',
+            });
             continue;
           }
 
@@ -207,6 +250,10 @@ export class CompetitorAnalyzerService {
             logger.warn('Skipping Amazon analysis - credential issues detected', {
               userId,
               issues: rec.issues,
+            });
+            results[`${mp}_${region}`] = emptyAnalysis('amazon', region, 'USD', {
+              code: 'AMAZON_CREDENTIAL_ISSUES',
+              detail: rec.issues?.join('; ') || 'Issues en credenciales Amazon.',
             });
             continue;
           }
@@ -247,6 +294,10 @@ export class CompetitorAnalyzerService {
             competitivePrice,
             topListings,
             dataSource: 'amazon_catalog',
+            competitionProbe:
+              listingsFound > 0
+                ? undefined
+                : { code: 'AMAZON_CATALOG_ZERO_RESULTS', detail: 'Catálogo SP-API sin precios para la búsqueda.' },
           };
         }
       } catch (e: any) {
@@ -257,6 +308,10 @@ export class CompetitorAnalyzerService {
           titleSample: productTitle?.slice(0, 80),
           error: e?.message || String(e),
           status: e?.response?.status,
+        });
+        results[`${mp}_${region}`] = emptyAnalysis(mp, region, 'USD', {
+          code: 'MARKETPLACE_SEARCH_ERROR',
+          detail: e?.message || String(e),
         });
       }
     }
