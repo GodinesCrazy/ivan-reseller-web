@@ -39,6 +39,27 @@ interface CommercialTruthMeta {
   competitionSources?: string[];
 }
 
+type PublishingDecision =
+  | 'PUBLICABLE'
+  | 'NO_PUBLICABLE'
+  | 'NEEDS_MARKET_DATA'
+  | 'NEEDS_ENRICHMENT'
+  | 'REJECTED_LOW_MARGIN'
+  | 'REJECTED_LOW_SUPPLIER_QUALITY'
+  | 'REJECTED_NO_COMPETITOR_EVIDENCE';
+
+interface PublishingDecisionResult {
+  decision: PublishingDecision;
+  reasons: string[];
+  canPublish: boolean;
+  checkedAt: string;
+  comparablesCount: number;
+  dataSource?: string;
+  realMarginPct: number;
+  minimumViablePriceUsd: number;
+  suggestedPriceUsd: number;
+}
+
 const COMPETITION_SOURCE_LABELS: Record<string, string> = {
   mercadolibre_public_catalog: 'Mercado Libre (catálogo público)',
   mercadolibre_authenticated_catalog: 'Mercado Libre (búsqueda con tu token)',
@@ -46,6 +67,39 @@ const COMPETITION_SOURCE_LABELS: Record<string, string> = {
   ebay_browse_user_oauth: 'eBay Browse (tu OAuth)',
   amazon_catalog: 'Amazon (catálogo)',
 };
+
+const PUBLISHING_DECISION_LABELS: Record<PublishingDecision, string> = {
+  PUBLICABLE: 'Publicable',
+  NO_PUBLICABLE: 'No publicable',
+  NEEDS_MARKET_DATA: 'Sin datos de mercado',
+  NEEDS_ENRICHMENT: 'Datos incompletos',
+  REJECTED_LOW_MARGIN: 'Margen insuficiente',
+  REJECTED_LOW_SUPPLIER_QUALITY: 'Calidad de proveedor baja',
+  REJECTED_NO_COMPETITOR_EVIDENCE: 'Sin comparables reales',
+};
+
+const PUBLISHING_DECISION_COLORS: Record<PublishingDecision, string> = {
+  PUBLICABLE: 'bg-green-100 text-green-800 border-green-300',
+  NO_PUBLICABLE: 'bg-red-100 text-red-800 border-red-300',
+  NEEDS_MARKET_DATA: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  NEEDS_ENRICHMENT: 'bg-orange-100 text-orange-800 border-orange-300',
+  REJECTED_LOW_MARGIN: 'bg-red-100 text-red-800 border-red-300',
+  REJECTED_LOW_SUPPLIER_QUALITY: 'bg-red-100 text-red-800 border-red-300',
+  REJECTED_NO_COMPETITOR_EVIDENCE: 'bg-gray-100 text-gray-700 border-gray-300',
+};
+
+function PublishingDecisionBadge({ result }: { result: PublishingDecisionResult }) {
+  const label = PUBLISHING_DECISION_LABELS[result.decision] ?? result.decision;
+  const colors = PUBLISHING_DECISION_COLORS[result.decision] ?? 'bg-gray-100 text-gray-700 border-gray-300';
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-semibold ${colors}`}
+      title={result.reasons.join('\n')}
+    >
+      {result.canPublish ? '✓' : '○'} {label}
+    </span>
+  );
+}
 
 /** Map Opportunities region selector → ISO country for import / AliExpress ship-to / ML site alignment. */
 function regionToIsoCountry(region: string): string | undefined {
@@ -121,6 +175,7 @@ interface OpportunityItem {
     probeCode?: string;
     probeDetail?: string;
   }>;
+  publishingDecision?: PublishingDecisionResult;
 }
 
 // ✅ Usar utilidad centralizada de formateo de moneda
@@ -1366,12 +1421,17 @@ export default function Opportunities() {
                 </td>
                 <td className="p-3 text-center">
                   <div className="flex flex-col gap-2 items-center">
-                    {/* ✅ FASE 3: Botón único de Importar (sin publicar automáticamente) */}
+                    {/* Publishing decision badge */}
+                    {it.publishingDecision && (
+                      <PublishingDecisionBadge result={it.publishingDecision} />
+                    )}
+                    {/* Import button — always available; publish only when PUBLICABLE */}
                     <button
+                      type="button"
                       onClick={() => importProduct(it)}
                       disabled={publishing[idx]}
                       className="px-4 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors flex items-center gap-2"
-                      title="Importar producto (se guardará en Products para revisión y publicación)"
+                      title="Importar producto (se guardará en Products para revisión)"
                     >
                       {publishing[idx] ? (
                         <>
@@ -1385,10 +1445,12 @@ export default function Opportunities() {
                         </>
                       )}
                     </button>
-                    {/* Nota informativa */}
-                    <p className="text-xs text-gray-500 max-w-[120px] text-center">
-                      El producto se guardará en Products para que puedas revisarlo y publicarlo
-                    </p>
+                    {/* Decision reasons tooltip */}
+                    {it.publishingDecision && !it.publishingDecision.canPublish && (
+                      <p className="text-xs text-gray-500 max-w-[140px] text-center leading-tight">
+                        {it.publishingDecision.reasons[0]}
+                      </p>
+                    )}
                   </div>
                 </td>
               </tr>

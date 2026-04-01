@@ -3,6 +3,32 @@
  * Used by opportunity-finder, and by discovery/enrichment modules when extracted.
  */
 
+/** Automatic publishability decision for each opportunity. */
+export type PublishingDecision =
+  | 'PUBLICABLE'
+  | 'NO_PUBLICABLE'
+  | 'NEEDS_MARKET_DATA'
+  | 'NEEDS_ENRICHMENT'
+  | 'REJECTED_LOW_MARGIN'
+  | 'REJECTED_LOW_SUPPLIER_QUALITY'
+  | 'REJECTED_NO_COMPETITOR_EVIDENCE';
+
+export interface PublishingDecisionResult {
+  decision: PublishingDecision;
+  /** Human-readable list of reasons behind the decision. */
+  reasons: string[];
+  /** True only when decision === 'PUBLICABLE'. Guards the publish payload. */
+  canPublish: boolean;
+  checkedAt: string;
+  comparablesCount: number;
+  dataSource?: string;
+  /** Real profit margin as a percentage (0-100). */
+  realMarginPct: number;
+  /** All-in cost including marketplace fee, payment fee, duties (feesConsidered.totalCost). */
+  minimumViablePriceUsd: number;
+  suggestedPriceUsd: number;
+}
+
 /** Per-field classification for Opportunities UI (backend is source of truth). */
 export type CommercialFieldTruth = 'exact' | 'estimated' | 'unavailable';
 
@@ -98,6 +124,8 @@ export interface OpportunityItem {
   supplierReviewsCount?: number;
   shippingDaysMax?: number;
   supplierScorePct?: number;
+  /** Automatic publishability decision — computed by the pipeline, not by the operator. */
+  publishingDecision?: PublishingDecisionResult;
 }
 
 /** Raw product shape returned by discovery (Affiliate API or fallbacks) */

@@ -30,6 +30,8 @@ import type {
   OpportunityFilters,
   OpportunityItem,
   PipelineDiagnostics,
+  PublishingDecision,
+  PublishingDecisionResult,
 } from './opportunity-finder.types';
 import { normalizeOpportunityPagination, OPPORTUNITY_MAX_PAGE } from '../utils/opportunity-search-pagination';
 import { computeMinimumViablePrice } from './canonical-cost-engine.service';
@@ -41,6 +43,91 @@ function listingsToCompetitionLevel(n: number): 'low' | 'medium' | 'high' | 'unk
   if (n < 6) return 'low';
   if (n < 15) return 'medium';
   return 'high';
+}
+
+/**
+ * Automatic publishability decision model.
+ * Evaluates an opportunity against hard criteria and returns a structured decision.
+ * Decision is 'PUBLICABLE' only when ALL criteria are met:
+ *   - feesConsidered populated (canonical pricing computed)
+ *   - profitMargin >= minMarginPct
+ *   - comparablesCount >= 3 (real competitor data)
+ *   - product has images and URL
+ * Returns a result with canPublish = true ONLY for PUBLICABLE.
+ */
+function computePublishingDecision(params: {
+  opp: OpportunityItem;
+  comparablesCount: number;
+  dataSource?: string;
+  probeCodes: string[];
+  minMarginPct: number;
+}): PublishingDecisionResult {
+  const { opp, comparablesCount, dataSource, probeCodes, minMarginPct } = params;
+  const reasons: string[] = [];
+  const realMarginPct = opp.profitMargin * 100;
+  const minimumViablePriceUsd = opp.feesConsidered?.totalCost ?? 0;
+  const base = {
+    checkedAt: new Date().toISOString(),
+    comparablesCount,
+    dataSource,
+    realMarginPct,
+    minimumViablePriceUsd,
+    suggestedPriceUsd: opp.suggestedPriceUsd,
+  };
+
+  // Gate 1 — enrichment: product must have images and URL
+  const hasImages = Array.isArray(opp.images) && opp.images.length > 0;
+  const hasUrl = !!(opp.aliexpressUrl && opp.aliexpressUrl.length > 10);
+  const hasTitle = !!(opp.title?.trim());
+  if (!hasImages || !hasUrl || !hasTitle) {
+    const missing = [!hasImages && 'imágenes', !hasUrl && 'URL', !hasTitle && 'título'].filter(Boolean).join(', ');
+    reasons.push(`Datos incompletos del producto: falta ${missing}`);
+    return { ...base, decision: 'NEEDS_ENRICHMENT', reasons, canPublish: false };
+  }
+
+  // Gate 2 — fees: canonical pricing must have been computed
+  const feesOk = opp.feesConsidered && Object.keys(opp.feesConsidered).length > 0;
+  if (!feesOk) {
+    reasons.push('No se calcularon fees canónicos — falta breakdown de marketplace fee, payment fee e import duties');
+    return { ...base, decision: 'NEEDS_ENRICHMENT', reasons, canPublish: false };
+  }
+
+  // Gate 3 — margin
+  if (realMarginPct < minMarginPct - 0.5) {
+    reasons.push(`Margen real ${realMarginPct.toFixed(1)}% < mínimo requerido ${minMarginPct.toFixed(1)}%`);
+    reasons.push(`Precio sugerido $${opp.suggestedPriceUsd.toFixed(2)} insuficiente para cubrir fees y objetivo de margen`);
+    return { ...base, decision: 'REJECTED_LOW_MARGIN', reasons, canPublish: false };
+  }
+
+  // Gate 4 — competitor evidence
+  if (comparablesCount === 0) {
+    const structuralBlock = probeCodes.some(
+      (c) => c.includes('FORBIDDEN') || c.includes('UNAUTHORIZED') || c.includes('NETWORK') || c.includes('TIMEOUT')
+    );
+    if (structuralBlock) {
+      reasons.push('Sin acceso a datos de mercado — bloqueo estructural de plataforma (ej: ML 403 desde IPs Railway)');
+      reasons.push(`Precio $${opp.suggestedPriceUsd.toFixed(2)} es el mínimo rentable canónico, no el precio de mercado real`);
+      reasons.push('Para publicar: configurar ML OAuth real o scraper-bridge en producción');
+      probeCodes.filter(Boolean).forEach((code) => reasons.push(`Probe: ${code}`));
+      return { ...base, decision: 'NEEDS_MARKET_DATA', reasons, canPublish: false };
+    }
+    reasons.push('Búsqueda de mercado ejecutada correctamente pero sin resultados para este producto y región');
+    reasons.push('Considera ampliar la búsqueda o probar otra región/categoría');
+    return { ...base, decision: 'REJECTED_NO_COMPETITOR_EVIDENCE', reasons, canPublish: false };
+  }
+
+  // Gate 5 — insufficient comparables (< 3 = weak evidence)
+  if (comparablesCount < 3) {
+    reasons.push(`Solo ${comparablesCount} comparable(s) encontrado(s) — se requieren ≥ 3 para decisión confiable`);
+    reasons.push(`Fuente parcial: ${dataSource ?? 'desconocida'}`);
+    return { ...base, decision: 'NEEDS_MARKET_DATA', reasons, canPublish: false };
+  }
+
+  // All gates passed — PUBLICABLE
+  reasons.push(`${comparablesCount} comparables reales obtenidos de ${dataSource ?? 'marketplace'}`);
+  reasons.push(`Margen canónico ${realMarginPct.toFixed(1)}% ≥ mínimo ${minMarginPct.toFixed(1)}%`);
+  reasons.push(`Precio sugerido: $${opp.suggestedPriceUsd.toFixed(2)} USD (cobertura de fees verificada)`);
+  return { ...base, decision: 'PUBLICABLE', reasons, canPublish: true };
 }
 
 class OpportunityFinderService {
@@ -1957,9 +2044,27 @@ class OpportunityFinderService {
         supplierReviewsCount: (product as any).supplierReviewsCount,
         shippingDaysMax: (product as any).shippingDaysMax,
         supplierScorePct: (product as any).supplierScorePct,
+        publishingDecision: computePublishingDecision({
+          opp: {
+            profitMargin: finalMargin,
+            suggestedPriceUsd: best.priceBase || best.price,
+            feesConsidered: bestBreakdown,
+            images: allImages.length > 0 ? allImages : (imageUrl ? [imageUrl] : []),
+            aliexpressUrl: product.productUrl || '',
+            title: product.title,
+          } as OpportunityItem,
+          comparablesCount: valid?.listingsFound ?? 0,
+          dataSource: valid?.dataSource,
+          probeCodes: competitionDiagnostics.map((d) => d.probeCode || '').filter(Boolean),
+          minMarginPct: effectiveMinMargin * 100,
+        }),
       };
 
-      logger.info('[PIPELINE] EVALUATED', { title: opp.title?.substring(0, 40), profitMargin: (opp.profitMargin * 100).toFixed(1) });
+      logger.info('[PIPELINE] EVALUATED', {
+        title: opp.title?.substring(0, 40),
+        profitMargin: (opp.profitMargin * 100).toFixed(1),
+        publishingDecision: opp.publishingDecision?.decision,
+      });
       opportunities.push(opp);
       logger.debug('Oportunidad agregada', {
         service: 'opportunity-finder',
