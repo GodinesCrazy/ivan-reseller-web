@@ -486,6 +486,106 @@ export class CompetitorAnalyzerService {
             }
           }
 
+          // FASE 0E — ScraperAPI/ZenRows proxy fallback for ML search when bridge also returns 0.
+          // ScraperAPI proxies the ML API request through their own IPs, bypassing Railway IP block.
+          if (res.length === 0 && (publicError?.httpStatus === 403 || publicError?.httpStatus === 401)) {
+            logger.info('[competitor-analyzer] Attempting ScraperAPI/ZenRows proxy fallback for ML', {
+              userId, siteId, region,
+            });
+            try {
+              const { default: axiosDefault } = await import('axios');
+              const mlSearchUrl = `https://api.mercadolibre.com/sites/${siteId}/search?q=${encodeURIComponent(searchQ)}&limit=20`;
+
+              // Try ScraperAPI first — read from DB via CredentialsManager or env
+              let proxyKey = (process.env.SCRAPERAPI_KEY || process.env.SCRAPER_API_KEY || '').trim();
+              if (!proxyKey) {
+                const scCred = await prisma.apiCredential.findFirst({
+                  where: { userId, apiName: 'scraperapi', environment: 'production' },
+                });
+                if (scCred?.credentials) {
+                  try {
+                    const { decrypt } = await import('../utils/encryption');
+                    const raw = scCred.credentials.includes(':') && /^[0-9a-f]+:/i.test(scCred.credentials)
+                      ? decrypt(scCred.credentials)
+                      : scCred.credentials;
+                    try { proxyKey = String(JSON.parse(raw)?.apiKey || JSON.parse(raw)?.key || '').trim(); }
+                    catch { proxyKey = raw.trim(); } // raw key string
+                  } catch {
+                    // undecryptable with local key — production will succeed
+                  }
+                }
+              }
+
+              if (proxyKey && proxyKey !== 'REPLACE_ME' && proxyKey.length > 8) {
+                const scraperUrl = `http://api.scraperapi.com/?api_key=${proxyKey}&url=${encodeURIComponent(mlSearchUrl)}&render=false`;
+                const scraperResp = await axiosDefault.get(scraperUrl, { timeout: 20000 });
+                const scraperItems = (scraperResp.data?.results || []) as any[];
+                if (scraperItems.length > 0) {
+                  res = scraperItems.map((r: any) => ({
+                    id: String(r.id || ''),
+                    title: String(r.title || ''),
+                    price: Number(r.price) || 0,
+                    currency_id: String(r.currency_id || 'CLP'),
+                    permalink: String(r.permalink || ''),
+                  })).filter((r: any) => r.price > 0);
+                  if (res.length > 0) {
+                    dataSource = 'mercadolibre_scraper_bridge';
+                    publicError = null;
+                    logger.info('[competitor-analyzer] ScraperAPI ML proxy succeeded', { userId, siteId, count: res.length });
+                    if (mlDebug) mlDebug.finalDecision = 'scraperapi_proxy_ml_comparables_used';
+                  }
+                }
+              }
+
+              // Try ZenRows if ScraperAPI didn't help
+              if (res.length === 0) {
+                let zenKey = (process.env.ZENROWS_API_KEY || '').trim();
+                if (!zenKey) {
+                  const zrCred = await prisma.apiCredential.findFirst({
+                    where: { userId, apiName: 'zenrows', environment: 'production' },
+                  });
+                  if (zrCred?.credentials) {
+                    try {
+                      const { decrypt } = await import('../utils/encryption');
+                      const raw = zrCred.credentials.includes(':') && /^[0-9a-f]+:/i.test(zrCred.credentials)
+                        ? decrypt(zrCred.credentials)
+                        : zrCred.credentials;
+                      try { zenKey = String(JSON.parse(raw)?.apiKey || JSON.parse(raw)?.key || '').trim(); }
+                      catch { zenKey = raw.trim(); }
+                    } catch {
+                      // undecryptable with local key — production will succeed
+                    }
+                  }
+                }
+
+                if (zenKey && zenKey !== 'REPLACE_ME' && zenKey.length > 8) {
+                  const zenUrl = `https://api.zenrows.com/v1/?apikey=${zenKey}&url=${encodeURIComponent(mlSearchUrl)}&premium_proxy=true`;
+                  const zenResp = await axiosDefault.get(zenUrl, { timeout: 20000 });
+                  const zenItems = (zenResp.data?.results || []) as any[];
+                  if (zenItems.length > 0) {
+                    res = zenItems.map((r: any) => ({
+                      id: String(r.id || ''),
+                      title: String(r.title || ''),
+                      price: Number(r.price) || 0,
+                      currency_id: String(r.currency_id || 'CLP'),
+                      permalink: String(r.permalink || ''),
+                    })).filter((r: any) => r.price > 0);
+                    if (res.length > 0) {
+                      dataSource = 'mercadolibre_scraper_bridge';
+                      publicError = null;
+                      logger.info('[competitor-analyzer] ZenRows ML proxy succeeded', { userId, siteId, count: res.length });
+                      if (mlDebug) mlDebug.finalDecision = 'zenrows_proxy_ml_comparables_used';
+                    }
+                  }
+                }
+              }
+            } catch (proxyErr: any) {
+              logger.warn('[competitor-analyzer] ScraperAPI/ZenRows ML proxy fallback failed', {
+                userId, siteId, error: proxyErr?.message,
+              });
+            }
+          }
+
           const prices = res.map(r => r.price).filter(v => isFinite(v) && v > 0).sort((a, b) => a - b);
           const listingsFound = prices.length;
           const minPrice = listingsFound ? prices[0] : 0;
@@ -516,7 +616,9 @@ export class CompetitorAnalyzerService {
                   detail:
                     'OAuth ML activo (token válido) pero MercadoLibre bloquea búsquedas (GET /sites/MLC/search) desde IPs de Railway ' +
                     'incluso con token autenticado. testConnection() pasa (/users/{id} no bloqueado), search sí bloqueado. ' +
-                    'Solución: activar scraper-bridge en una IP no bloqueada (SCRAPER_BRIDGE_ENABLED=true + SCRAPER_BRIDGE_URL).',
+                    'Opciones de fix: (1) SCRAPER_BRIDGE_ENABLED=true + SCRAPER_BRIDGE_URL, ' +
+                    '(2) SCRAPERAPI_KEY configurado en Railway (proxy automático a ML API), ' +
+                    '(3) ZENROWS_API_KEY configurado en Railway.',
                 };
                 if (mlDebug) {
                   mlDebug.finalDecision = 'estimated_due_to_ip_block_search_endpoint_auth_and_public';
