@@ -135,6 +135,12 @@ function mergeProductMetadata(dto: CreateProductDto | UpdateProductDto): Record<
     if (pd.opportunityImport && typeof pd.opportunityImport === 'object') {
       meta.opportunityImport = { ...pd.opportunityImport };
     }
+    if (pd.mlChileFreight && typeof pd.mlChileFreight === 'object') {
+      meta.mlChileFreight = { ...pd.mlChileFreight };
+    }
+    if (pd.mlChileFreightCompatibility && typeof pd.mlChileFreightCompatibility === 'object') {
+      meta.mlChileFreightCompatibility = { ...pd.mlChileFreightCompatibility };
+    }
   }
 
   const createDto = dto as CreateProductDto;
