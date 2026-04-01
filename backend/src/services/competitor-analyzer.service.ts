@@ -496,22 +496,29 @@ export class CompetitorAnalyzerService {
               const { default: axiosDefault } = await import('axios');
               const mlSearchUrl = `https://api.mercadolibre.com/sites/${siteId}/search?q=${encodeURIComponent(searchQ)}&limit=20`;
 
-              // Try ScraperAPI first — read from DB via CredentialsManager or env
+              // Try ScraperAPI first — read from DB (all records, prefer hex-encrypted, newest first)
               let proxyKey = (process.env.SCRAPERAPI_KEY || process.env.SCRAPER_API_KEY || '').trim();
               if (!proxyKey) {
-                const scCred = await prisma.apiCredential.findFirst({
+                const { decrypt: decryptFn } = await import('../utils/encryption');
+                const scCreds = await prisma.apiCredential.findMany({
                   where: { userId, apiName: 'scraperapi', environment: 'production' },
+                  orderBy: { id: 'desc' },
                 });
-                if (scCred?.credentials) {
+                for (const scCred of scCreds) {
+                  if (!scCred.credentials) continue;
                   try {
-                    const { decrypt } = await import('../utils/encryption');
-                    const raw = scCred.credentials.includes(':') && /^[0-9a-f]+:/i.test(scCred.credentials)
-                      ? decrypt(scCred.credentials)
-                      : scCred.credentials;
-                    try { proxyKey = String(JSON.parse(raw)?.apiKey || JSON.parse(raw)?.key || '').trim(); }
-                    catch { proxyKey = raw.trim(); } // raw key string
+                    const isEncrypted = scCred.credentials.includes(':') && /^[0-9a-f]{32,}/i.test(scCred.credentials);
+                    const raw = isEncrypted ? decryptFn(scCred.credentials) : scCred.credentials;
+                    let candidate = '';
+                    try { candidate = String(JSON.parse(raw)?.apiKey || JSON.parse(raw)?.key || '').trim(); }
+                    catch { candidate = raw.trim(); }
+                    // A valid ScraperAPI key is alphanumeric, 20-40 chars, no special chars
+                    if (candidate.length >= 20 && /^[a-zA-Z0-9]+$/.test(candidate)) {
+                      proxyKey = candidate;
+                      break;
+                    }
                   } catch {
-                    // undecryptable with local key — production will succeed
+                    continue;
                   }
                 }
               }
@@ -541,20 +548,22 @@ export class CompetitorAnalyzerService {
               if (res.length === 0) {
                 let zenKey = (process.env.ZENROWS_API_KEY || '').trim();
                 if (!zenKey) {
-                  const zrCred = await prisma.apiCredential.findFirst({
+                  const { decrypt: decryptFn2 } = await import('../utils/encryption');
+                  const zrCreds = await prisma.apiCredential.findMany({
                     where: { userId, apiName: 'zenrows', environment: 'production' },
+                    orderBy: { id: 'desc' },
                   });
-                  if (zrCred?.credentials) {
+                  for (const zrCred of zrCreds) {
+                    if (!zrCred.credentials) continue;
                     try {
-                      const { decrypt } = await import('../utils/encryption');
-                      const raw = zrCred.credentials.includes(':') && /^[0-9a-f]+:/i.test(zrCred.credentials)
-                        ? decrypt(zrCred.credentials)
-                        : zrCred.credentials;
-                      try { zenKey = String(JSON.parse(raw)?.apiKey || JSON.parse(raw)?.key || '').trim(); }
-                      catch { zenKey = raw.trim(); }
-                    } catch {
-                      // undecryptable with local key — production will succeed
-                    }
+                      const isEncrypted = zrCred.credentials.includes(':') && /^[0-9a-f]{32,}/i.test(zrCred.credentials);
+                      const raw = isEncrypted ? decryptFn2(zrCred.credentials) : zrCred.credentials;
+                      let candidate = '';
+                      try { candidate = String(JSON.parse(raw)?.apiKey || JSON.parse(raw)?.key || '').trim(); }
+                      catch { candidate = raw.trim(); }
+                      // ZenRows key: alphanumeric with possible hyphens, 20+ chars
+                      if (candidate.length >= 20) { zenKey = candidate; break; }
+                    } catch { continue; }
                   }
                 }
 
