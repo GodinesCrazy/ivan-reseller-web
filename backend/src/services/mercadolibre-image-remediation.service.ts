@@ -595,16 +595,29 @@ export async function autoGenerateSimpleProcessedPack(params: {
   }
 
   await fsp.mkdir(params.rootDir, { recursive: true });
-  const coverBuffer = await squareFitToJpeg(cover.buffer);
-  // Apply neutral background crush: convert near-white/light-gray pixels to pure white
-  // so the portada white-background gate passes (inspectAsset runs evaluateMlPortadaStrictAndNaturalGateFromBuffer).
+  // Create cover with 80% content fit + neutral background crush so the portada white-background
+  // gate passes (inspectAsset runs evaluateMlPortadaStrictAndNaturalGateFromBuffer).
+  // 80% fit leaves ~120px white margin on every side of a 1200x1200 output, ensuring corners
+  // and the 96px border band are pure white (no shadow/object bleed).
   const coverCrushed = await (async (): Promise<Buffer> => {
-    const { data, info } = await sharp(coverBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    const copy = Buffer.from(data);
-    const chromaMax = 20;
-    const lumMin = 178;
+    const outerSide = MIN_SIDE; // 1200
+    const innerSide = Math.round(outerSide * 0.80); // 960 — 120px white margin each side
+    const margin = Math.floor((outerSide - innerSide) / 2);
+    // Step 1: fit product into 960x960 on white canvas
+    const fitted = await sharp(cover.buffer)
+      .rotate()
+      .flatten({ background: '#ffffff' })
+      .resize(innerSide, innerSide, { fit: 'contain', background: '#ffffff' })
+      .extend({ top: margin, bottom: outerSide - innerSide - margin, left: margin, right: outerSide - innerSide - margin, background: '#ffffff' })
+      .raw()
+      .ensureAlpha()
+      .toBuffer({ resolveWithObject: true });
+    // Step 2: neutral crush — convert low-chroma, medium-bright pixels to pure white
+    const copy = Buffer.from(fitted.data);
+    const chromaMax = 22;
+    const lumMin = 165;
     const lumMax = 252;
-    for (let i = 0; i < copy.length; i += info.channels) {
+    for (let i = 0; i < copy.length; i += fitted.info.channels) {
       const r = copy[i]!;
       const g = copy[i + 1]!;
       const b = copy[i + 2]!;
@@ -613,10 +626,10 @@ export async function autoGenerateSimpleProcessedPack(params: {
       const lum = 0.299 * r + 0.587 * g + 0.114 * b;
       if (M - m <= chromaMax && lum >= lumMin && lum <= lumMax) {
         copy[i] = 255; copy[i + 1] = 255; copy[i + 2] = 255;
-        if (info.channels === 4) copy[i + 3] = 255;
+        if (fitted.info.channels === 4) copy[i + 3] = 255;
       }
     }
-    return sharp(copy, { raw: { width: info.width, height: info.height, channels: info.channels } })
+    return sharp(copy, { raw: { width: fitted.info.width, height: fitted.info.height, channels: fitted.info.channels } })
       .flatten({ background: '#ffffff' })
       .png({ compressionLevel: 7 })
       .toBuffer();
