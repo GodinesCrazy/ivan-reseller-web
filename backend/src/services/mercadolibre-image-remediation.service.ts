@@ -595,46 +595,26 @@ export async function autoGenerateSimpleProcessedPack(params: {
   }
 
   await fsp.mkdir(params.rootDir, { recursive: true });
-  // Create cover with 80% content fit + neutral background crush so the portada white-background
-  // gate passes (inspectAsset runs evaluateMlPortadaStrictAndNaturalGateFromBuffer).
-  // 80% fit leaves ~120px white margin on every side of a 1200x1200 output, ensuring corners
-  // and the 96px border band are pure white (no shadow/object bleed).
-  const coverCrushed = await (async (): Promise<Buffer> => {
+  // Create cover with 60% content fit (20% margin on each side) so the portada gate passes:
+  // - 240px white margins → corner patch (144px) and border band (102px) are pure white ✅
+  // - 64% of all pixels are white margins → near-white dominance (58% threshold) ✅
+  // - NO neutral crush → natural product transitions preserved → natural-look gate ✅
+  const coverBuffer = await (async (): Promise<Buffer> => {
     const outerSide = MIN_SIDE; // 1200
-    const innerSide = Math.round(outerSide * 0.80); // 960 — 120px white margin each side
+    const innerSide = Math.round(outerSide * 0.60); // 720 — 240px white margin each side
     const margin = Math.floor((outerSide - innerSide) / 2);
-    // Step 1: fit product into 960x960 on white canvas
-    const fitted = await sharp(cover.buffer)
+    return sharp(cover.buffer)
       .rotate()
       .flatten({ background: '#ffffff' })
       .resize(innerSide, innerSide, { fit: 'contain', background: '#ffffff' })
-      .extend({ top: margin, bottom: outerSide - innerSide - margin, left: margin, right: outerSide - innerSide - margin, background: '#ffffff' })
-      .raw()
-      .ensureAlpha()
-      .toBuffer({ resolveWithObject: true });
-    // Step 2: neutral crush — convert low-chroma, medium-bright pixels to pure white
-    const copy = Buffer.from(fitted.data);
-    const chromaMax = 22;
-    const lumMin = 165;
-    const lumMax = 252;
-    for (let i = 0; i < copy.length; i += fitted.info.channels) {
-      const r = copy[i]!;
-      const g = copy[i + 1]!;
-      const b = copy[i + 2]!;
-      const M = Math.max(r, g, b);
-      const m = Math.min(r, g, b);
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      if (M - m <= chromaMax && lum >= lumMin && lum <= lumMax) {
-        copy[i] = 255; copy[i + 1] = 255; copy[i + 2] = 255;
-        if (fitted.info.channels === 4) copy[i + 3] = 255;
-      }
-    }
-    // Output as JPEG (not PNG): JPEG compression adds natural texture to the pure-white
-    // background areas, making whiteFieldMeanGrad > 0 so the natural-look
-    // transitionRatio (boundaryGrad / (whiteFieldGrad + 0.35)) stays below 118.
-    return sharp(copy, { raw: { width: fitted.info.width, height: fitted.info.height, channels: fitted.info.channels } })
-      .flatten({ background: '#ffffff' })
-      .jpeg({ quality: 88, mozjpeg: true })
+      .extend({
+        top: margin,
+        bottom: outerSide - innerSide - margin,
+        left: margin,
+        right: outerSide - innerSide - margin,
+        background: '#ffffff',
+      })
+      .jpeg({ quality: 92, mozjpeg: true })
       .toBuffer();
   })();
   const detailBuffer = await squareFitToJpeg(detail.buffer);
@@ -643,7 +623,7 @@ export async function autoGenerateSimpleProcessedPack(params: {
   if (fs.existsSync(staleCoverPng)) await fsp.unlink(staleCoverPng);
   const coverPath = path.join(params.rootDir, 'cover_main.jpg');
   const detailPath = path.join(params.rootDir, 'detail_mount_interface.jpg');
-  await fsp.writeFile(coverPath, coverCrushed);
+  await fsp.writeFile(coverPath, coverBuffer);
   await fsp.writeFile(detailPath, detailBuffer);
 
   const manifest: MlAssetPackManifest = {
