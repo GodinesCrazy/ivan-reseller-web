@@ -629,16 +629,19 @@ export async function autoGenerateSimpleProcessedPack(params: {
         if (fitted.info.channels === 4) copy[i + 3] = 255;
       }
     }
+    // Output as JPEG (not PNG): JPEG compression adds natural texture to the pure-white
+    // background areas, making whiteFieldMeanGrad > 0 so the natural-look
+    // transitionRatio (boundaryGrad / (whiteFieldGrad + 0.35)) stays below 118.
     return sharp(copy, { raw: { width: fitted.info.width, height: fitted.info.height, channels: fitted.info.channels } })
       .flatten({ background: '#ffffff' })
-      .png({ compressionLevel: 7 })
+      .jpeg({ quality: 88, mozjpeg: true })
       .toBuffer();
   })();
   const detailBuffer = await squareFitToJpeg(detail.buffer);
-  // Remove any stale cover_main.jpg so findAssetFile picks up .png first
-  const staleCoverJpg = path.join(params.rootDir, 'cover_main.jpg');
-  if (fs.existsSync(staleCoverJpg)) await fsp.unlink(staleCoverJpg);
-  const coverPath = path.join(params.rootDir, 'cover_main.png');
+  // Remove any stale cover_main.png so findAssetFile picks up .jpg
+  const staleCoverPng = path.join(params.rootDir, 'cover_main.png');
+  if (fs.existsSync(staleCoverPng)) await fsp.unlink(staleCoverPng);
+  const coverPath = path.join(params.rootDir, 'cover_main.jpg');
   const detailPath = path.join(params.rootDir, 'detail_mount_interface.jpg');
   await fsp.writeFile(coverPath, coverCrushed);
   await fsp.writeFile(detailPath, detailBuffer);
