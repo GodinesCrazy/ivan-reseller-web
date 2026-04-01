@@ -12,6 +12,11 @@ import { toNumber } from '../../utils/decimal.utils';
 import { getEffectiveShippingCost } from '../../utils/shipping.utils';
 import { jobService } from '../../services/job.service';
 import costCalculator from '../../services/cost-calculator.service';
+import {
+  autoGenerateSimpleProcessedPack,
+  getCanonicalMercadoLibreAssetPackDir,
+  inspectMercadoLibreAssetPack,
+} from '../../services/mercadolibre-image-remediation.service';
 
 const router = Router();
 router.use(authenticate);
@@ -43,6 +48,59 @@ router.get('/proxy-image', async (req: Request, res: Response) => {
   } catch (e: any) {
     logger.warn('[PUBLISHER] Proxy image failed', { url: req.query.url, error: e?.message });
     res.status(502).json({ error: 'Failed to fetch image' });
+  }
+});
+
+// POST /api/publisher/bootstrap_image_pack/:productId
+// Admin-only: generates a simple square-white approved image pack for a product so the
+// P98 approved-disk-pack path in runMercadoLibreImageRemediationPipeline can unblock publish.
+router.post('/bootstrap_image_pack/:productId', authorize('ADMIN'), async (req: Request, res: Response) => {
+  try {
+    const productId = Number(req.params.productId);
+    if (!productId || isNaN(productId)) {
+      return res.status(400).json({ success: false, error: 'Invalid productId' });
+    }
+
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, title: true, images: true },
+    });
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    let imageUrls: string[] = [];
+    try {
+      const parsed = typeof product.images === 'string' ? JSON.parse(product.images) : product.images;
+      if (Array.isArray(parsed)) {
+        imageUrls = parsed.filter((u): u is string => typeof u === 'string' && u.startsWith('http'));
+      } else if (typeof parsed === 'string' && parsed.startsWith('http')) {
+        imageUrls = [parsed];
+      }
+    } catch {
+      return res.status(400).json({ success: false, error: 'Cannot parse product images' });
+    }
+
+    if (imageUrls.length < 2) {
+      return res.status(422).json({ success: false, error: `Need at least 2 image URLs, found ${imageUrls.length}` });
+    }
+
+    const rootDir = getCanonicalMercadoLibreAssetPackDir(productId);
+    const generated = await autoGenerateSimpleProcessedPack({
+      productId,
+      title: product.title,
+      imageUrls,
+      rootDir,
+      listingId: null,
+    });
+
+    const pack = await inspectMercadoLibreAssetPack({ productId });
+    logger.info('[PUBLISHER] bootstrap_image_pack completed', { productId, generated, packApproved: pack.packApproved });
+
+    return res.json({ success: true, generated, packApproved: pack.packApproved, pack });
+  } catch (error: any) {
+    logger.error('[PUBLISHER] bootstrap_image_pack failed', { error: error?.message });
+    return res.status(500).json({ success: false, error: error?.message ?? 'Internal error' });
   }
 });
 

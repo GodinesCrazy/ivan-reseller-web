@@ -577,7 +577,7 @@ export function evaluateMercadoLibreImageRemediationDecision(
   };
 }
 
-async function autoGenerateSimpleProcessedPack(params: {
+export async function autoGenerateSimpleProcessedPack(params: {
   productId: number;
   title?: string | null;
   imageUrls: string[];
