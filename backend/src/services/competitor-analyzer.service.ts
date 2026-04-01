@@ -282,6 +282,9 @@ export class CompetitorAnalyzerService {
 
           const rawCreds = (rec?.credentials || {}) as Record<string, unknown>;
           const accessTok = String(rawCreds.accessToken || '').trim();
+          const hasAuthCredentials = !!(accessTok && rawCreds.clientId && rawCreds.clientSecret);
+          // Tracks whether the authenticated search was attempted and what error it got.
+          let authSearchError: { httpStatus?: number; message: string } | null = null;
           const tryAuthSearch = async (sid: string, tag: 'primary' | 'mlm') => {
             if (!accessTok || !rawCreds.clientId || !rawCreds.clientSecret) {
               if (mlDebug) {
@@ -381,6 +384,10 @@ export class CompetitorAnalyzerService {
                     authSearchErr?.message ||
                     String(authSearchErr);
                 }
+              }
+              // Track auth failure for accurate probe code generation.
+              if (!authSearchError) {
+                authSearchError = { httpStatus, message: authSearchErr?.message || String(authSearchErr) };
               }
               logger.warn('[competitor-analyzer] ML authenticated search failed', {
                 userId,
@@ -497,15 +504,33 @@ export class CompetitorAnalyzerService {
 
           let competitionProbe: { code: string; detail?: string } | undefined;
           if (listingsFound === 0) {
+            const authAlso403 =
+              authSearchError &&
+              (authSearchError.httpStatus === 403 || authSearchError.httpStatus === 401);
             if (publicError?.httpStatus === 403 || publicError?.httpStatus === 401) {
-              competitionProbe = {
-                code: 'ML_PUBLIC_CATALOG_HTTP_FORBIDDEN',
-                detail:
-                  'Se intentó OAuth ML + catálogo público, pero Mercado Libre rechazó (403/401) desde esta IP de Railway. ' +
-                  'Activá SCRAPER_BRIDGE_ENABLED=true con SCRAPER_BRIDGE_URL para desbloquear competencia ML, o conectá credenciales OAuth ML válidas.',
-              };
-              if (mlDebug) {
-                mlDebug.finalDecision = 'estimated_due_to_public_403_after_auth_zero';
+              if (hasAuthCredentials && authAlso403) {
+                // OAuth token is valid but ML blocks search from Railway IPs at the IP level.
+                // The fix is a scraper-bridge, NOT reconnecting OAuth.
+                competitionProbe = {
+                  code: 'ML_SEARCH_IP_BLOCKED',
+                  detail:
+                    'OAuth ML activo (token válido) pero MercadoLibre bloquea búsquedas (GET /sites/MLC/search) desde IPs de Railway ' +
+                    'incluso con token autenticado. testConnection() pasa (/users/{id} no bloqueado), search sí bloqueado. ' +
+                    'Solución: activar scraper-bridge en una IP no bloqueada (SCRAPER_BRIDGE_ENABLED=true + SCRAPER_BRIDGE_URL).',
+                };
+                if (mlDebug) {
+                  mlDebug.finalDecision = 'estimated_due_to_ip_block_search_endpoint_auth_and_public';
+                }
+              } else {
+                competitionProbe = {
+                  code: 'ML_PUBLIC_CATALOG_HTTP_FORBIDDEN',
+                  detail:
+                    'Se intentó OAuth ML + catálogo público, pero Mercado Libre rechazó (403/401) desde esta IP de Railway. ' +
+                    'Activá SCRAPER_BRIDGE_ENABLED=true con SCRAPER_BRIDGE_URL para desbloquear competencia ML.',
+                };
+                if (mlDebug) {
+                  mlDebug.finalDecision = 'estimated_due_to_public_403_after_auth_zero';
+                }
               }
             } else if (publicError) {
               competitionProbe = {

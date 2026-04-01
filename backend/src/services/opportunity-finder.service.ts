@@ -101,13 +101,20 @@ function computePublishingDecision(params: {
 
   // Gate 4 — competitor evidence
   if (comparablesCount === 0) {
-    const structuralBlock = probeCodes.some(
+    const ipBlocked = probeCodes.some((c) => c.includes('IP_BLOCKED'));
+    const structuralBlock = ipBlocked || probeCodes.some(
       (c) => c.includes('FORBIDDEN') || c.includes('UNAUTHORIZED') || c.includes('NETWORK') || c.includes('TIMEOUT')
     );
     if (structuralBlock) {
-      reasons.push('Sin acceso a datos de mercado — bloqueo estructural de plataforma (ej: ML 403 desde IPs Railway)');
-      reasons.push(`Precio $${opp.suggestedPriceUsd.toFixed(2)} es el mínimo rentable canónico, no el precio de mercado real`);
-      reasons.push('Para publicar: configurar ML OAuth real o scraper-bridge en producción');
+      if (ipBlocked) {
+        reasons.push('ML OAuth activo pero búsquedas bloqueadas por IP desde Railway (GET /sites/MLC/search → 403 con y sin token)');
+        reasons.push('testConnection() pasa (/users/{id} no bloqueado), pero search endpoint sí lo está');
+        reasons.push('Solución: scraper-bridge en IP no bloqueada (SCRAPER_BRIDGE_ENABLED=true + SCRAPER_BRIDGE_URL)');
+      } else {
+        reasons.push('Sin acceso a datos de mercado — bloqueo estructural de plataforma (ej: ML 403 desde IPs Railway)');
+        reasons.push(`Precio $${opp.suggestedPriceUsd.toFixed(2)} es el mínimo rentable canónico, no el precio de mercado real`);
+        reasons.push('Para publicar: scraper-bridge en producción o proxy ML en IP no bloqueada');
+      }
       probeCodes.filter(Boolean).forEach((code) => reasons.push(`Probe: ${code}`));
       return { ...base, decision: 'NEEDS_MARKET_DATA', reasons, canPublish: false };
     }
