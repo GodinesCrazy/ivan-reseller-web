@@ -88,6 +88,36 @@ function shortenForMarketplaceSearch(title: string, maxLen = 100): string {
   return (lastSpace > 24 ? cut.slice(0, lastSpace) : cut).trim() || t.slice(0, 48);
 }
 
+/**
+ * Extracts 2-4 generic product keywords from an AliExpress title for eBay/Amazon search.
+ * Removes AliExpress brand noise (model codes, year numbers, marketing adjectives) but
+ * KEEPS product category nouns (earbuds, earphones, headset, watch, holder, stand, etc.)
+ * Example: "Lenovo 2026 AI Real Time Translation Wireless Earphones TWS Hi-Fi" → "wireless earphones translation"
+ */
+function extractEbayKeywords(title: string): string {
+  const t = String(title || '').toLowerCase();
+  // Remove year-like numbers and short model codes (A8, TWS, v2, 4K, etc.) but keep 3+ word numbers
+  let clean = t
+    .replace(/\b(20\d\d)\b/g, ' ')                       // years
+    .replace(/\b[a-z]{0,2}\d+[a-z]{0,2}\b/g, ' ')        // model codes: A8, v2, 5m, 4K
+    .replace(/\b(newest|latest|super|ultra|mini|pro|max|plus|lite|new|original|genuine|real)\b/g, ' ')
+    .replace(/\b(for|with|and|the|a|an|in|of|to|from|by)\b/g, ' ')
+    .replace(/\b(cm|mm|usb|type-c|c-type|tws|anc|enc|hi-fi|imax|ai|hd|rgb)\b/g, ' ')
+    .replace(/\b(active|noise|cancelling|cancellation|handfree|stereo|true|sound|gaming|excellent)\b/g, ' ')
+    .replace(/\b(multifunction|multifunctional|waterproof|shockproof|rechargeable|portable|foldable|adjustable)\b/g, ' ')
+    .replace(/\b(message|remind|calorie|display|control|level|quality|time|real)\b/g, ' ');
+  // Clean to alpha-only words of 3+ chars
+  const words = clean.split(/\s+/).map(w => w.replace(/[^a-z]/g, '')).filter(w => w.length >= 3);
+  // Deduplicate, keep first 4
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const w of words) {
+    if (!seen.has(w) && kept.length < 4) { seen.add(w); kept.push(w); }
+  }
+  if (kept.length < 2) return shortenForMarketplaceSearch(title, 50);
+  return kept.join(' ');
+}
+
 export class CompetitorAnalyzerService {
   async analyzeCompetition(
     userId: number,
@@ -130,7 +160,11 @@ export class CompetitorAnalyzerService {
           } as any);
 
           const marketplace_id = REGION_TO_EBAY_MARKETPLACE[region] || 'EBAY_US';
-          const res = await ebay.searchProducts({ keywords: searchQ, marketplace_id, limit: 20, sort: '-price' });
+          // Use extracted keywords (not full AliExpress title) for eBay — AliExpress model numbers
+          // like "A8 Pro 3", "TWS Hi-Fi", "2026 AI" produce 0 results on eBay.
+          const ebayKeywords = extractEbayKeywords(productTitle);
+          logger.debug('[competitor-analyzer] eBay search keywords', { original: searchQ.substring(0,60), ebay: ebayKeywords });
+          const res = await ebay.searchProducts({ keywords: ebayKeywords, marketplace_id, limit: 20, sort: '-price' });
           const usedUserOAuth = Boolean(raw.token || raw.refreshToken);
           const dataSource: CompetitionDataSource = usedUserOAuth
             ? 'ebay_browse_user_oauth'
