@@ -27,6 +27,8 @@ import {
   attemptMercadoLibreP103HeroPortadaFromUrls,
   type P103HeroAttemptResult,
 } from './ml-portada-hero-reconstruction.service';
+import { isolateProductSubjectToPng } from './ml-portada-isolation.service';
+import { composePortadaHeroWithRecipe } from './ml-portada-recipes.service';
 
 export type MlImageRemediationDecision =
   | 'pass_as_is'
@@ -604,6 +606,19 @@ export async function autoGenerateSimpleProcessedPack(params: {
   // - NO neutral crush → natural product transitions preserved ✅
   // - portadaGateBypass: true in manifest handles our internal harsh-silhouette gate ✅
   const coverBuffer = await (async (): Promise<Buffer> => {
+    // Try isolation pipeline: border-statistics background removal → white canvas composition
+    // This handles AliExpress WebP images with opaque (non-alpha) colored backgrounds
+    // that sharp.flatten() cannot remove (flatten only strips alpha transparency)
+    const isolated = await isolateProductSubjectToPng(cover.buffer);
+    if (isolated?.png) {
+      const composed = await composePortadaHeroWithRecipe(isolated.png, 'p107_white_078');
+      if (composed) {
+        logger.info('[autoGenerateSimpleProcessedPack] isolation pipeline succeeded → white-bg portada');
+        return await sharp(composed).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+      }
+    }
+    // Fallback: naive approach (works only if source already has white/alpha background)
+    logger.warn('[autoGenerateSimpleProcessedPack] isolation pipeline failed → fallback to flatten/extend');
     const outerSide = MIN_SIDE; // 1200
     const innerSide = Math.round(outerSide * 0.80); // 960 — 120px white margin each side
     const margin = Math.floor((outerSide - innerSide) / 2);
