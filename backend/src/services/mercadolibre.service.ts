@@ -37,6 +37,8 @@ export interface MLProduct {
     mode: string;
     cost?: number;
     freeShipping?: boolean;
+    /** Días de despacho declarados al comprador (handling_time en API ML). */
+    handlingTime?: number;
   };
 }
 
@@ -616,10 +618,14 @@ export class MercadoLibreService {
     }
 
     if (product.shipping && product.shipping.mode !== 'not_specified') {
-      listingData.shipping = {
+      const shippingPayload: Record<string, unknown> = {
         mode: product.shipping.mode || 'not_specified',
         free_shipping: product.shipping.freeShipping || false,
       };
+      if (typeof product.shipping.handlingTime === 'number' && product.shipping.handlingTime > 0) {
+        shippingPayload.handling_time = product.shipping.handlingTime;
+      }
+      listingData.shipping = shippingPayload;
     } else if (this.credentials.siteId === 'MLC') {
       listingData.shipping = { mode: 'me2', free_shipping: false };
     }

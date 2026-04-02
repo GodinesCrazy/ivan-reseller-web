@@ -1446,14 +1446,21 @@ export class MarketplaceService {
         }
       }
 
-      // Fase 2.1: shipping from product when available; else free_shipping if shippingCost 0 or very low
+      // Fase 2.1: shipping from product when available; else free_shipping if shippingCost 0 or very low.
+      // handlingTime: 25 — AliExpress dropshipping desde China a Chile tarda ~20-45 días calendario.
+      // Declarar 25 días de despacho en ML evita comprometer ETA doméstico (2-5 días) que no se puede cumplir.
+      const DROPSHIPPING_HANDLING_TIME_DAYS = 25;
       const effectiveShippingCost = getEffectiveShippingCost(product);
       const freeShipping = effectiveShippingCost < 1;
       const shippingFromProduct = (product as any).shipping;
       const mlShipping =
         shippingFromProduct && shippingFromProduct.mode && shippingFromProduct.mode !== 'not_specified'
-          ? { mode: shippingFromProduct.mode as string, freeShipping: Boolean(shippingFromProduct.freeShipping) }
-          : { mode: 'me2' as const, freeShipping };
+          ? {
+              mode: shippingFromProduct.mode as string,
+              freeShipping: Boolean(shippingFromProduct.freeShipping),
+              handlingTime: shippingFromProduct.handlingTime ?? DROPSHIPPING_HANDLING_TIME_DAYS,
+            }
+          : { mode: 'me2' as const, freeShipping, handlingTime: DROPSHIPPING_HANDLING_TIME_DAYS };
 
       const mlProduct: MLProduct = {
         title: finalTitle,
