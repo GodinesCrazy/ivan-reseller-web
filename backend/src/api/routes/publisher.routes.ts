@@ -1216,4 +1216,41 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/publisher/replace_pictures/:listingId
+ * Admin — Replace ML listing pictures with the provided image URLs (or local paths).
+ * Used to fix poor_quality_thumbnail without republishing.
+ */
+router.post('/replace_pictures/:listingId', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
+  try {
+    const { listingId } = req.params;
+    const { imageUrls } = req.body as { imageUrls?: string[] };
+    if (!listingId) {
+      return res.status(400).json({ success: false, error: 'listingId required' });
+    }
+    if (!Array.isArray(imageUrls) || imageUrls.length === 0) {
+      return res.status(400).json({ success: false, error: 'imageUrls array required' });
+    }
+    const userId = req.user!.userId;
+    const marketplaceService = new MarketplaceService();
+    const { resolveEnvironment } = await import('../../utils/environment-resolver');
+    const env = await resolveEnvironment({ userId, default: 'production' });
+    const credsResult = await marketplaceService.getCredentials(userId, 'mercadolibre', env);
+    if (!credsResult?.isActive || !credsResult?.credentials?.accessToken) {
+      return res.status(400).json({ success: false, error: 'ML credentials not found or inactive' });
+    }
+    const { MercadoLibreService } = await import('../../services/mercadolibre.service');
+    const mlService = new MercadoLibreService({
+      ...credsResult.credentials,
+      siteId: credsResult.credentials.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+    } as any);
+    const verified = await mlService.replaceListingPictures(listingId, imageUrls);
+    return res.json({ success: true, listingId, status: verified.status, pictures: verified.pictures });
+  } catch (e: any) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    logger.error('[PUBLISHER] replace_pictures failed', { error: errorMessage });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
 export default router;
