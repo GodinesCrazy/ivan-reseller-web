@@ -1221,7 +1221,7 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
  * Admin — Replace ML listing pictures with the provided image URLs (or local paths).
  * Used to fix poor_quality_thumbnail without republishing.
  */
-router.post('/replace_pictures/:listingId', authenticate, authorize(['admin']), async (req: Request, res: Response) => {
+router.post('/replace_pictures/:listingId', authenticate, authorize('admin'), async (req: Request, res: Response) => {
   try {
     const { listingId } = req.params;
     const { imageUrls } = req.body as { imageUrls?: string[] };
