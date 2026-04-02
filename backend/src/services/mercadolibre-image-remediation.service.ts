@@ -613,12 +613,30 @@ export async function autoGenerateSimpleProcessedPack(params: {
     if (isolated?.png) {
       const composed = await composePortadaHeroWithRecipe(isolated.png, 'p107_white_078');
       if (composed) {
-        logger.info('[autoGenerateSimpleProcessedPack] isolation pipeline succeeded → white-bg portada');
-        return await sharp(composed).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+        // Quality gate: reject if composition is >95% white (product was removed with background)
+        try {
+          const jpegBuf = await sharp(composed).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+          const { data: raw, info } = await sharp(jpegBuf).raw().toBuffer({ resolveWithObject: true });
+          const ch = info.channels as number;
+          let whitePixels = 0;
+          const total = info.width * info.height;
+          for (let i = 0; i < raw.length; i += ch) {
+            if ((raw[i] as number) > 240 && (raw[i + 1] as number) > 240 && (raw[i + 2] as number) > 240) whitePixels++;
+          }
+          const whitePct = whitePixels / total;
+          if (whitePct > 0.95) {
+            logger.warn('[autoGenerateSimpleProcessedPack] isolation produced >95% white composition — product likely removed with background, using fallback', { whitePct: (whitePct * 100).toFixed(1) });
+          } else {
+            logger.info('[autoGenerateSimpleProcessedPack] isolation pipeline succeeded → white-bg portada', { whitePct: (whitePct * 100).toFixed(1) });
+            return jpegBuf;
+          }
+        } catch (qgErr: any) {
+          logger.warn('[autoGenerateSimpleProcessedPack] quality gate check failed, using fallback', { error: qgErr?.message });
+        }
       }
     }
     // Fallback: naive approach (works only if source already has white/alpha background)
-    logger.warn('[autoGenerateSimpleProcessedPack] isolation pipeline failed → fallback to flatten/extend');
+    logger.warn('[autoGenerateSimpleProcessedPack] isolation pipeline failed or quality gate rejected → fallback to flatten/extend');
     const outerSide = MIN_SIDE; // 1200
     const innerSide = Math.round(outerSide * 0.80); // 960 — 120px white margin each side
     const margin = Math.floor((outerSide - innerSide) / 2);
