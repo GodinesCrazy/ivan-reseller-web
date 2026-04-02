@@ -29,6 +29,7 @@ const publishProductSchema = z.object({
   productId: z.number(),
   marketplace: z.enum(['ebay', 'mercadolibre', 'amazon']),
   environment: z.enum(['sandbox', 'production']).optional(),
+  duplicateListing: z.boolean().optional(),
   customData: z.object({
     categoryId: z.string().optional(),
     price: z.number().optional(),
@@ -200,6 +201,7 @@ router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response
           productId: data.productId,
           marketplace: data.marketplace,
           customData: data.customData,
+          duplicateListing: data.duplicateListing,
         },
         data.environment
       );
