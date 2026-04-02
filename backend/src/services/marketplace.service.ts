@@ -1250,7 +1250,11 @@ export class MarketplaceService {
               typeof product.productData === 'string'
                 ? JSON.parse(product.productData || '{}')
                 : product.productData || {};
-            const inputs = pd?.mlChileImageRemediation?.publishableImageInputs;
+            // Data is persisted under preventivePublish.mlChileImageRemediation by persistPreventivePublishPreparation.
+            // Also check legacy top-level location for backwards compatibility.
+            const inputs =
+              pd?.preventivePublish?.mlChileImageRemediation?.publishableImageInputs ||
+              pd?.mlChileImageRemediation?.publishableImageInputs;
             if (Array.isArray(inputs) && inputs.length > 0) {
               return inputs.filter((s: unknown): s is string => typeof s === 'string' && s.length > 0);
             }
