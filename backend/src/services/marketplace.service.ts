@@ -1237,8 +1237,36 @@ export class MarketplaceService {
       }
 
       // ✅ CORREGIDO: Validar imágenes antes de publicar
-      // ✅ MULTI-IMAGE: Preparar todas las imágenes disponibles (hasta el límite de MercadoLibre)
-      const images = this.prepareImagesForMarketplace(product.images, 'mercadolibre', mergedCustomData);
+      // Use ML-compliant image inputs from pre-publish preparation when available.
+      // prepareProductForSafePublishing runs runMercadoLibreImageRemediationPipeline and
+      // stores publishableImageInputs in productData.mlChileImageRemediation. These are either
+      // local bootstrap-pack files (approved disk pack) or canonical-pipeline-processed URLs.
+      // Falling back to raw product.images only when no compliant pack was prepared.
+      let images: string[];
+      {
+        const mlCompliantInputs = (() => {
+          try {
+            const pd =
+              typeof product.productData === 'string'
+                ? JSON.parse(product.productData || '{}')
+                : product.productData || {};
+            const inputs = pd?.mlChileImageRemediation?.publishableImageInputs;
+            if (Array.isArray(inputs) && inputs.length > 0) {
+              return inputs.filter((s: unknown): s is string => typeof s === 'string' && s.length > 0);
+            }
+          } catch {
+            /* ignore */
+          }
+          return null;
+        })();
+        if (mlCompliantInputs && mlCompliantInputs.length > 0) {
+          images = mlCompliantInputs.slice(0, this.getMarketplaceImageLimit('mercadolibre'));
+          logger.info('[ML Publish] Using pre-publish ML-compliant image inputs', { count: images.length });
+        } else {
+          images = this.prepareImagesForMarketplace(product.images, 'mercadolibre', mergedCustomData);
+          logger.info('[ML Publish] No compliant pack found — using raw product images', { count: images.length });
+        }
+      }
       if (!images || images.length === 0) {
         throw new AppError('Product must have at least one image before publishing. Please add images to the product.', 400);
       }
@@ -1294,8 +1322,17 @@ export class MarketplaceService {
         countryCode: dest.countryCode,
         currency: dest.currency,
       });
+      // FX conversion: only convert when price is in USD and target is a different currency.
+      // When product.currency matches targetCurrency (e.g. both CLP for MLC),
+      // priceUsd is already in the target currency — skip conversion to avoid double-converting.
+      const productCurrencyForMl = (product.currency || 'USD').toUpperCase();
       let price = priceUsd;
-      if (targetCurrency !== 'USD') {
+      if (productCurrencyForMl === targetCurrency) {
+        // Price is already in the target marketplace currency — use directly.
+        logger.info('[ML Publish] Price already in target currency — no FX conversion', {
+          price, targetCurrency, productCurrency: productCurrencyForMl, siteId,
+        });
+      } else if (targetCurrency !== 'USD') {
         const fxService = (await import('./fx.service')).default;
         price = fxService.convert(priceUsd, 'USD', targetCurrency);
         logger.info('[ML Publish] Price converted to local currency', {
