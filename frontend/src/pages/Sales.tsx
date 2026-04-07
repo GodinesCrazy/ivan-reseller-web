@@ -308,8 +308,20 @@ export default function Sales() {
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList className="border-b border-slate-200 dark:border-slate-800 bg-transparent p-0 rounded-none gap-4">
           <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2.5 text-sm font-medium text-slate-500 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100">Resumen</TabsTrigger>
+          <TabsTrigger value="needs-action" className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2.5 text-sm font-medium text-slate-500 data-[state=active]:text-amber-700 dark:data-[state=active]:text-amber-400 flex items-center gap-1.5">
+            Requieren acción
+            {(() => {
+              const n = sales.filter(s => {
+                const st = s.fulfillmentAutomationStatus;
+                return st === 'failed' || st === 'needs_mapping' || st === 'pending_purchase' || s.needsProductMapping;
+              }).length;
+              return n > 0 ? (
+                <span className="inline-flex items-center justify-center h-4 min-w-[1rem] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold">{n}</span>
+              ) : null;
+            })()}
+          </TabsTrigger>
           <TabsTrigger value="analytics" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2.5 text-sm font-medium text-slate-500 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100">Analíticas</TabsTrigger>
-          <TabsTrigger value="list" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2.5 text-sm font-medium text-slate-500 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100">Lista de ventas</TabsTrigger>
+          <TabsTrigger value="list" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2.5 text-sm font-medium text-slate-500 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100">Todas las ventas</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -351,6 +363,95 @@ export default function Sales() {
               </div>
             </div>
           </div>
+        </TabsContent>
+
+        {/* Needs Action Tab */}
+        <TabsContent value="needs-action" className="space-y-4">
+          {(() => {
+            const stuckSales = sales.filter(s => {
+              const st = s.fulfillmentAutomationStatus;
+              return st === 'failed' || st === 'needs_mapping' || st === 'pending_purchase' || s.needsProductMapping;
+            });
+            if (stuckSales.length === 0) {
+              return (
+                <div className="ir-panel p-12 text-center">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-3">
+                    <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Sin ventas atascadas</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Todas las ventas están en fulfillment correcto o completadas</p>
+                </div>
+              );
+            }
+            return (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-900 shadow-card overflow-hidden">
+                <div className="px-5 py-3 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800">
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">{stuckSales.length} venta{stuckSales.length !== 1 ? 's' : ''} requieren{stuckSales.length === 1 ? '' : 'n'} acción</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Fulfillment fallido, pendiente de compra o sin mapeo de producto</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-800/60">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Venta / Marketplace</th>
+                        <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Producto</th>
+                        <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fulfillment</th>
+                        <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Error / Detalle</th>
+                        <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Importe</th>
+                        <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fecha</th>
+                        <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {stuckSales.map(sale => {
+                        const st = sale.fulfillmentAutomationStatus;
+                        const pillCls = st === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                          : st === 'needs_mapping' || sale.needsProductMapping ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+                        const pillLabel = st === 'failed' ? '✕ Fallido'
+                          : st === 'needs_mapping' || sale.needsProductMapping ? '⚠ Sin mapeo'
+                          : '→ Pend. compra';
+                        const mpLabel = sale.ebayOrderId ? 'eBay' : sale.mercadolibreOrderId ? 'ML' : sale.amazonOrderId ? 'Amazon' : 'Direct';
+                        const extId = sale.ebayOrderId || sale.mercadolibreOrderId || sale.amazonOrderId;
+                        return (
+                          <tr key={sale.id} className="hover:bg-amber-50/40 dark:hover:bg-amber-950/10 transition-colors">
+                            <td className="px-4 py-3 align-top">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`inline-flex shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                  mpLabel === 'eBay' ? 'bg-blue-100 text-blue-700' : mpLabel === 'ML' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'
+                                }`}>{mpLabel}</span>
+                                <span className="font-mono text-xs text-slate-600 dark:text-slate-400 truncate max-w-[100px]">{extId || sale.orderId.slice(0, 10)}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 align-top max-w-[180px]">
+                              <p className="text-xs text-slate-800 dark:text-slate-200 line-clamp-2">{sale.productTitle}</p>
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${pillCls}`}>{pillLabel}</span>
+                            </td>
+                            <td className="px-4 py-3 align-top max-w-[200px]">
+                              <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{sale.fulfillmentErrorReason || sale.syncNote || '—'}</p>
+                            </td>
+                            <td className="px-4 py-3 align-top text-right text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(sale.salePrice, 'USD')}</td>
+                            <td className="px-4 py-3 align-top text-xs text-slate-500">{new Date(sale.createdAt).toLocaleDateString()}</td>
+                            <td className="px-4 py-3 align-top text-right">
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/orders/${sale.orderId}`)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                              >
+                                Ver orden <ExternalLink className="w-3 h-3" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
         </TabsContent>
 
         {/* Analytics Tab */}
@@ -439,6 +540,7 @@ export default function Sales() {
                   />
                 </div>
                 <select
+                  title="Filtrar por estado"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -451,6 +553,7 @@ export default function Sales() {
                   <option value="CANCELLED">Cancelado</option>
                 </select>
                 <select
+                  title="Filtrar por marketplace"
                   value={marketplaceFilter}
                   onChange={(e) => setMarketplaceFilter(e.target.value)}
                   className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -462,6 +565,7 @@ export default function Sales() {
                   <option value="checkout">Checkout</option>
                 </select>
                 <select
+                  title="Período de tiempo"
                   value={dateRange}
                   onChange={(e) => setDateRange(e.target.value)}
                   className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -503,7 +607,7 @@ export default function Sales() {
                           <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Producto</th>
                           <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Comprador</th>
                           <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Origen</th>
-                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Automatización</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fulfillment</th>
                           <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Precio</th>
                           <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500" title="Margen registrado — ganancia realizada requiere proof de payout">Profit (registrado)</th>
                           <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Estado</th>
@@ -513,8 +617,10 @@ export default function Sales() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {paginatedSales.map((sale) => (
-                          <tr key={sale.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        {paginatedSales.map((sale) => {
+                          const isStuck = sale.fulfillmentAutomationStatus === 'failed' || sale.fulfillmentAutomationStatus === 'needs_mapping' || sale.needsProductMapping;
+                          return (
+                          <tr key={sale.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${isStuck ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}`}>
                             <td className="px-3 py-3">
                               {sale.productImage ? (
                                 <img src={sale.productImage} alt="" className="w-10 h-10 object-cover rounded-md" />
@@ -563,7 +669,7 @@ export default function Sales() {
                               </button>
                             </td>
                           </tr>
-                        ))}
+                        ); })}
                       </tbody>
                     </table>
                   </div>

@@ -665,9 +665,69 @@ export default function FinanceDashboard() {
 
       {activeTab === 'overview' && !isLoadingTab && (
         <>
+      {/* ═══ CASH FLOW OPERATIVO — Panel de decisión ═══ */}
+      {(financialData.workingCapital || financialData.cashFlowMetrics) && (() => {
+        const wc = financialData.workingCapital;
+        const cf = financialData.cashFlowMetrics;
+        const available  = wc?.available  ?? cf?.realCashFlow ?? 0;
+        const committed  = wc?.committed  ?? 0;
+        const pending    = cf?.pendingSalesValue ?? 0;
+        const utilRate   = wc?.utilizationRate ?? (wc && wc.total > 0 ? (wc.committed / wc.total) * 100 : null);
+        const canPublish = wc ? wc.available > 0 : cf ? cf.realCashFlow > 0 : null;
+        return (
+          <div className={`rounded-xl border shadow-card p-5 ${
+            canPublish === true  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20' :
+            canPublish === false ? 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20' :
+            'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+          }`}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Cash Flow Operativo</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Capital real disponible para publicar y operar — {getDateRangeLabel()}</p>
+              </div>
+              {canPublish !== null && (
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                  canPublish ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${canPublish ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                  {canPublish ? 'Capital disponible para publicar' : 'Sin capital libre — revisar'}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-lg bg-white/70 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/60 p-3">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Capital libre</p>
+                <p className={`text-xl font-bold tabular-nums mt-0.5 ${available > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{formatCurrency(available)}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">disponible ahora</p>
+              </div>
+              <div className="rounded-lg bg-white/70 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/60 p-3">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Capital comprometido</p>
+                <p className="text-xl font-bold tabular-nums mt-0.5 text-amber-700 dark:text-amber-300">{formatCurrency(committed)}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">en órdenes activas</p>
+              </div>
+              {pending > 0 && (
+                <div className="rounded-lg bg-white/70 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/60 p-3">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Ventas pendientes</p>
+                  <p className="text-xl font-bold tabular-nums mt-0.5 text-blue-700 dark:text-blue-300">{formatCurrency(pending)}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">por liquidar</p>
+                </div>
+              )}
+              {utilRate !== null && (
+                <div className="rounded-lg bg-white/70 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/60 p-3">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Utilización capital</p>
+                  <p className={`text-xl font-bold tabular-nums mt-0.5 ${utilRate > 80 ? 'text-red-700 dark:text-red-300' : utilRate > 50 ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-white'}`}>{safeNumber(utilRate).toFixed(0)}%</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{utilRate > 80 ? 'sobreexpuesto' : utilRate > 50 ? 'moderado' : 'bajo — OK'}</p>
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-3">Dato operativo — confirmar con Capital de Trabajo para detalle por fuente (PayPal, Payoneer, retenciones).</p>
+          </div>
+        );
+      })()}
+
       <div className="mb-1">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Los totales inferidos del sales ledger (ventas con payout); la ganancia realizada probada se confirma con proof ladder en Control Center.
+          Totales inferidos del sales ledger (ventas con payout); ganancia realizada probada se confirma en Control Center.
         </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

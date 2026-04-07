@@ -28,6 +28,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import PageHeader from '@/components/ui/PageHeader';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
@@ -983,56 +984,67 @@ export default function Autopilot() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Autopilot</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Runtime del programador (ciclos buscar/publicar). La verdad de listings, blockers y pruebas vive en{' '}
-            <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
-              Control Center
-            </Link>
-            — no sustituye el contrato canónico.
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Contadores y fases aquí son telemetría de ejecución, no estado comercial probado.</p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-3">
+      <PageHeader
+        icon={Zap}
+        title="Autopilot"
+        subtitle={autopilotRunning
+          ? `Ciclo activo · ${autopilotStatus?.config?.targetMarketplaces?.map(mp => mp === 'mercadolibre' ? 'Mercado Libre' : mp).join(', ') || 'marketplace no configurado'}`
+          : 'Detenido · telemetría de ejecución — verdad canónica en Control Center'}
+        badge={
+          autopilotRunning ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              En ejecución
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+              Detenido
+            </span>
+          )
+        }
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
             <button
+              type="button"
               onClick={() => loadLogs()}
-              className="inline-flex items-center justify-center gap-2 h-9 px-3.5 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
+              className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
             >
               <Activity className="w-4 h-4" />
-              Ver todos los logs
+              Logs
             </button>
             <button
+              type="button"
               onClick={toggleAutopilot}
-              className={`inline-flex items-center justify-center gap-2 h-9 px-3.5 text-sm font-medium rounded-lg shadow-sm transition-colors ${
-                autopilotRunning 
-                  ? 'bg-red-600 text-white hover:bg-red-700' 
+              className={`inline-flex items-center gap-1.5 h-9 px-3.5 text-sm font-medium rounded-lg shadow-sm transition-colors ${
+                autopilotRunning
+                  ? 'bg-red-600 text-white hover:bg-red-700'
                   : 'bg-green-600 text-white hover:bg-green-700'
               }`}
             >
               {autopilotRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              {autopilotRunning ? 'Detener Autopilot' : 'Iniciar Autopilot'}
+              {autopilotRunning ? 'Detener' : 'Iniciar Autopilot'}
             </button>
             <button
+              type="button"
               onClick={() => openWorkflowModal()}
-              className="inline-flex items-center justify-center gap-2 h-9 px-3.5 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 shadow-sm transition-colors"
+              className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 shadow-sm transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Nuevo Workflow
+              Workflow
             </button>
           </div>
-          {startReadiness && !startReadiness.canStart && !autopilotRunning && (
-            <p className="text-sm text-amber-700 dark:text-amber-300">
-              Para iniciar: {startReadiness.reason ?? 'Revisa la configuración.'}
-              {(startReadiness.checks.scraping === false || startReadiness.checks.ebay === false) && (
-                <a href="/api-settings" className="ml-1 underline font-medium">Ir a Configuración de APIs</a>
-              )}
-            </p>
+        }
+      />
+      {startReadiness && !startReadiness.canStart && !autopilotRunning && (
+        <div className="flex items-center gap-2 px-1 text-sm text-amber-700 dark:text-amber-300">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          Para iniciar: {startReadiness.reason ?? 'Revisa la configuración.'}
+          {(startReadiness.checks.scraping === false || startReadiness.checks.ebay === false) && (
+            <a href="/api-settings" className="ml-1 underline font-medium">Ir a Configuración de APIs</a>
           )}
         </div>
-      </div>
+      )}
 
       {startError && (
         <div className="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-start justify-between gap-3">
@@ -1084,243 +1096,135 @@ export default function Autopilot() {
         );
       })()}
 
-      {/* Estado del ciclo — telemetría de ejecución (1-4); post-venta probada arriba / en órdenes */}
+      {/* Estado del ciclo — telemetría de ejecución */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card overflow-hidden">
-        <div className={`px-4 py-3 font-semibold text-[11px] uppercase tracking-wider ${
+        <div className={`px-4 py-3 flex items-center justify-between ${
           autopilotRunning ? 'bg-green-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
         }`}>
-          Estado del ciclo
+          <span className="font-semibold text-[11px] uppercase tracking-wider">Estado del ciclo autónomo</span>
+          {autopilotRunning && (() => {
+            const mins = getMinutesAgo(autopilotStatus?.cycleStartedAt);
+            return mins != null ? (
+              <span className="text-[11px] text-green-100">Ciclo iniciado hace {mins} min</span>
+            ) : null;
+          })()}
         </div>
-        <div className={`border-t p-4 flex items-start gap-4 transition-colors ${
-          autopilotRunning ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'border-slate-200 dark:border-slate-800'
-        }`}>
-          <div className={`p-3 rounded-xl shrink-0 ${autopilotRunning ? 'bg-green-100 dark:bg-green-900/40' : 'bg-slate-100 dark:bg-slate-800'}`}>
-            {autopilotRunning ? (
-              <Activity className="w-8 h-8 text-green-600 dark:text-green-400 animate-pulse" />
-            ) : (
-              <Pause className="w-8 h-8 text-slate-500 dark:text-slate-400" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0 space-y-3">
-            <div>
-              <div className="font-semibold text-lg text-slate-900 dark:text-slate-100">
-                {autopilotRunning ? 'En ejecución' : 'Detenido'}
-              </div>
-              {autopilotRunning && (
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Ciclo del Autopilot (buscar → publicar)</p>
-              )}
-              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1 space-y-1">
-                {autopilotRunning ? (
-                  <>
-                    {(() => {
-                      const phase = autopilotStatus?.currentPhase;
-                      const phaseNames: Record<string, { num: number; name: string }> = {
-                        idle: { num: 0, name: 'Entre ciclos' },
-                        searching: { num: 1, name: 'Buscar' },
-                        filtering: { num: 2, name: 'Filtrar' },
-                        analyzing: { num: 3, name: 'Analizar' },
-                        publishing: { num: 4, name: 'Publicar' },
-                      };
-                      const phaseInfo = phase ? phaseNames[phase] ?? { num: 0, name: '—' } : { num: 0, name: '—' };
-                      const prog = autopilotStatus?.currentCycleProgress;
-                      let detail = '';
-                      if (phase === 'searching') detail = 'Buscando oportunidades en AliExpress…';
-                      else if (phase === 'filtering') detail = 'Filtrando por criterios de precio y calidad…';
-                      else if (phase === 'analyzing') detail = 'Analizando rentabilidad y ROI (estimaciones internas del ciclo, no proof comercial)…';
-                      else if (phase === 'publishing') {
-                        const curr = prog?.publishingCurrent;
-                        const tot = prog?.publishingTotal;
-                        detail = (curr != null && tot != null && tot > 0) ? `Publicando… producto ${curr} de ${tot}` : 'Publicando en marketplace(s)…';
-                      } else if (phase === 'idle') detail = 'Siguiente ciclo según intervalo configurado.';
-                      else detail = 'buscar → filtrar → analizar → publicar.';
-                      return (
-                        <>
-                          <div className="font-medium text-base text-slate-900 dark:text-slate-100">
-                            Ahora: Fase {phaseInfo.num || '—'} — {phaseInfo.name}
-                          </div>
-                          {detail && <span className="text-sm">{detail}</span>}
-                        </>
-                      );
-                    })()}
-                    {(() => {
-                      const mins = getMinutesAgo(autopilotStatus?.cycleStartedAt);
-                      return mins != null ? (
-                        <span className="block text-xs text-slate-500">
-                          Ciclo iniciado hace {mins} min
-                        </span>
-                      ) : null;
-                    })()}
-                    {autopilotStatus?.config?.targetMarketplaces && autopilotStatus.config.targetMarketplaces.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {autopilotStatus.config.targetMarketplaces.map((mp) => (
-                          <span key={mp} className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 capitalize">
-                            {mp === 'mercadolibre' ? 'Mercado Libre' : mp}
-                          </span>
-                        ))}
+
+        {/* Phase stepper */}
+        <div className="p-5 space-y-4">
+          {(() => {
+            const currentPhase = autopilotStatus?.currentPhase ?? 'idle';
+            const prog = autopilotStatus?.currentCycleProgress;
+            const phases: Array<{ key: string; num: number; label: string; detail: string }> = [
+              { key: 'searching',  num: 1, label: 'Buscar',   detail: prog?.query ? `"${String(prog.query).slice(0, 40)}"` : 'Buscando oportunidades en AliExpress' },
+              { key: 'filtering',  num: 2, label: 'Filtrar',  detail: prog?.filteredCount != null ? `${prog.filteredCount} filtrados` : 'Filtrando por precio y calidad' },
+              { key: 'analyzing',  num: 3, label: 'Analizar', detail: prog?.opportunitiesFound != null ? `${prog.opportunitiesFound} oportunidades` : 'Analizando rentabilidad estimada' },
+              { key: 'publishing', num: 4, label: 'Publicar', detail: (prog?.publishingCurrent != null && prog?.publishingTotal != null && prog.publishingTotal > 0) ? `${prog.publishingCurrent}/${prog.publishingTotal} productos` : prog?.published != null ? `${prog.published} publicados` : 'Publicando en marketplaces' },
+            ];
+            const currentIdx = phases.findIndex(p => p.key === currentPhase);
+            return (
+              <div className="flex items-start gap-0">
+                {phases.map((phase, i) => {
+                  const isDone    = autopilotRunning && currentIdx > i;
+                  const isActive  = autopilotRunning && currentIdx === i;
+                  const isPaused  = !autopilotRunning;
+                  const dotCls    = isDone ? 'bg-green-500 text-white' : isActive ? 'bg-blue-500 text-white animate-pulse' : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500';
+                  const lineCls   = isDone ? 'bg-green-400' : 'bg-slate-200 dark:bg-slate-700';
+                  const labelCls  = isDone ? 'text-green-700 dark:text-green-400' : isActive ? 'text-blue-700 dark:text-blue-400 font-semibold' : 'text-slate-400 dark:text-slate-500';
+                  return (
+                    <div key={phase.key} className="flex-1 flex flex-col items-center relative">
+                      {i > 0 && <div className={`absolute left-0 top-3.5 w-1/2 h-0.5 ${lineCls}`} />}
+                      {i < phases.length - 1 && <div className={`absolute right-0 top-3.5 w-1/2 h-0.5 ${isDone ? 'bg-green-400' : 'bg-slate-200 dark:bg-slate-700'}`} />}
+                      <div className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${dotCls}`}>
+                        {isDone ? '✓' : phase.num}
                       </div>
-                    )}
-                  </>
-                ) : (
-                  'Inicia el autopilot para ejecutar ciclos automáticos (buscar oportunidades y publicar).'
-                )}
+                      <p className={`mt-1.5 text-center text-[11px] leading-tight ${labelCls}`}>{phase.label}</p>
+                      {isActive && !isPaused && (
+                        <p className="text-center text-[10px] text-blue-600 dark:text-blue-400 leading-tight mt-0.5 px-1 truncate w-full">{phase.detail}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-            {(() => {
-              const cyclePhases = ['idle', 'searching', 'filtering', 'analyzing', 'publishing'];
-              const cyclePhaseLabels = ['Buscar', 'Filtrar', 'Analizar', 'Publicar'];
-              const currentIdx = cyclePhases.indexOf(autopilotStatus?.currentPhase || 'idle');
-              const cycleProgress = currentIdx >= 0 ? Math.round((currentIdx / Math.max(1, cyclePhases.length - 1)) * 100) : 0;
-              const orders = inventoryListings?.ordersByStatus ?? {};
-              const compraCount = (orders.PAID ?? 0) + (orders.PURCHASING ?? 0) + (inventoryListings?.pendingPurchasesCount ?? 0);
-              const envioCount = orders.PURCHASED ?? 0;
-              const entregadoCount = inventoryListings?.salesDeliveredCount ?? 0;
-              const currentPhase = autopilotStatus?.currentPhase;
-              return (
-                <div className="space-y-4">
-                  {/* Bloque 1: Ciclo del Autopilot (solo fases 1-4) */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
-                      {!autopilotRunning && <span>Autopilot detenido</span>}
-                      {autopilotRunning && currentPhase === 'idle' && (
-                        <span>Entre ciclos — próximo ciclo según intervalo configurado</span>
-                      )}
-                      {autopilotRunning && currentPhase !== 'idle' && (
-                        <>
-                          <span>Progreso de este ciclo</span>
-                          <span>{cycleProgress}%</span>
-                        </>
-                      )}
-                    </div>
-                    {/* Barra: indeterminada entre ciclos, continua con fill cuando hay ciclo, gris vacía si parado */}
-                    <div className="h-2.5 w-full rounded overflow-hidden bg-slate-200 dark:bg-slate-800">
-                      {autopilotRunning && currentPhase === 'idle' && (
-                        <div
-                          className="h-full w-full animate-pulse bg-slate-300 dark:bg-slate-600 rounded"
-                          aria-hidden
-                        />
-                      )}
-                      {autopilotRunning && currentPhase !== 'idle' && (
-                        <div
-                          className={`h-full bg-green-500 dark:bg-green-600 transition-all duration-300 ${cycleProgress >= 100 ? 'rounded' : 'rounded-l'}`}
-                          style={{ width: `${cycleProgress}%` }}
-                          role="progressbar"
-                          aria-valuenow={cycleProgress}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                        />
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      {cyclePhaseLabels.map((label, i) => {
-                        const phaseKey = cyclePhases[i + 1];
-                        const isCurrent = currentPhase === phaseKey && autopilotRunning;
-                        const titles = ['Query a AliExpress / tendencias', 'Precio, capital, duplicados', 'Rentabilidad, ROI, compliance', 'Crear listados en eBay/ML/Amazon'];
-                        return (
-                          <span
-                            key={label}
-                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${
-                              isCurrent
-                                ? 'ring-2 ring-green-500 dark:ring-green-400 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                            }`}
-                            title={titles[i]}
-                          >
-                            {i + 1}. {label}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  {/* Bloque 2: Pipeline post-venta (ventas y envíos) */}
-                  <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Ventas y envíos en proceso</div>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200" title="Pagadas + Comprando en AliExpress + Pendientes de compra">
-                        5. Compra: {compraCount}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200" title="Órdenes compradas en proveedor, esperando envío">
-                        6. Envío: {envioCount}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200" title="Ventas marcadas como entregadas">
-                        7. Entregado: {entregadoCount}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowPhaseSummary((v) => !v)}
-                    className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 flex items-center gap-1"
-                  >
-                    {showPhaseSummary ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    {showPhaseSummary ? 'Ocultar' : 'Ver'} descripción de fases
-                  </button>
-                  {showPhaseSummary && (
-                    <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-                      <table className="min-w-full text-xs">
-                        <thead className="bg-slate-50/80 dark:bg-slate-900/80">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-medium text-slate-500 dark:text-slate-400">Fase</th>
-                            <th className="px-3 py-2 text-left font-medium text-slate-500 dark:text-slate-400">Nombre</th>
-                            <th className="px-3 py-2 text-left font-medium text-slate-500 dark:text-slate-400">Descripción</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                          <tr><td className="px-3 py-2 font-medium">1</td><td>Buscar</td><td>Query a AliExpress / tendencias</td></tr>
-                          <tr><td className="px-3 py-2 font-medium">2</td><td>Filtrar</td><td>Precio, capital, duplicados</td></tr>
-                          <tr><td className="px-3 py-2 font-medium">3</td><td>Analizar</td><td>Rentabilidad, ROI, compliance</td></tr>
-                          <tr><td className="px-3 py-2 font-medium">4</td><td>Publicar</td><td>Crear listados en eBay/ML/Amazon</td></tr>
-                          <tr><td className="px-3 py-2 font-medium">5</td><td>Compra</td><td>Orden pagada, compra en AliExpress</td></tr>
-                          <tr><td className="px-3 py-2 font-medium">6</td><td>Envío</td><td>En tránsito desde proveedor</td></tr>
-                          <tr><td className="px-3 py-2 font-medium">7</td><td>Entregado</td><td>Venta completada</td></tr>
-                        </tbody>
-                      </table>
-                    </div>
+            );
+          })()}
+
+          {/* Estado textual + señales de intervención */}
+          <div className={`rounded-lg p-3 border ${
+            !autopilotRunning ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60' :
+            autopilotStatus?.currentPhase === 'idle' ? 'border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20' :
+            'border-green-200 dark:border-green-800 bg-green-50/60 dark:bg-green-950/20'
+          }`}>
+            {!autopilotRunning ? (
+              <div className="flex items-center gap-2">
+                <Pause className="w-4 h-4 text-slate-400 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Ciclo detenido</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Inicia el Autopilot para ejecutar ciclos automáticos. Los workflows manuales siguen disponibles.</p>
+                </div>
+              </div>
+            ) : autopilotStatus?.currentPhase === 'idle' ? (
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Entre ciclos — esperando intervalo</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                    {autopilotStatus?.config?.cycleIntervalMinutes != null
+                      ? `Próximo ciclo en ~${autopilotStatus.config.cycleIntervalMinutes} min`
+                      : 'El próximo ciclo se ejecutará según el intervalo configurado'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-green-600 dark:text-green-400 animate-pulse shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                    Fase activa: {(() => {
+                      const labels: Record<string, string> = { searching: 'Buscando', filtering: 'Filtrando', analyzing: 'Analizando', publishing: 'Publicando' };
+                      return labels[autopilotStatus?.currentPhase ?? ''] ?? autopilotStatus?.currentPhase ?? '—';
+                    })()}
+                  </p>
+                  {autopilotStatus?.currentCycleProgress?.query && (
+                    <p className="text-xs text-green-700 dark:text-green-300 mt-0.5">Query: "{String(autopilotStatus.currentCycleProgress.query).slice(0, 60)}"</p>
                   )}
                 </div>
-              );
-            })()}
-            {autopilotRunning && autopilotStatus?.currentCycleProgress && (autopilotStatus.currentCycleProgress.query || autopilotStatus.currentCycleProgress.opportunitiesFound != null || autopilotStatus.currentCycleProgress.analyzed != null || autopilotStatus.currentCycleProgress.published != null) && (
-            <div className="flex flex-wrap gap-2 items-center pt-1">
-              {(autopilotStatus.currentCycleProgress.query || autopilotStatus.currentCycleProgress.opportunitiesFound != null) && (
-                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-200 dark:bg-slate-800 text-xs font-medium text-slate-800 dark:text-slate-200" title="Query de búsqueda">
-                  Query: <span className="ml-1 truncate max-w-[240px]" title={autopilotStatus.currentCycleProgress.query || ''}>{autopilotStatus.currentCycleProgress.query || 'selección automática'}</span>
-                </span>
-              )}
-              {autopilotStatus.currentCycleProgress.opportunitiesFound != null && (
-                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-medium">
-                  Oportunidades: {autopilotStatus.currentCycleProgress.opportunitiesFound}
-                </span>
-              )}
-              {autopilotStatus.currentCycleProgress.analyzed != null && (
-                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 text-xs font-medium">
-                  Analizadas: {autopilotStatus.currentCycleProgress.analyzed}
-                </span>
-              )}
-              {autopilotStatus.currentCycleProgress.published != null && (
-                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 text-xs font-medium">
-                  Publicadas: {autopilotStatus.currentCycleProgress.published}
-                </span>
-              )}
-            </div>
-          )}
-            {!autopilotRunning && (autopilotStatus?.lastRun != null || autopilotStatus?.opportunitiesGenerated != null || autopilotStatus?.productsPublished != null) && (
-            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 mt-2">
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Resumen del último ciclo</div>
-              <div className="flex flex-wrap gap-4 text-sm text-slate-600 dark:text-slate-300">
-              {autopilotStatus.lastRun != null && autopilotStatus.lastRun && (
-                <span>Última ejecución: {formatLastRun(autopilotStatus.lastRun)}</span>
-              )}
-              {autopilotStatus.opportunitiesGenerated != null && (
-                <span>Oportunidades último ciclo: {autopilotStatus.opportunitiesGenerated}</span>
-              )}
-              {autopilotStatus.productsPublished != null && (
-                <span title="Acumulado de todos los ciclos del Autopilot">Total publicados por Autopilot: {autopilotStatus.productsPublished}</span>
-              )}
               </div>
-            </div>
-          )}
+            )}
           </div>
+
+          {/* Intervención requerida: órdenes manuales */}
+          {(() => {
+            const orders = inventoryListings?.ordersByStatus ?? {};
+            const manualCount = (inventoryListings?.pendingPurchasesCount ?? 0);
+            const failedCount = orders.FAILED ?? 0;
+            if (manualCount === 0 && failedCount === 0) return null;
+            return (
+              <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Intervención humana requerida</p>
+                  <div className="flex flex-wrap gap-3 mt-1">
+                    {manualCount > 0 && (
+                      <span className="text-xs text-amber-800 dark:text-amber-200">
+                        · <strong>{manualCount}</strong> compra{manualCount !== 1 ? 's' : ''} manual{manualCount !== 1 ? 'es' : ''} pendiente{manualCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {failedCount > 0 && (
+                      <span className="text-xs text-red-800 dark:text-red-200">
+                        · <strong>{failedCount}</strong> orden{failedCount !== 1 ? 'es' : ''} fallida{failedCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <Link to="/orders" className="inline-flex items-center gap-1 mt-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline">
+                    Ir a Órdenes →
+                  </Link>
+                </div>
+              </div>
+            );
+          })()}
         </div>
+
       </div>
 
       {/* Dashboard analytics — estimates / aggregates; not canonical proof */}

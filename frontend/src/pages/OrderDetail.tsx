@@ -391,15 +391,114 @@ export default function OrderDetail() {
 
   const smartOpenUrl = smartRec ? (smartRec.affiliateUrl || smartRec.productUrl) : '';
 
+  // Lifecycle stepper data
+  const cycleSteps = (() => {
+    const isML = order.paypalOrderId?.startsWith('mercadolibre:');
+    const hasSupplierProof = hasVerifiedSupplierPurchaseProof;
+    const hasTracking = !!(order.sale?.trackingNumber?.trim());
+    const isDone = order.status === 'PURCHASED';
+    const isFailed = order.status === 'FAILED';
+    const isPurchasing = order.status === 'PURCHASING';
+    const isPaid = order.status === 'PAID';
+    const isManual = order.status === 'MANUAL_ACTION_REQUIRED' || order.status === 'FULFILLMENT_BLOCKED' || !!order.manualFulfillmentRequired;
+
+    type StepState = 'done' | 'active' | 'blocked' | 'pending';
+    interface CycleStep { label: string; sub: string; state: StepState }
+
+    const steps: CycleStep[] = [
+      {
+        label: 'Orden recibida',
+        sub: isML ? 'Mercado Libre' : order.paypalOrderId?.startsWith('ebay:') ? 'eBay' : 'Directa',
+        state: 'done',
+      },
+      {
+        label: 'Sincronizada',
+        sub: order.marketplaceOrderId ? `ID: ${order.marketplaceOrderId.slice(0, 12)}` : 'sin ID ext.',
+        state: order.marketplaceOrderId ? 'done' : 'active',
+      },
+      {
+        label: 'Compra proveedor',
+        sub: hasSupplierProof
+          ? (order.aliexpressOrderId ? `Ali: ${order.aliexpressOrderId.slice(0, 10)}` : 'Manual confirmado')
+          : isManual
+            ? 'Intervención requerida'
+            : isFailed
+              ? 'Compra fallida'
+              : isPurchasing
+                ? 'Comprando…'
+                : isPaid
+                  ? 'Pendiente'
+                  : '—',
+        state: hasSupplierProof ? 'done' : isFailed ? 'blocked' : isManual ? 'blocked' : isPurchasing || isPaid ? 'active' : 'pending',
+      },
+      {
+        label: 'Tracking / Envío',
+        sub: hasTracking ? order.sale!.trackingNumber!.slice(0, 16) : 'Sin tracking aún',
+        state: hasTracking ? 'done' : isDone && !hasTracking ? 'active' : 'pending',
+      },
+      {
+        label: 'Completada',
+        sub: isDone ? 'Ciclo cerrado' : '—',
+        state: isDone ? 'done' : isFailed ? 'blocked' : 'pending',
+      },
+    ];
+    return steps;
+  })();
+
+  const stepColors: Record<string, string> = {
+    done:    'bg-emerald-500 text-white',
+    active:  'bg-blue-500 text-white animate-pulse',
+    blocked: 'bg-red-500 text-white',
+    pending: 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500',
+  };
+  const stepLineColors: Record<string, string> = {
+    done:    'bg-emerald-400',
+    active:  'bg-blue-400',
+    blocked: 'bg-red-400',
+    pending: 'bg-slate-200 dark:bg-slate-700',
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-5 p-6">
       <button
+        type="button"
         onClick={() => navigate('/orders')}
         className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         Volver a Órdenes
       </button>
+
+      {/* Lifecycle stepper */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">Ciclo de la orden</p>
+        <div className="flex items-start gap-0">
+          {cycleSteps.map((step, i) => (
+            <div key={i} className="flex-1 flex flex-col items-center relative">
+              {/* connector line left */}
+              {i > 0 && (
+                <div className={`absolute left-0 top-3.5 w-1/2 h-0.5 -translate-x-0 ${stepLineColors[cycleSteps[i - 1].state]}`} />
+              )}
+              {/* connector line right */}
+              {i < cycleSteps.length - 1 && (
+                <div className={`absolute right-0 top-3.5 w-1/2 h-0.5 ${stepLineColors[step.state]}`} />
+              )}
+              {/* dot */}
+              <div className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${stepColors[step.state]}`}>
+                {step.state === 'done' ? '✓' : step.state === 'blocked' ? '✕' : i + 1}
+              </div>
+              {/* label */}
+              <p className={`mt-1.5 text-center text-[11px] font-medium leading-tight ${
+                step.state === 'done' ? 'text-emerald-700 dark:text-emerald-400' :
+                step.state === 'blocked' ? 'text-red-700 dark:text-red-400' :
+                step.state === 'active' ? 'text-blue-700 dark:text-blue-400' :
+                'text-slate-400 dark:text-slate-500'
+              }`}>{step.label}</p>
+              <p className="text-center text-[10px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5 px-1 truncate w-full">{step.sub}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 space-y-6">
         <div className="flex items-start justify-between gap-4">

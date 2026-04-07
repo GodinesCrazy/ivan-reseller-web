@@ -46,6 +46,7 @@ const Orders = lazy(() => import('@pages/Orders'));
 const OrderDetail = lazy(() => import('@pages/OrderDetail'));
 const Checkout = lazy(() => import('@pages/Checkout'));
 const Diagnostics = lazy(() => import('@pages/Diagnostics'));
+const Listings = lazy(() => import('@pages/Listings'));
 const ControlCenter = lazy(() => import('@pages/ControlCenter'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
 const OnboardingWizard = lazy(() => import('@components/OnboardingWizard'));
@@ -224,6 +225,7 @@ function AppContent() {
         
         {/* Publishing */}
         <Route path="publisher" element={<IntelligentPublisher />} />
+        <Route path="listings" element={<Listings />} />
         
         {/* Jobs & Reports */}
         <Route path="jobs" element={<Jobs />} />

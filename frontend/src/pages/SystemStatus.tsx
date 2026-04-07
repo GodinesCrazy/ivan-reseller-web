@@ -7,6 +7,7 @@ import type { OperationsTruthResponse } from '@/types/operations';
 import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
 import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
 import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
+import PageHeader from '@/components/ui/PageHeader';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
@@ -141,20 +142,20 @@ export default function SystemStatus() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Estado del sistema</h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Salud técnica y conectores como subcapa. La verdad operativa real del negocio se muestra abajo.
-        </p>
-        {operationsTruth?.generatedAt && (
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}
-            {' · '}
-            Evidencia operativa: {new Date(operationsTruth.generatedAt).toLocaleString()}
-          </p>
-        )}
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={ShieldAlert}
+        title="Estado del sistema"
+        subtitle="Salud técnica de conectores e integraciones. La verdad operativa real se muestra abajo."
+        badge={
+          operationsTruth?.generatedAt ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              <CheckCircle className="w-3 h-3" />
+              {environment === 'production' ? 'Producción' : 'Sandbox'}
+            </span>
+          ) : undefined
+        }
+      />
 
       <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-900 dark:text-amber-200">
         Conectado no significa comercialmente listo. Un conector sano puede coexistir con listings bajo revisión, blockers activos o prueba post-venta inexistente.

@@ -1,24 +1,22 @@
 import { useState, useEffect } from 'react';
-import { 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Clock,
+  CheckCircle,
+  XCircle,
   AlertCircle,
   RefreshCw,
   Trash2,
-  Filter,
   Search,
-  Calendar,
-  BarChart3,
   Play,
   Pause,
   Package,
   StopCircle,
   RotateCcw,
-  Download
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
+import PageHeader from '@/components/ui/PageHeader';
+import KpiCard from '@/components/ui/KpiCard';
 
 interface Job {
   id: string;
@@ -344,82 +342,61 @@ export default function Jobs() {
   }
 
   return (
-    <div className="p-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Cola de trabajos</h1>
-          <p className="text-xs text-slate-500">Monitorea y gestiona trabajos en segundo plano</p>
-          <p className="text-xs text-slate-500 mt-0.5">Datos desde API. Actualización automática si está activada.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center gap-2 transition-colors ${
-              autoRefresh ? 'bg-green-50 border-green-300 dark:border-green-700' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
-          >
-            {autoRefresh ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            Actualización automática {autoRefresh ? 'activada' : 'desactivada'}
-          </button>
-          <button
-            onClick={() => { loadJobs(); loadStats(); }}
-            className="px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/40 flex items-center gap-2 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Actualizar ahora
-          </button>
-          <button
-            onClick={clearCompleted}
-            className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            Limpiar completados
-          </button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={RefreshCw}
+        title="Cola de trabajos"
+        subtitle="Monitorea y gestiona trabajos en segundo plano · actualización automática cada 5s"
+        badge={
+          stats.active > 0 ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+              <RefreshCw className="w-3 h-3 animate-spin" />
+              {stats.active} activo{stats.active !== 1 ? 's' : ''}
+            </span>
+          ) : undefined
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                autoRefresh
+                  ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              {autoRefresh ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+              Auto-refresh {autoRefresh ? 'on' : 'off'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { loadJobs(); loadStats(); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Actualizar
+            </button>
+            <button
+              type="button"
+              onClick={clearCompleted}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 text-xs font-medium transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Limpiar completados
+            </button>
+          </div>
+        }
+      />
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
-          <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">Total</div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.total}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
-          <div className="flex items-center gap-2 text-sm text-blue-600 mb-1">
-            <RefreshCw className="w-4 h-4" />
-            Activos
-          </div>
-          <div className="text-2xl font-bold text-blue-900">{stats.active}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
-          <div className="flex items-center gap-2 text-sm text-yellow-600 mb-1">
-            <Clock className="w-4 h-4" />
-            Pendientes
-          </div>
-          <div className="text-2xl font-bold text-yellow-900">{stats.pending}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
-          <div className="flex items-center gap-2 text-sm text-green-600 mb-1">
-            <CheckCircle className="w-4 h-4" />
-            Completados
-          </div>
-          <div className="text-2xl font-bold text-green-900">{stats.completed}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
-          <div className="flex items-center gap-2 text-sm text-red-600 mb-1">
-            <XCircle className="w-4 h-4" />
-            Fallidos
-          </div>
-          <div className="text-2xl font-bold text-red-900">{stats.failed}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
-          <div className="flex items-center gap-2 text-sm text-orange-600 mb-1">
-            <AlertCircle className="w-4 h-4" />
-            Retrasados
-          </div>
-          <div className="text-2xl font-bold text-orange-900">{stats.delayed}</div>
-        </div>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <KpiCard icon={Package} label="Total" value={stats.total} subtitle="todos los jobs" tone="default" />
+        <KpiCard icon={RefreshCw} label="Activos" value={stats.active} subtitle="ejecutándose" tone={stats.active > 0 ? 'info' : 'default'} />
+        <KpiCard icon={Clock} label="Pendientes" value={stats.pending} subtitle="en cola" tone={stats.pending > 0 ? 'warning' : 'default'} />
+        <KpiCard icon={CheckCircle} label="Completados" value={stats.completed} subtitle="finalizados" tone={stats.completed > 0 ? 'success' : 'default'} />
+        <KpiCard icon={XCircle} label="Fallidos" value={stats.failed} subtitle="con error" tone={stats.failed > 0 ? 'danger' : 'default'} />
+        <KpiCard icon={AlertCircle} label="Retrasados" value={stats.delayed} subtitle="delayed" tone={stats.delayed > 0 ? 'warning' : 'default'} />
       </div>
 
       {/* Bulk Actions */}

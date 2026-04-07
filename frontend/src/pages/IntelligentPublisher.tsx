@@ -763,30 +763,76 @@ export default function IntelligentPublisher() {
         </div>
       </div>
 
-      {/* Capital strip */}
-      {capitalData != null && (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-3 flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Wallet className="w-4 h-4 text-slate-400" />
-            <span className="text-xs text-slate-500">Capital disponible:</span>
-            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrencySimple(capitalData.availableCash, 'USD')}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-slate-400" />
-            <span className="text-xs text-slate-500">Puede publicar:</span>
-            {capitalData.canPublish ? (
-              <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                Sí
+      {/* GO / NO-GO panel */}
+      {capitalData != null && (() => {
+        const totalBlockers = (operationsTruth?.summary.blockerCounts ?? []).reduce((s, b) => s + Number(b.count || 0), 0);
+        const activeListings = operationsTruth?.summary.liveStateCounts?.active ?? 0;
+        const isGo = capitalData.canPublish && totalBlockers === 0;
+        const isPartial = capitalData.canPublish && totalBlockers > 0;
+        return (
+          <div className={`rounded-xl border shadow-card p-4 ${
+            isGo      ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/80 dark:bg-emerald-950/30' :
+            isPartial ? 'border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-950/30' :
+                        'border-red-300 dark:border-red-700 bg-red-50/80 dark:bg-red-950/30'
+          }`}>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              {/* Decisión principal */}
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 text-lg font-black ${
+                  isGo      ? 'bg-emerald-500 text-white' :
+                  isPartial ? 'bg-amber-500 text-white' :
+                              'bg-red-500 text-white'
+                }`}>
+                  {isGo ? '✓' : isPartial ? '!' : '✕'}
+                </div>
+                <div>
+                  <p className={`text-base font-bold ${
+                    isGo      ? 'text-emerald-900 dark:text-emerald-100' :
+                    isPartial ? 'text-amber-900 dark:text-amber-100' :
+                                'text-red-900 dark:text-red-100'
+                  }`}>
+                    {isGo ? 'GO — Listo para publicar' : isPartial ? 'GO parcial — Hay blockers' : 'NO-GO — Revisar antes de publicar'}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${
+                    isGo      ? 'text-emerald-700 dark:text-emerald-300' :
+                    isPartial ? 'text-amber-700 dark:text-amber-300' :
+                                'text-red-700 dark:text-red-300'
+                  }`}>
+                    {isGo
+                      ? `Capital libre · 0 blockers · ${activeListings > 0 ? `${activeListings} listing${activeListings !== 1 ? 's' : ''} activo${activeListings !== 1 ? 's' : ''}` : 'sin listings activos aún'}`
+                      : isPartial
+                        ? `${totalBlockers} blocker${totalBlockers !== 1 ? 's' : ''} activo${totalBlockers !== 1 ? 's' : ''} — solo productos sin bloqueo serán publicados`
+                        : `Capital insuficiente o límite de exposición alcanzado — no publicar hasta resolver`}
+                  </p>
+                </div>
+              </div>
+              {/* Métricas compactas */}
+              <div className="flex items-center gap-4 flex-wrap text-sm">
+                <div className="text-center">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Capital libre</p>
+                  <p className={`text-lg font-bold tabular-nums mt-0.5 ${capitalData.availableCash > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+                    {formatCurrencySimple(capitalData.availableCash, 'USD')}
+                  </p>
+                </div>
                 {capitalData.remainingExposure > 0 && (
-                  <span className="text-slate-500 font-normal ml-1">(+{formatCurrencySimple(capitalData.remainingExposure, 'USD')})</span>
+                  <div className="text-center">
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Exposición restante</p>
+                    <p className="text-lg font-bold tabular-nums mt-0.5 text-blue-700 dark:text-blue-300">{formatCurrencySimple(capitalData.remainingExposure, 'USD')}</p>
+                  </div>
                 )}
-              </span>
-            ) : (
-              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">Límite alcanzado</span>
-            )}
+                <div className="text-center">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Blockers</p>
+                  <p className={`text-lg font-bold tabular-nums mt-0.5 ${totalBlockers > 0 ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{totalBlockers}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Activos</p>
+                  <p className="text-lg font-bold tabular-nums mt-0.5 text-slate-700 dark:text-slate-300">{activeListings}</p>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Pending approvals header + filters */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-3 space-y-2.5">

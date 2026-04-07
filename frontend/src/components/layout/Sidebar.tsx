@@ -20,6 +20,10 @@ import {
   Key,
   Repeat2,
   Server,
+  List,
+  Stethoscope,
+  FileBarChart2,
+  Briefcase,
 } from 'lucide-react';
 
 interface NavItem {
@@ -43,6 +47,7 @@ const navGroups: NavGroup[] = [
       { path: '/control-center', label: 'Control Center', icon: Activity },
       { path: '/opportunities', label: 'Oportunidades', icon: Search },
       { path: '/publisher', label: 'Publicador', icon: Send },
+      { path: '/listings', label: 'Listings', icon: List },
       { path: '/autopilot', label: 'Autopilot', icon: Bot },
     ],
   },
@@ -50,6 +55,7 @@ const navGroups: NavGroup[] = [
     title: 'Catálogo y ventas',
     items: [
       { path: '/products', label: 'Productos', icon: Package },
+      { path: '/product-research', label: 'Investigación', icon: Briefcase },
       { path: '/orders', label: 'Órdenes', icon: Receipt },
       { path: '/pending-purchases', label: 'Compras pendientes', icon: ShoppingCart },
       { path: '/sales', label: 'Ventas', icon: DollarSign },
@@ -60,12 +66,14 @@ const navGroups: NavGroup[] = [
     items: [
       { path: '/finance', label: 'Finanzas', icon: Wallet },
       { path: '/commissions', label: 'Comisiones', icon: Receipt },
+      { path: '/reports', label: 'Reportes', icon: FileBarChart2 },
     ],
   },
   {
     title: 'Administración',
     items: [
       { path: '/users', label: 'Usuarios', icon: Users, roles: ['ADMIN'] },
+      { path: '/admin', label: 'Panel Admin', icon: Server, roles: ['ADMIN'] },
       { path: '/logs', label: 'Registros del sistema', icon: Terminal, roles: ['ADMIN'] },
     ],
     roles: ['ADMIN'],
@@ -77,6 +85,7 @@ const navGroups: NavGroup[] = [
       { path: '/workflow-config', label: 'Workflows', icon: Repeat2 },
       { path: '/regional', label: 'Regional', icon: Globe },
       { path: '/system-status', label: 'Estado del sistema', icon: Server },
+      { path: '/diagnostics', label: 'Diagnósticos', icon: Stethoscope },
       { path: '/help', label: 'Ayuda', icon: HelpCircle },
     ],
   },

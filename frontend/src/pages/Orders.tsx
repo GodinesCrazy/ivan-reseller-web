@@ -711,16 +711,14 @@ export default function Orders() {
           <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Orden</th>
-                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Marketplace</th>
-                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Título</th>
-                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Comprador</th>
-                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Traza E2E</th>
-                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ciclo de vida</th>
-                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Estado</th>
-                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Importe</th>
-                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fecha</th>
-                <th className="px-6 py-3"></th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Orden / MP</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Producto</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Comprador</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fulfillment</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ciclo</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Importe</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fecha</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -741,89 +739,104 @@ export default function Orders() {
                           : order.status === 'PAID'
                             ? 'pending'
                             : 'n/a';
+                const mpLabel = order.paypalOrderId?.startsWith('ebay:')
+                  ? 'eBay'
+                  : order.paypalOrderId?.startsWith('mercadolibre:')
+                    ? 'ML'
+                    : order.paypalOrderId?.startsWith('amazon:')
+                      ? 'Amazon'
+                      : 'Direct';
+                const orderId = order.paypalOrderId?.startsWith('ebay:')
+                  ? order.paypalOrderId.slice(5)
+                  : order.paypalOrderId?.startsWith('mercadolibre:')
+                    ? order.paypalOrderId.slice(13).split('-')[0]
+                    : order.id.slice(0, 8) + '…';
+
+                const fulfillPillMap: Record<string, { label: string; cls: string }> = {
+                  fulfilled:       { label: '✓ Fulfillado',     cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' },
+                  in_progress:     { label: '⏳ Comprando…',    cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
+                  manual_required: { label: '⚠ Acción Manual', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 font-semibold' },
+                  failed:          { label: '✕ Fallido',        cls: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 font-semibold' },
+                  pending:         { label: '→ Pend. Compra',   cls: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300' },
+                  'n/a':           { label: '—',                cls: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' },
+                };
+                const fpill = fulfillPillMap[fulfillmentState] ?? fulfillPillMap['n/a'];
+                const needsAction = fulfillmentState === 'manual_required' || fulfillmentState === 'failed';
+
                 return (
-                <tr key={order.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                  <td className="px-6 py-4 text-sm font-mono text-slate-700 dark:text-slate-300">
-                    {order.paypalOrderId?.startsWith('ebay:')
-                      ? order.paypalOrderId.slice(5)
-                      : order.paypalOrderId?.startsWith('mercadolibre:')
-                        ? order.paypalOrderId.slice(13).split('-')[0]
-                        : order.id.slice(0, 8) + '…'}
+                <tr key={order.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${needsAction ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''}`}>
+                  {/* Orden / MP */}
+                  <td className="px-4 py-3 align-top">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        mpLabel === 'eBay' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                        mpLabel === 'ML'   ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                        'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                      }`}>{mpLabel}</span>
+                      <span className="text-xs font-mono text-slate-600 dark:text-slate-400 truncate max-w-[110px]">{orderId}</span>
+                    </div>
+                    <OrderStatusBadge status={order.status} />
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
-                    {order.paypalOrderId?.startsWith('ebay:') ? 'eBay' : order.paypalOrderId?.startsWith('mercadolibre:') ? 'Mercado Libre' : order.paypalOrderId?.startsWith('amazon:') ? 'Amazon' : 'Checkout'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">
+                  {/* Producto */}
+                  <td className="px-4 py-3 align-top max-w-[180px]">
                     {order.productId ? (
                       <button
                         onClick={() => navigate(`/products/${order.productId}/preview`)}
-                        className="text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
+                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline text-left leading-snug line-clamp-2"
                       >
                         {order.title}
-                        <ExternalLink className="w-3.5 h-3.5" />
                       </button>
                     ) : (
-                      order.title
+                      <span className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{order.title}</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{order.customerName || '—'}</td>
-                  <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">
-                    <div className="space-y-1">
-                      <div>
-                        Producto:{' '}
-                        {order.productId ? (
-                          <button
-                            onClick={() => navigate(`/products/${order.productId}/preview`)}
-                            className="text-primary-600 dark:text-primary-400 hover:underline"
-                          >
-                            #{order.productId}
-                          </button>
-                        ) : (
-                          '—'
-                        )}
-                      </div>
-                      <div>
-                        Listing: <span className="font-mono">{listingRef}</span>
-                      </div>
-                      <div>
-                        Sinc: {truth?.orderIngested || order.sale ? 'ok' : 'pendiente'} · Cumplimiento: {fulfillmentState}
-                      </div>
-                    </div>
+                  {/* Comprador */}
+                  <td className="px-4 py-3 align-top text-xs text-slate-600 dark:text-slate-400">
+                    {order.customerName || '—'}
                   </td>
-                  <td className="px-6 py-4 text-xs">
-                    <div className={`inline-flex rounded-full px-2 py-0.5 font-medium ${lifecycleToneClasses(lifecycle.tone)}`}>
+                  {/* Fulfillment pill */}
+                  <td className="px-4 py-3 align-top">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] ${fpill.cls}`}>
+                      {fpill.label}
+                    </span>
+                    {needsAction && (
+                      <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">Requiere intervención</p>
+                    )}
+                  </td>
+                  {/* Ciclo de vida */}
+                  <td className="px-4 py-3 align-top text-xs">
+                    <div className={`inline-flex rounded-full px-2 py-0.5 font-medium text-[11px] ${lifecycleToneClasses(lifecycle.tone)}`}>
                       {lifecycle.label}
                     </div>
-                    <div className="mt-1 text-slate-500 dark:text-slate-400 max-w-[220px] truncate" title={lifecycle.detail}>
-                      {lifecycle.detail}
-                    </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <OrderStatusBadge status={order.status} />
+                  {/* Importe */}
+                  <td className="px-4 py-3 align-top text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                    {formatCurrencySimple(order.price, order.currency)}
                   </td>
-                  <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{formatCurrencySimple(order.price, order.currency)}</td>
-                  <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
+                  {/* Fecha */}
+                  <td className="px-4 py-3 align-top text-xs text-slate-500 dark:text-slate-400">
                     {new Date(order.createdAt).toLocaleDateString()}
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
+                  {/* Acciones */}
+                  <td className="px-4 py-3 align-top">
+                    <div className="flex flex-col gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 px-2 text-xs"
                         onClick={() => navigate(`/orders/${order.id}`)}
                       >
-                        Ver <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                        Ver <ArrowRight className="w-3 h-3 ml-1" />
                       </Button>
                       {canRetryFulfill(order) && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 px-2 text-xs text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300"
+                          className="h-7 px-2 text-xs text-amber-700 dark:text-amber-400"
                           onClick={() => handleRetryFulfill(order.id)}
                           disabled={retryingId === order.id}
                         >
-                          <RefreshCw className={`w-3.5 h-3.5 mr-1 ${retryingId === order.id ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`w-3 h-3 mr-1 ${retryingId === order.id ? 'animate-spin' : ''}`} />
                           Reintentar
                         </Button>
                       )}
