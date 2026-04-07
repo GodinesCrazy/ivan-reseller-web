@@ -12,11 +12,11 @@ import {
   Wallet,
   AlertCircle
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import PageHeader from '@/components/ui/PageHeader';
 import {
   BarChart,
   Bar,
@@ -230,29 +230,29 @@ export default function Commissions() {
   const premiumCard = 'rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card';
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Comisiones</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Seguimiento de ganancias y gestión de pagos</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportToCSV} className="flex items-center gap-1.5 text-xs border-slate-200 dark:border-slate-800">
-            <Download className="w-3.5 h-3.5" />
-            Exportar
-          </Button>
-          <Button 
-            size="sm"
-            onClick={handleRequestPayout}
-            disabled={requestingPayout || safeStats.totalPending < 50}
-            className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-          >
-            <Wallet className="w-3.5 h-3.5" />
-            Solicitar pago (${safeStats.totalPending.toFixed(2)})
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        icon={DollarSign}
+        title="Comisiones"
+        subtitle="Seguimiento de ganancias y gestion de pagos"
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={exportToCSV} className="flex items-center gap-1.5 text-xs">
+              <Download className="w-3.5 h-3.5" />
+              Exportar
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleRequestPayout}
+              disabled={requestingPayout || safeStats.totalPending < 50}
+              className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              Solicitar pago (${safeStats.totalPending.toFixed(2)})
+            </Button>
+          </div>
+        }
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

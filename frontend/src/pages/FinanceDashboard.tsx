@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
+import PageHeader from '@/components/ui/PageHeader';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -12,8 +13,6 @@ import {
   CreditCard,
   Wallet,
   Receipt,
-  ArrowUpRight,
-  ArrowDownRight,
   LayoutGrid,
   BookOpen,
   PiggyBank,
@@ -21,7 +20,7 @@ import {
   Award,
   Target,
   RotateCcw,
-  Info
+
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
@@ -345,18 +344,12 @@ export default function FinanceDashboard() {
   const isLoadingTab = loading && activeTab === 'overview';
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
-      {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Finanzas</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">KPIs consolidados: ventas, comisiones, pagos y saldos</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5" title="Origen de los datos">
-            <Info className="w-3.5 h-3.5 shrink-0" />
-            <strong>Analytics vs proof:</strong> Summary/Ledger provienen de ventas registradas; la ganancia realizada probada requiere proof ladder (payout ejecutado). La proyección de beneficio es estimada. El capital puede venir de PayPal API o de tu configuración.
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}</p>
-        </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={Wallet}
+        title="Finanzas"
+        subtitle={`KPIs consolidados: ventas, comisiones, pagos y saldos · Entorno: ${environment === 'production' ? 'produccion' : environment === 'sandbox' ? 'sandbox' : 'todos'}`}
+        actions={
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             onClick={() => { loadFinancialData(); loadSalesLedger(); loadWorkingCapital(); loadLeverageRisk(); loadTopProducts(); loadCapitalAllocation(); }}
@@ -369,6 +362,8 @@ export default function FinanceDashboard() {
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value as any)}
+              title="Periodo de tiempo"
+              aria-label="Periodo de tiempo"
               className="px-3 py-1.5 pr-9 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary-500 appearance-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors"
             >
               <option value="week">Últimos 7 días</option>
@@ -408,7 +403,8 @@ export default function FinanceDashboard() {
             </div>
           </div>
         </div>
-      </div>
+        }
+      />
 
       {/* Tab Row */}
       <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 -mx-4 px-4 md:mx-0 md:px-0">

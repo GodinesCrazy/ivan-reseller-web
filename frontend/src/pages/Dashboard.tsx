@@ -537,7 +537,7 @@ export default function Dashboard() {
       {!loading && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* BUSINESS CYCLE FUNNEL */}
-          <div className="lg:col-span-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+          <div className="lg:col-span-2 ir-panel p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <Layers className="h-4 w-4 text-blue-500" />
@@ -706,7 +706,7 @@ export default function Dashboard() {
       {/* BOTTOM GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* ACTIVITY FEED */}
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
+        <div className="ir-panel p-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
               <Activity className="h-3.5 w-3.5 text-slate-400" />
@@ -740,7 +740,7 @@ export default function Dashboard() {
         {/* RIGHT COLUMN: System status + latest order + admin */}
         <div className="space-y-2.5">
           {/* System status compact */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
+          <div className="ir-panel p-3">
             <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">Estado del sistema</h3>
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {[
@@ -805,7 +805,7 @@ export default function Dashboard() {
           </div>
 
           {/* Latest order */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
+          <div className="ir-panel p-3">
             <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-2">
               <ShoppingBag className="h-3.5 w-3.5 text-slate-400" />
               Última orden
@@ -844,7 +844,7 @@ export default function Dashboard() {
 
           {/* Admin: platform revenue */}
           {user?.role?.toUpperCase() === 'ADMIN' && platformRevenue && (
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
+            <div className="ir-panel p-3">
               <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">Ingresos plataforma (Admin)</h3>
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>

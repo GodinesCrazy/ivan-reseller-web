@@ -30,6 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import PageHeader from '@/components/ui/PageHeader';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { useCurrency } from '../hooks/useCurrency';
@@ -562,12 +563,14 @@ export default function Products() {
   const selectClass = "px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-slate-900 text-sm dark:text-slate-200";
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div>
-        <div className="flex justify-between items-center flex-wrap gap-2">
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Productos</h1>
-          <div className="flex gap-2">
+    <div className="space-y-6">
+      <PageHeader
+        icon={Package}
+        title="Productos"
+        subtitle="Catalogo real · candidatos validados, bloqueos operativos y legacy congelado"
+        below={<CycleStepsBreadcrumb currentStep={3} />}
+        actions={
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="flex gap-2" onClick={exportToCSV} title="Exportar productos visibles a CSV">
               <Download className="w-4 h-4" />
               Exportar CSV
@@ -599,12 +602,8 @@ export default function Products() {
               Buscar oportunidades
             </Button>
           </div>
-        </div>
-        <p className="text-xs text-slate-500 mt-0.5">Catálogo real · candidatos validados, bloqueos operativos y legacy congelado</p>
-        <div className="mt-3">
-          <CycleStepsBreadcrumb currentStep={3} />
-        </div>
-      </div>
+        }
+      />
 
       {setupRequired && (
         <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">

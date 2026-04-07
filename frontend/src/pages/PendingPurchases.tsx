@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  ShoppingCart, 
-  ExternalLink, 
+import {
+  ShoppingCart,
+  ExternalLink,
   DollarSign,
   Package,
   AlertCircle,
@@ -12,9 +12,9 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import PageHeader from '@/components/ui/PageHeader';
 import { formatCurrencySimple } from '../utils/currency';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
@@ -160,31 +160,26 @@ export default function PendingPurchases() {
   }
 
   return (
-    <div className="space-y-5 p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Compras Pendientes</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Ventas que requieren compra en proveedor · proof ladder en{' '}
-            <Link to="/control-center" className="text-primary-600 dark:text-primary-400 hover:underline">Control Center</Link>
-            {' '}·{' '}
-            <Link to="/orders?import=ebay" className="text-amber-600 dark:text-amber-400 hover:underline">Importar orden eBay</Link>
-          </p>
-          {pendingSales.length > 0 && (
-            <p className="text-amber-700 dark:text-amber-400 text-xs font-medium mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3.5 h-3.5" />
-              {pendingSales.length} orden{pendingSales.length !== 1 ? 'es' : ''} pendiente{pendingSales.length !== 1 ? 's' : ''} de fulfillment
-            </p>
-          )}
-          <div className="mt-3">
-            <CycleStepsBreadcrumb currentStep={5} />
-          </div>
-        </div>
-        <Button onClick={fetchPendingPurchases} variant="outline" size="sm">
-          Actualizar
-        </Button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={ShoppingCart}
+        title="Compras Pendientes"
+        subtitle="Ventas que requieren compra en proveedor · proof ladder en Control Center"
+        badge={
+          pendingSales.length > 0 ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              <AlertCircle className="w-3 h-3" />
+              {pendingSales.length} pendiente{pendingSales.length !== 1 ? 's' : ''}
+            </span>
+          ) : undefined
+        }
+        below={<CycleStepsBreadcrumb currentStep={5} />}
+        actions={
+          <Button onClick={fetchPendingPurchases} variant="outline" size="sm">
+            Actualizar
+          </Button>
+        }
+      />
 
       {/* Operations truth panels */}
       {operationsTruth && pendingProductIds.length > 0 && (
@@ -200,46 +195,43 @@ export default function PendingPurchases() {
 
       {/* Capital summary card */}
       {pendingSales.length > 0 && (
-        <Card className="bg-blue-50/60 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
-          <CardContent className="pt-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Capital de trabajo disponible</p>
-                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-1">
-                  {formatCurrencySimple(pendingSales[0]?.availableCapital || 0, 'USD')}
-                </p>
-              </div>
-              <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
+        <div className="ir-panel p-4 bg-blue-50/60 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Capital de trabajo disponible</p>
+              <p className="text-2xl font-bold tabular-nums text-blue-900 dark:text-blue-100 mt-1">
+                {formatCurrencySimple(pendingSales[0]?.availableCapital || 0, 'USD')}
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+              <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Pending Sales List */}
       {pendingSales.length === 0 ? (
-        <Card>
-          <CardContent className="pt-5">
-            <div className="text-center py-16">
-              <div className="mx-auto h-14 w-14 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
-                <ShoppingCart className="w-7 h-7 text-slate-400 dark:text-slate-500" />
-              </div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No hay compras pendientes</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-                Todas las ventas están siendo procesadas automáticamente o ya fueron completadas
-              </p>
+        <div className="ir-panel p-5">
+          <div className="text-center py-16">
+            <div className="mx-auto h-14 w-14 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+              <ShoppingCart className="w-7 h-7 text-slate-400 dark:text-slate-500" />
             </div>
-          </CardContent>
-        </Card>
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No hay compras pendientes</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+              Todas las ventas están siendo procesadas automaticamente o ya fueron completadas
+            </p>
+          </div>
+        </div>
       ) : (
         <div className="grid gap-4">
           {pendingSales.map((sale) => (
-            <Card key={sale.id} className="hover:shadow-md transition-shadow">
-              <CardHeader>
+            <div key={sale.id} className="ir-panel hover:shadow-md transition-shadow">
+              {/* Card header */}
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <CardTitle className="text-sm flex items-center gap-2">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                       <Package className="w-4 h-4 flex-shrink-0 text-slate-400" />
                       {sale.productId ? (
                         <button
@@ -252,11 +244,11 @@ export default function PendingPurchases() {
                       ) : (
                         <span className="truncate">{sale.productTitle}</span>
                       )}
-                    </CardTitle>
+                    </div>
                     <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                       <Badge variant="outline">{sale.marketplace.toUpperCase()}</Badge>
                       <Badge variant="secondary">Orden: {sale.orderId}</Badge>
-                      <Badge variant="warning">Acción requerida</Badge>
+                      <Badge variant="warning">Accion requerida</Badge>
                       {sale.isFailedOrder && (
                         <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-300">Orden fallida — fulfillment manual</Badge>
                       )}
@@ -264,19 +256,20 @@ export default function PendingPurchases() {
                     </div>
                     {sale.isFailedOrder && sale.errorMessage && (
                       <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
-                        ⚠ {sale.errorMessage}
+                        {sale.errorMessage}
                       </p>
                     )}
                   </div>
                   <div className="text-right ml-4 flex-shrink-0">
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">Precio de venta</p>
-                    <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400 mt-0.5">
                       {formatCurrencySimple(sale.salePrice, 'USD')}
                     </p>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent>
+              </div>
+              {/* Card content */}
+              <div className="p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   {/* Fulfillment action */}
                   <div className="space-y-1.5 md:order-1">
@@ -476,8 +469,8 @@ export default function PendingPurchases() {
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       )}

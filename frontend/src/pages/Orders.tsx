@@ -4,8 +4,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X, Download, ClipboardCopy, ShoppingCart } from 'lucide-react';
+import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X, Download, ClipboardCopy, ShoppingCart, Receipt } from 'lucide-react';
 import api from '@/services/api';
+import PageHeader from '@/components/ui/PageHeader';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -353,11 +354,28 @@ export default function Orders() {
   }).length;
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <div className="flex justify-between items-center">
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Órdenes / Envíos</h1>
-          <div className="flex items-center gap-1.5">
+    <div className="space-y-6">
+      <PageHeader
+        icon={Receipt}
+        title="Ordenes / Envios"
+        subtitle={[
+          'Compras al proveedor y seguimiento de envios',
+          orders.length > 0 ? `trazabilidad: ${tracedOrders}/${orders.length}${truthLoading ? ' ...' : ''}` : null,
+          lastSyncAt ? (() => {
+            const mins = Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000);
+            return mins < 1 ? 'sincronizado ahora' : `sincronizado hace ${mins} min`;
+          })() : null,
+        ].filter(Boolean).join(' · ')}
+        badge={
+          hasManual ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              Accion manual requerida
+            </span>
+          ) : undefined
+        }
+        below={<CycleStepsBreadcrumb currentStep={6} />}
+        actions={
+          <div className="flex items-center gap-1.5 flex-wrap">
             <Button variant="outline" size="sm" onClick={() => setShowFetchEbay((v) => !v)}>
               <Download className="w-3.5 h-3.5 mr-1" />
               Traer pedido eBay
@@ -374,27 +392,8 @@ export default function Orders() {
               <RefreshCw className="w-3.5 h-3.5" />
             </Button>
           </div>
-        </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          Compras al proveedor y seguimiento de envíos · proof ladder en{' '}
-          <Link to="/control-center" className="text-primary-600 dark:text-primary-400 hover:underline">Control Center</Link>
-          {orders.length > 0 && <> · trazabilidad: {tracedOrders}/{orders.length}{truthLoading ? ' …' : ''}</>}
-          {lastSyncAt && (
-            <> · {(() => {
-              const mins = Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000);
-              return mins < 1 ? 'sincronizado ahora' : `sincronizado hace ${mins} min`;
-            })()}</>
-          )}
-        </p>
-        {hasManual && (
-          <p className="text-xs mt-1 text-amber-600 dark:text-amber-400 font-medium">
-            Hay pedidos que requieren compra manual en AliExpress.
-          </p>
-        )}
-        <div className="mt-3">
-          <CycleStepsBreadcrumb currentStep={6} />
-        </div>
-      </div>
+        }
+      />
 
       {showFetchEbay && (
         <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">

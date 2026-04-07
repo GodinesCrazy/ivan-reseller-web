@@ -3,7 +3,7 @@ import type { OperationsTruthResponse } from '@/types/operations';
 
 function formatStateLabel(value: string | null | undefined): string {
   const raw = String(value || '').trim();
-  if (!raw) return 'unknown';
+  if (!raw) return 'desconocido';
   return raw.replace(/_/g, ' ');
 }
 
@@ -16,58 +16,60 @@ export default function OperationsTruthSummaryPanel({ data }: OperationsTruthSum
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_1fr] gap-4">
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+      {/* Panel izquierdo: Estado de listings en vivo */}
+      <div className="ir-panel p-4">
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Canonical Listing Truth</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Live listing state, blockers, evidence times, and source labels from the backend truth contract.
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Estado de Listings en Vivo</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Estado canónico de publicaciones, blockers y evidencia desde el contrato de backend.
           </p>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3">
-            <p className="text-xs text-green-700 dark:text-green-300 uppercase font-semibold">Active</p>
-            <p className="text-xl font-bold text-green-700 dark:text-green-300">{data.summary.liveStateCounts.active}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-3">
+            <p className="text-[10px] text-emerald-700 dark:text-emerald-300 uppercase font-semibold tracking-wider">Activo</p>
+            <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">{data.summary.liveStateCounts.active}</p>
           </div>
           <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
-            <p className="text-xs text-amber-700 dark:text-amber-300 uppercase font-semibold">Under review</p>
-            <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{data.summary.liveStateCounts.under_review}</p>
+            <p className="text-[10px] text-amber-700 dark:text-amber-300 uppercase font-semibold tracking-wider">En revisión</p>
+            <p className="text-xl font-bold text-amber-700 dark:text-amber-300 tabular-nums">{data.summary.liveStateCounts.under_review}</p>
           </div>
           <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-3">
-            <p className="text-xs text-orange-700 dark:text-orange-300 uppercase font-semibold">Paused</p>
-            <p className="text-xl font-bold text-orange-700 dark:text-orange-300">{data.summary.liveStateCounts.paused}</p>
+            <p className="text-[10px] text-orange-700 dark:text-orange-300 uppercase font-semibold tracking-wider">Pausado</p>
+            <p className="text-xl font-bold text-orange-700 dark:text-orange-300 tabular-nums">{data.summary.liveStateCounts.paused}</p>
           </div>
           <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
-            <p className="text-xs text-red-700 dark:text-red-300 uppercase font-semibold">Failed publish</p>
-            <p className="text-xl font-bold text-red-700 dark:text-red-300">{data.summary.liveStateCounts.failed_publish}</p>
+            <p className="text-[10px] text-red-700 dark:text-red-300 uppercase font-semibold tracking-wider">Pub. fallida</p>
+            <p className="text-xl font-bold text-red-700 dark:text-red-300 tabular-nums">{data.summary.liveStateCounts.failed_publish}</p>
           </div>
-          <div className="rounded-lg bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 p-3">
-            <p className="text-xs text-gray-700 dark:text-gray-300 uppercase font-semibold">Unknown</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{data.summary.liveStateCounts.unknown}</p>
+          <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3">
+            <p className="text-[10px] text-slate-600 dark:text-slate-400 uppercase font-semibold tracking-wider">Desconocido</p>
+            <p className="text-xl font-bold text-slate-800 dark:text-slate-200 tabular-nums">{data.summary.liveStateCounts.unknown}</p>
           </div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+      {/* Panel derecho: Blockers activos */}
+      <div className="ir-panel p-4">
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Current Blockers</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            The UI now stays fail-closed and shows exact blockers instead of optimistic published states.
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Blockers Activos</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Blockers canónicos del contrato de backend. La operación no avanza hasta resolverlos.
           </p>
         </div>
         {topBlocked.length === 0 ? (
-          <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-3 text-sm text-green-700 dark:text-green-300">
-            No canonical blockers detected in the current truth sample.
+          <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+            Sin blockers canónicos detectados en la muestra actual.
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {topBlocked.map((item) => (
-              <div key={item.productId} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+              <div key={item.productId} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                       {item.productTitle}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                       {formatStateLabel(item.externalMarketplaceState)}
                       {item.externalMarketplaceSubStatus.length > 0 && ` · ${item.externalMarketplaceSubStatus.join(', ')}`}
                     </p>
@@ -77,35 +79,35 @@ export default function OperationsTruthSummaryPanel({ data }: OperationsTruthSum
                       href={item.listingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                      className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                       Listing
                     </a>
                   )}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-1 text-red-700 dark:text-red-300">
+                <div className="mt-2.5 flex flex-wrap gap-1.5 text-xs">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-red-700 dark:text-red-300 font-medium">
                     <AlertCircle className="h-3.5 w-3.5" />
                     {item.blockerCode}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-1 text-gray-700 dark:text-gray-300">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-slate-700 dark:text-slate-300">
                     <ShieldAlert className="h-3.5 w-3.5" />
                     {item.sourceLabels.blocker}
                   </span>
                   {item.lastMarketplaceSyncAt && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-1 text-gray-700 dark:text-gray-300">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-slate-600 dark:text-slate-400">
                       <Clock3 className="h-3.5 w-3.5" />
                       {new Date(item.lastMarketplaceSyncAt).toLocaleString()}
                     </span>
                   )}
                 </div>
                 {item.blockerMessage && (
-                  <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{item.blockerMessage}</p>
+                  <p className="mt-2 text-xs text-slate-700 dark:text-slate-300">{item.blockerMessage}</p>
                 )}
                 {item.nextAction && (
                   <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                    Next action: {item.nextAction}
+                    Siguiente acción: {item.nextAction}
                   </p>
                 )}
               </div>

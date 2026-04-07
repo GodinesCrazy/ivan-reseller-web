@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { 
-  DollarSign, 
-  TrendingUp, 
-  ShoppingCart, 
+import { useNavigate } from 'react-router-dom';
+import {
+  DollarSign,
+  TrendingUp,
+  ShoppingCart,
   Package,
   Filter,
   Search,
@@ -13,11 +13,12 @@ import {
   Calendar,
   MapPin
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import KpiCard from '@/components/ui/KpiCard';
+import PageHeader from '@/components/ui/PageHeader';
 import { formatCurrencySimple } from '../utils/currency';
 import WorkflowStatusIndicator from '@/components/WorkflowStatusIndicator';
 import {
@@ -258,32 +259,23 @@ export default function Sales() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Ventas</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Ventas registradas · ganancia realizada en{' '}
-            <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline">Control Center</Link>
-            {lastSyncAt && (
-              <span className="ml-2 text-amber-600 dark:text-amber-400">
-                · sincronizado {(() => {
-                  const mins = Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000);
-                  return mins < 1 ? 'ahora' : `hace ${mins} min`;
-                })()}
-              </span>
-            )}
-          </p>
-          <div className="mt-3">
-            <CycleStepsBreadcrumb currentStep={4} />
-          </div>
-        </div>
-        <Button onClick={exportToCSV} className="flex items-center gap-2">
-          <Download className="w-4 h-4" />
-          Exportar CSV
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        icon={DollarSign}
+        title="Ventas"
+        subtitle={
+          lastSyncAt
+            ? `Ventas registradas · sincronizado hace ${Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000)} min`
+            : 'Ventas registradas · ganancia realizada confirmada en Control Center'
+        }
+        below={<CycleStepsBreadcrumb currentStep={4} />}
+        actions={
+          <Button onClick={exportToCSV} className="flex items-center gap-2">
+            <Download className="w-4 h-4" />
+            Exportar CSV
+          </Button>
+        }
+      />
 
       <SalesReadinessPanel onSyncComplete={fetchSalesData} />
 
@@ -292,68 +284,39 @@ export default function Sales() {
       </p>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-5">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs text-slate-500">Ingresos totales ({periodLabel})</p>
-              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(stats.totalRevenue, 'USD')}</p>
-              <p className={`text-xs flex items-center gap-1 ${stats.revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                <TrendingUp className="w-3 h-3" />
-                {stats.revenueChange >= 0 ? '+' : ''}{stats.revenueChange.toFixed(1)}% vs período anterior
-              </p>
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-50 dark:bg-green-900/20">
-              <DollarSign className="w-5 h-5 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-5">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs text-slate-500">Margen neto ({periodLabel})</p>
-              <p className="text-[10px] leading-tight text-amber-600 dark:text-amber-400 mt-0.5">No es ganancia realizada hasta proof de fondos liberados.</p>
-              <p className="text-2xl font-bold tabular-nums text-green-600">{formatCurrencySimple(stats.totalProfit, 'USD')}</p>
-              <p className={`text-xs flex items-center gap-1 ${stats.profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                <TrendingUp className="w-3 h-3" />
-                {stats.profitChange >= 0 ? '+' : ''}{stats.profitChange.toFixed(1)}% vs período anterior
-              </p>
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-5">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs text-slate-500">Ventas totales ({periodLabel})</p>
-              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{stats.totalSales}</p>
-              <p className="text-xs text-slate-500">pedidos en el período</p>
-              {typeof stats.completedSales === 'number' && stats.completedSales !== stats.totalSales && (
-                <p className="text-xs text-slate-500">Completadas: {stats.completedSales}</p>
-              )}
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-50 dark:bg-purple-900/20">
-              <ShoppingCart className="w-5 h-5 text-purple-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-5">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs text-slate-500">Valor promedio por orden ({periodLabel})</p>
-              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(stats.avgOrderValue, 'USD')}</p>
-              <p className="text-xs text-slate-500">por transacción</p>
-            </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50 dark:bg-orange-900/20">
-              <Package className="w-5 h-5 text-orange-600" />
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <KpiCard
+          icon={DollarSign}
+          label={`Ingresos (${periodLabel})`}
+          value={formatCurrencySimple(stats.totalRevenue, 'USD')}
+          subtitle={`${stats.revenueChange >= 0 ? '+' : ''}${stats.revenueChange.toFixed(1)}% vs período anterior`}
+          tone={stats.totalRevenue > 0 ? 'success' : 'default'}
+        />
+        <KpiCard
+          icon={TrendingUp}
+          label={`Margen neto (${periodLabel})`}
+          value={formatCurrencySimple(stats.totalProfit, 'USD')}
+          subtitle={`${stats.profitChange >= 0 ? '+' : ''}${stats.profitChange.toFixed(1)}% · estimado hasta proof fondos`}
+          tone={stats.totalProfit > 0 ? 'success' : 'warning'}
+        />
+        <KpiCard
+          icon={ShoppingCart}
+          label={`Ventas (${periodLabel})`}
+          value={stats.totalSales}
+          subtitle={
+            typeof stats.completedSales === 'number' && stats.completedSales !== stats.totalSales
+              ? `${stats.completedSales} completadas`
+              : 'pedidos en el período'
+          }
+          tone="default"
+        />
+        <KpiCard
+          icon={Package}
+          label={`Valor promedio (${periodLabel})`}
+          value={formatCurrencySimple(stats.avgOrderValue, 'USD')}
+          subtitle="por transacción"
+          tone="info"
+        />
       </div>
 
       {/* Tabs with Charts and Table */}
@@ -367,7 +330,7 @@ export default function Sales() {
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+            <div className="ir-panel">
               <div className="p-5 pb-2">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Evolución ingresos y beneficio</h3>
               </div>
@@ -386,7 +349,7 @@ export default function Sales() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+            <div className="ir-panel">
               <div className="p-5 pb-2">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ventas por marketplace</h3>
               </div>
@@ -408,7 +371,7 @@ export default function Sales() {
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+            <div className="ir-panel">
               <div className="p-5 pb-2">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ventas por estado</h3>
               </div>
@@ -425,7 +388,7 @@ export default function Sales() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+            <div className="ir-panel">
               <div className="p-5 pb-2">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Métricas con proof</h3>
               </div>
@@ -483,7 +446,7 @@ export default function Sales() {
         {/* Sales List Tab */}
         <TabsContent value="list" className="space-y-4">
           {/* Filters */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+          <div className="ir-panel">
             <div className="p-5 pb-3">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <Filter className="w-4 h-4 text-slate-400" />
@@ -539,7 +502,7 @@ export default function Sales() {
           </div>
 
           {/* Sales Table */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+          <div className="ir-panel">
             <div className="p-5 pb-3">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lista de ventas ({filteredSales.length})</h3>
             </div>
