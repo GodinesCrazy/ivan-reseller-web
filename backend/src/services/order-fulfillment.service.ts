@@ -14,6 +14,10 @@ import { purchaseRetryService } from './purchase-retry.service';
 import { checkDailyLimits } from './daily-limits.service';
 import { hasSufficientFreeCapital } from './working-capital.service';
 import { maybeEscalateFailedOrderToManual } from './manual-fulfillment.service';
+import {
+  resolveOrderTimeFreightTruth,
+  checkOrderTimeProfitability,
+} from '../utils/order-time-freight';
 
 export type OrderStatus =
   | 'CREATED'
@@ -171,6 +175,93 @@ export class OrderFulfillmentService {
         error: errMsg,
       };
     }
+
+    // ── Order-time freight truth + profitability gate ─────────────────────────
+    // Capa 1: resolve real supplier freight cost at the moment the order arrives.
+    // AliExpress DS API is country-level only (CL); city/commune does not affect quote.
+    // Gate: if freight pushes the order into a loss, block auto-purchase.
+    if (order.productId) {
+      try {
+        const targetCountry = 'CL'; // ML Chile only for now
+        const freightTruth = await resolveOrderTimeFreightTruth(order.productId, targetCountry);
+
+        // Resolve sale price in USD for profitability check.
+        // Priority:
+        //  1. _mlSaleAmountCLP from shippingAddress JSON (real ML total_amount captured at sync time)
+        //  2. product.finalPrice / product.suggestedPrice as ML listing price proxy
+        //  3. INSUFFICIENT_DATA (profitability check skipped — order continues)
+        const CLP_PER_USD = 950; // approximate; fx.service has dynamic rates but this is conservative
+        const productForProfit = await prisma.product.findUnique({
+          where: { id: order.productId },
+          select: { aliexpressPrice: true, suggestedPrice: true, finalPrice: true, currency: true },
+        });
+        const supplierCostUsd = Number(productForProfit?.aliexpressPrice ?? 0);
+
+        // 1. Try real ML sale amount from shippingAddress metadata
+        let salePriceUsd = 0;
+        try {
+          const addrJson = typeof order.shippingAddress === 'string'
+            ? JSON.parse(order.shippingAddress)
+            : (order.shippingAddress ?? {});
+          const mlAmountCLP = Number((addrJson as any)?._mlSaleAmountCLP ?? 0);
+          if (mlAmountCLP > 0) {
+            salePriceUsd = mlAmountCLP / CLP_PER_USD;
+            logger.debug('[ORDER-FULFILLMENT] Sale price from _mlSaleAmountCLP', { orderId, mlAmountCLP, salePriceUsd });
+          }
+        } catch {/* shippingAddress JSON parse fail — fall through */}
+
+        // 2. Fallback to product listing price proxy
+        if (salePriceUsd <= 0) {
+          const rawSalePrice = Number(productForProfit?.finalPrice ?? productForProfit?.suggestedPrice ?? 0);
+          if (rawSalePrice > 0) {
+            const currency = String(productForProfit?.currency || 'USD').toUpperCase();
+            salePriceUsd = (currency === 'CLP' || rawSalePrice > 500)
+              ? rawSalePrice / CLP_PER_USD
+              : rawSalePrice;
+            logger.debug('[ORDER-FULFILLMENT] Sale price from product.finalPrice/suggestedPrice proxy', { orderId, rawSalePrice, salePriceUsd });
+          }
+        }
+
+        const profitCheck = checkOrderTimeProfitability({
+          salePriceUsd,
+          supplierCostUsd,
+          freightUsd: freightTruth.freightUsd,
+          shippingTruthStatus: freightTruth.shippingTruthStatus,
+        });
+
+        logger.info('[ORDER-FULFILLMENT] Freight truth + profitability gate', {
+          orderId,
+          productId: order.productId,
+          freightUsd: freightTruth.freightUsd,
+          shippingTruthStatus: freightTruth.shippingTruthStatus,
+          serviceName: freightTruth.serviceName,
+          profitStatus: profitCheck.status,
+          netProfitUsd: profitCheck.netProfitUsd,
+          breakdown: profitCheck.breakdown,
+          resolution: freightTruth.resolution,
+        });
+
+        if (!profitCheck.allowed && profitCheck.status === 'AUTO_PURCHASE_BLOCKED_BY_FREIGHT') {
+          const errMsg = `AUTO_PURCHASE_BLOCKED_BY_FREIGHT: ${profitCheck.reason}`;
+          await this.markFailed(orderId, errMsg, order.userId ?? undefined);
+          return { success: false, orderId, status: 'FAILED', error: errMsg };
+        }
+
+        if (!profitCheck.allowed && profitCheck.status === 'ORDER_REQUIRES_SHIPPING_RECHECK') {
+          const errMsg = `ORDER_REQUIRES_SHIPPING_RECHECK: ${profitCheck.reason}`;
+          await this.markFailed(orderId, errMsg, order.userId ?? undefined);
+          return { success: false, orderId, status: 'MANUAL_ACTION_REQUIRED', error: errMsg };
+        }
+      } catch (freightErr: any) {
+        // Freight check failure is non-fatal — log and continue with purchase
+        logger.warn('[ORDER-FULFILLMENT] Freight truth check failed (non-fatal, continuing)', {
+          orderId,
+          productId: order.productId,
+          error: freightErr?.message,
+        });
+      }
+    }
+    // ── End freight gate ──────────────────────────────────────────────────────
 
     await prisma.order.update({
       where: { id: orderId },

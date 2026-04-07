@@ -23,6 +23,44 @@ export interface UpdateWorkflowConfigDto {
   autoPublishThreshold?: number;
   maxAutoInvestment?: number;
   workingCapital?: number; // ⚠️ Capital de trabajo declarado por el usuario (USD). NO verificado contra saldo PayPal.
+  mlHandlingTimeDays?: number; // Días de despacho declarados al comprador en ML (por defecto 30 = dropshipping CN→CL)
+  mlChannelMode?: MercadoLibreChannelMode;
+  mlForeignSellerEnabled?: boolean;
+  mlInternationalPublishingEnabled?: boolean;
+  mlReturnAddressConfigured?: boolean;
+  mlReturnPolicyConfigured?: boolean;
+  mlPostSaleContactConfigured?: boolean;
+  mlResponseSlaEnabled?: boolean;
+  mlAlertsConfigured?: boolean;
+  mlPilotModeEnabled?: boolean;
+  mlPilotRequireManualAck?: boolean;
+  mlPilotMaxActivePublications?: number;
+  mlProgramVerificationManualOverride?: 'none' | 'international_candidate' | 'foreign_seller_verified' | null;
+  mlShippingOriginCountry?: string | null;
+  mlSellerOriginCountry?: string | null;
+}
+
+export type MercadoLibreChannelMode =
+  | 'local_only'
+  | 'international_candidate'
+  | 'foreign_seller_enabled'
+  | 'blocked';
+
+export interface MercadoLibreChannelConfig {
+  channelMode: MercadoLibreChannelMode;
+  foreignSellerEnabled: boolean;
+  internationalPublishingEnabled: boolean;
+  returnAddressConfigured: boolean;
+  returnPolicyConfigured: boolean;
+  postSaleContactConfigured: boolean;
+  responseSlaEnabled: boolean;
+  alertsConfigured: boolean;
+  pilotModeEnabled: boolean;
+  pilotRequireManualAck: boolean;
+  pilotMaxActivePublications: number;
+  programVerificationManualOverride: 'none' | 'international_candidate' | 'foreign_seller_verified' | null;
+  shippingOriginCountry: string | null;
+  sellerOriginCountry: string | null;
 }
 
 export class WorkflowConfigService {
@@ -115,6 +153,15 @@ export class WorkflowConfigService {
     }
   }
   
+  /**
+   * Obtener días de despacho configurados para MercadoLibre (handling_time).
+   * Por defecto 30 días (dropshipping CN→CL).
+   */
+  async getMlHandlingTimeDays(userId: number): Promise<number> {
+    const config = await this.getUserConfig(userId);
+    return config.mlHandlingTimeDays ?? 30;
+  }
+
   /**
    * ✅ NUEVO: Obtener modo efectivo considerando workflowMode (mismo comportamiento que getStageMode pero más explícito)
    */
@@ -230,7 +277,53 @@ export class WorkflowConfigService {
     
     await this.updateUserConfig(userId, { workingCapital });
   }
+
+  async getMercadoLibreChannelConfig(userId: number): Promise<MercadoLibreChannelConfig> {
+    const config = await this.getUserConfig(userId);
+    const rawMode = String((config as any).mlChannelMode || 'local_only').toLowerCase();
+    const channelMode: MercadoLibreChannelMode =
+      rawMode === 'blocked' ||
+      rawMode === 'international_candidate' ||
+      rawMode === 'foreign_seller_enabled' ||
+      rawMode === 'local_only'
+        ? (rawMode as MercadoLibreChannelMode)
+        : 'local_only';
+
+    const shippingOriginCountryRaw =
+      typeof (config as any).mlShippingOriginCountry === 'string'
+        ? (config as any).mlShippingOriginCountry.trim().toUpperCase()
+        : '';
+    const sellerOriginCountryRaw =
+      typeof (config as any).mlSellerOriginCountry === 'string'
+        ? (config as any).mlSellerOriginCountry.trim().toUpperCase()
+        : '';
+
+    return {
+      channelMode,
+      foreignSellerEnabled: (config as any).mlForeignSellerEnabled === true,
+      internationalPublishingEnabled: (config as any).mlInternationalPublishingEnabled === true,
+      returnAddressConfigured: (config as any).mlReturnAddressConfigured === true,
+      returnPolicyConfigured: (config as any).mlReturnPolicyConfigured === true,
+      postSaleContactConfigured: (config as any).mlPostSaleContactConfigured === true,
+      responseSlaEnabled: (config as any).mlResponseSlaEnabled === true,
+      alertsConfigured: (config as any).mlAlertsConfigured === true,
+      pilotModeEnabled: (config as any).mlPilotModeEnabled === true,
+      pilotRequireManualAck: (config as any).mlPilotRequireManualAck !== false,
+      pilotMaxActivePublications: Math.max(1, Number((config as any).mlPilotMaxActivePublications || 1)),
+      programVerificationManualOverride:
+        (String((config as any).mlProgramVerificationManualOverride || '').toLowerCase() === 'none'
+          ? 'none'
+          : String((config as any).mlProgramVerificationManualOverride || '').toLowerCase() ===
+              'international_candidate'
+            ? 'international_candidate'
+            : String((config as any).mlProgramVerificationManualOverride || '').toLowerCase() ===
+                'foreign_seller_verified'
+              ? 'foreign_seller_verified'
+              : null),
+      shippingOriginCountry: shippingOriginCountryRaw || null,
+      sellerOriginCountry: sellerOriginCountryRaw || null,
+    };
+  }
 }
 
 export const workflowConfigService = new WorkflowConfigService();
-

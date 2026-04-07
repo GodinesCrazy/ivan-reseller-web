@@ -8,7 +8,7 @@ interface APIInfoStepProps {
   onUpdateData: (updates: Partial<WizardData>) => void;
   onNext: () => void;
   onBack: () => void;
-  onComplete: () => void;
+  onComplete?: () => void;
 }
 
 interface APIInfo {
@@ -48,7 +48,7 @@ export default function APIInfoStep({
       if (result.success && result.data) {
         const api = result.data.find((a: any) => a.apiName === data.selectedAPI);
         if (api) {
-          const env = data.selectedEnvironment;
+          const env = data.selectedEnvironment ?? 'production';
           const envConfig = api.supportsEnvironments && api.environments?.[env];
           const fields = envConfig?.fields || api.fields || [];
           

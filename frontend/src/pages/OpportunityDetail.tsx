@@ -27,6 +27,8 @@ function mapSearchOpportunityToItem(opp: any): any {
   };
 }
 
+const premiumCard = 'rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card';
+
 export default function OpportunityDetail() {
   const { id } = useParams();
   const location = useLocation();
@@ -61,53 +63,66 @@ export default function OpportunityDetail() {
   }, [id, location.state]);
 
   if (loading) return <LoadingSpinner text="Cargando oportunidad..." />;
-  if (!item) return <div className="p-6 text-center text-gray-500">Oportunidad no encontrada</div>;
+  if (!item) return (
+    <div className="p-6 text-center">
+      <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+        <Package className="w-6 h-6 text-slate-400" />
+      </div>
+      <p className="text-sm text-slate-500">Oportunidad no encontrada</p>
+    </div>
+  );
 
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Opportunity #{item.id}</h1>
-      <div className="bg-white dark:bg-gray-800 border rounded p-4">
-        <div className="font-medium text-lg">{item.title}</div>
-        <div className="text-sm text-gray-600">Source: {item.sourceMarketplace}</div>
+    <div className="space-y-6 p-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Oportunidad #{item.id}</h1>
+        <p className="text-xs text-slate-500 mt-0.5">Detalle de la oportunidad y análisis de competencia</p>
+      </div>
+
+      {/* Main Detail Card */}
+      <div className={premiumCard + ' p-5'}>
+        <div className="font-medium text-base text-slate-900 dark:text-slate-100">{item.title}</div>
+        <div className="text-xs text-slate-500 mt-0.5">Fuente: {item.sourceMarketplace}</div>
         
-        {/* ✅ MEJORADO: Desglose de costos */}
+        {/* Cost Breakdown */}
         {(item.shippingCost || item.importTax || item.totalCost) && (
-          <div className="mt-4 p-3 bg-gray-50 rounded border">
-            <div className="font-semibold text-sm mb-2 flex items-center gap-2">
-              <Info className="w-4 h-4 text-gray-500" />
-              Desglose de Costos
+          <div className="mt-4 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+            <div className="font-semibold text-xs mb-2.5 flex items-center gap-2 text-slate-700 dark:text-slate-300">
+              <Info className="w-4 h-4 text-slate-400" />
+              Desglose de costos
             </div>
-            <div className="space-y-1 text-sm">
+            <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-600">Costo del producto:</span>
-                <span className="font-medium">{formatCurrencySimple(item.costUsd, item.baseCurrency || 'USD')}</span>
+                <span className="text-slate-500 text-xs">Costo del producto:</span>
+                <span className="font-medium text-sm tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(item.costUsd, item.baseCurrency || 'USD')}</span>
               </div>
               {item.shippingCost && item.shippingCost > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600 flex items-center gap-1">
+                  <span className="text-slate-500 text-xs flex items-center gap-1">
                     <Truck className="w-3 h-3" />
                     Envío internacional:
                   </span>
-                  <span className="font-medium">{formatCurrencySimple(item.shippingCost, item.baseCurrency || 'USD')}</span>
+                  <span className="font-medium text-sm tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(item.shippingCost, item.baseCurrency || 'USD')}</span>
                 </div>
               )}
               {item.importTax && item.importTax > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600 flex items-center gap-1">
+                  <span className="text-slate-500 text-xs flex items-center gap-1">
                     <Receipt className="w-3 h-3" />
                     Impuestos de importación:
                   </span>
-                  <span className="font-medium">{formatCurrencySimple(item.importTax, item.baseCurrency || 'USD')}</span>
+                  <span className="font-medium text-sm tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(item.importTax, item.baseCurrency || 'USD')}</span>
                 </div>
               )}
               {item.totalCost && item.totalCost > item.costUsd && (
-                <div className="flex justify-between pt-2 border-t border-gray-300">
-                  <span className="font-semibold">Costo total:</span>
-                  <span className="font-bold text-lg">{formatCurrencySimple(item.totalCost, item.baseCurrency || 'USD')}</span>
+                <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+                  <span className="font-semibold text-xs text-slate-700 dark:text-slate-300">Costo total:</span>
+                  <span className="font-bold text-base tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(item.totalCost, item.baseCurrency || 'USD')}</span>
                 </div>
               )}
               {item.targetCountry && (
-                <div className="text-xs text-gray-500 mt-2">
+                <div className="text-[11px] text-slate-400 mt-2">
                   País destino: {item.targetCountry}
                 </div>
               )}
@@ -115,28 +130,29 @@ export default function OpportunityDetail() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           <Stat 
-            label="Costo Base" 
+            label="Costo base" 
             value={formatCurrencySimple(item.costUsd, item.baseCurrency || 'USD')}
             highlight={false}
           />
           {item.totalCost && item.totalCost > item.costUsd ? (
             <Stat 
-              label="Costo Total" 
+              label="Costo total" 
               value={formatCurrencySimple(item.totalCost, item.baseCurrency || 'USD')}
               highlight={true}
               tooltip="Incluye producto + envío + impuestos"
             />
           ) : (
             <Stat 
-              label="Costo Base" 
+              label="Costo base" 
               value={formatCurrencySimple(item.costUsd, item.baseCurrency || 'USD')}
               highlight={false}
             />
           )}
           <Stat 
-            label="Precio Sugerido" 
+            label="Precio sugerido" 
             value={formatCurrencySimple(item.suggestedPriceUsd, item.suggestedPriceCurrency || item.baseCurrency || 'USD')}
             highlight={false}
           />
@@ -156,58 +172,65 @@ export default function OpportunityDetail() {
           />
         </div>
 
-        {/* ✅ MEJORADO: Cálculo de ganancia real */}
+        {/* Estimated Net Profit */}
         {item.totalCost && item.suggestedPriceUsd && (
-          <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
-            <div className="font-semibold text-sm mb-2 text-blue-900">Ganancia Estimada</div>
-            <div className="text-lg font-bold text-blue-700">
+          <div className="mt-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+            <div className="font-semibold text-xs mb-1 text-blue-900 dark:text-blue-200">Ganancia neta estimada</div>
+            <div className="text-lg font-bold tabular-nums text-blue-700 dark:text-blue-300">
               {formatCurrencySimple(item.suggestedPriceUsd - item.totalCost, item.baseCurrency || 'USD')}
             </div>
-            <div className="text-xs text-blue-600 mt-1">
+            <div className="text-[11px] text-blue-600 dark:text-blue-400 mt-1">
               Precio sugerido - Costo total = Ganancia neta
             </div>
           </div>
         )}
 
+        {/* CTA Button */}
         {(item.productUrl || item.aliexpressUrl) && (
           <Link
             to={`/checkout?productUrl=${encodeURIComponent(item.productUrl || item.aliexpressUrl || '')}&title=${encodeURIComponent(item.title || '')}&price=${item.suggestedPriceUsd || item.costUsd || 10}`}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium shadow-sm transition"
           >
             <CreditCard className="w-4 h-4" />
-            Buy with PayPal
+            Comprar con PayPal
           </Link>
         )}
       </div>
-      <div className="bg-white dark:bg-gray-800 border rounded p-4">
-        <div className="font-medium mb-2">Competition Snapshots</div>
-        <div className="overflow-auto">
+
+      {/* Competition Snapshots */}
+      <div className={premiumCard + ' p-5'}>
+        <div className="font-semibold text-sm text-slate-900 dark:text-slate-100 mb-3">Instantáneas de competencia</div>
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left p-2">Marketplace</th>
-                <th className="text-left p-2">Region</th>
-                <th className="text-right p-2">Listings</th>
-                <th className="text-right p-2">Avg</th>
-                <th className="text-right p-2">Median</th>
-                <th className="text-right p-2">Competitive</th>
-                <th className="text-left p-2">When</th>
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40">
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Marketplace</th>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Región</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Listings</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Promedio</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Mediana</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Competitivo</th>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fecha</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {snapshots.map((s, idx) => (
-                <tr key={idx} className="border-t">
-                  <td className="p-2">{s.marketplace}</td>
-                  <td className="p-2">{s.region}</td>
-                  <td className="p-2 text-right">{s.listingsFound}</td>
-                  <td className="p-2 text-right">{s.averagePrice.toFixed(2)}</td>
-                  <td className="p-2 text-right">{s.medianPrice.toFixed(2)}</td>
-                  <td className="p-2 text-right">{s.competitivePrice.toFixed(2)}</td>
-                  <td className="p-2">{new Date(s.createdAt).toLocaleString()}</td>
+                <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                  <td className="px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100">{s.marketplace}</td>
+                  <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-400">{s.region}</td>
+                  <td className="px-3 py-2.5 text-sm text-right tabular-nums text-slate-900 dark:text-slate-100">{s.listingsFound}</td>
+                  <td className="px-3 py-2.5 text-sm text-right tabular-nums text-slate-900 dark:text-slate-100">{s.averagePrice.toFixed(2)}</td>
+                  <td className="px-3 py-2.5 text-sm text-right tabular-nums text-slate-900 dark:text-slate-100">{s.medianPrice.toFixed(2)}</td>
+                  <td className="px-3 py-2.5 text-sm text-right tabular-nums font-medium text-slate-900 dark:text-slate-100">{s.competitivePrice.toFixed(2)}</td>
+                  <td className="px-3 py-2.5 text-xs text-slate-500">{new Date(s.createdAt).toLocaleString()}</td>
                 </tr>
               ))}
               {snapshots.length === 0 && (
-                <tr><td className="p-4 text-center text-gray-500" colSpan={7}>No snapshots saved</td></tr>
+                <tr>
+                  <td className="px-3 py-8 text-center" colSpan={7}>
+                    <p className="text-xs text-slate-400">Sin instantáneas guardadas</p>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -231,22 +254,23 @@ function Stat({
   tooltip?: string;
 }) {
   const colorClasses = {
-    green: 'text-green-600',
-    yellow: 'text-yellow-600',
-    red: 'text-red-600',
-    default: 'text-gray-900'
+    green: 'text-emerald-600 dark:text-emerald-400',
+    yellow: 'text-amber-600 dark:text-amber-400',
+    red: 'text-red-600 dark:text-red-400',
+    default: 'text-slate-900 dark:text-slate-100'
   };
 
   return (
-    <div className={`p-3 border rounded ${highlight ? 'bg-blue-50 border-blue-200' : ''}`}>
-      <div className="text-xs text-gray-500 flex items-center gap-1">
+    <div className={`p-3 rounded-lg border ${highlight ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800' : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800'}`}>
+      <div className="text-[11px] text-slate-500 flex items-center gap-1">
         {label}
         {tooltip && (
-          <Info className="w-3 h-3 text-gray-400 cursor-help" title={tooltip} />
+          <span title={tooltip}>
+            <Info className="w-3 h-3 text-slate-400 cursor-help" />
+          </span>
         )}
       </div>
-      <div className={`text-lg font-semibold ${colorClasses[color]}`}>{value}</div>
+      <div className={`text-lg font-semibold tabular-nums ${colorClasses[color]}`}>{value}</div>
     </div>
   );
 }
-

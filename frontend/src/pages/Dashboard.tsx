@@ -1,30 +1,27 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  Search, 
-  TrendingUp, 
-  Brain, 
-  Settings, 
-  BarChart3, 
-  Zap, 
-  Target, 
+import {
+  Search,
+  TrendingUp,
+  Brain,
+  Settings,
+  BarChart3,
   AlertCircle,
   ChevronRight,
   Lightbulb,
-  Briefcase,
   DollarSign,
   ShoppingBag,
-  Users,
   Activity,
-  Play,
-  Pause,
-  TestTube,
   Globe,
-  CheckCircle,
-  TrendingDown,
-  Eye,
-  ArrowUp,
-  ArrowDown
+  Package,
+  Radio,
+  CheckCircle2,
+  XCircle,
+  Truck,
+  ArrowRight,
+  RefreshCw,
+  Target,
+  Layers,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@services/api';
@@ -34,13 +31,9 @@ import LoadingSpinner, { CardSkeleton } from '@/components/ui/LoadingSpinner';
 import AIOpportunityFinder from '../components/AIOpportunityFinder';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import InventorySummaryCard from '@/components/InventorySummaryCard';
-import SalesReadinessPanel from '@/components/SalesReadinessPanel';
 import AutopilotLiveWidget from '@/components/AutopilotLiveWidget';
 import BalanceSummaryWidget from '@/components/BalanceSummaryWidget';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
-import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
-import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
-import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
 import { log } from '@/utils/logger';
 import { getTrendingKeywords, type TrendKeyword } from '@/services/trends.api';
 import { useAuthStore } from '@stores/authStore';
@@ -70,10 +63,7 @@ export default function Dashboard() {
     totalProfit: 0,
     platformCommissionPaid: 0,
     salesCount: 0,
-    activeProducts: 0,
-    totalOpportunities: 0,
-    aiSuggestions: 0,
-    automationRules: 0
+    activeProducts: 0
   });
   const [loading, setLoading] = useState(true);
   const [dataLoadError, setDataLoadError] = useState(false);
@@ -108,75 +98,6 @@ export default function Dashboard() {
     createdAt: string;
     title?: string | null;
   } | null>(null);
-
-  const [autoListingDecisions, setAutoListingDecisions] = useState<Array<{
-    id: number;
-    productId: number;
-    productTitle: string | null;
-    productStatus: string | null;
-    marketplace: string;
-    priorityScore: number;
-    decisionReason: string;
-    executed: boolean;
-    createdAt: string;
-  }>>([]);
-
-  const [listingOptimizationActions, setListingOptimizationActions] = useState<Array<{
-    id: number;
-    listingId: number;
-    productId: number | null;
-    productTitle: string | null;
-    marketplace: string | null;
-    actionType: string;
-    reason: string;
-    executed: boolean;
-    createdAt: string;
-  }>>([]);
-
-  const [demandSignals, setDemandSignals] = useState<Array<{
-    id: number;
-    keyword: string;
-    trendScore: number;
-    source: string;
-    confidence: number;
-    detectedAt: string;
-  }>>([]);
-
-  const [strategyDecisions, setStrategyDecisions] = useState<Array<{
-    id: number;
-    productId: number;
-    productTitle: string | null;
-    productStatus: string | null;
-    decisionType: string;
-    score: number;
-    reason: string;
-    executed: boolean;
-    createdAt: string;
-  }>>([]);
-
-  const [scalingActions, setScalingActions] = useState<Array<{
-    id: number;
-    productId: number;
-    productTitle: string | null;
-    marketplace: string;
-    actionType: string;
-    score: number;
-    executed: boolean;
-    createdAt: string;
-  }>>([]);
-
-  const [conversionOptimizationActions, setConversionOptimizationActions] = useState<Array<{
-    id: number;
-    listingId: number;
-    productId: number | null;
-    productTitle: string | null;
-    marketplace: string | null;
-    actionType: string;
-    reason: string;
-    score: number;
-    executed: boolean;
-    createdAt: string;
-  }>>([]);
   const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
   const [autopilotRuntime, setAutopilotRuntime] = useState<{ running: boolean; status: string; lastRun?: string | null } | null>(null);
 
@@ -238,36 +159,6 @@ export default function Dashboard() {
           }
           return { data: { activities: [] } };
         }),
-        // ✅ B6: Cargar count de oportunidades desde API
-        api.get('/api/opportunities/list', { params: { page: 1, limit: 1 } }).catch(err => {
-          hasErrors = true;
-          if (err.response) {
-            log.warn('⚠️  Error loading opportunities count (HTTP):', err.response.status);
-          } else {
-            log.warn('⚠️  Error loading opportunities count (red/CORS):', err.message);
-          }
-          return { data: { count: 0 } };
-        }),
-        // ✅ B6: Cargar sugerencias IA desde API
-        api.get('/api/ai-suggestions', { params: { limit: 1 } }).catch(err => {
-          hasErrors = true;
-          if (err.response) {
-            log.warn('⚠️  Error loading AI suggestions (HTTP):', err.response.status);
-          } else {
-            log.warn('⚠️  Error loading AI suggestions (red/CORS):', err.message);
-          }
-          return { data: { suggestions: [], count: 0 } };
-        }),
-        // ✅ B6: Cargar configuración de automatización para contar workflows
-        api.get('/api/automation/config').catch(err => {
-          hasErrors = true;
-          if (err.response) {
-            log.warn('⚠️  Error loading automation config (HTTP):', err.response.status);
-          } else {
-            log.warn('⚠️  Error loading automation config (red/CORS):', err.message);
-          }
-          return { data: { workflows: [] } };
-        }),
         // Inventario (productos, listings, órdenes, compras pendientes) - en vivo vía loadDashboardData
         api.get('/api/dashboard/inventory-summary', { params: { environment } }).catch(err => {
           if (err.response) {
@@ -283,35 +174,17 @@ export default function Dashboard() {
         api.get('/api/health').then((r) => ({ ok: r.status === 200 })).catch(() => ({ ok: false })),
         // Ingresos plataforma (solo admin)
         isAdmin ? api.get('/api/admin/platform-revenue').catch(() => ({ data: null })) : Promise.resolve({ data: null }),
-        // Phase 5: Auto Listing Strategy decisions
-        api.get('/api/analytics/auto-listing-decisions', { params: { limit: 20 } }).catch(() => ({ data: null })),
-        // Phase 6: Listing Optimization actions
-        api.get('/api/analytics/listing-optimization-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
-        // Phase 7: Demand Radar
-        api.get('/api/analytics/demand-signals', { params: { limit: 15, minTrendScore: 20 } }).catch(() => ({ data: null })),
-        // Phase 8: Strategy Brain
-        api.get('/api/analytics/strategy-decisions', { params: { limit: 20 } }).catch(() => ({ data: null })),
-        // Phase 9: Autonomous Scaling
-        api.get('/api/analytics/scaling-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
-        // Phase 11: Conversion Rate Optimization
-        api.get('/api/analytics/conversion-optimization-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
         // Canonical operations truth
-        fetchOperationsTruth({ limit: 12, environment }).catch(() => null),
+        fetchOperationsTruth({ environment }).catch(() => null),
         // Real autopilot runtime
         api.get('/api/autopilot/status').catch(() => ({ data: null })),
         // Última orden (para card "Estado de la única venta real")
         api.get('/api/orders', { params: { limit: 1, environment } }).catch(() => ({ data: [] })),
       ]);
-      const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes, inventoryRes, businessDiagRes, healthRes, platformRevRes] = allResponses;
-      const autoListingRes = allResponses[9] as any;
-      const listingOptRes = allResponses[10] as any;
-      const demandRadarRes = allResponses[11] as any;
-      const strategyRes = allResponses[12] as any;
-      const scalingRes = allResponses[13] as any;
-      const conversionOptimizationRes = allResponses[14] as any;
-      const operationsTruthRes = allResponses[15] as OperationsTruthResponse | null;
-      const autopilotStatusRes = allResponses[16] as { data?: { running?: boolean; status?: string; lastRun?: string | null } | null };
-      const ordersRes = allResponses[17] as { data?: Array<{ id: string; status: string; errorMessage?: string | null; paypalOrderId?: string | null; createdAt: string; title?: string | null }> };
+      const [statsRes, activityRes, inventoryRes, businessDiagRes, healthRes, platformRevRes] = allResponses;
+      const operationsTruthRes = allResponses[6] as OperationsTruthResponse | null;
+      const autopilotStatusRes = allResponses[7] as { data?: { running?: boolean; status?: string; lastRun?: string | null } | null };
+      const ordersRes = allResponses[8] as { data?: Array<{ id: string; status: string; errorMessage?: string | null; paypalOrderId?: string | null; createdAt: string; title?: string | null }> };
 
       // ✅ FIX-002: Si hay errores y no hay datos reales, mostrar mensaje informativo
       const hasRealData = statsRes.data && Object.keys(statsRes.data).length > 0;
@@ -320,10 +193,6 @@ export default function Dashboard() {
       const stats = statsRes.data || {};
       if (stats._lastUpdated) setLastDataUpdated(stats._lastUpdated);
       const activities = activityRes.data?.activities || [];
-      const opportunitiesCount = opportunitiesRes.data?.count || 0;
-      const aiSuggestionsCount = aiSuggestionsRes.data?.count || aiSuggestionsRes.data?.suggestions?.length || 0;
-      const automationWorkflows = automationRes.data?.workflows || [];
-      const automationRulesCount = automationWorkflows.length || 0;
 
       // Backend: { products, sales: { totalSales (count), totalRevenue, totalProfit, totalCommissions, platformCommissionPaid }, commissions }
       const totalRevenue = Number(stats?.sales?.totalRevenue ?? stats?.sales?.total ?? 0);
@@ -343,10 +212,7 @@ export default function Dashboard() {
         totalProfit,
         platformCommissionPaid,
         salesCount,
-        activeProducts,
-        totalOpportunities: opportunitiesCount,
-        aiSuggestions: aiSuggestionsCount,
-        automationRules: automationRulesCount
+        activeProducts
       });
 
       // Formatear actividad reciente desde datos reales
@@ -425,6 +291,8 @@ export default function Dashboard() {
       // Estado del sistema (business diagnostics) - en vivo
       if (businessDiagRes?.data && typeof businessDiagRes.data === 'object' && !(businessDiagRes.data as any).error) {
         setBusinessDiagnostics(businessDiagRes.data as Record<string, { status: string; message?: string; count?: number }>);
+      } else {
+        setBusinessDiagnostics(null);
       }
 
       // Backend health - en vivo
@@ -438,14 +306,10 @@ export default function Dashboard() {
           salesCount: platformRevRes.data.salesCount ?? 0,
           perUser: platformRevRes.data.perUser ?? [],
         });
+      } else {
+        setPlatformRevenue(null);
       }
 
-      if (autoListingRes?.data?.decisions) setAutoListingDecisions(autoListingRes.data.decisions);
-      if (listingOptRes?.data?.actions) setListingOptimizationActions(listingOptRes.data.actions);
-      if (demandRadarRes?.data?.signals) setDemandSignals(demandRadarRes.data.signals);
-      if (strategyRes?.data?.decisions) setStrategyDecisions(strategyRes.data.decisions);
-      if (scalingRes?.data?.actions) setScalingActions(scalingRes.data.actions);
-      if (conversionOptimizationRes?.data?.actions) setConversionOptimizationActions(conversionOptimizationRes.data.actions);
       if (operationsTruthRes && typeof operationsTruthRes === 'object' && Array.isArray(operationsTruthRes.items)) {
         setOperationsTruth(operationsTruthRes);
       } else {
@@ -527,996 +391,641 @@ export default function Dashboard() {
     }
   };
 
+  const truthSummary = operationsTruth?.summary;
+  const blockerTotal = (truthSummary?.blockerCounts ?? []).reduce((acc, blocker) => acc + Number(blocker.count || 0), 0);
+  const activeListingsCount = truthSummary?.liveStateCounts.active ?? dashboardData.activeProducts;
+  const underReviewCount = truthSummary?.liveStateCounts.under_review ?? 0;
+  const failedPublishCount = truthSummary?.liveStateCounts.failed_publish ?? 0;
+  const orderIngestedCount = truthSummary?.proofCounts.orderIngested ?? 0;
+  const trackingAttachedCount = truthSummary?.proofCounts.trackingAttached ?? 0;
+  const fulfillmentPendingCount = Math.max(orderIngestedCount - trackingAttachedCount, 0);
+  const realizedProfitCount = truthSummary?.proofCounts.realizedProfitObtained ?? 0;
+  const readyToPublishCount = inventorySummary?.products?.approved ?? 0;
+  const pilotOrReviewCount = operationsTruth?.items?.filter((item) => {
+    const externalState = String(item.externalMarketplaceState || '').toLowerCase();
+    const hasPilotSignal = [
+      item.localListingState,
+      item.publicationReadinessState,
+      ...(item.externalMarketplaceSubStatus ?? []),
+    ].some((value) => String(value || '').toLowerCase().includes('pilot'));
+    return hasPilotSignal || externalState === 'under_review';
+  }).length ?? underReviewCount;
+  const immediateActionCount = blockerTotal + (inventorySummary?.pendingPurchasesCount ?? 0) + failedPublishCount;
+  const topBlockers = [...(truthSummary?.blockerCounts ?? [])].sort((a, b) => b.count - a.count).slice(0, 3);
+  const actionableTruthItems = (operationsTruth?.items ?? [])
+    .filter((item) => item.blockerCode || item.nextAction)
+    .slice(0, 5);
+  const getTruthActionTarget = (item: NonNullable<OperationsTruthResponse['items'][number]>) => {
+    if (item.orderIngested && !item.trackingAttached) {
+      return { to: '/orders', label: 'Ir a Órdenes' };
+    }
+    if (item.externalMarketplaceState && item.externalMarketplaceState !== 'unknown') {
+      return { to: '/publisher', label: 'Ir a Publicador' };
+    }
+    return { to: '/products', label: 'Ir a Productos' };
+  };
+
   const renderOverview = () => (
-    <div className="space-y-6">
-      {/* Canonical truth first; analytics clearly secondary — P56 */}
-      {!loading && (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/80 p-4">
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-            {operationsTruth && operationsTruth.summary.proofCounts.realizedProfitObtained > 0 && (
-              <>
-                <strong>Proof-backed:</strong> {operationsTruth.summary.proofCounts.realizedProfitObtained} con ganancia realizada probada.
-                {' '}
-              </>
-            )}
-            <strong>Analytics (referencia):</strong> Margen neto agregado ${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            {dashboardData.salesCount > 0 && ` · ${dashboardData.salesCount} ventas`}
-            {dashboardData.activeProducts > 0 && ` · ${dashboardData.activeProducts} publicados`}.
-            {(inventorySummary?.pendingPurchasesCount ?? 0) > 0 && ' Acción: revisar Compras pendientes.'}
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            Los totales financieros son agregados del sales ledger; la verdad canónica (blockers, proof ladder) está en Control Center.
-          </p>
+    <div className="space-y-4">
+      {/* DATA ERROR BANNER */}
+      {dataLoadError && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <p className="text-sm text-amber-900 dark:text-amber-100 flex-1">Algunos datos no pudieron refrescarse — mostrando última evidencia disponible.</p>
+          <Link to="/control-center" className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline whitespace-nowrap">Control Center →</Link>
         </div>
       )}
-      <SalesReadinessPanel />
-      {operationsTruth && (
-        <>
-          <OperationsTruthSummaryPanel data={operationsTruth} />
-          <PostSaleProofLadderPanel
-            summary={operationsTruth.summary.proofCounts}
-            title="Post-sale Proof Truth"
-            subtitle="The dashboard now separates order/supplier/tracking/payout/profit proof from listing activity."
-          />
-          <AgentDecisionTracePanel items={operationsTruth.items} />
-        </>
-      )}
-      {/* Métricas principales */}
+
+      {/* KPI STRIP */}
       {loading ? (
         <CardSkeleton count={6} />
       ) : (
-        <>
-        <div className="mb-2">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Métricas de panel — agregados del sales ledger; no sustituyen proof canónico. Para blockers y proof ladder, usa Control Center.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {/* Profit aggregate — analytics, not standalone proof */}
-          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors md:col-span-1" title="Agregado del sales ledger; ganancia realizada probada se ve en proof ladder.">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Margen neto (agregado)</p>
-                <p className="mt-1 text-metric tabular-nums text-gray-900 dark:text-white">${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                <Link to="/finance" className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1 inline-block font-medium">Ver finanzas →</Link>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* LISTOS */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
-              <div className="w-11 h-11 shrink-0 bg-gray-200/80 dark:bg-slate-700 rounded-xl flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-gray-600 dark:text-gray-400" />
-              </div>
+              <span className="text-xs text-slate-400 dark:text-slate-500 text-right leading-tight">Listos</span>
             </div>
+            <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{readyToPublishCount}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">para publicar</p>
           </div>
 
-          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors" title="Suma de los precios de venta de todas las ventas confirmadas.">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Ingresos totales</p>
-                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">${dashboardData.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          {/* PILOTO */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+                <Radio className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <div className="w-11 h-11 shrink-0 bg-green-100 dark:bg-green-900/40 rounded-xl flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
+              <span className="text-xs text-slate-400 dark:text-slate-500 text-right leading-tight">Piloto</span>
             </div>
+            <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{pilotOrReviewCount}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">en revisión</p>
           </div>
 
-          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Comisión plataforma</p>
-                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">${(dashboardData.platformCommissionPaid ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          {/* ACTIVOS */}
+          <div className={`rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow ${
+            activeListingsCount > 0
+              ? 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/40 dark:bg-emerald-900/10'
+              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
+          }`}>
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                activeListingsCount > 0 ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-slate-100 dark:bg-slate-800'
+              }`}>
+                <CheckCircle2 className={`h-4 w-4 ${activeListingsCount > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`} />
               </div>
-              <div className="w-11 h-11 shrink-0 bg-amber-100 dark:bg-amber-900/40 rounded-xl flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-              </div>
+              <span className={`text-xs text-right leading-tight ${activeListingsCount > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>Activos</span>
             </div>
+            <p className={`text-2xl font-bold tabular-nums ${activeListingsCount > 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-900 dark:text-white'}`}>{activeListingsCount}</p>
+            <p className={`text-xs mt-0.5 ${activeListingsCount > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-slate-500 dark:text-slate-400'}`}>en marketplace</p>
           </div>
 
-          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors" title="Número de ventas registradas.">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Nº de ventas</p>
-                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.salesCount}</p>
+          {/* BLOQUEADOS */}
+          <div className={`rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow ${
+            blockerTotal > 0
+              ? 'border-red-200 dark:border-red-800/50 bg-red-50/40 dark:bg-red-900/10'
+              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
+          }`}>
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                blockerTotal > 0 ? 'bg-red-100 dark:bg-red-900/40' : 'bg-slate-100 dark:bg-slate-800'
+              }`}>
+                <XCircle className={`h-4 w-4 ${blockerTotal > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400'}`} />
               </div>
-              <div className="w-11 h-11 shrink-0 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl flex items-center justify-center">
-                <BarChart3 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-              </div>
+              <span className={`text-xs text-right leading-tight ${blockerTotal > 0 ? 'text-red-700 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>Bloqueados</span>
             </div>
+            <p className={`text-2xl font-bold tabular-nums ${blockerTotal > 0 ? 'text-red-700 dark:text-red-300' : 'text-slate-900 dark:text-white'}`}>{blockerTotal}</p>
+            <p className={`text-xs mt-0.5 ${blockerTotal > 0 ? 'text-red-600 dark:text-red-500' : 'text-slate-500 dark:text-slate-400'}`}>{blockerTotal > 0 ? 'requieren acción' : 'sin bloqueos'}</p>
           </div>
 
-          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors" title="Productos publicados en el marketplace.">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Publicados</p>
-                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.activeProducts}</p>
+          {/* CON ORDEN */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
+                <ShoppingBag className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               </div>
-              <div className="w-11 h-11 shrink-0 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center">
-                <ShoppingBag className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-              </div>
+              <span className="text-xs text-slate-400 dark:text-slate-500 text-right leading-tight">Con orden</span>
             </div>
+            <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{orderIngestedCount}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">órdenes activas</p>
           </div>
 
-          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Oportunidades IA</p>
-                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.totalOpportunities}</p>
+          {/* FULFILLMENT */}
+          <div className={`rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow ${
+            fulfillmentPendingCount > 0
+              ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-900/10'
+              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
+          }`}>
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                fulfillmentPendingCount > 0 ? 'bg-amber-100 dark:bg-amber-900/40' : 'bg-slate-100 dark:bg-slate-800'
+              }`}>
+                <Truck className={`h-4 w-4 ${fulfillmentPendingCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`} />
               </div>
-              <div className="w-11 h-11 shrink-0 bg-primary-100 dark:bg-primary-900/50 rounded-xl flex items-center justify-center">
-                <Brain className="h-6 w-6 text-primary-600 dark:text-primary-400" />
-              </div>
+              <span className={`text-xs text-right leading-tight ${fulfillmentPendingCount > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>Fulfillment</span>
             </div>
-          </div>
-
-          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Sugerencias IA</p>
-                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.aiSuggestions}</p>
-              </div>
-              <div className="w-11 h-11 shrink-0 bg-amber-100 dark:bg-amber-900/40 rounded-xl flex items-center justify-center">
-                <Lightbulb className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Automatización</p>
-                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.automationRules}</p>
-              </div>
-              <div className="w-11 h-11 shrink-0 bg-teal-100 dark:bg-teal-900/40 rounded-xl flex items-center justify-center">
-                <Settings className="h-6 w-6 text-teal-600 dark:text-teal-400" />
-              </div>
-            </div>
+            <p className={`text-2xl font-bold tabular-nums ${fulfillmentPendingCount > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-slate-900 dark:text-white'}`}>{fulfillmentPendingCount}</p>
+            <p className={`text-xs mt-0.5 ${fulfillmentPendingCount > 0 ? 'text-amber-600 dark:text-amber-500' : 'text-slate-500 dark:text-slate-400'}`}>{fulfillmentPendingCount > 0 ? 'por resolver' : 'al día'}</p>
           </div>
         </div>
-        </>
       )}
 
-      {/* Data transparency (Phase 37 — Business Truth UX) */}
+      {/* CYCLE FUNNEL + BLOCKER PANEL */}
       {!loading && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-          <span>Fuente: API · Datos reales (ventas, inventario, comisiones)</span>
-          {lastDataUpdated && (
-            <span>Última actualización: {new Date(lastDataUpdated).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-          )}
-          <span>Actualización automática ~15 s</span>
-        </div>
-      )}
-
-      {/* Alerts panel (Phase 34 — centralizar problemas) */}
-      {businessDiagnostics && Object.values(businessDiagnostics).some((v) => v?.status === 'FAIL') && (
-        <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4">
-          <h3 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-2 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            Alertas del sistema
-          </h3>
-          <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
-            {Object.entries(businessDiagnostics)
-              .filter(([, v]) => v?.status === 'FAIL')
-              .map(([key, v]) => (
-                <li key={key}>
-                  <strong className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}:</strong> {v?.message ?? 'Revisar configuración'}
-                </li>
-              ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Balance resumido - capital disponible, comprometido, puede publicar */}
-      <BalanceSummaryWidget />
-
-      {/* Acciones requeridas: compras pendientes y productos pendientes */}
-      {inventorySummary && ((inventorySummary.pendingPurchasesCount ?? 0) > 0 || (inventorySummary.products?.pending ?? 0) > 0) && (
-        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
-          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
-            Acciones requeridas
-          </h3>
-          <ul className="space-y-2 text-sm text-amber-800 dark:text-amber-200">
-            {(inventorySummary.pendingPurchasesCount ?? 0) > 0 && (
-              <li className="flex items-center justify-between gap-4 flex-wrap">
-                <span>Tienes {inventorySummary.pendingPurchasesCount ?? 0} ventas pendientes de compra.</span>
-                <button
-                  type="button"
-                  onClick={() => navigate('/pending-purchases')}
-                  className="font-medium text-amber-700 dark:text-amber-300 hover:underline underline-offset-2"
-                >
-                  Ir a Compras pendientes
-                </button>
-              </li>
-            )}
-            {(inventorySummary.products?.pending ?? 0) > 0 && (
-              <li className="flex items-center justify-between gap-4 flex-wrap">
-                <span>Y {inventorySummary.products.pending} productos pendientes de aprobación.</span>
-                <button
-                  type="button"
-                  onClick={() => navigate('/products')}
-                  className="font-medium text-amber-700 dark:text-amber-300 hover:underline underline-offset-2"
-                >
-                  Ir a Productos
-                </button>
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
-
-      {/* Qué hacer ahora (Phase 34 — Action-oriented UI) */}
-      {(scalingActions.filter((a) => !a.executed).length > 0 || conversionOptimizationActions.filter((a) => !a.executed).length > 0 || strategyDecisions.filter((d) => !d.executed).length > 0) && (
-        <div className="rounded-xl border border-primary-200 dark:border-primary-700/60 bg-primary-50/50 dark:bg-primary-900/10 p-4">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-            <Target className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-            Qué hacer ahora
-          </h3>
-          <div className="flex flex-wrap gap-4 text-sm">
-            {scalingActions.filter((a) => !a.executed).length > 0 && (
-              <span className="text-gray-700 dark:text-gray-300">
-                <strong className="text-emerald-700 dark:text-emerald-400">Escalar:</strong> {scalingActions.filter((a) => !a.executed).length} producto(s) listos para replicar en más marketplaces.
-              </span>
-            )}
-            {conversionOptimizationActions.filter((a) => !a.executed).length > 0 && (
-              <span className="text-gray-700 dark:text-gray-300">
-                <strong className="text-amber-700 dark:text-amber-400">Optimizar:</strong> {conversionOptimizationActions.filter((a) => !a.executed).length} listado(s) con acciones de conversión pendientes.
-              </span>
-            )}
-            {strategyDecisions.filter((d) => !d.executed).length > 0 && (
-              <span className="text-gray-700 dark:text-gray-300">
-                <strong className="text-blue-700 dark:text-blue-400">Estrategia:</strong> {strategyDecisions.filter((d) => !d.executed).length} decisión(es) pendiente(s).
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Performance feedback (Phase 37 — what is working / what is failing) */}
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900/80 p-4">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-          <Activity className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-          Estado del negocio
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-            <p className="text-emerald-800 dark:text-emerald-200 font-medium">Funcionando</p>
-            <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">{dashboardData.salesCount} ventas</p>
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">{dashboardData.activeProducts} publicados</p>
-          </div>
-          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-            <p className="text-blue-800 dark:text-blue-200 font-medium">Para escalar</p>
-            <p className="text-lg font-bold text-blue-700 dark:text-blue-300 tabular-nums">{scalingActions.filter((a) => !a.executed).length}</p>
-            <p className="text-xs text-blue-600 dark:text-blue-400">productos ganadores</p>
-          </div>
-          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-            <p className="text-amber-800 dark:text-amber-200 font-medium">Por optimizar</p>
-            <p className="text-lg font-bold text-amber-700 dark:text-amber-300 tabular-nums">{conversionOptimizationActions.filter((a) => !a.executed).length + listingOptimizationActions.filter((a) => !a.executed).length}</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400">listados</p>
-          </div>
-          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-            <p className="text-red-800 dark:text-red-200 font-medium">Revisar / pausar</p>
-            <p className="text-lg font-bold text-red-700 dark:text-red-300 tabular-nums">{strategyDecisions.filter((d) => !d.executed && (d.decisionType === 'pause_listing' || d.decisionType === 'pause')).length}</p>
-            <p className="text-xs text-red-600 dark:text-red-400">bajo rendimiento</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Decision blocks (Phase 34 — Scale Now / Optimize Now / Remove Now) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-emerald-200 dark:border-emerald-700/60 bg-emerald-50/50 dark:bg-emerald-900/10 p-4">
-          <h3 className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 mb-2 flex items-center gap-2">
-            <Zap className="h-4 w-4" />
-            Escalar ahora
-          </h3>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Productos ganadores listos para más marketplaces.</p>
-          {scalingActions.filter((a) => !a.executed).length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-500">Ninguno pendiente.</p>
-          ) : (
-            <ul className="space-y-1 text-sm">
-              {scalingActions.filter((a) => !a.executed).slice(0, 3).map((a) => (
-                <li key={a.id}>
-                  <button type="button" onClick={() => navigate(`/products${a.productId ? `?highlight=${a.productId}` : ''}`)} className="text-left text-emerald-700 dark:text-emerald-300 hover:underline truncate block max-w-full">
-                    {a.productTitle ?? `Producto #${a.productId}`}
-                  </button>
-                </li>
-              ))}
-              {scalingActions.filter((a) => !a.executed).length > 3 && (
-                <li className="text-gray-500 dark:text-gray-400">+{scalingActions.filter((a) => !a.executed).length - 3} más</li>
-              )}
-            </ul>
-          )}
-        </div>
-        <div className="rounded-xl border border-amber-200 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-900/10 p-4">
-          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2 flex items-center gap-2">
-            <Target className="h-4 w-4" />
-            Optimizar ahora
-          </h3>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Listados con mejora de conversión pendiente.</p>
-          {conversionOptimizationActions.filter((a) => !a.executed).length === 0 && listingOptimizationActions.filter((a) => !a.executed).length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-500">Ninguno pendiente.</p>
-          ) : (
-            <ul className="space-y-1 text-sm">
-              {[...conversionOptimizationActions.filter((a) => !a.executed), ...listingOptimizationActions.filter((a) => !a.executed)].slice(0, 3).map((a, i) => (
-                <li key={(a as any).id ?? i}>
-                  <button type="button" onClick={() => navigate(`/products${(a as any).productId ? `?highlight=${(a as any).productId}` : ''}`)} className="text-left text-amber-700 dark:text-amber-300 hover:underline truncate block max-w-full">
-                    {(a as any).productTitle ?? `Listado #${(a as any).listingId ?? (a as any).productId}`}
-                  </button>
-                </li>
-              ))}
-              {[...conversionOptimizationActions.filter((a) => !a.executed), ...listingOptimizationActions.filter((a) => !a.executed)].length > 3 && (
-                <li className="text-gray-500 dark:text-gray-400">+{[...conversionOptimizationActions.filter((a) => !a.executed), ...listingOptimizationActions.filter((a) => !a.executed)].length - 3} más</li>
-              )}
-            </ul>
-          )}
-        </div>
-        <div className="rounded-xl border border-red-200 dark:border-red-700/60 bg-red-50/50 dark:bg-red-900/10 p-4">
-          <h3 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-2 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            Revisar / pausar
-          </h3>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Decisiones de pausa por bajo rendimiento.</p>
-          {strategyDecisions.filter((d) => !d.executed && (d.decisionType === 'pause_listing' || d.decisionType === 'pause')).length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-500">Ninguno pendiente.</p>
-          ) : (
-            <ul className="space-y-1 text-sm">
-              {strategyDecisions.filter((d) => !d.executed && (d.decisionType === 'pause_listing' || d.decisionType === 'pause')).slice(0, 3).map((d) => (
-                <li key={d.id}>
-                  <button type="button" onClick={() => navigate(`/products${d.productId ? `?highlight=${d.productId}` : ''}`)} className="text-left text-red-700 dark:text-red-300 hover:underline truncate block max-w-full">
-                    {d.productTitle ?? `Producto #${d.productId}`}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-
-      {/* Autopilot en vivo - estado, fase y progreso del ciclo */}
-      <AutopilotLiveWidget />
-
-      <InventorySummaryCard summary={inventorySummary} />
-
-      {/* Estado de la única venta real / última orden */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <ShoppingBag className="h-5 w-5 text-amber-500" />
-          Última venta / orden
-        </h3>
-        {latestOrder ? (
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  latestOrder.status === 'PURCHASED'
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
-                    : latestOrder.status === 'PAID' || latestOrder.status === 'PURCHASING'
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-                      : latestOrder.status === 'FAILED'
-                        ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
-                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                }`}
-              >
-                {latestOrder.status}
-              </span>
-              {latestOrder.paypalOrderId && (
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  ID: {String(latestOrder.paypalOrderId).replace(/^ebay:/, 'eBay ').replace(/^mercadolibre:/, 'ML ').replace(/^amazon:/, 'Amazon ')}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* BUSINESS CYCLE FUNNEL */}
+          <div className="lg:col-span-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <Layers className="h-4 w-4 text-blue-500" />
+                Ciclo operativo E2E
+              </h3>
+              {operationsTruth && (
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {new Date(operationsTruth.generatedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
             </div>
-            {latestOrder.status === 'FAILED' && latestOrder.errorMessage && (
-              <p className="text-sm text-red-600 dark:text-red-400">{latestOrder.errorMessage}</p>
-            )}
-            <Link
-              to={`/orders/${latestOrder.id}`}
-              className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              Ver orden <ChevronRight className="h-4 w-4" />
-            </Link>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500 dark:text-gray-400">Sin órdenes recientes.</p>
-        )}
-      </div>
-
-      {/* Admin: ingresos plataforma y comisiones por usuario */}
-      {user?.role?.toUpperCase() === 'ADMIN' && platformRevenue && (
-        <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Ingresos plataforma (Admin)</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Total comisiones cobradas</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-gray-100">${platformRevenue.totalPlatformRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Ventas con comisión</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{platformRevenue.salesCount}</p>
-            </div>
-          </div>
-          {platformRevenue.perUser.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm text-left text-gray-700 dark:text-gray-300">
-                <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-600">
-                    <th className="py-2 pr-4">Usuario</th>
-                    <th className="py-2 pr-4">Ventas</th>
-                    <th className="py-2 pr-4">Comisión plataforma</th>
-                    <th className="py-2 pr-4">Ganancia usuario</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {platformRevenue.perUser.map((row) => (
-                    <tr key={row.userId} className="border-b border-gray-100 dark:border-gray-700">
-                      <td className="py-2 pr-4">{row.username || row.email}</td>
-                      <td className="py-2 pr-4">{row.salesCount}</td>
-                      <td className="py-2 pr-4">${row.platformCommission.toFixed(2)}</td>
-                      <td className="py-2 pr-4">${row.userProfit.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Phase 9: Autonomous Scaling — scaled products, scale score, marketplace expansion */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <Zap className="h-5 w-5 text-amber-500" />
-          Autonomous Scaling
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Productos escalados a más marketplaces (ganadores replicados en eBay, Amazon, etc.).
-        </p>
-        {scalingActions.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay acciones de escalado recientes.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Marketplace</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Acción</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Score</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scalingActions.map((a) => (
-                  <tr key={a.id} className="border-b border-gray-100 dark:border-gray-700/50">
-                    <td className="py-2">
-                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[180px] block" title={a.productTitle ?? ''}>
-                        {a.productTitle ?? '—'}
-                      </span>
-                    </td>
-                    <td className="py-2 capitalize text-gray-700 dark:text-gray-300">{a.marketplace}</td>
-                    <td className="py-2 text-gray-700 dark:text-gray-300">{a.actionType.replace(/_/g, ' ')}</td>
-                    <td className="py-2 font-medium text-gray-900 dark:text-gray-100">{a.score.toFixed(0)}</td>
-                    <td className="py-2">
-                      {a.executed ? (
-                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                          <CheckCircle className="h-4 w-4" />
-                          Ejecutado
-                        </span>
-                      ) : (
-                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
-                      )}
-                    </td>
-                    <td className="py-2 text-gray-500 dark:text-gray-500">{new Date(a.createdAt).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Phase 11: Conversion Rate Optimization — recent CRO actions, conversion improvements */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <Target className="h-5 w-5 text-emerald-500" />
-          Conversion Optimization
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Mejoras automáticas de conversión: títulos, precios, descripciones e imágenes (cada 12 h).
-        </p>
-        {conversionOptimizationActions.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay acciones de CRO recientes.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Marketplace</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Acción</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Razón</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Score</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {conversionOptimizationActions.map((a) => (
-                  <tr key={a.id} className="border-b border-gray-100 dark:border-gray-700/50">
-                    <td className="py-2">
-                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[180px] block" title={a.productTitle ?? ''}>
-                        {a.productTitle ?? '—'}
-                      </span>
-                    </td>
-                    <td className="py-2 capitalize text-gray-700 dark:text-gray-300">{a.marketplace ?? '—'}</td>
-                    <td className="py-2 text-gray-700 dark:text-gray-300">{a.actionType.replace(/_/g, ' ')}</td>
-                    <td className="py-2 text-gray-600 dark:text-gray-400">{a.reason.replace(/_/g, ' ')}</td>
-                    <td className="py-2 font-medium text-gray-900 dark:text-gray-100">{a.score.toFixed(0)}</td>
-                    <td className="py-2">
-                      {a.executed ? (
-                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                          <CheckCircle className="h-4 w-4" />
-                          Ejecutado
-                        </span>
-                      ) : (
-                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
-                      )}
-                    </td>
-                    <td className="py-2 text-gray-500 dark:text-gray-500">{new Date(a.createdAt).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Phase 8: Strategy Brain — top strategic products, scores, recommended actions */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <Brain className="h-5 w-5 text-violet-500" />
-          Strategy Brain
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Decisiones estratégicas del sistema (escala, expansión, precio, pausa). Se ejecuta diariamente.
-        </p>
-        {strategyDecisions.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay decisiones recientes.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Acción</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Score</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Razón</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {strategyDecisions.map((d) => (
-                  <tr key={d.id} className="border-b border-gray-100 dark:border-gray-700/50">
-                    <td className="py-2">
-                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[180px] block" title={d.productTitle ?? ''}>
-                        {d.productTitle ?? '—'}
-                      </span>
-                    </td>
-                    <td className="py-2 text-gray-700 dark:text-gray-300">{d.decisionType.replace(/_/g, ' ')}</td>
-                    <td className="py-2 font-medium text-gray-900 dark:text-gray-100">{d.score.toFixed(0)}</td>
-                    <td className="py-2 text-gray-600 dark:text-gray-400">{d.reason.replace(/_/g, ' ')}</td>
-                    <td className="py-2">
-                      {d.executed ? (
-                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                          <CheckCircle className="h-4 w-4" />
-                          Ejecutado
-                        </span>
-                      ) : (
-                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
-                      )}
-                    </td>
-                    <td className="py-2 text-gray-500 dark:text-gray-500">{new Date(d.createdAt).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Phase 7: Demand Radar — top trending keywords, trend growth, sources */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-emerald-500" />
-          Demand Radar
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Keywords en tendencia (score, fuente). Actualizado diariamente por el Global Demand Radar.
-        </p>
-        {demandSignals.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay señales recientes.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {demandSignals.map((s) => (
-              <span
-                key={s.id}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200 text-sm"
-                title={`Score: ${s.trendScore} · ${s.source}`}
-              >
-                <span className="font-medium">{s.keyword}</span>
-                <span className="opacity-80">{s.trendScore.toFixed(0)}</span>
-                <span className="text-xs opacity-70">{s.source.replace(/_/g, ' ')}</span>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Phase 6: Listing Optimization — optimization actions, performance improvements, recent adjustments */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-indigo-500" />
-          Listing Optimization
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Acciones del motor de optimización dinámica (precio, título SEO, expansión de marketplace).
-        </p>
-        {listingOptimizationActions.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay acciones recientes. El motor se ejecuta cada 12 h.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Marketplace</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Acción</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Razón</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {listingOptimizationActions.map((a) => (
-                  <tr key={a.id} className="border-b border-gray-100 dark:border-gray-700/50">
-                    <td className="py-2">
-                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px] block" title={a.productTitle ?? ''}>
-                        {a.productTitle ?? '—'}
-                      </span>
-                    </td>
-                    <td className="py-2 capitalize text-gray-700 dark:text-gray-300">{a.marketplace ?? '—'}</td>
-                    <td className="py-2 text-gray-700 dark:text-gray-300">{a.actionType.replace(/_/g, ' ')}</td>
-                    <td className="py-2 text-gray-600 dark:text-gray-400">{a.reason.replace(/_/g, ' ')}</td>
-                    <td className="py-2">
-                      {a.executed ? (
-                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                          <CheckCircle className="h-4 w-4" />
-                          Ejecutado
-                        </span>
-                      ) : (
-                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
-                      )}
-                    </td>
-                    <td className="py-2 text-gray-500 dark:text-gray-500">
-                      {new Date(a.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Phase 5: Auto Listing Strategy — recommended products, priority, marketplace, execution status */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <Zap className="h-5 w-5 text-amber-500" />
-          Auto Listing Strategy
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Productos recomendados por el motor de estrategia (prioridad, marketplace, estado de publicación).
-        </p>
-        {autoListingDecisions.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay decisiones recientes. El motor se ejecuta diariamente.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Marketplace</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Prioridad</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Razón</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
-                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {autoListingDecisions.map((d) => (
-                  <tr key={d.id} className="border-b border-gray-100 dark:border-gray-700/50">
-                    <td className="py-2">
-                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px] block" title={d.productTitle ?? ''}>
-                        {d.productTitle ?? '—'}
-                      </span>
-                    </td>
-                    <td className="py-2 capitalize text-gray-700 dark:text-gray-300">{d.marketplace}</td>
-                    <td className="py-2 font-medium text-gray-900 dark:text-gray-100">{d.priorityScore.toFixed(0)}</td>
-                    <td className="py-2 text-gray-600 dark:text-gray-400">{d.decisionReason.replace(/_/g, ' ')}</td>
-                    <td className="py-2">
-                      {d.executed ? (
-                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                          <CheckCircle className="h-4 w-4" />
-                          Encolado
-                        </span>
-                      ) : (
-                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
-                      )}
-                    </td>
-                    <td className="py-2 text-gray-500 dark:text-gray-500">
-                      {new Date(d.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Business Diagnostics - Estado del sistema */}
-      {businessDiagnostics && (
-        <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            Estado del sistema
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
-            {Object.entries(businessDiagnostics).filter(([k]) => k !== 'error').map(([key, val]) => (
-              <div
-                key={key}
-                className={`p-3 rounded-lg border ${
-                  val.status === 'OK'
-                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                    : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-                }`}
-                title={val.message}
-              >
-                <div className="flex items-center gap-2">
-                  {val.status === 'OK' ? (
-                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+            <div className="flex items-center gap-1 overflow-x-auto pb-1">
+              {[
+                { label: 'Listos', count: readyToPublishCount, textColor: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800' },
+                { label: 'Piloto', count: pilotOrReviewCount, textColor: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800' },
+                { label: 'Activo', count: activeListingsCount, textColor: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800' },
+                { label: 'Con orden', count: orderIngestedCount, textColor: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800' },
+                { label: 'Fulfillment', count: fulfillmentPendingCount, textColor: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-200 dark:border-amber-800' },
+                { label: 'Realizado', count: realizedProfitCount, textColor: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-50 dark:bg-teal-900/20', border: 'border-teal-200 dark:border-teal-800' },
+              ].map((stage, i, arr) => (
+                <div key={stage.label} className="flex items-center shrink-0">
+                  <div className={`rounded-lg border ${stage.border} ${stage.bg} px-3 py-2 text-center min-w-[72px]`}>
+                    <p className={`text-lg font-bold tabular-nums ${stage.textColor}`}>{stage.count}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 whitespace-nowrap">{stage.label}</p>
+                  </div>
+                  {i < arr.length - 1 && (
+                    <ArrowRight className="h-3 w-3 text-slate-300 dark:text-slate-600 mx-0.5 shrink-0" />
                   )}
-                  <span className="text-sm font-medium capitalize truncate">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
                 </div>
-                {val.count !== undefined && (
-                  <p className="text-xs mt-1 text-gray-600 dark:text-gray-400">{val.count}</p>
-                )}
-                {val.message && val.status === 'OK' && (
-                  <p className="text-xs mt-1 text-gray-500 truncate" title={val.message}>{val.message}</p>
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
+            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+              {dashboardData.salesCount > 0 && (
+                <span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{dashboardData.salesCount}</span> ventas ·{' '}
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">${dashboardData.totalProfit.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span> margen neto
+                </span>
+              )}
+              {dashboardData.totalRevenue > 0 && (
+                <span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">${dashboardData.totalRevenue.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span> ingresos
+                </span>
+              )}
+              {(inventorySummary?.pendingPurchasesCount ?? 0) > 0 && (
+                <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                  {inventorySummary?.pendingPurchasesCount} compras proveedor pendientes
+                </span>
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-3 text-xs">
+              <Link to="/products" className="font-medium text-blue-600 dark:text-blue-400 hover:underline">Catálogo →</Link>
+              <Link to="/publisher" className="font-medium text-blue-600 dark:text-blue-400 hover:underline">Publisher →</Link>
+              <Link to="/orders" className="font-medium text-blue-600 dark:text-blue-400 hover:underline">Órdenes →</Link>
+              <Link to="/control-center" className="font-medium text-blue-600 dark:text-blue-400 hover:underline">Control Center →</Link>
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* Actividad reciente */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 transition-colors">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Actividad Reciente</h3>
-            <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
-              Ver todo
-            </button>
-          </div>
-          
-          <div className="space-y-3">
-            {recentActivity.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Activity className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm">No hay actividad reciente</p>
+          {/* BLOCKER PANEL */}
+          <div className={`rounded-xl border p-4 shadow-sm ${
+            immediateActionCount > 0
+              ? 'border-red-200 dark:border-red-800/50 bg-red-50/40 dark:bg-red-900/10'
+              : 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/40 dark:bg-emerald-900/10'
+          }`}>
+            <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${
+              immediateActionCount > 0 ? 'text-red-800 dark:text-red-200' : 'text-emerald-800 dark:text-emerald-200'
+            }`}>
+              {immediateActionCount > 0
+                ? <XCircle className="h-4 w-4 shrink-0" />
+                : <CheckCircle2 className="h-4 w-4 shrink-0" />
+              }
+              {immediateActionCount > 0 ? `${immediateActionCount} acción${immediateActionCount !== 1 ? 'es' : ''} requerida${immediateActionCount !== 1 ? 's' : ''}` : 'Sin acciones urgentes'}
+            </h3>
+
+            {immediateActionCount > 0 ? (
+              <div className="space-y-2">
+                {(inventorySummary?.pendingPurchasesCount ?? 0) > 0 && (
+                  <Link to="/pending-purchases" className="flex items-center justify-between p-2.5 rounded-lg bg-white/80 dark:bg-red-950/20 border border-red-200/60 dark:border-red-800/40 hover:bg-white dark:hover:bg-red-950/30 transition-colors group">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-red-800 dark:text-red-200">{inventorySummary?.pendingPurchasesCount} compras pendientes</p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">Proveedor sin ejecutar</p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-red-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+                )}
+                {topBlockers.map((b) => (
+                  <Link to="/control-center" key={b.blockerCode} className="flex items-center justify-between p-2.5 rounded-lg bg-white/80 dark:bg-red-950/20 border border-red-200/60 dark:border-red-800/40 hover:bg-white dark:hover:bg-red-950/30 transition-colors group">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-red-800 dark:text-red-200 font-mono">{b.blockerCode}</p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{b.count} {b.count === 1 ? 'item' : 'items'} afectados</p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-red-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+                ))}
+                {failedPublishCount > 0 && (
+                  <Link to="/publisher" className="flex items-center justify-between p-2.5 rounded-lg bg-white/80 dark:bg-red-950/20 border border-red-200/60 dark:border-red-800/40 hover:bg-white dark:hover:bg-red-950/30 transition-colors group">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-red-800 dark:text-red-200">{failedPublishCount} publicaciones fallidas</p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">Revisar publisher</p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-red-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+                )}
+                {(inventorySummary?.products?.pending ?? 0) > 0 && (
+                  <Link to="/products" className="flex items-center justify-between p-2.5 rounded-lg bg-white/80 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 hover:bg-white dark:hover:bg-amber-950/30 transition-colors group">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">{inventorySummary?.products?.pending} productos pendientes</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Pendientes de aprobación</p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-amber-500 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+                )}
               </div>
             ) : (
-              recentActivity.map((activity) => (
-                <div key={activity.id} className={`p-3 rounded-lg border ${getActivityBg(activity.status)}`}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-3">
-                      <div className="mt-0.5">
-                        {getActivityIcon(activity.type)}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{activity.title}</p>
-                        <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
-                      </div>
-                    </div>
-                    {activity.amount && (
-                      <span className="text-sm font-medium text-gray-900">{activity.amount}</span>
-                    )}
+              <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                Sin blockers activos detectados. El ciclo opera limpio.
+              </p>
+            )}
+
+            {businessDiagnostics && Object.values(businessDiagnostics).some((v) => v?.status === 'FAIL') && (
+              <div className="mt-3 pt-3 border-t border-red-200/50 dark:border-red-800/30 space-y-1.5">
+                <p className="text-xs font-semibold text-red-700 dark:text-red-300 flex items-center gap-1"><AlertCircle className="h-3 w-3" />Alertas sistema</p>
+                {Object.entries(businessDiagnostics)
+                  .filter(([, v]) => v?.status === 'FAIL')
+                  .map(([key, v]) => (
+                    <p key={key} className="text-xs text-red-700 dark:text-red-300">
+                      <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}:</span> {v?.message ?? 'Revisar config'}
+                    </p>
+                  ))}
+              </div>
+            )}
+
+            {!operationsTruth && (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                Sin datos canónicos en este refresh.{' '}
+                <Link to="/control-center" className="font-medium hover:underline">Validar en Control Center →</Link>
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* QUICK ACTIONS */}
+      <div className="flex flex-wrap gap-1.5">
+        {([
+          { to: '/products', icon: Package, label: 'Productos', style: 'bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 border-blue-200/70 dark:border-blue-800/40 text-blue-700 dark:text-blue-300' },
+          { to: '/publisher', icon: Radio, label: 'Publisher', style: 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/30 border-indigo-200/70 dark:border-indigo-800/40 text-indigo-700 dark:text-indigo-300' },
+          { to: '/orders', icon: ShoppingBag, label: 'Órdenes', style: 'bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/30 border-purple-200/70 dark:border-purple-800/40 text-purple-700 dark:text-purple-300' },
+          { to: '/pending-purchases', icon: Truck, label: 'Compras', style: 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 dark:hover:bg-amber-900/30 border-amber-200/70 dark:border-amber-800/40 text-amber-700 dark:text-amber-300' },
+          { to: '/control-center', icon: Target, label: 'Control Center', style: 'bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 border-red-200/70 dark:border-red-800/40 text-red-700 dark:text-red-300' },
+          { to: '/sales', icon: TrendingUp, label: 'Ventas', style: 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/30 border-emerald-200/70 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-300' },
+          { to: '/autopilot', icon: Brain, label: 'Autopilot', style: 'bg-sky-50 hover:bg-sky-100 dark:bg-sky-900/20 dark:hover:bg-sky-900/30 border-sky-200/70 dark:border-sky-800/40 text-sky-700 dark:text-sky-300' },
+          { to: '/finance', icon: DollarSign, label: 'Finanzas', style: 'bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/20 dark:hover:bg-teal-900/30 border-teal-200/70 dark:border-teal-800/40 text-teal-700 dark:text-teal-300' },
+        ] as const).map(({ to, icon: Icon, label, style }) => (
+          <Link key={to} to={to} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${style}`}>
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            {label}
+          </Link>
+        ))}
+      </div>
+
+      {/* SECONDARY PANELS */}
+      <BalanceSummaryWidget />
+      <AutopilotLiveWidget />
+      <InventorySummaryCard summary={inventorySummary} />
+
+      {/* BOTTOM GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* ACTIVITY FEED */}
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 text-slate-400" />
+              Actividad reciente
+            </h3>
+            <Link to="/reports" className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-medium">Ver reportes →</Link>
+          </div>
+          <div className="space-y-0 divide-y divide-slate-100 dark:divide-slate-800">
+            {recentActivity.length === 0 ? (
+              <div className="py-6 text-center text-slate-400 dark:text-slate-500">
+                <Activity className="h-6 w-6 mx-auto mb-1.5 opacity-40" />
+                <p className="text-xs">Sin actividad reciente</p>
+              </div>
+            ) : (
+              recentActivity.slice(0, 7).map((activity) => (
+                <div key={activity.id} className="flex items-start gap-2.5 py-2">
+                  <div className="mt-0.5 shrink-0">{getActivityIcon(activity.type)}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-slate-800 dark:text-slate-200 font-medium truncate">{activity.title}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-px">{activity.time}</p>
                   </div>
+                  {activity.amount && (
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">{activity.amount}</span>
+                  )}
                 </div>
               ))
             )}
           </div>
         </div>
 
-        {/* Estado del sistema - Real backend status */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Estado del Sistema</h3>
-          
-          <div className="space-y-4">
-            <div className={`flex items-center justify-between p-3 rounded-lg border ${
-              backendHealthy === true ? 'bg-green-50 border-green-200' :
-              backendHealthy === false ? 'bg-red-50 border-red-200' :
-              'bg-gray-50 border-gray-200'
-            }`}>
-              <div className="flex items-center space-x-3">
-                <div className={`w-2 h-2 rounded-full ${
-                  backendHealthy === true ? 'bg-green-400 animate-pulse' :
-                  backendHealthy === false ? 'bg-red-500' : 'bg-gray-400'
-                }`}></div>
-                <span className="text-sm font-medium text-gray-900">Backend</span>
-              </div>
-              <span className={`text-sm font-medium ${
-                backendHealthy === true ? 'text-green-600' :
-                backendHealthy === false ? 'text-red-600' : 'text-gray-500'
-              }`}>
-                {backendHealthy === true ? 'Conectado' : backendHealthy === false ? 'No disponible' : 'Verificando...'}
-              </span>
-            </div>
-            
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center space-x-3">
-                <Brain className="h-4 w-4 text-blue-600" />
-                <span className="text-sm font-medium text-gray-900">Motor IA</span>
-              </div>
-              <span className="text-sm text-blue-600 font-medium">
-                {backendHealthy === true ? 'Disponible' : backendHealthy === false ? 'Revisar backend' : '—'}
-              </span>
-            </div>
-            
-            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200">
-              <div className="flex items-center space-x-3">
-                <Settings className="h-4 w-4 text-purple-600" />
-                <span className="text-sm font-medium text-gray-900">Autopilot runtime</span>
-              </div>
-              <span className="text-sm text-purple-600 font-medium">
-                {autopilotRuntime?.running
-                  ? 'Ejecutándose'
-                  : autopilotRuntime?.status
-                    ? `Detenido (${autopilotRuntime.status})`
-                    : 'Sin prueba runtime'}
-              </span>
-            </div>
-            
-            <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200">
-              <div className="flex items-center space-x-3">
-                <Globe className="h-4 w-4 text-orange-600" />
-                <span className="text-sm font-medium text-gray-900">Entorno</span>
-              </div>
-              <span className="text-sm text-orange-600 font-medium">
-                {isProductionMode ? 'Producción' : 'Sandbox'}
-              </span>
-            </div>
-          </div>
-          
-          {/* Controles rápidos */}
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-gray-700">Controles Rápidos</span>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                El estado de automatización local fue retirado. Usa el runtime real de Autopilot y el contrato canónico de verdad operativa.
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">Entorno</span>
+        {/* RIGHT COLUMN: System status + latest order + admin */}
+        <div className="space-y-2.5">
+          {/* System status compact */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
+            <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">Estado del sistema</h3>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {[
+                {
+                  label: 'Backend',
+                  value: backendHealthy === true ? 'Conectado' : backendHealthy === false ? 'No disponible' : 'Verificando…',
+                  dot: backendHealthy === true ? 'bg-emerald-400 animate-pulse' : backendHealthy === false ? 'bg-red-400' : 'bg-slate-400',
+                  valueColor: backendHealthy === true ? 'text-emerald-600 dark:text-emerald-400' : backendHealthy === false ? 'text-red-600 dark:text-red-400' : 'text-slate-500',
+                },
+                {
+                  label: 'Motor IA',
+                  value: backendHealthy === true ? 'Disponible' : '—',
+                  dot: backendHealthy === true ? 'bg-blue-400' : 'bg-slate-400',
+                  valueColor: backendHealthy === true ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500',
+                },
+                {
+                  label: 'Autopilot runtime',
+                  value: autopilotRuntime?.running ? 'Ejecutándose' : autopilotRuntime?.status ? 'Detenido' : 'Sin prueba',
+                  dot: autopilotRuntime?.running ? 'bg-blue-400 animate-pulse' : 'bg-slate-400',
+                  valueColor: autopilotRuntime?.running ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400',
+                },
+                {
+                  label: 'Entorno activo',
+                  value: isProductionMode ? 'Producción' : 'Sandbox',
+                  dot: isProductionMode ? 'bg-emerald-400' : 'bg-amber-400',
+                  valueColor: isProductionMode ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
+                },
+                {
+                  label: 'Blockers canónicos',
+                  value: blockerTotal > 0 ? `${blockerTotal} activos` : 'Sin bloqueos',
+                  dot: blockerTotal > 0 ? 'bg-red-400' : 'bg-emerald-400',
+                  valueColor: blockerTotal > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400',
+                },
+              ].map(({ label, value, dot, valueColor }) => (
+                <div key={label} className="flex items-center justify-between py-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-[5px] h-[5px] rounded-full shrink-0 ${dot}`} />
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">{label}</span>
+                  </div>
+                  <span className={`text-[11px] font-medium ${valueColor}`}>{value}</span>
                 </div>
-                <button
-                  onClick={() => {
-                    setEnvironment(isProductionMode ? 'sandbox' : 'production').catch(() => {
-                      toast.error('No se pudo cambiar el entorno');
-                    });
-                  }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                    isProductionMode 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-orange-100 text-orange-800'
-                  }`}
-                >
-                  {isProductionMode ? 'Producción' : 'Sandbox'}
-                </button>
-              </div>
+              ))}
+            </div>
+            <div className="mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">Entorno</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setEnvironment(isProductionMode ? 'sandbox' : 'production').catch(() => {
+                    toast.error('No se pudo cambiar el entorno');
+                  });
+                }}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+                  isProductionMode
+                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-900/60'
+                    : 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-900/60'
+                }`}
+              >
+                {isProductionMode ? 'Producción' : 'Sandbox'}
+              </button>
             </div>
           </div>
+
+          {/* Latest order */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
+            <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-2">
+              <ShoppingBag className="h-3.5 w-3.5 text-slate-400" />
+              Última orden
+            </h3>
+            {latestOrder ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    latestOrder.status === 'PURCHASED'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : latestOrder.status === 'PAID' || latestOrder.status === 'PURCHASING'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                        : latestOrder.status === 'FAILED'
+                          ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                  }`}>
+                    {latestOrder.status}
+                  </span>
+                  {latestOrder.paypalOrderId && (
+                    <span className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                      {String(latestOrder.paypalOrderId).replace(/^ebay:/, 'eBay ').replace(/^mercadolibre:/, 'ML ').replace(/^amazon:/, 'Amazon ')}
+                    </span>
+                  )}
+                </div>
+                {latestOrder.status === 'FAILED' && latestOrder.errorMessage && (
+                  <p className="text-xs text-red-600 dark:text-red-400">{latestOrder.errorMessage}</p>
+                )}
+                <Link to={`/orders/${latestOrder.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
+                  Ver orden <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 dark:text-slate-500">Sin órdenes recientes.</p>
+            )}
+          </div>
+
+          {/* Admin: platform revenue */}
+          {user?.role?.toUpperCase() === 'ADMIN' && platformRevenue && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-sm">
+              <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">Ingresos plataforma (Admin)</h3>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Comisiones cobradas</p>
+                  <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white">
+                    ${platformRevenue.totalPlatformRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Ventas con comisión</p>
+                  <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white">{platformRevenue.salesCount}</p>
+                </div>
+              </div>
+              {platformRevenue.perUser.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs text-left">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-800">
+                        <th className="py-1.5 pr-3 font-medium text-slate-500 dark:text-slate-400">Usuario</th>
+                        <th className="py-1.5 pr-3 font-medium text-slate-500 dark:text-slate-400">Ventas</th>
+                        <th className="py-1.5 pr-3 font-medium text-slate-500 dark:text-slate-400">Comisión</th>
+                        <th className="py-1.5 font-medium text-slate-500 dark:text-slate-400">Ganancia</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {platformRevenue.perUser.map((row) => (
+                        <tr key={row.userId}>
+                          <td className="py-1.5 pr-3 text-slate-700 dark:text-slate-300">{row.username || row.email}</td>
+                          <td className="py-1.5 pr-3 text-slate-700 dark:text-slate-300">{row.salesCount}</td>
+                          <td className="py-1.5 pr-3 text-slate-700 dark:text-slate-300">${row.platformCommission.toFixed(2)}</td>
+                          <td className="py-1.5 text-slate-700 dark:text-slate-300">${row.userProfit.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* DATA FOOTER */}
+      {!loading && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-400/80 dark:text-slate-500/80 pt-1 pb-1">
+          <span>API · datos en vivo</span>
+          {lastDataUpdated && (
+            <span>· {new Date(lastDataUpdated).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+          )}
+          <span>· refresh ~15s</span>
+        </div>
+      )}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 p-4 md:p-6">
+      <div className="max-w-7xl mx-auto space-y-4">
+
+        {/* EXECUTIVE HEADER */}
+        <div className="rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 border border-slate-700/80 shadow-lg p-4 md:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Dashboard Inteligente</h1>
-              <p className="text-gray-600 mt-1">
-                Sistema de reventa con IA avanzada - 
-                <span className={`ml-1 font-medium ${
-                  isProductionMode ? 'text-green-600' : 'text-orange-600'
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+                  isProductionMode
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
+                    : 'bg-amber-500/15 text-amber-300 border-amber-500/25'
                 }`}>
-                  {isProductionMode ? 'Producción' : 'Sandbox'}
+                  <span className={`w-1.5 h-1.5 rounded-full ${isProductionMode ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  {isProductionMode ? 'PRODUCCIÓN' : 'SANDBOX'}
                 </span>
-              </p>
+                {immediateActionCount > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-500/15 text-red-300 border border-red-500/25">
+                    <AlertCircle className="w-3 h-3" />
+                    {immediateActionCount} acción{immediateActionCount !== 1 ? 'es' : ''}
+                  </span>
+                )}
+              </div>
+              <h1 className="text-lg font-semibold text-white tracking-tight">
+                {user?.username ? `Hola, ${user.username}` : 'Operations Dashboard'}
+              </h1>
+              <p className="text-slate-400 text-xs mt-0.5">Dropshipping inteligente · Sistema operativo en vivo</p>
             </div>
-            
-            {/* Indicadores de estado */}
-            <div className="flex items-center space-x-4">
-              <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
-                autopilotRuntime?.running ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Backend health */}
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-medium ${
+                backendHealthy === true
+                  ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
+                  : backendHealthy === false
+                    ? 'bg-red-500/10 border-red-500/25 text-red-300'
+                    : 'bg-slate-700/60 border-slate-600/60 text-slate-400'
               }`}>
-                <Brain className="h-4 w-4" />
-                <span className="text-sm font-medium">
-                  {autopilotRuntime?.running ? 'Autopilot activo' : 'Autopilot detenido'}
-                </span>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  backendHealthy === true ? 'bg-emerald-400 animate-pulse' :
+                  backendHealthy === false ? 'bg-red-400' : 'bg-slate-500'
+                }`} />
+                {backendHealthy === true ? 'Backend OK' : backendHealthy === false ? 'Backend caído' : 'Conectando…'}
               </div>
-              
-              <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
-                backendHealthy === true ? 'text-green-600 bg-green-50' :
-                backendHealthy === false ? 'text-red-600 bg-red-50' : 'text-gray-600 bg-gray-50'
+
+              {/* Autopilot */}
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-medium ${
+                autopilotRuntime?.running
+                  ? 'bg-blue-500/10 border-blue-500/25 text-blue-300'
+                  : 'bg-slate-700/60 border-slate-600/60 text-slate-400'
               }`}>
-                <div className={`w-2 h-2 rounded-full ${
-                  backendHealthy === true ? 'bg-green-400 animate-pulse' :
-                  backendHealthy === false ? 'bg-red-500' : 'bg-gray-400'
-                }`}></div>
-                <span className="text-sm font-medium">
-                  {backendHealthy === true ? 'Backend conectado' : backendHealthy === false ? 'Backend no disponible' : 'Verificando...'}
-                </span>
+                <Radio className={`w-3 h-3 ${autopilotRuntime?.running ? 'animate-pulse' : ''}`} />
+                {autopilotRuntime?.running ? 'Autopilot activo' : 'Autopilot detenido'}
               </div>
+
+              {/* Environment toggle */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEnvironment(isProductionMode ? 'sandbox' : 'production').catch(() => {
+                    toast.error('No se pudo cambiar el entorno');
+                  });
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-600/60 bg-slate-700/40 text-slate-300 text-[11px] font-medium hover:bg-slate-700/70 transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Cambiar entorno
+              </button>
             </div>
           </div>
+
+          {/* Blockers strip in header — only if active */}
+          {blockerTotal > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-700/40 flex flex-wrap items-center gap-2.5">
+              <span className="flex items-center gap-1.5 text-red-300 text-[11px] font-medium">
+                <XCircle className="w-3 h-3" />
+                {blockerTotal} blocker{blockerTotal !== 1 ? 's' : ''} activo{blockerTotal !== 1 ? 's' : ''}
+              </span>
+              {topBlockers.map((b) => (
+                <span key={b.blockerCode} className="px-1.5 py-px rounded-full bg-red-500/15 border border-red-500/25 text-red-300 text-[11px] font-mono">
+                  {b.blockerCode} ×{b.count}
+                </span>
+              ))}
+              <Link to="/control-center" className="ml-auto text-[11px] text-red-300 hover:text-red-200 font-medium flex items-center gap-1">
+                Ver en Control Center <ChevronRight className="w-3 h-3" />
+              </Link>
+            </div>
+          )}
         </div>
 
-        {/* Navegación por tabs */}
-        <div className="mb-6">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      setActiveTab(tab.id);
-                      setSearchParams(tab.id === 'overview' ? {} : { tab: tab.id });
-                    }}
-                    className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-all ${
-                      activeTab === tab.id
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <Icon className="h-5 w-5" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+        {/* TABS */}
+        <div className="border-b border-gray-200 dark:border-slate-700/80">
+          <nav className="-mb-px flex gap-0.5 overflow-x-auto">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setSearchParams(tab.id === 'overview' ? {} : { tab: tab.id });
+                  }}
+                  className={`flex items-center gap-1.5 py-2 px-3 border-b-2 font-medium text-xs whitespace-nowrap transition-colors ${
+                    activeTab === tab.id
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-slate-600'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
         </div>
 
-        {/* Contenido del tab activo */}
-        <div className="tab-content">
+        {/* TAB CONTENT */}
+        <div>
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'trends' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Tendencias (Google Trends)</h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Tendencias (Google Trends)</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                   Inicio del ciclo: selecciona una tendencia para buscar oportunidades de negocio con esa palabra.
                 </p>
                 <div className="mt-3">
@@ -1526,7 +1035,7 @@ export default function Dashboard() {
               {trendsLoading ? (
                 <LoadingSpinner text="Cargando tendencias..." />
               ) : trendingKeywords.length === 0 ? (
-                <div className="p-12 text-center text-gray-500 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="p-12 text-center text-gray-500 bg-gray-50 dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700">
                   <TrendingUp className="h-12 w-12 mx-auto mb-4 text-gray-400" />
                   <p>No hay tendencias cargadas</p>
                   <p className="text-sm mt-2">Las tendencias se obtienen del backend (SerpAPI / Google Trends)</p>
@@ -1545,18 +1054,18 @@ export default function Dashboard() {
                         navigate(`/opportunities?${params.toString()}`);
                         toast.success(`Buscando oportunidades para "${kw.keyword}"...`);
                       }}
-                      className="p-4 bg-white border rounded-lg shadow-sm hover:shadow-md hover:border-primary-500 transition text-left w-full group"
+                      className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 transition text-left w-full group"
                     >
-                      <div className="font-medium text-gray-900 group-hover:text-primary-600">{kw.keyword}</div>
+                      <div className="font-medium text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">{kw.keyword}</div>
                       <div className="flex gap-2 mt-2 text-xs flex-wrap">
                         {kw.trend && <span className={`px-2 py-0.5 rounded ${
-                          kw.trend === 'rising' ? 'bg-green-100 text-green-800' :
-                          kw.trend === 'declining' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'
+                          kw.trend === 'rising' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' :
+                          kw.trend === 'declining' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300'
                         }`}>{kw.trend}</span>}
-                        {kw.priority && <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded">{kw.priority}</span>}
-                        {kw.searchVolume != null && <span className="text-gray-500">Vol: {kw.searchVolume}</span>}
+                        {kw.priority && <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded">{kw.priority}</span>}
+                        {kw.searchVolume != null && <span className="text-gray-500 dark:text-slate-400">Vol: {kw.searchVolume}</span>}
                       </div>
-                      <div className="mt-2 text-xs text-primary-600 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
                         <Search className="w-3 h-3" /> Buscar oportunidades
                       </div>
                     </button>
@@ -1569,15 +1078,23 @@ export default function Dashboard() {
           {activeTab === 'opportunities' && <AIOpportunityFinder />}
           {activeTab === 'suggestions' && <AISuggestionsPanel />}
           {activeTab === 'automation' && (
-            <div className="text-center py-12">
-              <Settings className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Panel de Automatización</h3>
-              <p className="text-gray-600">
-                Configuración avanzada de reglas y automatizaciones del sistema
-              </p>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8">
+              <div className="max-w-sm mx-auto text-center">
+                <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
+                  <Settings className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+                </div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Automatización</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Reglas de automatización y configuración avanzada del sistema. Disponible próximamente.
+                </p>
+                <Link to="/autopilot" className="inline-flex items-center gap-1 mt-4 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
+                  Ir a Autopilot <ChevronRight className="w-3 h-3" />
+                </Link>
+              </div>
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

@@ -45,7 +45,7 @@ export default function Diagnostics() {
       newResults.push({
         name: 'Health Check (/health)',
         status: 'success',
-        message: `Status: ${healthData?.status || 'ok'}`,
+        message: `Estado: ${healthData?.status || 'ok'}`,
         data: healthData,
       });
     } catch (error: any) {
@@ -88,7 +88,7 @@ export default function Diagnostics() {
         name: 'Version Info (/version)',
         status: versionResponse.ok ? 'success' : 'error',
         message: versionResponse.ok 
-          ? `Environment: ${versionData.env || 'unknown'}` 
+          ? `Entorno: ${versionData.env || 'desconocido'}` 
           : `Error: ${versionResponse.status}`,
         data: versionData,
       });
@@ -110,7 +110,7 @@ export default function Diagnostics() {
         name: 'Config Info (/config)',
         status: configResponse.ok ? 'success' : 'error',
         message: configResponse.ok 
-          ? `CORS Origins: ${configData.corsOriginCount || 0}` 
+          ? `Orígenes CORS: ${configData.corsOriginCount || 0}` 
           : `Error: ${configResponse.status}`,
         data: configData,
       });
@@ -129,7 +129,7 @@ export default function Diagnostics() {
       newResults.push({
         name: 'Connectivity (/api/connectivity)',
         status: connResponse.status === 200 && connData?.ok ? 'success' : 'error',
-        message: connData?.ok ? 'Backend API reachable' : `Unexpected: ${connResponse.status}`,
+        message: connData?.ok ? 'API del backend alcanzable' : `Inesperado: ${connResponse.status}`,
         data: connData,
       });
     } catch (error: any) {
@@ -146,7 +146,7 @@ export default function Diagnostics() {
       newResults.push({
         name: 'Auth Endpoint (/api/auth-status)',
         status: status === 200 || status === 401 ? 'success' : 'error',
-        message: status === 200 ? 'Authenticated' : status === 401 ? 'Unauthenticated (endpoint OK)' : `Status: ${status}`,
+        message: status === 200 ? 'Autenticado' : status === 401 ? 'No autenticado (endpoint OK)' : `Estado: ${status}`,
       });
     } catch (error: any) {
       newResults.push({
@@ -162,7 +162,7 @@ export default function Diagnostics() {
       newResults.push({
         name: 'Analytics (/api/analytics/listings)',
         status: status === 200 || status === 401 ? 'success' : 'error',
-        message: status === 200 ? 'OK' : status === 401 ? 'Auth required (endpoint OK)' : `Status: ${status}`,
+        message: status === 200 ? 'OK' : status === 401 ? 'Requiere auth (endpoint OK)' : `Estado: ${status}`,
       });
     } catch (error: any) {
       newResults.push({
@@ -178,7 +178,7 @@ export default function Diagnostics() {
       newResults.push({
         name: 'Product Research (/api/opportunities/research)',
         status: status === 200 || status === 401 ? 'success' : 'error',
-        message: status === 200 ? 'OK' : status === 401 ? 'Auth required (endpoint OK)' : `Status: ${status}`,
+        message: status === 200 ? 'OK' : status === 401 ? 'Requiere auth (endpoint OK)' : `Estado: ${status}`,
       });
     } catch (error: any) {
       newResults.push({
@@ -234,27 +234,27 @@ export default function Diagnostics() {
       case 'loading':
         return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
       default:
-        return <AlertCircle className="w-5 h-5 text-gray-500" />;
+        return <AlertCircle className="w-5 h-5 text-slate-500" />;
     }
   };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Diagnóstico del Sistema</h1>
-        <p className="text-gray-600 dark:text-gray-400">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">Diagnóstico del sistema</h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Verifica la configuración y conectividad con el backend
         </p>
       </div>
 
       <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="text-sm text-slate-600 dark:text-slate-400">
           {lastUpdate && `Última actualización: ${lastUpdate.toLocaleTimeString()}`}
         </div>
         <button
           onClick={runDiagnostics}
           disabled={isLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           Actualizar
@@ -265,19 +265,19 @@ export default function Diagnostics() {
         {results.map((result, index) => (
           <div
             key={index}
-            className="bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700"
+            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4"
           >
             <div className="flex items-start gap-3">
               {getStatusIcon(result.status)}
               <div className="flex-1">
-                <h3 className="font-semibold text-lg mb-1">{result.name}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{result.message}</p>
+                <h3 className="font-semibold text-lg mb-1 text-slate-900 dark:text-slate-100">{result.name}</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">{result.message}</p>
                 {result.data && (
                   <details className="mt-2">
                     <summary className="text-sm text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
                       Ver detalles
                     </summary>
-                    <pre className="mt-2 p-3 bg-gray-100 dark:bg-gray-900 rounded text-xs overflow-auto">
+                    <pre className="mt-2 p-3 bg-slate-100 dark:bg-slate-900 rounded text-xs overflow-auto text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800">
                       {JSON.stringify(result.data, null, 2)}
                     </pre>
                   </details>
@@ -290,21 +290,20 @@ export default function Diagnostics() {
         {isLoading && results.length === 0 && (
           <div className="text-center py-8">
             <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500 mb-2" />
-            <p className="text-gray-600 dark:text-gray-400">Ejecutando diagnósticos...</p>
+            <p className="text-slate-600 dark:text-slate-400">Ejecutando diagnósticos...</p>
           </div>
         )}
       </div>
 
-      <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-        <h3 className="font-semibold mb-2">Información de Configuración</h3>
-        <div className="text-sm space-y-1">
-          <p><strong>API Base URL:</strong> {diagnosticsInfo.apiBaseUrl}</p>
-          <p><strong>Window Origin:</strong> {diagnosticsInfo.windowOrigin}</p>
-          <p><strong>Environment:</strong> {diagnosticsInfo.isProduction ? 'Production' : 'Development'}</p>
-          <p><strong>Log Level:</strong> {diagnosticsInfo.logLevel}</p>
+      <div className="mt-8 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-blue-50 dark:bg-blue-900/20 shadow-card">
+        <h3 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">Información de configuración</h3>
+        <div className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+          <p><strong>URL base de la API:</strong> {diagnosticsInfo.apiBaseUrl}</p>
+          <p><strong>Origen de la ventana:</strong> {diagnosticsInfo.windowOrigin}</p>
+          <p><strong>Entorno:</strong> {diagnosticsInfo.isProduction ? 'Producción' : 'Desarrollo'}</p>
+          <p><strong>Nivel de log:</strong> {diagnosticsInfo.logLevel}</p>
         </div>
       </div>
     </div>
   );
 }
-

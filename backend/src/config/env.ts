@@ -402,6 +402,24 @@ const envSchema = z.object({
 
   /** P89: when true, web/API publish to Mercado Libre is blocked if WEBHOOK_SECRET_MERCADOLIBRE is unset (post-sale honesty). */
   ML_WEB_PUBLISH_REQUIRE_ML_WEBHOOK_SECRET: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+
+  /**
+   * Phase 1: ML webhook must enqueue to Redis/BullMQ after DB persist.
+   * Unset = auto: required when NODE_ENV=production and SAFE_BOOT=false. Set false for local dev without Redis.
+   */
+  ML_WEBHOOK_REQUIRE_ASYNC_QUEUE: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((val) => (val === undefined ? undefined : val === 'true')),
+
+  /**
+   * Phase 1: Mercado Libre publish via approve cannot fall back to synchronous publish when queue is missing.
+   * Unset = auto: required when NODE_ENV=production and SAFE_BOOT=false.
+   */
+  ML_PUBLISH_REQUIRE_REDIS_QUEUE: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((val) => (val === undefined ? undefined : val === 'true')),
 });
 
 // Asegurar que DATABASE_URL esté en process.env

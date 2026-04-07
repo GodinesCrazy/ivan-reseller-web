@@ -1,0 +1,137 @@
+{
+  "capturedAt": "2026-03-20T02:01:55.7265691-03:00",
+  "backendUrl": "https://ivan-reseller-backend-production.up.railway.app",
+  "inventorySummary": {
+    "products": {
+      "total": 32649,
+      "pending": 772,
+      "approved": 31704,
+      "published": 171
+    },
+    "listingsByMarketplace": {
+      "ebay": 0,
+      "mercadolibre": 0,
+      "amazon": 0
+    },
+    "listingsTotal": 0,
+    "listingsSource": "api",
+    "lastSyncAt": "2026-03-20T05:01:54.656Z",
+    "mercadolibreActiveCount": 0,
+    "ordersByStatus": {
+      "CREATED": 0,
+      "PAID": 0,
+      "PURCHASING": 2,
+      "PURCHASED": 5,
+      "FAILED": 44
+    },
+    "pendingPurchasesCount": 0,
+    "salesDeliveredCount": 1
+  },
+  "setupStatus": {
+    "success": true,
+    "setupRequired": false,
+    "configuredCount": 12,
+    "totalCount": 20,
+    "hasMarketplace": true,
+    "hasSearchAPI": true,
+    "webhookStatus": {
+      "ebay": {
+        "configured": false
+      },
+      "mercadolibre": {
+        "configured": false
+      },
+      "amazon": {
+        "configured": false
+      }
+    },
+    "missingRequirements": {
+      "marketplace": false,
+      "searchAPI": false
+    },
+    "configuredAPIs": [
+      {
+        "apiName": "ebay",
+        "name": "eBay Trading API",
+        "isAvailable": false
+      },
+      {
+        "apiName": "ebay",
+        "name": "eBay Trading API",
+        "isAvailable": false
+      },
+      {
+        "apiName": "mercadolibre",
+        "name": "MercadoLibre API",
+        "isAvailable": true
+      },
+      {
+        "apiName": "mercadolibre",
+        "name": "MercadoLibre API",
+        "isAvailable": false
+      },
+      {
+        "apiName": "groq",
+        "name": "GROQ AI API",
+        "isAvailable": true
+      },
+      {
+        "apiName": "scraperapi",
+        "name": "ScraperAPI",
+        "isAvailable": true
+      },
+      {
+        "apiName": "zenrows",
+        "name": "ZenRows",
+        "isAvailable": true
+      },
+      {
+        "apiName": "paypal",
+        "name": "PayPal Payouts API",
+        "isAvailable": true
+      },
+      {
+        "apiName": "paypal",
+        "name": "PayPal Payouts API",
+        "isAvailable": true
+      },
+      {
+        "apiName": "aliexpress-affiliate",
+        "name": "AliExpress Affiliate API",
+        "isAvailable": true
+      },
+      {
+        "apiName": "aliexpress-affiliate",
+        "name": "AliExpress Affiliate API",
+        "isAvailable": true
+      },
+      {
+        "apiName": "aliexpress-dropshipping",
+        "name": "AliExpress Dropshipping API",
+        "isAvailable": true
+      }
+    ],
+    "message": "Setup completo"
+  },
+  "realProfit": {
+    "success": true,
+    "type": "summary",
+    "data": {
+      "moneyIn": 0,
+      "moneyOut": {
+        "supplierCost": 0,
+        "shipping": 0,
+        "marketplaceFees": 0,
+        "paymentFees": 0,
+        "total": 0
+      },
+      "totalProfit": 0,
+      "orderCount": 0,
+      "profitPerOrder": 0,
+      "roiPercent": 0,
+      "currency": "USD",
+      "periodDays": 30,
+      "environment": "production"
+    }
+  }
+}

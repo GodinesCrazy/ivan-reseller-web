@@ -10,6 +10,16 @@ import { decrypt } from '../../utils/encryption';
 import { getWebhookStatusWithProof, getWebhookStatus } from '../../services/webhook-readiness.service';
 import { recordWebhookEventProof } from '../../services/webhook-event-proof.service';
 import {
+  computeMercadoLibreWebhookIdempotencyKey,
+  persistMercadoLibreWebhookLedger,
+  markMercadoLibreWebhookQueued,
+  markMercadoLibreWebhookFailed,
+  markMercadoLibreWebhookProcessed,
+  processMercadoLibreWebhookPayload,
+} from '../../services/mercadolibre-webhook-async.service';
+import { jobService } from '../../services/job.service';
+import { mercadoLibreWebhookRequiresBullmq } from '../../utils/ml-operational-guards';
+import {
   buildEbayChallengeResponse,
   resolveEbayWebhookEndpoint,
   resolveEbayWebhookVerificationToken,
@@ -277,84 +287,47 @@ router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), as
       });
     });
 
-    let listingId = body.listingId || body.resourceId || body?.order?.order_items?.[0]?.item?.id || body?.order_items?.[0]?.item?.id;
-    let amount = Number(body.amount || body.total_amount || body?.order?.total_amount || body?.order_items?.[0]?.unit_price);
-    let orderId = String(body.id || body.order_id || body.resource || body?.data?.id || '');
-    let receiverAddress = body?.shipping?.receiver_address || body?.order?.shipping?.receiver_address;
-    let buyer = body?.buyer?.nickname || body?.buyer?.first_name || body?.buyer?.last_name || body?.buyer?.email;
-    let buyerEmail = body?.buyer?.email || (body?.buyer?.nickname && body.buyer.nickname.includes('@') ? body.buyer.nickname : null);
+    const idempotencyKey = computeMercadoLibreWebhookIdempotencyKey(body as Record<string, unknown>);
+    const { eventId, alreadyHandled } = await persistMercadoLibreWebhookLedger({
+      idempotencyKey,
+      payload: body as Record<string, any>,
+      correlationId,
+    });
 
-    // orders_v2 format: body.data.id = order ID, body.user_id = ML seller id. Fetch full order via API.
-    if (body?.data?.id && !body?.order) {
-      const mlOrderId = String(body.data.id);
-      const mlSellerId = body.user_id;
-      const credResult = await findMercadoLibreCredentialsBySellerId(mlSellerId);
-      if (!credResult) {
-        logger.warn('[WEBHOOK_MERCADOLIBRE] No credentials for seller', { correlationId, mlSellerId });
-        return res.status(200).json({ success: true });
-      }
-      const { creds, userId: credUserId, environment } = credResult;
-      const mlService = new MercadoLibreService(creds as any);
-      let orderData: {
-        order_items?: Array<{ item?: { id?: string }; unit_price?: number }>;
-        total_amount?: number;
-        shipping?: { receiver_address?: any };
-        buyer?: { nickname?: string; email?: string };
-      };
-      try {
-        orderData = await mlService.getOrder(mlOrderId);
-      } catch (err: any) {
-        const is401 = err?.statusCode === 401 || err?.response?.status === 401;
-        if (is401 && creds?.refreshToken) {
-          try {
-            const refreshed = await mlService.refreshAccessToken();
-            const updatedCreds = { ...creds, accessToken: refreshed.accessToken };
-            await CredentialsManager.saveCredentials(credUserId, 'mercadolibre', updatedCreds, environment);
-            clearCredentialsCache(credUserId, 'mercadolibre', environment);
-            const retryService = new MercadoLibreService(updatedCreds as any);
-            orderData = await retryService.getOrder(mlOrderId);
-          } catch (refreshErr: any) {
-            logger.error('[WEBHOOK_MERCADOLIBRE] Token refresh failed', {
-              correlationId,
-              error: (refreshErr as Error)?.message,
-            });
-            throw err;
-          }
-        } else {
-          throw err;
-        }
-      }
-      listingId = orderData?.order_items?.[0]?.item?.id ?? null;
-      amount = Number(orderData?.total_amount ?? 0) || Number(orderData?.order_items?.[0]?.unit_price ?? 0);
-      orderId = mlOrderId;
-      receiverAddress = orderData?.shipping?.receiver_address;
-      buyer = orderData?.buyer?.nickname || orderData?.buyer?.email;
-      buyerEmail = orderData?.buyer?.email ?? null;
+    if (alreadyHandled) {
+      return res.status(200).json({ ok: true, duplicate: true, eventId });
     }
 
-    const shippingAddress = receiverAddress ? {
-      addressLine1: receiverAddress.address_line || receiverAddress.street_name || '',
-      city: receiverAddress.city?.name || receiverAddress.city || '',
-      state: receiverAddress.state?.name || receiverAddress.state || '',
-      zipCode: receiverAddress.zip_code || receiverAddress.postal_code || '',
-      country: receiverAddress.country?.name || receiverAddress.country || '',
-    } : null;
+    const requiresQueue = mercadoLibreWebhookRequiresBullmq();
+    if (requiresQueue) {
+      const job = await jobService.addMlWebhookJob({ eventId, correlationId });
+      if (!job) {
+        await markMercadoLibreWebhookFailed(eventId, 'queue unavailable: Redis/BullMQ not ready');
+        return res.status(503).json({ ok: false, error: 'queue_unavailable', eventId });
+      }
 
-    if (!listingId) return res.status(400).json({ success: false, error: 'listingId missing' });
-    await recordWebhookEventProof({
-      marketplace: 'mercadolibre',
-      eventType: String(body?.topic || body?.resource || 'mercadolibre_event'),
-      orderReference: orderId || null,
-      verified: signatureVerified,
+      const jobId = String(job.id ?? '');
+      await markMercadoLibreWebhookQueued(eventId, jobId);
+      return res.status(200).json({ ok: true, enqueued: true, eventId, jobId });
+    }
+
+    const result = await processMercadoLibreWebhookPayload(body as Record<string, any>, correlationId);
+    if (!result.ok) {
+      await markMercadoLibreWebhookFailed(eventId, result.reason || 'sync_processing_failed');
+      return res.status(500).json({ ok: false, error: 'sync_processing_failed', eventId });
+    }
+
+    await markMercadoLibreWebhookProcessed(eventId);
+    return res.status(200).json({
+      ok: true,
+      processedSync: true,
+      eventId,
+      skipped: result.skipped === true,
+      reason: result.reason || null,
     });
-    await recordSaleFromWebhook(
-      { marketplace: 'mercadolibre', listingId, amount, orderId: orderId || undefined, buyer, buyerEmail, shippingAddress },
-      correlationId
-    );
-    res.status(200).json({ success: true });
   } catch (e: any) {
     logger.error('[WEBHOOK_MERCADOLIBRE] Error', { correlationId, error: (e as Error)?.message });
-    res.status(200).json({ success: true });
+    return res.status(500).json({ ok: false, error: 'ingest_failed' });
   }
 });
 

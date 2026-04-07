@@ -122,16 +122,16 @@ export default function MeetingRoom() {
   // Si hay una reunión activa, mostrar el iframe de Jitsi
   if (meetingInfo && meetingInfo.status === 'ACTIVE') {
     return (
-      <div className="flex flex-col h-[calc(100vh-73px)] bg-gray-900">
+      <div className="flex flex-col h-[calc(100vh-73px)] bg-slate-900">
         {/* Header de la reunión */}
-        <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between border-b border-gray-700">
+        <div className="bg-slate-800 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
               <span className="font-semibold">Reunión en curso</span>
             </div>
             {meetingInfo.startedAt && (
-              <div className="flex items-center gap-2 text-sm text-gray-300">
+              <div className="flex items-center gap-2 text-sm text-slate-300">
                 <Clock className="w-4 h-4" />
                 <span>
                   {formatDuration(
@@ -167,16 +167,16 @@ export default function MeetingRoom() {
   // Si hay una reunión en espera
   if (meetingInfo && meetingInfo.status === 'WAITING') {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-73px)] bg-gray-50 dark:bg-gray-900 p-6">
-        <div className="max-w-2xl w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
+      <div className="flex items-center justify-center min-h-[calc(100vh-73px)] bg-slate-50 dark:bg-slate-900 p-6">
+        <div className="max-w-2xl w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-8 text-center">
           <div className="mb-6">
             <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
               <Clock className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-pulse" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
               {isAdmin ? 'Esperando usuario...' : 'Esperando administrador...'}
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-slate-600 dark:text-slate-400">
               {isAdmin
                 ? 'La sala está lista. Un usuario se unirá pronto.'
                 : 'Tu solicitud de reunión ha sido enviada. El administrador se unirá en breve.'}
@@ -184,9 +184,9 @@ export default function MeetingRoom() {
           </div>
 
           <div className="space-y-4">
-            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">ID de la sala:</p>
-              <p className="font-mono text-sm text-gray-900 dark:text-white">{meetingInfo.roomId}</p>
+            <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">ID de la sala:</p>
+              <p className="font-mono text-sm text-slate-900 dark:text-white">{meetingInfo.roomId}</p>
             </div>
 
             <div className="flex gap-4 justify-center">
@@ -205,7 +205,7 @@ export default function MeetingRoom() {
                   setMeetingInfo(null);
                   checkAvailability();
                 }}
-                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
+                className="px-6 py-3 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-900 dark:text-white rounded-lg transition-colors"
               >
                 Cancelar
               </button>
@@ -222,23 +222,23 @@ export default function MeetingRoom() {
       <div className="flex items-center justify-center min-h-[calc(100vh-73px)]">
         <div className="text-center">
           <Loader2 className="w-8 h-8 mx-auto mb-4 text-primary-600 animate-spin" />
-          <p className="text-gray-600 dark:text-gray-400">Verificando disponibilidad...</p>
+          <p className="text-slate-600 dark:text-slate-400">Verificando disponibilidad...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-73px)] bg-gray-50 dark:bg-gray-900 p-6">
-      <div className="max-w-2xl w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
+    <div className="flex items-center justify-center min-h-[calc(100vh-73px)] bg-slate-50 dark:bg-slate-900 p-6">
+      <div className="max-w-2xl w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-8">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center mx-auto mb-4">
             <Video className="w-8 h-8 text-primary-600 dark:text-primary-400" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
             Sala de Reuniones
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-slate-600 dark:text-slate-400">
             {isAdmin
               ? 'Inicia una reunión o únete a una sala en espera'
               : 'Conéctate con el administrador para soporte en tiempo real'}
@@ -283,24 +283,24 @@ export default function MeetingRoom() {
 
         {/* Funcionalidades */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+          <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 text-center">
             <Video className="w-8 h-8 mx-auto mb-2 text-primary-600 dark:text-primary-400" />
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Videollamada</h3>
-            <p className="text-xs text-gray-600 dark:text-gray-400">
+            <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Videollamada</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Comunicación cara a cara en tiempo real
             </p>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+          <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 text-center">
             <Monitor className="w-8 h-8 mx-auto mb-2 text-primary-600 dark:text-primary-400" />
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Compartir pantalla</h3>
-            <p className="text-xs text-gray-600 dark:text-gray-400">
+            <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Compartir pantalla</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Muestra tu pantalla al administrador
             </p>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+          <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 text-center">
             <MessageSquare className="w-8 h-8 mx-auto mb-2 text-primary-600 dark:text-primary-400" />
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Chat</h3>
-            <p className="text-xs text-gray-600 dark:text-gray-400">
+            <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Chat</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Mensajes de texto en tiempo real
             </p>
           </div>
@@ -314,7 +314,7 @@ export default function MeetingRoom() {
             className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 ${
               availability?.available || isAdmin
                 ? 'bg-primary-600 hover:bg-primary-700 text-white'
-                : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                : 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed'
             }`}
           >
             {joining ? (
@@ -331,15 +331,15 @@ export default function MeetingRoom() {
           </button>
           <button
             onClick={checkAvailability}
-            className="px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
+            className="px-6 py-3 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-900 dark:text-white rounded-lg transition-colors"
           >
             Actualizar
           </button>
         </div>
 
         {/* Información adicional */}
-        <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-          <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+        <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
             Las reuniones están encriptadas de extremo a extremo. Solo usuarios autenticados pueden acceder.
           </p>
         </div>

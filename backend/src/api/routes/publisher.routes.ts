@@ -10,7 +10,8 @@ import { isRedisAvailable } from '../../config/redis';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
 import { getEffectiveShippingCost } from '../../utils/shipping.utils';
-import { jobService } from '../../services/job.service';
+import { jobService, publishingQueue } from '../../services/job.service';
+import { mercadoLibrePublishRequiresRedisQueue } from '../../utils/ml-operational-guards';
 import costCalculator from '../../services/cost-calculator.service';
 import {
   autoGenerateSimpleProcessedPack,
@@ -918,6 +919,27 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const { marketplaces = [], customData, environment } = req.body || {};
+    const requestedPublishMode =
+      String(req.body?.publishMode || customData?.publishMode || '').toLowerCase() === 'international'
+        ? 'international'
+        : 'local';
+    const requestedPublishIntentRaw = String(
+      req.body?.publishIntent || customData?.publishIntent || ''
+    ).toLowerCase();
+    const requestedPublishIntent =
+      requestedPublishIntentRaw === 'dry_run' ||
+      requestedPublishIntentRaw === 'pilot' ||
+      requestedPublishIntentRaw === 'production'
+        ? requestedPublishIntentRaw
+        : 'production';
+    const pilotManualAck =
+      req.body?.pilotManualAck === true || customData?.pilotManualAck === true;
+    const customDataWithMode = {
+      ...(customData || {}),
+      publishMode: requestedPublishMode,
+      publishIntent: requestedPublishIntent,
+      pilotManualAck,
+    };
     const userId = req.user!.userId;
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
@@ -1005,7 +1027,77 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
         });
       }
     }
-    
+
+    const includesMercadoLibre = Array.isArray(marketplaces) && marketplaces.some((m) => m === 'mercadolibre');
+    let mercadolibrePreflight:
+      | {
+          publishIntent?: string;
+          requestedMode?: string;
+          modeResolved?: string;
+          channelCapability?: string;
+          overallState?: string;
+          blockers?: string[];
+          warnings?: string[];
+          pilotReadiness?: { evidence?: { approvalId?: string | null } };
+          programVerification?: Record<string, unknown>;
+        }
+      | null = null;
+
+    if (includesMercadoLibre) {
+      const { buildMercadoLibrePublishPreflight } = await import('../../services/mercadolibre-publish-preflight.service');
+      const preflightEnvironment =
+        (resolvedMarketplaceEnvironments['mercadolibre'] as 'sandbox' | 'production' | undefined) ||
+        requestedEnvironment;
+      const pre = await buildMercadoLibrePublishPreflight({
+        userId: product.userId,
+        productId: product.id,
+        isAdmin,
+        environment: preflightEnvironment,
+        requestedMode: requestedPublishMode,
+        publishIntent: requestedPublishIntent,
+        pilotManualAck,
+      });
+      mercadolibrePreflight = pre as any;
+      if (requestedPublishIntent === 'dry_run') {
+        return res.status(200).json({
+          success: true,
+          dryRun: true,
+          message: 'Dry-run completed. No publication was executed.',
+          preflight: pre,
+        });
+      }
+      if (!pre.publishAllowed) {
+        logger.warn('[PUBLISHER] MercadoLibre preflight blocked approve/publication', {
+          productId: id,
+          userId: req.user!.userId,
+          overallState: pre.overallState,
+          blockers: pre.blockers,
+        });
+        return res.status(400).json({
+          success: false,
+          error: 'mercadolibre_preflight_blocked',
+          message: pre.nextAction,
+          overallState: pre.overallState,
+          publishIntent: pre.publishIntent,
+          requestedMode: pre.requestedMode,
+          modeResolved: pre.modeResolved,
+          channelCapability: pre.channelCapability,
+          blockers: pre.blockers,
+        });
+      }
+    }
+
+    if (includesMercadoLibre && !publishingQueue) {
+      const queueRequired = mercadoLibrePublishRequiresRedisQueue();
+      return res.status(503).json({
+        success: false,
+        error: 'publishing_queue_unavailable',
+        queueRequired,
+        message:
+          'Mercado Libre approve/publish requires Redis/BullMQ queue ingestion in this phase. Configure REDIS_URL and workers; synchronous fallback is disabled for ML safety.',
+      });
+    }
+
     await productService.updateProductStatus(id, 'APPROVED', req.user!.userId);
 
     // ✅ Delegar publicación al job (mismo flujo que Queue Publishing Jobs) para evitar timeouts HTTP
@@ -1014,9 +1106,44 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
         userId: product.userId,
         productId: product.id,
         marketplaces,
-        customData,
+        customData: customDataWithMode,
       });
       if (job && job.id) {
+        if (
+          includesMercadoLibre &&
+          mercadolibrePreflight?.publishIntent === 'pilot' &&
+          mercadolibrePreflight?.requestedMode === 'international'
+        ) {
+          try {
+            const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+            await mlPilotOpsService.appendPilotDecisionLedger({
+              userId: product.userId,
+              productId: product.id,
+              marketplace: 'mercadolibre',
+              publishIntent: 'pilot',
+              requestedMode: 'international',
+              modeResolved:
+                mercadolibrePreflight?.modeResolved === 'international' ? 'international' : 'local',
+              result: 'enqueued',
+              approvalId: mercadolibrePreflight?.pilotReadiness?.evidence?.approvalId || null,
+              blockers: mercadolibrePreflight?.blockers || [],
+              warnings: mercadolibrePreflight?.warnings || [],
+              programVerificationSnapshot: mercadolibrePreflight?.programVerification || null,
+              pilotReadinessSnapshot: mercadolibrePreflight?.pilotReadiness || null,
+              evidenceSnapshot: {
+                jobId: String(job.id),
+                overallState: mercadolibrePreflight?.overallState || null,
+              },
+              reason: 'pilot_publish_job_enqueued',
+            });
+          } catch (ledgerError) {
+            logger.warn('[PUBLISHER] Could not append pilot enqueue ledger', {
+              productId: id,
+              userId: req.user!.userId,
+              error: ledgerError instanceof Error ? ledgerError.message : String(ledgerError),
+            });
+          }
+        }
         logger.info('[PUBLISHER] Publishing job queued', { productId: id, jobId: job.id, marketplaces });
         return res.json({
           success: true,
@@ -1025,7 +1152,19 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
           jobId: job.id,
         });
       }
-      // Redis unavailable: fallback to synchronous publish
+      if (includesMercadoLibre) {
+        logger.error('[PUBLISHER] Publishing queue required for Mercado Libre but job was not enqueued', {
+          productId: id,
+        });
+        return res.status(503).json({
+          success: false,
+          error: 'publishing_queue_unavailable',
+          queueRequired: mercadoLibrePublishRequiresRedisQueue(),
+          message:
+            'Could not enqueue Mercado Libre publish job. Check Redis/BullMQ; synchronous fallback is disabled for ML safety.',
+        });
+      }
+      // Redis unavailable: fallback to synchronous publish only for non-ML marketplaces
       logger.warn('[PUBLISHER] Job queue unavailable, falling back to sync publish', { productId: id });
     }
 
@@ -1042,7 +1181,7 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
           {
             productId: product.id,
             marketplace: typedMarketplace,
-            customData
+            customData: customDataWithMode
           },
           environmentForMarketplace
         );

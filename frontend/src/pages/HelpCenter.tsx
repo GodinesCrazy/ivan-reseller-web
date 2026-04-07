@@ -54,16 +54,16 @@ export default function HelpCenter() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-8 mb-8 text-white">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center justify-center">
+            <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center">
               <BookOpen className="w-8 h-8 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-4xl font-bold mb-2">Centro de Ayuda – Ivan Reseller</h1>
+              <h1 className="text-xl font-semibold mb-2">Centro de Ayuda – Ivan Reseller</h1>
               <p className="text-blue-100 text-lg">
                 Todo lo que necesitas saber sobre Ivan Reseller. Guías, configuración y soporte.
               </p>
@@ -94,9 +94,9 @@ export default function HelpCenter() {
         <div className="grid grid-cols-12 gap-8">
           {/* Sidebar */}
           <div className="col-span-3">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 sticky top-8">
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Navegación</h3>
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 sticky top-8">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100">Navegación</h3>
               </div>
               <nav className="p-2">
                 {sections.map((section) => {
@@ -108,7 +108,7 @@ export default function HelpCenter() {
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors mb-1 ${
                         activeSection === section.id
                           ? 'bg-blue-50 text-blue-700 font-medium'
-                          : 'text-gray-600 hover:bg-gray-50'
+                          : 'text-slate-600 hover:bg-slate-50'
                       }`}
                     >
                       <Icon className="w-5 h-5" />
@@ -122,7 +122,7 @@ export default function HelpCenter() {
 
           {/* Content */}
           <div className="col-span-9">
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm border p-8">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-8">
               {activeSection === 'inicio' && <InicioRapido />}
               {activeSection === 'configuracion' && <Configuracion />}
               {activeSection === 'apis' && <APIsCredenciales />}
@@ -150,8 +150,8 @@ function InicioRapido() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">🚀 Inicio Rápido</h2>
-        <p className="text-gray-600 text-lg">
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">🚀 Inicio Rápido</h2>
+        <p className="text-slate-600 text-lg">
           Comienza a usar Ivan Reseller Web en 5 minutos
         </p>
       </div>
@@ -163,8 +163,8 @@ function InicioRapido() {
             1
           </div>
           <div className="flex-1">
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Acceder al Sistema</h3>
-            <div className="space-y-3 text-gray-700">
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">Acceder al Sistema</h3>
+            <div className="space-y-3 text-slate-700">
               <p>
                 <strong>URL:</strong>{' '}
                 <code className="bg-blue-100 px-2 py-1 rounded">ivanreseller.com/login</code> o{' '}
@@ -185,30 +185,30 @@ function InicioRapido() {
             2
           </div>
           <div className="flex-1">
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Explorar el Dashboard</h3>
-            <p className="text-gray-700 mb-3">
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">Explorar el Dashboard</h3>
+            <p className="text-slate-700 mb-3">
               Una vez dentro, verás el dashboard principal con:
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white p-3 rounded-lg border border-green-200">
+              <div className="bg-white p-3 rounded-xl border border-green-200">
                 <CheckCircle className="w-5 h-5 text-green-600 mb-1" />
                 <div className="font-medium">KPIs en tiempo real</div>
-                <div className="text-sm text-gray-600">Ventas, ganancias, productos</div>
+                <div className="text-sm text-slate-600">Ventas, ganancias, productos</div>
               </div>
-              <div className="bg-white p-3 rounded-lg border border-green-200">
+              <div className="bg-white p-3 rounded-xl border border-green-200">
                 <CheckCircle className="w-5 h-5 text-green-600 mb-1" />
                 <div className="font-medium">Gráficas interactivas</div>
-                <div className="text-sm text-gray-600">Visualiza tu rendimiento</div>
+                <div className="text-sm text-slate-600">Visualiza tu rendimiento</div>
               </div>
-              <div className="bg-white p-3 rounded-lg border border-green-200">
+              <div className="bg-white p-3 rounded-xl border border-green-200">
                 <CheckCircle className="w-5 h-5 text-green-600 mb-1" />
                 <div className="font-medium">Alertas importantes</div>
-                <div className="text-sm text-gray-600">Notificaciones en tiempo real</div>
+                <div className="text-sm text-slate-600">Notificaciones en tiempo real</div>
               </div>
-              <div className="bg-white p-3 rounded-lg border border-green-200">
+              <div className="bg-white p-3 rounded-xl border border-green-200">
                 <CheckCircle className="w-5 h-5 text-green-600 mb-1" />
                 <div className="font-medium">Accesos rápidos</div>
-                <div className="text-sm text-gray-600">A todas las funciones</div>
+                <div className="text-sm text-slate-600">A todas las funciones</div>
               </div>
             </div>
           </div>
@@ -222,11 +222,11 @@ function InicioRapido() {
             3
           </div>
           <div className="flex-1">
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Configurar APIs (Opcional)</h3>
-            <p className="text-gray-700 mb-3">
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">Configurar APIs (Opcional)</h3>
+            <p className="text-slate-700 mb-3">
               Para activar todas las funcionalidades:
             </p>
-            <ol className="space-y-2 text-gray-700">
+            <ol className="space-y-2 text-slate-700">
               <li className="flex items-start gap-2">
                 <ChevronRight className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
                 <span>Ve a <strong>Settings → Configuración de APIs</strong></span>
@@ -246,7 +246,7 @@ function InicioRapido() {
 
       {/* Menú Principal */}
       <div>
-        <h3 className="text-2xl font-bold text-gray-900 mb-4">📍 Menú de Navegación</h3>
+        <h3 className="text-2xl font-bold text-slate-900 mb-4">📍 Menú de Navegación</h3>
         <div className="grid grid-cols-2 gap-4">
           {[
             { icon: TrendingUp, title: 'Opportunities', desc: 'Productos rentables con IA' },
@@ -256,12 +256,12 @@ function InicioRapido() {
             { icon: Users, title: 'Users', desc: 'Gestión de usuarios' },
             { icon: Settings, title: 'Settings', desc: 'Configuración general' }
           ].map((item, idx) => (
-            <div key={idx} className="bg-gray-50 border rounded-lg p-4 hover:bg-gray-100 transition-colors">
+            <div key={idx} className="bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:bg-slate-100 transition-colors">
               <div className="flex items-center gap-3">
                 <item.icon className="w-6 h-6 text-blue-600" />
                 <div>
-                  <div className="font-semibold text-gray-900">{item.title}</div>
-                  <div className="text-sm text-gray-600">{item.desc}</div>
+                  <div className="font-semibold text-slate-900">{item.title}</div>
+                  <div className="text-sm text-slate-600">{item.desc}</div>
                 </div>
               </div>
             </div>
@@ -274,8 +274,8 @@ function InicioRapido() {
         <div className="flex items-start gap-3">
           <Info className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div>
-            <h4 className="font-semibold text-gray-900 mb-2">💡 Tips Rápidos</h4>
-            <ul className="space-y-1 text-gray-700">
+            <h4 className="font-semibold text-slate-900 mb-2">💡 Tips Rápidos</h4>
+            <ul className="space-y-1 text-slate-700">
               <li>• El sistema funciona parcialmente sin APIs configuradas (funcionalidad básica)</li>
               <li>• Para usar IA: Solo necesitas GROQ API Key (gratis, sin tarjeta de crédito)</li>
               <li>• Para vender: Configura eBay, Amazon o MercadoLibre (OAuth 2.0)</li>
@@ -300,16 +300,16 @@ function Configuracion() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">⚙️ Configuración del Sistema</h2>
-        <p className="text-gray-600 text-lg">
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">⚙️ Configuración del Sistema</h2>
+        <p className="text-slate-600 text-lg">
           Personaliza Ivan Reseller Web según tus necesidades
         </p>
       </div>
 
       {/* Settings Hub */}
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 border rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">🎯 Hub de Configuración</h3>
-        <p className="text-gray-700 mb-4">
+        <h3 className="text-xl font-semibold text-slate-900 mb-4">🎯 Hub de Configuración</h3>
+        <p className="text-slate-700 mb-4">
           Accede a <strong>Settings</strong> desde el menú lateral para ver todas las opciones:
         </p>
         <div className="grid grid-cols-2 gap-4">
@@ -323,9 +323,9 @@ function Configuracion() {
             { title: 'Perfil de Usuario', desc: 'Información personal' },
             { title: 'Permisos y Roles', desc: 'Control de acceso' }
           ].map((item, idx) => (
-            <div key={idx} className="bg-white border rounded-lg p-4">
-              <div className="font-semibold text-gray-900 mb-1">{item.title}</div>
-              <div className="text-sm text-gray-600">{item.desc}</div>
+            <div key={idx} className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+              <div className="font-semibold text-slate-900 mb-1">{item.title}</div>
+              <div className="text-sm text-slate-600">{item.desc}</div>
             </div>
           ))}
         </div>
@@ -333,50 +333,50 @@ function Configuracion() {
 
       {/* Configuración Inicial */}
       <div>
-        <h3 className="text-2xl font-bold text-gray-900 mb-4">🚀 Configuración Inicial Recomendada</h3>
+        <h3 className="text-2xl font-bold text-slate-900 mb-4">🚀 Configuración Inicial Recomendada</h3>
         <div className="space-y-4">
-          <div className="bg-white border border-green-200 rounded-lg p-5">
+          <div className="bg-white border border-green-200 rounded-xl p-5">
             <div className="flex items-start gap-3">
               <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
               <div>
-                <div className="font-semibold text-gray-900 mb-2">1. Cambiar contraseña por defecto</div>
-                <p className="text-gray-600 text-sm">
+                <div className="font-semibold text-slate-900 mb-2">1. Cambiar contraseña por defecto</div>
+                <p className="text-slate-600 text-sm">
                   Ve a Settings → Perfil de Usuario y cambia tu contraseña
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white border border-blue-200 rounded-lg p-5">
+          <div className="bg-white border border-blue-200 rounded-xl p-5">
             <div className="flex items-start gap-3">
               <CheckCircle className="w-6 h-6 text-blue-600 flex-shrink-0" />
               <div>
-                <div className="font-semibold text-gray-900 mb-2">2. Configurar región</div>
-                <p className="text-gray-600 text-sm">
+                <div className="font-semibold text-slate-900 mb-2">2. Configurar región</div>
+                <p className="text-slate-600 text-sm">
                   Settings → Regional Config: Selecciona tu país, moneda e idioma
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white border border-purple-200 rounded-lg p-5">
+          <div className="bg-white border border-purple-200 rounded-xl p-5">
             <div className="flex items-start gap-3">
               <CheckCircle className="w-6 h-6 text-purple-600 flex-shrink-0" />
               <div>
-                <div className="font-semibold text-gray-900 mb-2">3. Configurar APIs (si es necesario)</div>
-                <p className="text-gray-600 text-sm">
+                <div className="font-semibold text-slate-900 mb-2">3. Configurar APIs (si es necesario)</div>
+                <p className="text-slate-600 text-sm">
                   Settings → Configuración de APIs: Agrega credenciales de marketplaces
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white border border-yellow-200 rounded-lg p-5">
+          <div className="bg-white border border-yellow-200 rounded-xl p-5">
             <div className="flex items-start gap-3">
               <CheckCircle className="w-6 h-6 text-yellow-600 flex-shrink-0" />
               <div>
-                <div className="font-semibold text-gray-900 mb-2">4. Configurar notificaciones</div>
-                <p className="text-gray-600 text-sm">
+                <div className="font-semibold text-slate-900 mb-2">4. Configurar notificaciones</div>
+                <p className="text-slate-600 text-sm">
                   Settings → Notificaciones: Activa alertas importantes
                 </p>
               </div>
@@ -386,17 +386,17 @@ function Configuracion() {
       </div>
 
       {/* Variables de Entorno */}
-      <div className="bg-gray-50 border rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">🔧 Variables de Entorno (Backend)</h3>
-        <p className="text-gray-700 mb-4">
+      <div className="bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
+        <h3 className="text-xl font-semibold text-slate-900 mb-4">🔧 Variables de Entorno (Backend)</h3>
+        <p className="text-slate-700 mb-4">
           Si eres administrador del sistema, estas son las variables importantes:
         </p>
-        <div className="bg-white border rounded-lg p-4 space-y-2 text-sm font-mono">
-          <div><span className="text-gray-600"># Base de datos</span></div>
+        <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2 text-sm font-mono">
+          <div><span className="text-slate-600"># Base de datos</span></div>
           <div>DATABASE_URL=<span className="text-blue-600">tu_conexion_db</span></div>
-          <div className="mt-3"><span className="text-gray-600"># Autenticación</span></div>
+          <div className="mt-3"><span className="text-slate-600"># Autenticación</span></div>
           <div>JWT_SECRET=<span className="text-blue-600">tu_secret_key</span></div>
-          <div className="mt-3"><span className="text-gray-600"># APIs (ver sección APIs)</span></div>
+          <div className="mt-3"><span className="text-slate-600"># APIs (ver sección APIs)</span></div>
           <div>GROQ_API_KEY=<span className="text-blue-600">tu_groq_key</span></div>
         </div>
       </div>
@@ -411,16 +411,16 @@ function APIsCredenciales() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">🔑 APIs y Credenciales</h2>
-        <p className="text-gray-600 text-lg">
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">🔑 APIs y Credenciales</h2>
+        <p className="text-slate-600 text-lg">
           Configura las APIs de marketplaces y servicios
         </p>
       </div>
 
       {/* Cómo acceder */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-3">📍 Cómo Acceder</h3>
-        <ol className="space-y-2 text-gray-700">
+        <h3 className="text-xl font-semibold text-slate-900 mb-3">📍 Cómo Acceder</h3>
+        <ol className="space-y-2 text-slate-700">
           <li className="flex items-start gap-2">
             <span className="font-bold text-blue-600">1.</span>
             <span>Menu lateral → <strong>Settings</strong></span>
@@ -439,7 +439,7 @@ function APIsCredenciales() {
       {/* Documentación Técnica */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-2xl font-bold text-gray-900">📚 Documentación Técnica</h3>
+          <h3 className="text-2xl font-bold text-slate-900">📚 Documentación Técnica</h3>
           <Link
             to="/help/docs"
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
@@ -450,39 +450,39 @@ function APIsCredenciales() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <Link to="/help/docs/setup-local" className="block">
-            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <h4 className="font-semibold text-gray-900 mb-2">🚀 Setup Local</h4>
-              <p className="text-sm text-gray-600">Configurar entorno de desarrollo</p>
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-slate-900 mb-2">🚀 Setup Local</h4>
+              <p className="text-sm text-slate-600">Configurar entorno de desarrollo</p>
             </div>
           </Link>
           <Link to="/help/docs/deployment-railway" className="block">
-            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <h4 className="font-semibold text-gray-900 mb-2">🚀 Deployment Railway</h4>
-              <p className="text-sm text-gray-600">Desplegar en producción</p>
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-slate-900 mb-2">🚀 Deployment Railway</h4>
+              <p className="text-sm text-slate-600">Desplegar en producción</p>
             </div>
           </Link>
           <Link to="/help/docs/security" className="block">
-            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <h4 className="font-semibold text-gray-900 mb-2">🔐 Security Guide</h4>
-              <p className="text-sm text-gray-600">Seguridad y mejores prácticas</p>
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-slate-900 mb-2">🔐 Security Guide</h4>
+              <p className="text-sm text-slate-600">Seguridad y mejores prácticas</p>
             </div>
           </Link>
           <Link to="/help/docs/user-guide" className="block">
-            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <h4 className="font-semibold text-gray-900 mb-2">📘 User Guide</h4>
-              <p className="text-sm text-gray-600">Guía para usuarios finales</p>
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-slate-900 mb-2">📘 User Guide</h4>
+              <p className="text-sm text-slate-600">Guía para usuarios finales</p>
             </div>
           </Link>
           <Link to="/help/docs/admin-guide" className="block">
-            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <h4 className="font-semibold text-gray-900 mb-2">👨‍💼 Admin Guide</h4>
-              <p className="text-sm text-gray-600">Guía para administradores</p>
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-slate-900 mb-2">👨‍💼 Admin Guide</h4>
+              <p className="text-sm text-slate-600">Guía para administradores</p>
             </div>
           </Link>
           <Link to="/help/docs/troubleshooting" className="block">
-            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-              <h4 className="font-semibold text-gray-900 mb-2">🔧 Troubleshooting</h4>
-              <p className="text-sm text-gray-600">Solución de problemas</p>
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-slate-900 mb-2">🔧 Troubleshooting</h4>
+              <p className="text-sm text-slate-600">Solución de problemas</p>
             </div>
           </Link>
         </div>
@@ -491,7 +491,7 @@ function APIsCredenciales() {
       {/* APIs Disponibles */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-2xl font-bold text-gray-900">🌐 APIs Disponibles</h3>
+          <h3 className="text-2xl font-bold text-slate-900">🌐 APIs Disponibles</h3>
           <Link
             to="/help/apis"
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
@@ -526,22 +526,22 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-red-50 via-orange-50 to-amber-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">AliExpress Auto-Purchase</h4>
+                <h4 className="text-lg font-semibold text-slate-900">AliExpress Auto-Purchase</h4>
                 <span className="text-sm text-red-500 font-medium">Fuente primaria (obligatoria)</span>
               </div>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               Necesitamos email, password y cookies vigentes para automatizar la navegación. El formulario de “Other
               Credentials” y la tarjeta de AliExpress en `Settings → Configuración de APIs` trabajan juntos.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3 text-sm text-gray-700">
-              <div className="font-semibold text-gray-900">Campos obligatorios</div>
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3 text-sm text-slate-700">
+              <div className="font-semibold text-slate-900">Campos obligatorios</div>
               <ul className="list-disc list-inside space-y-1">
                 <li>Email / Username</li>
                 <li>Password</li>
                 <li>Cookies de sesión (se capturan con el snippet automático)</li>
               </ul>
-              <div className="font-semibold text-gray-900 pt-2 border-t">Cómo guardar las cookies</div>
+              <div className="font-semibold text-slate-900 pt-2 border-t">Cómo guardar las cookies</div>
               <ol className="list-decimal list-inside space-y-1">
                 <li>En la tarjeta AliExpress, pulsa <strong>Guardar cookies manualmente</strong>.</li>
                 <li>Haz clic en <strong>Abrir login de AliExpress</strong> y asegúrate de que tu cuenta esté iniciada.</li>
@@ -566,29 +566,29 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-red-50 via-orange-50 to-yellow-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">AliExpress Affiliate API (Portals API)</h4>
+                <h4 className="text-lg font-semibold text-slate-900">AliExpress Affiliate API (Portals API)</h4>
                 <span className="text-sm text-orange-600 font-medium">Recomendada para scraping y extracción de datos</span>
               </div>
               <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
                 Gratis
               </span>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               API oficial de AliExpress para extraer datos de productos, precios, imágenes y costos de envío de forma oficial y gratuita. 
               El sistema usa esta API primero antes del scraping nativo para mayor velocidad y confiabilidad.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campos requeridos:</strong>
               </div>
-              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+              <ul className="text-sm text-slate-700 list-disc list-inside space-y-1">
                 <li><strong>App Key:</strong> Clave de aplicación obtenida de AliExpress Open Platform</li>
                 <li><strong>App Secret:</strong> Secret para calcular la firma de las peticiones</li>
                 <li><strong>Tracking ID:</strong> ID de afiliado (opcional, para generar enlaces de afiliado)</li>
                 <li><strong>Sandbox:</strong> Marca si usas ambiente de pruebas (false para producción)</li>
               </ul>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener las credenciales:</div>
                 <ol className="list-decimal list-inside space-y-2">
                   <li><strong>Crear cuenta en AliExpress Portals:</strong>
                     <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
@@ -669,7 +669,7 @@ function APIsCredenciales() {
                   <li>Cada usuario del SaaS debería tener su propio Tracking ID para comisiones</li>
                 </ul>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación oficial:</strong> 
                 <a href="https://developer.alibaba.com/help/en/portal" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   developer.alibaba.com/help/en/portal <ExternalLink className="w-3 h-3 inline" />
@@ -682,31 +682,31 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-red-50 via-pink-50 to-purple-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">AliExpress Dropshipping API</h4>
+                <h4 className="text-lg font-semibold text-slate-900">AliExpress Dropshipping API</h4>
                 <span className="text-sm text-purple-600 font-medium">Recomendada para compras automatizadas</span>
               </div>
               <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
                 Gratis
               </span>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               API oficial de AliExpress para crear órdenes automatizadas y gestionar pedidos. Permite automatizar completamente 
               el proceso de compra cuando un cliente adquiere un producto en tu marketplace. El sistema usa esta API primero 
               antes de Puppeteer para mayor confiabilidad.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campos requeridos:</strong>
               </div>
-              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+              <ul className="text-sm text-slate-700 list-disc list-inside space-y-1">
                 <li><strong>App Key:</strong> Clave de aplicación obtenida de AliExpress Open Platform</li>
                 <li><strong>App Secret:</strong> Secret para calcular la firma de las peticiones</li>
                 <li><strong>Access Token:</strong> Token OAuth obtenido después del flujo de autorización</li>
                 <li><strong>Refresh Token:</strong> (Opcional) Token para renovar el access token cuando expire</li>
                 <li><strong>Sandbox:</strong> Marca si usas ambiente de pruebas (false para producción)</li>
               </ul>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener las credenciales:</div>
                 <ol className="list-decimal list-inside space-y-2">
                   <li><strong>Requisitos previos:</strong>
                     <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
@@ -801,7 +801,7 @@ function APIsCredenciales() {
                   <li>Respeta los términos de servicio y límites de uso</li>
                 </ul>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación oficial:</strong> 
                 <a href="https://developer.alibaba.com/help/en/portal" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   developer.alibaba.com/help/en/portal <ExternalLink className="w-3 h-3 inline" />
@@ -814,22 +814,22 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-purple-50 to-pink-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">GROQ AI API</h4>
+                <h4 className="text-lg font-semibold text-slate-900">GROQ AI API</h4>
                 <span className="text-sm text-purple-600 font-medium">Crítica para CEO Agent e IA</span>
               </div>
               <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
                 Gratis
               </span>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               IA estratégica para análisis de negocio, generación de contenido, predicciones y toma de decisiones automáticas. Usada por el CEO Agent.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campo requerido:</strong> API Key
               </div>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener la API Key:</div>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Ve a <a href="https://console.groq.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">console.groq.com <ExternalLink className="w-3 h-3 inline" /></a></li>
                   <li>Crea una cuenta (gratis, sin tarjeta de crédito requerida)</li>
@@ -843,7 +843,7 @@ function APIsCredenciales() {
                   <li>El estado cambiará a <strong>"Configurada"</strong> ✅</li>
                 </ol>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación:</strong> 
                 <a href="https://console.groq.com/docs" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   console.groq.com/docs <ExternalLink className="w-3 h-3 inline" />
@@ -859,23 +859,23 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-indigo-50 to-blue-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">Google Trends API (SerpAPI)</h4>
+                <h4 className="text-lg font-semibold text-slate-900">Google Trends API (SerpAPI)</h4>
                 <span className="text-sm text-indigo-600 font-medium">Recomendada para validar demanda real</span>
               </div>
               <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
                 Opcional
               </span>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               Valida demanda real de productos usando datos de Google Trends. El sistema usa esta API para verificar que los productos 
               identificados como oportunidades tienen demanda real en el mercado antes de considerarlos válidos.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campo requerido:</strong> API Key (SerpAPI Key)
               </div>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener la API Key:</div>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Ve a <a href="https://serpapi.com/users/sign_up" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">serpapi.com/users/sign_up <ExternalLink className="w-3 h-3 inline" /></a></li>
                   <li>Crea una cuenta (hay plan gratuito con límites)</li>
@@ -906,7 +906,7 @@ function APIsCredenciales() {
                   <li>El sistema prioriza las credenciales del usuario, luego variables de entorno, luego fallback interno</li>
                 </ul>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación:</strong> 
                 <a href="https://serpapi.com/google-trends-api" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   serpapi.com/google-trends-api <ExternalLink className="w-3 h-3 inline" />
@@ -919,34 +919,34 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-yellow-50 to-orange-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">MercadoLibre API</h4>
+                <h4 className="text-lg font-semibold text-slate-900">MercadoLibre API</h4>
                 <span className="text-sm text-yellow-600 font-medium">Opcional (mejora cobertura regional)</span>
               </div>
               <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
                 Recomendada
               </span>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               Publica y gestiona productos en MercadoLibre usando OAuth 2.0
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campos requeridos:</strong>
               </div>
-              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+              <ul className="text-sm text-slate-700 list-disc list-inside space-y-1">
                 <li><strong>Client ID (App ID):</strong> ID de tu aplicación en MercadoLibre</li>
                 <li><strong>Client Secret:</strong> Secret key de tu aplicación</li>
               </ul>
               <div className="text-sm">
                 <strong>Campos opcionales (se obtienen automáticamente con OAuth):</strong>
               </div>
-              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+              <ul className="text-sm text-slate-700 list-disc list-inside space-y-1">
                 <li><strong>Access Token:</strong> Token de acceso (se renueva automáticamente)</li>
                 <li><strong>Refresh Token:</strong> Token para renovar el access token</li>
                 <li><strong>User ID:</strong> ID del usuario vendedor</li>
               </ul>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener las credenciales:</div>
                 <ol className="list-decimal list-inside space-y-2">
                   <li><strong>Inicia sesión</strong> en <a href="https://developers.mercadolibre.cl/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">developers.mercadolibre.cl <ExternalLink className="w-3 h-3 inline" /></a> con tu cuenta de MercadoLibre</li>
                   <li><strong>Crear aplicación:</strong> Ve a <a href="https://developers.mercadolibre.cl/devcenter/create-app" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold">developers.mercadolibre.cl/devcenter/create-app <ExternalLink className="w-3 h-3 inline" /></a></li>
@@ -963,8 +963,8 @@ function APIsCredenciales() {
                     <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
                       <li><strong>Redirect URI*:</strong> Agrega exactamente una de estas URLs (debe coincidir con BACKEND_URL en Railway):
                         <ul className="list-circle list-inside ml-4 mt-1">
-                          <li><code className="bg-gray-100 px-1 rounded">https://ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code> (sin www)</li>
-                          <li>o <code className="bg-gray-100 px-1 rounded">https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code> (con www)</li>
+                          <li><code className="bg-slate-100 px-1 rounded">https://ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code> (sin www)</li>
+                          <li>o <code className="bg-slate-100 px-1 rounded">https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code> (con www)</li>
                           <li>⚠️ <strong>IMPORTANTE:</strong> La URL debe coincidir EXACTAMENTE con BACKEND_URL en Railway. Si usas ivanreseller.com aquí, configura BACKEND_URL=https://ivanreseller.com en Railway.</li>
                         </ul>
                       </li>
@@ -1035,7 +1035,7 @@ function APIsCredenciales() {
                   </ul>
                 </div>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación:</strong> 
                 <a href="https://developers.mercadolibre.com.ar/es_ar/autenticacion-y-autorizacion" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   developers.mercadolibre.com <ExternalLink className="w-3 h-3 inline" />
@@ -1051,28 +1051,28 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-blue-50 to-cyan-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">eBay API</h4>
+                <h4 className="text-lg font-semibold text-slate-900">eBay API</h4>
                 <span className="text-sm text-blue-600 font-medium">Marketplace global</span>
               </div>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               Publica en eBay a nivel mundial. Necesitarás credenciales <strong>Sandbox</strong> para pruebas y <strong>Production</strong> para publicar en vivo.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campos requeridos (ambos entornos):</strong> App ID (Client ID), Dev ID, Cert ID (Client Secret), Redirect URI (RuName)
               </div>
               <div className="text-sm">
                 <strong>Campos generados automáticamente tras OAuth:</strong> Auth Token (Access Token) y Refresh Token
               </div>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener las claves:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener las claves:</div>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Ingresa a <a href="https://developer.ebay.com/my/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">developer.ebay.com <ExternalLink className="w-3 h-3 inline" /></a> y selecciona el conjunto de claves (<em>Keyset</em>) <strong>Sandbox</strong>.</li>
                   <li>Copia los valores <strong>App ID</strong>, <strong>Dev ID</strong> y <strong>Cert ID</strong> y pégalos en <code>Settings → Configuración de APIs → eBay (Sandbox)</code>.</li>
                   <li>En la misma página de eBay haz clic en <em>User Tokens</em> y, dentro de <em>Your eBay Sign-in Settings</em>, registra un <strong>Redirect URL name (RuName)</strong> apuntando a:<br />
-                    <code className="block bg-gray-100 rounded px-2 py-1 mt-1">https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/ebay</code>
-                    <span className="text-xs text-gray-600 block mt-1">⚠️ <strong>Importante:</strong> Si tu sistema está en otro dominio, usa ese dominio en lugar de www.ivanreseller.com</span>
+                    <code className="block bg-slate-100 rounded px-2 py-1 mt-1">https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/ebay</code>
+                    <span className="text-xs text-slate-600 block mt-1">⚠️ <strong>Importante:</strong> Si tu sistema está en otro dominio, usa ese dominio en lugar de www.ivanreseller.com</span>
                   </li>
                   <li>Copia el nombre generado (ej. <code>Ivan_Marty-...</code>) y pégalo en el campo <strong>Redirect URI (RuName)</strong> del panel. Guarda.</li>
                   <li>Presiona el botón <strong>OAuth</strong>. Se abrirá la ventana oficial de eBay Sandbox. Inicia sesión con tu cuenta Sandbox y acepta los permisos. El sistema guardará automáticamente el <em>Auth Token</em> y el <em>Refresh Token</em>.</li>
@@ -1089,18 +1089,18 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-orange-50 to-red-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">Amazon SP-API</h4>
+                <h4 className="text-lg font-semibold text-slate-900">Amazon SP-API</h4>
                 <span className="text-sm text-orange-600 font-medium">Opcional (marketplace premium)</span>
               </div>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               Vende en Amazon usando la Selling Partner API (requiere cuenta de vendedor y aprobación)
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campos requeridos:</strong>
               </div>
-              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+              <ul className="text-sm text-slate-700 list-disc list-inside space-y-1">
                 <li><strong>Seller ID:</strong> Tu ID de vendedor en Amazon (formato: A2XXXXXXXXXX)</li>
                 <li><strong>Client ID (LWA):</strong> ID de aplicación OAuth de Amazon Developer</li>
                 <li><strong>Client Secret (LWA):</strong> Secret de aplicación OAuth</li>
@@ -1110,8 +1110,8 @@ function APIsCredenciales() {
                 <li><strong>Region:</strong> Región de AWS (ej: us-east-1, eu-west-1)</li>
                 <li><strong>Marketplace ID:</strong> ID del marketplace (ej: ATVPDKIKX0DER para US)</li>
               </ul>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener las credenciales:</div>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Ve a <a href="https://developer.amazon.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Amazon Developer Central <ExternalLink className="w-3 h-3 inline" /></a> e inicia sesión</li>
                   <li>Ve a <strong>"Apps & Services"</strong> → <strong>"Develop Apps"</strong> → <strong>"Create a new app"</strong></li>
@@ -1124,7 +1124,7 @@ function APIsCredenciales() {
                   <li>Selecciona el <strong>Marketplace ID</strong> según tu país (ver lista en documentación)</li>
                 </ol>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación:</strong> 
                 <a href="https://developer-docs.amazon.com/sp-api/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   developer-docs.amazon.com/sp-api <ExternalLink className="w-3 h-3 inline" />
@@ -1140,19 +1140,19 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-green-50 to-teal-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">ScraperAPI</h4>
+                <h4 className="text-lg font-semibold text-slate-900">ScraperAPI</h4>
                 <span className="text-sm text-green-600 font-medium">Crítica para Autopilot avanzado</span>
               </div>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               Servicio de web scraping anti-detección para AliExpress y otros sitios. Evita bloqueos y CAPTCHAs.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campo requerido:</strong> API Key
               </div>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener la API Key:</div>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Ve a <a href="https://www.scraperapi.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">scraperapi.com <ExternalLink className="w-3 h-3 inline" /></a></li>
                   <li>Crea una cuenta (plan gratuito disponible para pruebas)</li>
@@ -1161,7 +1161,7 @@ function APIsCredenciales() {
                   <li>Pégala en el sistema en <code>Settings → Configuración de APIs → ScraperAPI</code></li>
                 </ol>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación:</strong> 
                 <a href="https://www.scraperapi.com/documentation/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   scraperapi.com/documentation <ExternalLink className="w-3 h-3 inline" />
@@ -1174,19 +1174,19 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-teal-50 to-cyan-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">ZenRows</h4>
+                <h4 className="text-lg font-semibold text-slate-900">ZenRows</h4>
                 <span className="text-sm text-teal-600 font-medium">Alternativa a ScraperAPI</span>
               </div>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               Alternativa a ScraperAPI para web scraping avanzado con rotación de proxies y anti-detección.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campo requerido:</strong> API Key
               </div>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener la API Key:</div>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Ve a <a href="https://www.zenrows.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">zenrows.com <ExternalLink className="w-3 h-3 inline" /></a></li>
                   <li>Crea una cuenta (plan gratuito disponible)</li>
@@ -1195,7 +1195,7 @@ function APIsCredenciales() {
                   <li>Pégala en el sistema en <code>Settings → Configuración de APIs → ZenRows</code></li>
                 </ol>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación:</strong> 
                 <a href="https://www.zenrows.com/documentation" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   zenrows.com/documentation <ExternalLink className="w-3 h-3 inline" />
@@ -1208,19 +1208,19 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-indigo-50 to-purple-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">2Captcha</h4>
+                <h4 className="text-lg font-semibold text-slate-900">2Captcha</h4>
                 <span className="text-sm text-indigo-600 font-medium">Resolver captchas automáticamente</span>
               </div>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               Servicio para resolver CAPTCHAs automáticamente. Útil para Autopilot cuando AliExpress muestra CAPTCHAs.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campo requerido:</strong> API Key
               </div>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener la API Key:</div>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Ve a <a href="https://2captcha.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">2captcha.com <ExternalLink className="w-3 h-3 inline" /></a></li>
                   <li>Crea una cuenta y recarga saldo (mínimo $3 USD)</li>
@@ -1229,7 +1229,7 @@ function APIsCredenciales() {
                   <li>Pégala en el sistema en <code>Settings → Configuración de APIs → 2Captcha</code></li>
                 </ol>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación:</strong> 
                 <a href="https://2captcha.com/2captcha-api" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   2captcha.com/2captcha-api <ExternalLink className="w-3 h-3 inline" />
@@ -1245,24 +1245,24 @@ function APIsCredenciales() {
           <div className="border rounded-xl p-6 bg-gradient-to-r from-blue-50 to-indigo-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">PayPal Payouts API</h4>
+                <h4 className="text-lg font-semibold text-slate-900">PayPal Payouts API</h4>
                 <span className="text-sm text-blue-600 font-medium">Para pagos automáticos de comisiones</span>
               </div>
             </div>
-            <p className="text-gray-700 mb-3">
+            <p className="text-slate-700 mb-3">
               Permite pagar comisiones automáticamente a vendedores usando PayPal Payouts.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-3">
+            <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campos requeridos:</strong>
               </div>
-              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+              <ul className="text-sm text-slate-700 list-disc list-inside space-y-1">
                 <li><strong>Client ID:</strong> ID de aplicación de PayPal</li>
                 <li><strong>Client Secret:</strong> Secret de aplicación de PayPal</li>
                 <li><strong>Mode:</strong> <code>sandbox</code> para pruebas o <code>live</code> para producción</li>
               </ul>
-              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
-                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+              <div className="pt-2 border-t text-sm text-slate-700 space-y-2">
+                <div className="font-semibold text-slate-900">Pasos para obtener las credenciales:</div>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Ve a <a href="https://developer.paypal.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">PayPal Developer <ExternalLink className="w-3 h-3 inline" /></a> e inicia sesión</li>
                   <li>Ve a <strong>"Dashboard"</strong> → <strong>"My Apps & Credentials"</strong></li>
@@ -1272,7 +1272,7 @@ function APIsCredenciales() {
                   <li>Pégalos en el sistema en <code>Settings → Configuración de APIs → PayPal Payouts</code></li>
                 </ol>
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-slate-600">
                 <strong>Documentación:</strong> 
                 <a href="https://developer.paypal.com/docs/payouts/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   developer.paypal.com/docs/payouts <ExternalLink className="w-3 h-3 inline" />
@@ -1288,8 +1288,8 @@ function APIsCredenciales() {
 
       {/* Proceso de configuración */}
       <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">✍️ Cómo Configurar una API</h3>
-        <ol className="space-y-3 text-gray-700">
+        <h3 className="text-xl font-semibold text-slate-900 mb-4">✍️ Cómo Configurar una API</h3>
+        <ol className="space-y-3 text-slate-700">
           <li className="flex items-start gap-2">
             <span className="font-bold text-yellow-600">1.</span>
             <span>Busca la tarjeta de la API que necesitas</span>
@@ -1318,8 +1318,8 @@ function APIsCredenciales() {
         <div className="flex items-start gap-3">
           <Shield className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">🔒 Seguridad</h3>
-            <ul className="space-y-1 text-gray-700">
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">🔒 Seguridad</h3>
+            <ul className="space-y-1 text-slate-700">
               <li>• Todas las credenciales se encriptan con <strong>AES-256-GCM</strong></li>
               <li>• Las claves se almacenan de forma segura en la base de datos</li>
               <li>• No se pueden visualizar después de guardadas (solo editar)</li>
@@ -1339,15 +1339,15 @@ function GestionProductos() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">📦 Gestión de Productos</h2>
-        <p className="text-gray-600 text-lg">
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">📦 Gestión de Productos</h2>
+        <p className="text-slate-600 text-lg">
           Administra tu catálogo de productos
         </p>
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
         <h3 className="text-xl font-semibold mb-4">Acceso: Menu → Products</h3>
-        <p className="text-gray-700">
+        <p className="text-slate-700">
           La sección de productos te permite gestionar todo tu inventario con funciones CRUD completas.
         </p>
       </div>
@@ -1355,11 +1355,11 @@ function GestionProductos() {
       {/* Funciones principales */}
       <div className="grid grid-cols-2 gap-6">
         <div className="border rounded-xl p-6 bg-white">
-          <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-600" />
             Crear Producto
           </h4>
-          <ul className="space-y-2 text-sm text-gray-700">
+          <ul className="space-y-2 text-sm text-slate-700">
             <li>• Agregar manualmente desde formulario</li>
             <li>• Importar desde marketplace</li>
             <li>• Scraping automático (Autopilot)</li>
@@ -1368,11 +1368,11 @@ function GestionProductos() {
         </div>
 
         <div className="border rounded-xl p-6 bg-white">
-          <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-blue-600" />
             Editar Producto
           </h4>
-          <ul className="space-y-2 text-sm text-gray-700">
+          <ul className="space-y-2 text-sm text-slate-700">
             <li>• Actualizar información</li>
             <li>• Modificar precios y stock</li>
             <li>• Agregar/editar imágenes</li>
@@ -1381,11 +1381,11 @@ function GestionProductos() {
         </div>
 
         <div className="border rounded-xl p-6 bg-white">
-          <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-purple-600" />
             Publicar Producto
           </h4>
-          <ul className="space-y-2 text-sm text-gray-700">
+          <ul className="space-y-2 text-sm text-slate-700">
             <li>• Publicación en marketplaces</li>
             <li>• Multi-marketplace simultáneo</li>
             <li>• Publicador inteligente</li>
@@ -1394,11 +1394,11 @@ function GestionProductos() {
         </div>
 
         <div className="border rounded-xl p-6 bg-white">
-          <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-red-600" />
             Eliminar Producto
           </h4>
-          <ul className="space-y-2 text-sm text-gray-700">
+          <ul className="space-y-2 text-sm text-slate-700">
             <li>• Eliminación con confirmación</li>
             <li>• Desactivar sin eliminar</li>
             <li>• Archivar para histórico</li>
@@ -1409,39 +1409,39 @@ function GestionProductos() {
 
       {/* Búsqueda y filtros */}
       <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">🔍 Búsqueda y Filtros</h3>
+        <h3 className="text-xl font-semibold text-slate-900 mb-4">🔍 Búsqueda y Filtros</h3>
         <div className="grid grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-lg">
+          <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4">
             <div className="font-medium mb-2">Por texto</div>
-            <div className="text-sm text-gray-600">Nombre, SKU, descripción</div>
+            <div className="text-sm text-slate-600">Nombre, SKU, descripción</div>
           </div>
-          <div className="bg-white p-4 rounded-lg">
+          <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4">
             <div className="font-medium mb-2">Por categoría</div>
-            <div className="text-sm text-gray-600">Filtrar por tipo</div>
+            <div className="text-sm text-slate-600">Filtrar por tipo</div>
           </div>
-          <div className="bg-white p-4 rounded-lg">
+          <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4">
             <div className="font-medium mb-2">Por estado</div>
-            <div className="text-sm text-gray-600">Activo, inactivo, agotado</div>
+            <div className="text-sm text-slate-600">Activo, inactivo, agotado</div>
           </div>
-          <div className="bg-white p-4 rounded-lg">
+          <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4">
             <div className="font-medium mb-2">Por precio</div>
-            <div className="text-sm text-gray-600">Rango personalizado</div>
+            <div className="text-sm text-slate-600">Rango personalizado</div>
           </div>
-          <div className="bg-white p-4 rounded-lg">
+          <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4">
             <div className="font-medium mb-2">Por marketplace</div>
-            <div className="text-sm text-gray-600">Donde está publicado</div>
+            <div className="text-sm text-slate-600">Donde está publicado</div>
           </div>
-          <div className="bg-white p-4 rounded-lg">
+          <div className="bg-white border border-slate-200 dark:border-slate-800 rounded-xl p-4">
             <div className="font-medium mb-2">Por rentabilidad</div>
-            <div className="text-sm text-gray-600">Score de IA</div>
+            <div className="text-sm text-slate-600">Score de IA</div>
           </div>
         </div>
       </div>
 
       {/* Tips */}
       <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-3">💡 Tips</h3>
-        <ul className="space-y-2 text-gray-700">
+        <h3 className="text-xl font-semibold text-slate-900 mb-3">💡 Tips</h3>
+        <ul className="space-y-2 text-slate-700">
           <li>• Usa el <strong>Publicador Inteligente</strong> para publicar con IA</li>
           <li>• Activa <strong>Autopilot</strong> para gestión automática</li>
           <li>• Revisa <strong>Opportunities</strong> para productos rentables</li>
@@ -1461,18 +1461,18 @@ function SistemaAutopilot() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">🤖 Sistema Autopilot</h2>
-        <p className="text-gray-600 text-lg">Operación autónoma 24/7</p>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">🤖 Sistema Autopilot</h2>
+        <p className="text-slate-600 text-lg">Operación autónoma 24/7</p>
       </div>
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <p className="text-gray-700">
+        <p className="text-slate-700">
           El sistema Autopilot permite operación completamente autónoma: scraping de productos, análisis con IA, 
           publicación automática, gestión de inventario y monitoreo de precios.
         </p>
       </div>
       <div className="bg-green-50 border border-green-200 rounded-xl p-6">
         <h3 className="font-semibold mb-2">Acceso: Menu → Autopilot</h3>
-        <p className="text-gray-700">Configura intervalos, categorías y marketplaces para operación automática.</p>
+        <p className="text-slate-700">Configura intervalos, categorías y marketplaces para operación automática.</p>
       </div>
     </div>
   );
@@ -1482,63 +1482,63 @@ function Oportunidades() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">🎯 Oportunidades de Negocio</h2>
-        <p className="text-gray-600 text-lg">Sistema inteligente para encontrar productos rentables con demanda real</p>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">🎯 Oportunidades de Negocio</h2>
+        <p className="text-slate-600 text-lg">Sistema inteligente para encontrar productos rentables con demanda real</p>
       </div>
 
       {/* Qué es */}
       <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-3">¿Qué es el Sistema de Oportunidades?</h3>
-        <p className="text-gray-700 mb-4">
+        <h3 className="text-xl font-semibold text-slate-900 mb-3">¿Qué es el Sistema de Oportunidades?</h3>
+        <p className="text-slate-700 mb-4">
           El sistema de oportunidades analiza productos de AliExpress usando <strong>múltiples criterios de calidad</strong> 
           para identificar solo productos que realmente tienen potencial de venta rápida y rentabilidad real.
         </p>
         <div className="grid grid-cols-2 gap-4 mt-4">
-          <div className="bg-white p-4 rounded-lg border border-purple-200">
+          <div className="bg-white p-4 rounded-xl border border-purple-200">
             <CheckCircle className="w-6 h-6 text-green-600 mb-2" />
-            <div className="font-semibold text-gray-900">Validación Real</div>
-            <div className="text-sm text-gray-600">Demanda verificada con Google Trends</div>
+            <div className="font-semibold text-slate-900">Validación Real</div>
+            <div className="text-sm text-slate-600">Demanda verificada con Google Trends</div>
           </div>
-          <div className="bg-white p-4 rounded-lg border border-purple-200">
+          <div className="bg-white p-4 rounded-xl border border-purple-200">
             <CheckCircle className="w-6 h-6 text-green-600 mb-2" />
-            <div className="font-semibold text-gray-900">Análisis de Tendencias</div>
-            <div className="text-sm text-gray-600">Detección de productos en crecimiento</div>
+            <div className="font-semibold text-slate-900">Análisis de Tendencias</div>
+            <div className="text-sm text-slate-600">Detección de productos en crecimiento</div>
           </div>
-          <div className="bg-white p-4 rounded-lg border border-purple-200">
+          <div className="bg-white p-4 rounded-xl border border-purple-200">
             <CheckCircle className="w-6 h-6 text-green-600 mb-2" />
-            <div className="font-semibold text-gray-900">Velocidad de Venta</div>
-            <div className="text-sm text-gray-600">Estimación de días hasta primera venta</div>
+            <div className="font-semibold text-slate-900">Velocidad de Venta</div>
+            <div className="text-sm text-slate-600">Estimación de días hasta primera venta</div>
           </div>
-          <div className="bg-white p-4 rounded-lg border border-purple-200">
+          <div className="bg-white p-4 rounded-xl border border-purple-200">
             <CheckCircle className="w-6 h-6 text-green-600 mb-2" />
-            <div className="font-semibold text-gray-900">Viabilidad Financiera</div>
-            <div className="text-sm text-gray-600">Cálculo de tiempo hasta break-even</div>
+            <div className="font-semibold text-slate-900">Viabilidad Financiera</div>
+            <div className="text-sm text-slate-600">Cálculo de tiempo hasta break-even</div>
           </div>
         </div>
       </div>
 
       {/* Cómo usar */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">📋 Cómo Usar el Sistema</h3>
-        <ol className="space-y-4 text-gray-700">
+        <h3 className="text-xl font-semibold text-slate-900 mb-4">📋 Cómo Usar el Sistema</h3>
+        <ol className="space-y-4 text-slate-700">
           <li className="flex items-start gap-3">
             <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">1</div>
             <div>
-              <div className="font-semibold text-gray-900 mb-1">Ir a Opportunities</div>
+              <div className="font-semibold text-slate-900 mb-1">Ir a Opportunities</div>
               <p>Desde el menú lateral, haz clic en <strong>"Opportunities"</strong></p>
             </div>
           </li>
           <li className="flex items-start gap-3">
             <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">2</div>
             <div>
-              <div className="font-semibold text-gray-900 mb-1">Ingresar Búsqueda</div>
+              <div className="font-semibold text-slate-900 mb-1">Ingresar Búsqueda</div>
               <p>Escribe palabras clave del producto que buscas (ej: "phone case", "wireless earbuds")</p>
             </div>
           </li>
           <li className="flex items-start gap-3">
             <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">3</div>
             <div>
-              <div className="font-semibold text-gray-900 mb-1">Configurar Filtros</div>
+              <div className="font-semibold text-slate-900 mb-1">Configurar Filtros</div>
               <ul className="list-disc list-inside mt-1 space-y-1 text-sm">
                 <li><strong>Marketplace:</strong> Selecciona donde quieres vender (eBay, Amazon, MercadoLibre)</li>
                 <li><strong>Región:</strong> País destino (US, MX, CL, etc.)</li>
@@ -1549,7 +1549,7 @@ function Oportunidades() {
           <li className="flex items-start gap-3">
             <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">4</div>
             <div>
-              <div className="font-semibold text-gray-900 mb-1">Analizar Resultados</div>
+              <div className="font-semibold text-slate-900 mb-1">Analizar Resultados</div>
               <p>El sistema mostrará solo productos que cumplen todos los criterios de calidad:</p>
               <ul className="list-disc list-inside mt-2 space-y-1 text-sm bg-white p-3 rounded border border-blue-200">
                 <li>✅ Margen mínimo del 10% o más</li>
@@ -1563,7 +1563,7 @@ function Oportunidades() {
           <li className="flex items-start gap-3">
             <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">5</div>
             <div>
-              <div className="font-semibold text-gray-900 mb-1">Seleccionar Oportunidad</div>
+              <div className="font-semibold text-slate-900 mb-1">Seleccionar Oportunidad</div>
               <p>Revisa los detalles de cada oportunidad y haz clic en <strong>"Crear Producto"</strong> para publicarlo</p>
             </div>
           </li>
@@ -1572,14 +1572,14 @@ function Oportunidades() {
 
       {/* Criterios de calidad */}
       <div className="bg-green-50 border border-green-200 rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">✅ Criterios de Calidad Implementados</h3>
-        <div className="space-y-3 text-gray-700">
-          <div className="bg-white p-4 rounded-lg border border-green-200">
-            <div className="font-semibold text-gray-900 mb-2">1. Margen Rentable</div>
+        <h3 className="text-xl font-semibold text-slate-900 mb-4">✅ Criterios de Calidad Implementados</h3>
+        <div className="space-y-3 text-slate-700">
+          <div className="bg-white p-4 rounded-xl border border-green-200">
+            <div className="font-semibold text-slate-900 mb-2">1. Margen Rentable</div>
             <p className="text-sm">Margen mínimo del 10% (configurable). El sistema calcula margen considerando: precio de AliExpress, costos de envío, impuestos de importación, y comisiones del marketplace.</p>
           </div>
-          <div className="bg-white p-4 rounded-lg border border-green-200">
-            <div className="font-semibold text-gray-900 mb-2">2. Demanda Real Verificada</div>
+          <div className="bg-white p-4 rounded-xl border border-green-200">
+            <div className="font-semibold text-slate-900 mb-2">2. Demanda Real Verificada</div>
             <p className="text-sm">
               El sistema valida demanda usando <strong>Google Trends (SerpAPI)</strong>. Solo acepta productos con:
             </p>
@@ -1588,19 +1588,19 @@ function Oportunidades() {
               <li>Confianza de tendencias ≥ 30%</li>
               <li>Tendencia no declinante con baja confianza</li>
             </ul>
-            <p className="text-sm mt-2 text-gray-600">
+            <p className="text-sm mt-2 text-slate-600">
               💡 <strong>Nota:</strong> Si no tienes SerpAPI configurado, el sistema usará análisis de datos internos como fallback.
             </p>
           </div>
-          <div className="bg-white p-4 rounded-lg border border-green-200">
-            <div className="font-semibold text-gray-900 mb-2">3. Velocidad de Venta</div>
+          <div className="bg-white p-4 rounded-xl border border-green-200">
+            <div className="font-semibold text-slate-900 mb-2">3. Velocidad de Venta</div>
             <p className="text-sm">
               Estimación de días hasta primera venta basada en volumen de búsqueda, tendencia, y competencia. 
               Solo se aceptan productos con estimación ≤ 60 días (configurable).
             </p>
           </div>
-          <div className="bg-white p-4 rounded-lg border border-green-200">
-            <div className="font-semibold text-gray-900 mb-2">4. Viabilidad Financiera</div>
+          <div className="bg-white p-4 rounded-xl border border-green-200">
+            <div className="font-semibold text-slate-900 mb-2">4. Viabilidad Financiera</div>
             <p className="text-sm">
               Cálculo de tiempo hasta recuperar inversión (break-even). Solo se aceptan productos con break-even ≤ 90 días (configurable).
             </p>
@@ -1610,10 +1610,10 @@ function Oportunidades() {
 
       {/* Información mostrada */}
       <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">📊 Información Mostrada en cada Oportunidad</h3>
-        <div className="grid grid-cols-2 gap-4 text-gray-700">
-          <div className="bg-white p-4 rounded-lg border border-purple-200">
-            <div className="font-semibold text-gray-900 mb-2">💰 Financiera</div>
+        <h3 className="text-xl font-semibold text-slate-900 mb-4">📊 Información Mostrada en cada Oportunidad</h3>
+        <div className="grid grid-cols-2 gap-4 text-slate-700">
+          <div className="bg-white p-4 rounded-xl border border-purple-200">
+            <div className="font-semibold text-slate-900 mb-2">💰 Financiera</div>
             <ul className="text-sm space-y-1">
               <li>• Precio de compra (AliExpress)</li>
               <li>• Precio sugerido de venta</li>
@@ -1622,8 +1622,8 @@ function Oportunidades() {
               <li>• Costos totales (envío + impuestos)</li>
             </ul>
           </div>
-          <div className="bg-white p-4 rounded-lg border border-purple-200">
-            <div className="font-semibold text-gray-900 mb-2">📈 Demanda y Tendencias</div>
+          <div className="bg-white p-4 rounded-xl border border-purple-200">
+            <div className="font-semibold text-slate-900 mb-2">📈 Demanda y Tendencias</div>
             <ul className="text-sm space-y-1">
               <li>• Volumen de búsqueda</li>
               <li>• Tendencia (creciente/estable/declinante)</li>
@@ -1631,15 +1631,15 @@ function Oportunidades() {
               <li>• Razón de viabilidad</li>
             </ul>
           </div>
-          <div className="bg-white p-4 rounded-lg border border-purple-200">
-            <div className="font-semibold text-gray-900 mb-2">⏱️ Tiempos Estimados</div>
+          <div className="bg-white p-4 rounded-xl border border-purple-200">
+            <div className="font-semibold text-slate-900 mb-2">⏱️ Tiempos Estimados</div>
             <ul className="text-sm space-y-1">
               <li>• Días hasta primera venta</li>
               <li>• Días hasta break-even</li>
             </ul>
           </div>
-          <div className="bg-white p-4 rounded-lg border border-purple-200">
-            <div className="font-semibold text-gray-900 mb-2">🏪 Competencia</div>
+          <div className="bg-white p-4 rounded-xl border border-purple-200">
+            <div className="font-semibold text-slate-900 mb-2">🏪 Competencia</div>
             <ul className="text-sm space-y-1">
               <li>• Nivel de competencia</li>
               <li>• Precios promedio en marketplace</li>
@@ -1654,8 +1654,8 @@ function Oportunidades() {
         <div className="flex items-start gap-3">
           <Info className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
           <div>
-            <h4 className="font-semibold text-gray-900 mb-2">💡 Recomendaciones para Mejores Resultados</h4>
-            <ul className="space-y-2 text-gray-700">
+            <h4 className="font-semibold text-slate-900 mb-2">💡 Recomendaciones para Mejores Resultados</h4>
+            <ul className="space-y-2 text-slate-700">
               <li>
                 <strong>1. Configura Google Trends (SerpAPI):</strong> 
                 <span className="text-sm block mt-1">
@@ -1695,11 +1695,11 @@ function Finanzas() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">💰 Finanzas y Comisiones</h2>
-        <p className="text-gray-600 text-lg">Dashboard financiero completo</p>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">💰 Finanzas y Comisiones</h2>
+        <p className="text-slate-600 text-lg">Dashboard financiero completo</p>
       </div>
       <div className="bg-green-50 border border-green-200 rounded-xl p-6">
-        <p className="text-gray-700">
+        <p className="text-slate-700">
           Monitorea ventas, ganancias, comisiones y genera reportes financieros detallados.
         </p>
       </div>
@@ -1711,11 +1711,11 @@ function ConfiguracionRegional() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">🌍 Configuración Regional</h2>
-        <p className="text-gray-600 text-lg">Adapta el sistema a tu región</p>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">🌍 Configuración Regional</h2>
+        <p className="text-slate-600 text-lg">Adapta el sistema a tu región</p>
       </div>
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <p className="text-gray-700">
+        <p className="text-slate-700">
           Configura: país, moneda, idioma, zona horaria, formatos de fecha/hora y adaptaciones locales.
         </p>
       </div>
@@ -1727,11 +1727,11 @@ function UsuariosRoles() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">👥 Usuarios y Roles</h2>
-        <p className="text-gray-600 text-lg">Gestión multi-usuario</p>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">👥 Usuarios y Roles</h2>
+        <p className="text-slate-600 text-lg">Gestión multi-usuario</p>
       </div>
       <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-6">
-        <p className="text-gray-700">
+        <p className="text-slate-700">
           Sistema multi-usuario con roles: Admin (control total), User (operación limitada), Viewer (solo lectura).
         </p>
       </div>
@@ -1743,11 +1743,11 @@ function ReportesAnalytics() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">📊 Reportes y Analytics</h2>
-        <p className="text-gray-600 text-lg">Análisis y reportes avanzados</p>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">📊 Reportes y Analytics</h2>
+        <p className="text-slate-600 text-lg">Análisis y reportes avanzados</p>
       </div>
       <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
-        <p className="text-gray-700">
+        <p className="text-slate-700">
           Genera reportes en PDF, Excel y visualiza analytics con gráficas interactivas.
         </p>
       </div>
@@ -1759,43 +1759,43 @@ function NotificacionesVentas() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">Notificaciones de ventas (webhooks)</h2>
-        <p className="text-gray-600 text-lg">
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">Notificaciones de ventas (webhooks)</h2>
+        <p className="text-slate-600 text-lg">
           Para que las ventas realizadas en eBay o Mercado Libre aparezcan en Ivan Reseller, el marketplace debe enviar una notificación a nuestro servidor cuando se concrete una venta. Esa configuración se hace en la cuenta de desarrollador de cada plataforma.
         </p>
       </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">URL a registrar</h3>
-        <p className="text-gray-700 mb-2">
+        <h3 className="text-xl font-semibold text-slate-900 mb-2">URL a registrar</h3>
+        <p className="text-slate-700 mb-2">
           El administrador del sistema debe proporcionarte la URL base del backend (por ejemplo <code className="bg-amber-100 px-2 py-1 rounded">https://tu-backend.ejemplo.com</code>). Las rutas que deben recibir notificaciones son:
         </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>eBay:</strong> <code className="bg-gray-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/ebay</code></li>
-          <li><strong>Mercado Libre:</strong> <code className="bg-gray-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/mercadolibre</code></li>
+        <ul className="list-disc list-inside space-y-1 text-slate-700">
+          <li><strong>eBay:</strong> <code className="bg-slate-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/ebay</code></li>
+          <li><strong>Mercado Libre:</strong> <code className="bg-slate-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/mercadolibre</code></li>
         </ul>
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold text-gray-900">Mercado Libre</h3>
-        <ol className="list-decimal list-inside space-y-2 text-gray-700">
+        <h3 className="text-xl font-semibold text-slate-900">Mercado Libre</h3>
+        <ol className="list-decimal list-inside space-y-2 text-slate-700">
           <li>Entra a <a href="https://developers.mercadolibre.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">developers.mercadolibre.com</a> → Tu aplicación → Notificaciones.</li>
-          <li>Añade la URL: <code className="bg-gray-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/mercadolibre</code> para notificaciones de órdenes.</li>
-          <li>Copia el <strong>secret</strong> que Mercado Libre muestra. El administrador debe configurarlo en el servidor como <code className="bg-gray-100 px-2 py-0.5 rounded">WEBHOOK_SECRET_MERCADOLIBRE</code>.</li>
+          <li>Añade la URL: <code className="bg-slate-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/mercadolibre</code> para notificaciones de órdenes.</li>
+          <li>Copia el <strong>secret</strong> que Mercado Libre muestra. El administrador debe configurarlo en el servidor como <code className="bg-slate-100 px-2 py-0.5 rounded">WEBHOOK_SECRET_MERCADOLIBRE</code>.</li>
         </ol>
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold text-gray-900">eBay</h3>
-        <ol className="list-decimal list-inside space-y-2 text-gray-700">
+        <h3 className="text-xl font-semibold text-slate-900">eBay</h3>
+        <ol className="list-decimal list-inside space-y-2 text-slate-700">
           <li>Entra a <a href="https://developer.ebay.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">developer.ebay.com</a> → My Account → Application Keys → tu app → Notifications.</li>
-          <li>Configura el Endpoint URL: <code className="bg-gray-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/ebay</code>.</li>
-          <li>Copia el <strong>signing key</strong>. El administrador debe configurarlo en el servidor como <code className="bg-gray-100 px-2 py-0.5 rounded">WEBHOOK_SECRET_EBAY</code>.</li>
+          <li>Configura el Endpoint URL: <code className="bg-slate-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/ebay</code>.</li>
+          <li>Copia el <strong>signing key</strong>. El administrador debe configurarlo en el servidor como <code className="bg-slate-100 px-2 py-0.5 rounded">WEBHOOK_SECRET_EBAY</code>.</li>
         </ol>
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <p className="text-gray-700">
+        <p className="text-slate-700">
           En la página de <strong>Ventas</strong> o en el <strong>Dashboard</strong> verás el panel &quot;Listo para recibir ventas&quot;, que indica si las notificaciones están configuradas (eBay y Mercado Libre). Si aparece &quot;No configuradas&quot;, las ventas reales en el marketplace no se registrarán en Ivan Reseller hasta que se complete la configuración anterior.
         </p>
       </div>
@@ -1807,7 +1807,7 @@ function FAQ() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">❓ Preguntas Frecuentes</h2>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">❓ Preguntas Frecuentes</h2>
       </div>
       
       {[
@@ -1837,11 +1837,11 @@ function FAQ() {
         }
       ].map((faq, idx) => (
         <div key={idx} className="bg-white border rounded-xl p-6">
-          <h3 className="font-semibold text-gray-900 mb-2 flex items-start gap-2">
+          <h3 className="font-semibold text-slate-900 mb-2 flex items-start gap-2">
             <HelpCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
             {faq.q}
           </h3>
-          <p className="text-gray-700 ml-7">{faq.a}</p>
+          <p className="text-slate-700 ml-7">{faq.a}</p>
         </div>
       ))}
 
@@ -1849,8 +1849,8 @@ function FAQ() {
         <div className="flex items-center gap-3">
           <MessageCircle className="w-6 h-6 text-blue-600" />
           <div>
-            <h3 className="font-semibold text-gray-900">¿No encuentras tu respuesta?</h3>
-            <p className="text-gray-700 text-sm mt-1">
+            <h3 className="font-semibold text-slate-900">¿No encuentras tu respuesta?</h3>
+            <p className="text-slate-700 text-sm mt-1">
               Contacta al soporte técnico o consulta la documentación completa del sistema.
             </p>
           </div>

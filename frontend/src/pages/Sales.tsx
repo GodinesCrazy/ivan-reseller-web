@@ -39,7 +39,6 @@ import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 import SalesReadinessPanel from '@/components/SalesReadinessPanel';
-import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
 import type { OperationsTruthResponse } from '@/types/operations';
 import { fetchOperationsTruth } from '@/services/operationsTruth.api';
 
@@ -99,12 +98,12 @@ const MARKETPLACES = [
 
 function AutomationBadge({ sale }: { sale: Sale }) {
   const status = sale.fulfillmentAutomationStatus || (sale.needsProductMapping ? 'needs_mapping' : undefined);
-  if (!status || status === 'unknown') return <span className="text-xs text-gray-400">—</span>;
+  if (!status || status === 'unknown') return <span className="text-xs text-slate-400">—</span>;
   if (status === 'completed') return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Automatización: Completada (AliExpress)</Badge>;
   if (status === 'pending_purchase') return <Badge variant="outline" className="text-amber-600 dark:text-amber-400">Pendiente compra</Badge>;
   if (status === 'needs_mapping') return <Badge variant="outline" className="text-blue-600 dark:text-blue-400">Requiere mapeo producto</Badge>;
   if (status === 'failed') return <Badge variant="destructive" title={sale.fulfillmentErrorReason || sale.syncNote}>Fallida{sale.fulfillmentErrorReason ? `: ${sale.fulfillmentErrorReason.slice(0, 40)}…` : ''}</Badge>;
-  return <span className="text-xs text-gray-500">{status}</span>;
+  return <span className="text-xs text-slate-500">{status}</span>;
 }
 
 export default function Sales() {
@@ -255,7 +254,7 @@ export default function Sales() {
     a.href = url;
     a.download = `sales-${Date.now()}.csv`;
     a.click();
-    toast.success('Exported to CSV');
+    toast.success('Exportado a CSV');
   };
 
   return (
@@ -263,21 +262,15 @@ export default function Sales() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Ventas</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Ventas registradas. La ganancia realizada requiere proof de fondos liberados (proof ladder) — ver{' '}
-            <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
-              Control Center
-            </Link>
-            {' '}y Finance.
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Datos reales desde API · Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Ventas</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Ventas registradas · ganancia realizada en{' '}
+            <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline">Control Center</Link>
             {lastSyncAt && (
               <span className="ml-2 text-amber-600 dark:text-amber-400">
-                · Última sincronización: {(() => {
+                · sincronizado {(() => {
                   const mins = Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000);
-                  return mins < 1 ? 'ahora mismo' : `${mins} min`;
+                  return mins < 1 ? 'ahora' : `hace ${mins} min`;
                 })()}
               </span>
             )}
@@ -294,181 +287,175 @@ export default function Sales() {
 
       <SalesReadinessPanel onSyncComplete={fetchSalesData} />
 
-      {/* Proof ladder first — verdad operativa */}
-      {operationsTruth && (
-        <div className="mb-4">
-          <PostSaleProofLadderPanel
-            summary={operationsTruth.summary.proofCounts}
-            title="Post-sale proof ladder"
-            subtitle="Sales activity is not promoted to released-funds or realized-profit truth until the backend proves those stages."
-          />
-        </div>
-      )}
-
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+      <p className="text-xs text-slate-500 mb-2">
         Las tarjetas inferiores son agregados del período — no sustituyen proof de fondos liberados ni ganancia realizada.
       </p>
+
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Ingresos totales (agregado, {periodLabel})</p>
-                <p className="text-2xl font-bold">{formatCurrencySimple(stats.totalRevenue, 'USD')}</p>
-                <p className={`text-xs flex items-center gap-1 mt-1 ${stats.revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  <TrendingUp className="w-3 h-3" />
-                  {stats.revenueChange >= 0 ? '+' : ''}{stats.revenueChange.toFixed(1)}% vs last period
-                </p>
-              </div>
-              <DollarSign className="w-8 h-8 text-green-600" />
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-5">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Ingresos totales ({periodLabel})</p>
+              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(stats.totalRevenue, 'USD')}</p>
+              <p className={`text-xs flex items-center gap-1 ${stats.revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <TrendingUp className="w-3 h-3" />
+                {stats.revenueChange >= 0 ? '+' : ''}{stats.revenueChange.toFixed(1)}% vs período anterior
+              </p>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Margen neto (agregado, {periodLabel})</p>
-                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">No es ganancia realizada hasta proof de fondos liberados en proof ladder.</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrencySimple(stats.totalProfit, 'USD')}</p>
-                <p className={`text-xs flex items-center gap-1 mt-1 ${stats.profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  <TrendingUp className="w-3 h-3" />
-                  {stats.profitChange >= 0 ? '+' : ''}{stats.profitChange.toFixed(1)}% vs last period
-                </p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-blue-600" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-50 dark:bg-green-900/20">
+              <DollarSign className="w-5 h-5 text-green-600" />
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Sales ({periodLabel})</p>
-                <p className="text-2xl font-bold">{stats.totalSales}</p>
-                <p className="text-xs text-gray-500 mt-1">pedidos en el período</p>
-                {typeof stats.completedSales === 'number' && stats.completedSales !== stats.totalSales && (
-                  <p className="text-xs text-gray-500 mt-0.5">Completadas: {stats.completedSales}</p>
-                )}
-              </div>
-              <ShoppingCart className="w-8 h-8 text-purple-600" />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-5">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Margen neto ({periodLabel})</p>
+              <p className="text-[10px] leading-tight text-amber-600 dark:text-amber-400 mt-0.5">No es ganancia realizada hasta proof de fondos liberados.</p>
+              <p className="text-2xl font-bold tabular-nums text-green-600">{formatCurrencySimple(stats.totalProfit, 'USD')}</p>
+              <p className={`text-xs flex items-center gap-1 ${stats.profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <TrendingUp className="w-3 h-3" />
+                {stats.profitChange >= 0 ? '+' : ''}{stats.profitChange.toFixed(1)}% vs período anterior
+              </p>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Avg Order Value ({periodLabel})</p>
-                <p className="text-2xl font-bold">{formatCurrencySimple(stats.avgOrderValue, 'USD')}</p>
-                <p className="text-xs text-gray-500 mt-1">por transacción</p>
-              </div>
-              <Package className="w-8 h-8 text-orange-600" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20">
+              <TrendingUp className="w-5 h-5 text-blue-600" />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-5">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Ventas totales ({periodLabel})</p>
+              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{stats.totalSales}</p>
+              <p className="text-xs text-slate-500">pedidos en el período</p>
+              {typeof stats.completedSales === 'number' && stats.completedSales !== stats.totalSales && (
+                <p className="text-xs text-slate-500">Completadas: {stats.completedSales}</p>
+              )}
+            </div>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-50 dark:bg-purple-900/20">
+              <ShoppingCart className="w-5 h-5 text-purple-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-5">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Valor promedio por orden ({periodLabel})</p>
+              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(stats.avgOrderValue, 'USD')}</p>
+              <p className="text-xs text-slate-500">por transacción</p>
+            </div>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50 dark:bg-orange-900/20">
+              <Package className="w-5 h-5 text-orange-600" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Tabs with Charts and Table */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="list">Sales List</TabsTrigger>
+        <TabsList className="border-b border-slate-200 dark:border-slate-800 bg-transparent p-0 rounded-none gap-4">
+          <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2.5 text-sm font-medium text-slate-500 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100">Resumen</TabsTrigger>
+          <TabsTrigger value="analytics" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2.5 text-sm font-medium text-slate-500 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100">Analíticas</TabsTrigger>
+          <TabsTrigger value="list" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 pb-2.5 text-sm font-medium text-slate-500 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100">Lista de ventas</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Evolución ingresos y beneficio</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+              <div className="p-5 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Evolución ingresos y beneficio</h3>
+              </div>
+              <div className="p-5 pt-2">
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={revenueData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2} name="Revenue" />
-                    <Line type="monotone" dataKey="profit" stroke="#10B981" strokeWidth={2} name="Profit (agregado)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                    <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                    <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                    <Tooltip contentStyle={{ borderRadius: '0.5rem', border: '1px solid #e2e8f0', fontSize: '0.875rem' }} />
+                    <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
+                    <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2} name="Ingresos" />
+                    <Line type="monotone" dataKey="profit" stroke="#10B981" strokeWidth={2} name="Beneficio (agregado)" />
                   </LineChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Ventas por marketplace</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+              <div className="p-5 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ventas por marketplace</h3>
+              </div>
+              <div className="p-5 pt-2">
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={marketplaceData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#3B82F6" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                    <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                    <Tooltip contentStyle={{ borderRadius: '0.5rem', border: '1px solid #e2e8f0', fontSize: '0.875rem' }} />
+                    <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Sales by Status</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+              <div className="p-5 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ventas por estado</h3>
+              </div>
+              <div className="p-5 pt-2">
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={statusData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#3B82F6" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-700" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                    <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                    <Tooltip contentStyle={{ borderRadius: '0.5rem', border: '1px solid #e2e8f0', fontSize: '0.875rem' }} />
+                    <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Proof-aware Metrics</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+              <div className="p-5 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Métricas con proof</h3>
+              </div>
+              <div className="p-5 pt-2 space-y-4">
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600">Recorded net margin ratio</span>
-                    <span className="text-sm font-medium">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">Ratio de margen neto registrado</span>
+                    <span className="text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">
                       {stats.totalRevenue > 0 ? ((stats.totalProfit / stats.totalRevenue) * 100).toFixed(1) : 0}%
                     </span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                     <div 
-                      className="bg-blue-600 h-2 rounded-full" 
+                      className="bg-blue-600 h-2 rounded-full transition-all" 
                       style={{ width: stats.totalRevenue > 0 ? `${(stats.totalProfit / stats.totalRevenue) * 100}%` : '0%' }}
                     ></div>
                   </div>
                 </div>
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Fulfillment progress</span>
-                    <span className="text-sm font-medium">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">Progreso de fulfillment</span>
+                    <span className="text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">
                       {salesInPeriod.length > 0
                         ? `${Math.round((salesInPeriod.filter((s) => s.status === 'SHIPPED' || s.status === 'DELIVERED').length / salesInPeriod.length) * 100)}%`
                         : '—'}
                     </span>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                     <div
-                      className="bg-purple-600 h-2 rounded-full"
+                      className="bg-purple-600 h-2 rounded-full transition-all"
                       style={{
                         width: salesInPeriod.length > 0
                           ? `${(salesInPeriod.filter((s) => s.status === 'SHIPPED' || s.status === 'DELIVERED').length / salesInPeriod.length) * 100}%`
@@ -478,37 +465,37 @@ export default function Sales() {
                   </div>
                 </div>
                 {operationsTruth && (
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 text-sm">
-                    <p className="font-medium text-gray-900 dark:text-gray-100">Released funds proved</p>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1">
-                      {operationsTruth.summary.proofCounts.releasedFundsObtained} products with payout proof.
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-3 text-sm">
+                    <p className="font-medium text-slate-900 dark:text-slate-100">Fondos liberados comprobados</p>
+                    <p className="text-slate-600 dark:text-slate-400 mt-1">
+                      {operationsTruth.summary.proofCounts.releasedFundsObtained} productos con proof de payout.
                     </p>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1">
-                      {operationsTruth.summary.proofCounts.realizedProfitObtained} products with realized profit proof.
+                    <p className="text-slate-600 dark:text-slate-400 mt-1">
+                      {operationsTruth.summary.proofCounts.realizedProfitObtained} productos con proof de ganancia realizada.
                     </p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
         {/* Sales List Tab */}
         <TabsContent value="list" className="space-y-4">
           {/* Filters */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Filter className="w-5 h-5" />
-                Filters
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+            <div className="p-5 pb-3">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Filter className="w-4 h-4 text-slate-400" />
+                Filtros
+              </h3>
+            </div>
+            <div className="px-5 pb-5">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
-                    placeholder="Search orders..."
+                    placeholder="Buscar órdenes..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
@@ -517,21 +504,21 @@ export default function Sales() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="ALL">All Status</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="PROCESSING">Processing</option>
-                  <option value="SHIPPED">Shipped</option>
-                  <option value="DELIVERED">Delivered</option>
-                  <option value="CANCELLED">Cancelled</option>
+                  <option value="ALL">Todos los estados</option>
+                  <option value="PENDING">Pendiente</option>
+                  <option value="PROCESSING">Procesando</option>
+                  <option value="SHIPPED">Enviado</option>
+                  <option value="DELIVERED">Entregado</option>
+                  <option value="CANCELLED">Cancelado</option>
                 </select>
                 <select
                   value={marketplaceFilter}
                   onChange={(e) => setMarketplaceFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="ALL">All Marketplaces</option>
+                  <option value="ALL">Todos los marketplaces</option>
                   <option value="ebay">eBay</option>
                   <option value="amazon">Amazon</option>
                   <option value="mercadolibre">MercadoLibre</option>
@@ -540,100 +527,100 @@ export default function Sales() {
                 <select
                   value={dateRange}
                   onChange={(e) => setDateRange(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="7">Last 7 days</option>
-                  <option value="30">Last 30 days</option>
-                  <option value="90">Last 90 days</option>
-                  <option value="365">Last year</option>
+                  <option value="7">Últimos 7 días</option>
+                  <option value="30">Últimos 30 días</option>
+                  <option value="90">Últimos 90 días</option>
+                  <option value="365">Último año</option>
                 </select>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Sales Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Sales List ({filteredSales.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+            <div className="p-5 pb-3">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lista de ventas ({filteredSales.length})</h3>
+            </div>
+            <div className="px-5 pb-5">
               {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Loading sales...</p>
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-2 border-slate-200 border-t-blue-600 mx-auto"></div>
+                  <p className="mt-4 text-sm text-slate-500">Cargando ventas...</p>
                 </div>
               ) : paginatedSales.length === 0 ? (
-                <div className="text-center py-8">
-                  <ShoppingCart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No sales found</p>
+                <div className="text-center py-12">
+                  <ShoppingCart className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                  <p className="text-sm text-slate-500">No se encontraron ventas</p>
                 </div>
               ) : (
                 <>
                   <div className="overflow-x-auto">
                     <table className="w-full">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Imagen</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID pedido</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Comprador</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Origen</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Automatización</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="Margen registrado — ganancia realizada requiere proof de payout">Profit (registrado)</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Workflow</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Imagen</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Order ID</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">ID pedido</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Producto</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Comprador</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Origen</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Automatización</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Precio</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500" title="Margen registrado — ganancia realizada requiere proof de payout">Profit (registrado)</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Estado</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Workflow</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fecha</th>
+                          <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acciones</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200">
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {paginatedSales.map((sale) => (
-                          <tr key={sale.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                            <td className="px-4 py-3">
+                          <tr key={sale.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                            <td className="px-3 py-3">
                               {sale.productImage ? (
-                                <img src={sale.productImage} alt="" className="w-10 h-10 object-cover rounded" />
+                                <img src={sale.productImage} alt="" className="w-10 h-10 object-cover rounded-md" />
                               ) : (
-                                <div className="w-10 h-10 rounded bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
-                                  <Package className="w-5 h-5 text-gray-400" />
+                                <div className="w-10 h-10 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                  <Package className="w-4 h-4 text-slate-400" />
                                 </div>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">{sale.orderId}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{sale.ebayOrderId || sale.mercadolibreOrderId || sale.amazonOrderId || '—'}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">{sale.productTitle}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{sale.buyerName}</td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">{sale.orderId}</td>
+                            <td className="px-3 py-3 text-sm text-slate-500">{sale.ebayOrderId || sale.mercadolibreOrderId || sale.amazonOrderId || '—'}</td>
+                            <td className="px-3 py-3 text-sm text-slate-900 dark:text-slate-100 max-w-[200px] truncate">{sale.productTitle}</td>
+                            <td className="px-3 py-3 text-sm text-slate-600 dark:text-slate-400">{sale.buyerName}</td>
+                            <td className="px-3 py-3">
                               <Badge variant="outline">{sale.source || sale.marketplace}</Badge>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-3">
                               <AutomationBadge sale={sale} />
                             </td>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrencySimple(sale.salePrice, 'USD')}</td>
-                            <td className="px-4 py-3 text-sm font-medium text-green-600">+{formatCurrencySimple(sale.profit, 'USD')}</td>
-                            <td className="px-4 py-3">{getStatusBadge(sale.status)}</td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-3 text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(sale.salePrice, 'USD')}</td>
+                            <td className="px-3 py-3 text-sm font-medium tabular-nums text-green-600">+{formatCurrencySimple(sale.profit, 'USD')}</td>
+                            <td className="px-3 py-3">{getStatusBadge(sale.status)}</td>
+                            <td className="px-3 py-3">
                               {sale.productId ? (
                                 <WorkflowStatusIndicator 
                                   productId={sale.productId}
                                   currentStage={undefined}
                                 />
                               ) : (
-                                <span className="text-xs text-gray-400">N/A</span>
+                                <span className="text-xs text-slate-400">N/A</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
+                            <td className="px-3 py-3 text-sm tabular-nums text-slate-500">
                               {new Date(sale.createdAt).toLocaleDateString()}
                             </td>
-                            <td className="px-4 py-3 text-right">
+                            <td className="px-3 py-3 text-right">
                               <button
                                 onClick={() => {
                                   setSelectedSale(sale);
                                   setShowModal(true);
                                 }}
-                                className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                                title="View details"
+                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+                                title="Ver detalle"
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
@@ -646,9 +633,9 @@ export default function Sales() {
 
                   {/* Pagination */}
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                      <p className="text-sm text-gray-600">
-                        Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredSales.length)} of {filteredSales.length} sales
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                      <p className="text-sm text-slate-500">
+                        Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, filteredSales.length)} de {filteredSales.length} ventas
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -656,64 +643,64 @@ export default function Sales() {
                           onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                           disabled={currentPage === 1}
                         >
-                          Previous
+                          Anterior
                         </Button>
                         <Button
                           variant="outline"
                           onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                           disabled={currentPage === totalPages}
                         >
-                          Next
+                          Siguiente
                         </Button>
                       </div>
                     </div>
                   )}
                 </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
-      {/* Sale Detail Modal — Phase 40: full detail */}
+      {/* Sale Detail Modal */}
       {showModal && selectedSale && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b dark:border-gray-700 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Detalle de venta</h2>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Detalle de venta</h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors text-slate-400 hover:text-slate-600"
               >
                 ×
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-5 space-y-4">
               {selectedSale.productImage && (
                 <div className="flex justify-center">
-                  <img src={selectedSale.productImage} alt={selectedSale.productTitle} className="max-h-32 object-contain rounded" />
+                  <img src={selectedSale.productImage} alt={selectedSale.productTitle} className="max-h-32 object-contain rounded-lg" />
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Order ID</p>
-                  <p className="font-medium text-blue-600 dark:text-blue-400">{selectedSale.orderId}</p>
+                  <p className="text-xs text-slate-500">Order ID</p>
+                  <p className="font-medium text-blue-600 dark:text-blue-400 mt-0.5">{selectedSale.orderId}</p>
                 </div>
                 {(selectedSale.ebayOrderId || selectedSale.mercadolibreOrderId || selectedSale.amazonOrderId) && (
                   <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">ID pedido {selectedSale.ebayOrderId ? 'eBay' : selectedSale.mercadolibreOrderId ? 'Mercado Libre' : 'Amazon'}</p>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">{selectedSale.ebayOrderId || selectedSale.mercadolibreOrderId || selectedSale.amazonOrderId}</p>
+                    <p className="text-xs text-slate-500">ID pedido {selectedSale.ebayOrderId ? 'eBay' : selectedSale.mercadolibreOrderId ? 'Mercado Libre' : 'Amazon'}</p>
+                    <p className="font-medium text-slate-900 dark:text-slate-100 mt-0.5">{selectedSale.ebayOrderId || selectedSale.mercadolibreOrderId || selectedSale.amazonOrderId}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Estado</p>
-                  {getStatusBadge(selectedSale.status)}
+                  <p className="text-xs text-slate-500">Estado</p>
+                  <div className="mt-0.5">{getStatusBadge(selectedSale.status)}</div>
                 </div>
                 <div className="col-span-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Automatización</p>
-                  <AutomationBadge sale={selectedSale} />
+                  <p className="text-xs text-slate-500">Automatización</p>
+                  <div className="mt-0.5"><AutomationBadge sale={selectedSale} /></div>
                   {(selectedSale.fulfillmentErrorReason || selectedSale.syncNote) && (
-                    <p className="text-xs text-gray-500 mt-1 truncate" title={selectedSale.fulfillmentErrorReason || selectedSale.syncNote}>
+                    <p className="text-xs text-slate-400 mt-1 truncate" title={selectedSale.fulfillmentErrorReason || selectedSale.syncNote}>
                       {selectedSale.fulfillmentErrorReason || selectedSale.syncNote}
                     </p>
                   )}
@@ -725,27 +712,27 @@ export default function Sales() {
                   </div>
                 )}
                 <div className="col-span-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Producto</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">{selectedSale.productTitle}</p>
+                  <p className="text-xs text-slate-500">Producto</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-100 mt-0.5">{selectedSale.productTitle}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Origen</p>
-                  <Badge variant="outline">{selectedSale.source || selectedSale.marketplace}</Badge>
+                  <p className="text-xs text-slate-500">Origen</p>
+                  <div className="mt-0.5"><Badge variant="outline">{selectedSale.source || selectedSale.marketplace}</Badge></div>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Buyer</p>
-                  <p className="font-medium">{selectedSale.buyerName}</p>
+                  <p className="text-xs text-slate-500">Comprador</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-100 mt-0.5">{selectedSale.buyerName}</p>
                   {selectedSale.buyerEmail && (
-                    <p className="text-xs text-gray-500 mt-1">{selectedSale.buyerEmail}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{selectedSale.buyerEmail}</p>
                   )}
                 </div>
                 {selectedSale.shippingAddress && (
                   <div className="col-span-2">
-                    <p className="text-sm text-gray-600 flex items-center gap-1">
-                      <MapPin className="w-4 h-4" />
-                      Shipping Address
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      Dirección de envío
                     </p>
-                    <p className="font-medium text-sm break-words">
+                    <p className="font-medium text-sm text-slate-900 dark:text-slate-100 break-words mt-0.5">
                       {typeof selectedSale.shippingAddress === 'string' 
                         ? selectedSale.shippingAddress 
                         : JSON.stringify(selectedSale.shippingAddress)}
@@ -754,59 +741,59 @@ export default function Sales() {
                 )}
                 {selectedSale.trackingNumber && (
                   <div className="col-span-2">
-                    <p className="text-sm text-gray-600 flex items-center gap-1">
-                      <MapPin className="w-4 h-4" />
-                      Tracking Number
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      Número de seguimiento
                     </p>
-                    <p className="font-medium">{selectedSale.trackingNumber}</p>
+                    <p className="font-medium text-slate-900 dark:text-slate-100 mt-0.5">{selectedSale.trackingNumber}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-sm text-gray-600 flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    Sale Date
+                  <p className="text-xs text-slate-500 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    Fecha de venta
                   </p>
-                  <p className="font-medium">{new Date(selectedSale.createdAt).toLocaleString()}</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-100 mt-0.5">{new Date(selectedSale.createdAt).toLocaleString()}</p>
                 </div>
               </div>
               {/* Composición financiera — margen registrado, no necesariamente realizado */}
-              <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-900/40 space-y-2">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Composición financiera (registrada)</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Margen inferido del ledger — la ganancia realizada requiere proof de payout en Finance.</p>
+              <div className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 bg-slate-50 dark:bg-slate-800/50 space-y-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">Composición financiera (registrada)</h3>
+                <p className="text-[11px] text-slate-500 mb-3">Margen inferido del ledger — la ganancia realizada requiere proof de payout en Finance.</p>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Precio de venta</span>
-                  <span className="font-medium">{formatCurrencySimple(selectedSale.salePrice, 'USD')}</span>
+                  <span className="text-slate-600 dark:text-slate-400">Precio de venta</span>
+                  <span className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(selectedSale.salePrice, 'USD')}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Costo proveedor</span>
-                  <span className="font-medium text-red-600">-{formatCurrencySimple(selectedSale.cost, 'USD')}</span>
+                  <span className="text-slate-600 dark:text-slate-400">Costo proveedor</span>
+                  <span className="font-medium tabular-nums text-red-600">-{formatCurrencySimple(selectedSale.cost, 'USD')}</span>
                 </div>
                 {(selectedSale.marketplaceFee ?? 0) > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Fee marketplace</span>
-                    <span className="font-medium text-red-600">-{formatCurrencySimple(selectedSale.marketplaceFee ?? 0, 'USD')}</span>
+                    <span className="text-slate-600 dark:text-slate-400">Fee marketplace</span>
+                    <span className="font-medium tabular-nums text-red-600">-{formatCurrencySimple(selectedSale.marketplaceFee ?? 0, 'USD')}</span>
                   </div>
                 )}
                 {(selectedSale.commission ?? 0) > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Comisión plataforma</span>
-                    <span className="font-medium text-orange-600">-{formatCurrencySimple(selectedSale.commission ?? 0, 'USD')}</span>
+                    <span className="text-slate-600 dark:text-slate-400">Comisión plataforma</span>
+                    <span className="font-medium tabular-nums text-orange-600">-{formatCurrencySimple(selectedSale.commission ?? 0, 'USD')}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-sm pt-2 border-t">
-                  <span className="text-gray-600">Ganancia bruta</span>
-                  <span className="font-medium">{formatCurrencySimple(selectedSale.grossProfit ?? selectedSale.salePrice - selectedSale.cost, 'USD')}</span>
+                <div className="flex justify-between text-sm pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <span className="text-slate-600 dark:text-slate-400">Ganancia bruta</span>
+                  <span className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{formatCurrencySimple(selectedSale.grossProfit ?? selectedSale.salePrice - selectedSale.cost, 'USD')}</span>
                 </div>
                 <div className="flex justify-between text-sm font-semibold">
-                  <span className="text-gray-700 dark:text-gray-300">Ganancia neta (registrada)</span>
-                  <span className="text-gray-800 dark:text-gray-200">+{formatCurrencySimple(selectedSale.profit, 'USD')}</span>
+                  <span className="text-slate-700 dark:text-slate-300">Ganancia neta (registrada)</span>
+                  <span className="tabular-nums text-slate-900 dark:text-slate-100">+{formatCurrencySimple(selectedSale.profit, 'USD')}</span>
                 </div>
-                <p className="text-[11px] text-gray-500 pt-1">No equivale a realized profit sin proof de fondos liberados.</p>
+                <p className="text-[11px] text-slate-500 pt-1">No equivale a realized profit sin proof de fondos liberados.</p>
               </div>
             </div>
-            <div className="p-6 border-t flex gap-3 justify-end">
+            <div className="p-5 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setShowModal(false)}>
-                Close
+                Cerrar
               </Button>
             </div>
           </div>

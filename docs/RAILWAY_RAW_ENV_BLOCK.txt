@@ -1,0 +1,48 @@
+# RAILWAY RAW ENV BLOCK — FASE 0 PHASE 0
+# Fecha: 2026-03-31
+# Uso: Railway Dashboard → Variables → RAW Editor → pegar el bloque de abajo
+# IMPORTANTE: No pegar las líneas de comentario (que empiezan con #)
+# IMPORTANTE: Verificar primero que DATABASE_URL y REDIS_URL ya existan en Railway
+#             Si no existen, agregarlas con los valores correctos
+
+# ─── PHASE 0: SUPPLIER QUALITY FILTERS ───────────────────────────────────────
+MIN_SUPPLIER_ORDERS=100
+MIN_SUPPLIER_RATING=4.0
+MIN_SUPPLIER_REVIEWS=10
+MAX_SHIPPING_DAYS=30
+MIN_SUPPLIER_SCORE_PCT=70
+
+# ─── PHASE 0: OPPORTUNITY QUALITY THRESHOLDS ─────────────────────────────────
+MIN_SEARCH_VOLUME=500
+MIN_TREND_CONFIDENCE=60
+MIN_OPPORTUNITY_MARGIN=0.18
+OPPORTUNITY_DUPLICATE_THRESHOLD=0.75
+
+# ─── OPTIONAL: SCRAPER BRIDGE ML FALLBACK ────────────────────────────────────
+# Solo activar si el scraper bridge está corriendo en producción
+# SCRAPER_BRIDGE_ENABLED=true
+# SCRAPER_BRIDGE_URL=<URL del bridge en producción>
+
+# ─── OPTIONAL: ML DEBUG ──────────────────────────────────────────────────────
+# Solo para diagnóstico temporal — desactivar en producción
+# ML_COMPARABLES_DEBUG=1
+# ML_COMPARABLES_DEBUG_USER_ID=1
+
+# ─── CRITICAL: VERIFY THESE ALREADY EXIST IN RAILWAY ─────────────────────────
+# Los valores de abajo son los correctos según .env local
+# Verificar que existan en Railway con los valores correctos:
+#
+# DATABASE_URL=postgresql://postgres:<pass>@yamabiko.proxy.rlwy.net:35731/railway
+#   (o usar postgres.railway.internal si los servicios están en el mismo proyecto)
+#
+# REDIS_URL=<URL del servicio Redis en Railway>
+#   CRÍTICO: NO debe ser redis://localhost:6379 — causaría ECONNREFUSED
+#   Formato correcto: redis://default:<pass>@<host>.proxy.rlwy.net:<port>
+#
+# JWT_SECRET=<mínimo 32 caracteres>
+# ENCRYPTION_KEY=<mínimo 32 caracteres>
+# NODE_ENV=production
+#
+# ─── VERIFY PORT IS NOT SET MANUALLY ─────────────────────────────────────────
+# Si existe PORT=<cualquier valor> en Railway Variables → ELIMINARLA
+# Railway inyecta PORT automáticamente — definirla manualmente causa conflicto

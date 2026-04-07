@@ -45,6 +45,25 @@ interface JobStats {
   delayed: number;
 }
 
+const STATUS_LABEL_ES: Record<string, string> = {
+  completed: 'Completado',
+  failed: 'Fallido',
+  active: 'Activo',
+  pending: 'Pendiente',
+  delayed: 'Retrasado',
+  cancelled: 'Cancelado',
+};
+
+const TYPE_LABEL_ES: Record<string, string> = {
+  publish: 'Publicar',
+  sync: 'Sincronizar',
+  scrape: 'Raspado',
+  analyze: 'Analizar',
+  import: 'Importar',
+  export: 'Exportar',
+  other: 'Otro',
+};
+
 export default function Jobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [stats, setStats] = useState<JobStats>({
@@ -111,43 +130,43 @@ export default function Jobs() {
   const retryJob = async (jobId: string) => {
     try {
       await api.post(`/api/jobs/${jobId}/retry`);
-      toast.success('Job retry scheduled');
+      toast.success('Reintento programado');
       loadJobs();
       loadStats();
     } catch (error: any) {
-      toast.error('Error retrying job');
+      toast.error('Error al reintentar el trabajo');
     }
   };
 
   const cancelJob = async (jobId: string) => {
-    if (!confirm('Are you sure you want to cancel this job?')) return;
+    if (!confirm('¿Seguro que quieres cancelar este trabajo?')) return;
 
     try {
       await api.post(`/api/jobs/${jobId}/cancel`);
-      toast.success('Job cancelled');
+      toast.success('Trabajo cancelado');
       loadJobs();
       loadStats();
     } catch (error: any) {
-      toast.error('Error cancelling job');
+      toast.error('Error al cancelar el trabajo');
     }
   };
 
   const deleteJob = async (jobId: string) => {
-    if (!confirm('Are you sure you want to delete this job?')) return;
+    if (!confirm('¿Seguro que quieres eliminar este trabajo?')) return;
 
     try {
       await api.delete(`/api/jobs/${jobId}`);
-      toast.success('Job deleted');
+      toast.success('Trabajo eliminado');
       loadJobs();
       loadStats();
     } catch (error: any) {
-      toast.error('Error deleting job');
+      toast.error('Error al eliminar el trabajo');
     }
   };
 
   const bulkRetry = async () => {
     if (selectedJobs.size === 0) {
-      toast.error('No jobs selected');
+      toast.error('No hay trabajos seleccionados');
       return;
     }
 
@@ -155,67 +174,67 @@ export default function Jobs() {
       await Promise.all(
         Array.from(selectedJobs).map(jobId => api.post(`/api/jobs/${jobId}/retry`))
       );
-      toast.success(`${selectedJobs.size} jobs retry scheduled`);
+      toast.success(`${selectedJobs.size} reintentos programados`);
       setSelectedJobs(new Set());
       loadJobs();
       loadStats();
     } catch (error: any) {
-      toast.error('Error retrying jobs');
+      toast.error('Error al reintentar trabajos');
     }
   };
 
   const bulkCancel = async () => {
     if (selectedJobs.size === 0) {
-      toast.error('No jobs selected');
+      toast.error('No hay trabajos seleccionados');
       return;
     }
 
-    if (!confirm(`Cancel ${selectedJobs.size} selected jobs?`)) return;
+    if (!confirm(`¿Cancelar ${selectedJobs.size} trabajos seleccionados?`)) return;
 
     try {
       await Promise.all(
         Array.from(selectedJobs).map(jobId => api.post(`/api/jobs/${jobId}/cancel`))
       );
-      toast.success(`${selectedJobs.size} jobs cancelled`);
+      toast.success(`${selectedJobs.size} trabajos cancelados`);
       setSelectedJobs(new Set());
       loadJobs();
       loadStats();
     } catch (error: any) {
-      toast.error('Error cancelling jobs');
+      toast.error('Error al cancelar trabajos');
     }
   };
 
   const bulkDelete = async () => {
     if (selectedJobs.size === 0) {
-      toast.error('No jobs selected');
+      toast.error('No hay trabajos seleccionados');
       return;
     }
 
-    if (!confirm(`Delete ${selectedJobs.size} selected jobs?`)) return;
+    if (!confirm(`¿Eliminar ${selectedJobs.size} trabajos seleccionados?`)) return;
 
     try {
       await Promise.all(
         Array.from(selectedJobs).map(jobId => api.delete(`/api/jobs/${jobId}`))
       );
-      toast.success(`${selectedJobs.size} jobs deleted`);
+      toast.success(`${selectedJobs.size} trabajos eliminados`);
       setSelectedJobs(new Set());
       loadJobs();
       loadStats();
     } catch (error: any) {
-      toast.error('Error deleting jobs');
+      toast.error('Error al eliminar trabajos');
     }
   };
 
   const clearCompleted = async () => {
-    if (!confirm('Clear all completed jobs?')) return;
+    if (!confirm('¿Eliminar todos los trabajos completados?')) return;
 
     try {
       await api.delete('/api/jobs/completed');
-      toast.success('Completed jobs cleared');
+      toast.success('Trabajos completados eliminados');
       loadJobs();
       loadStats();
     } catch (error: any) {
-      toast.error('Error clearing jobs');
+      toast.error('Error al limpiar trabajos');
     }
   };
 
@@ -275,8 +294,8 @@ export default function Jobs() {
       case 'active': return 'text-blue-600 bg-blue-100';
       case 'pending': return 'text-yellow-600 bg-yellow-100';
       case 'delayed': return 'text-orange-600 bg-orange-100';
-      case 'cancelled': return 'text-gray-600 bg-gray-100';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'cancelled': return 'text-slate-600 bg-slate-100';
+      default: return 'text-slate-600 bg-slate-100';
     }
   };
 
@@ -300,7 +319,7 @@ export default function Jobs() {
       case 'analyze': return 'bg-yellow-100 text-yellow-700';
       case 'import': return 'bg-cyan-100 text-cyan-700';
       case 'export': return 'bg-pink-100 text-pink-700';
-      default: return 'bg-gray-100 text-gray-700';
+      default: return 'bg-slate-100 text-slate-700';
     }
   };
 
@@ -317,8 +336,8 @@ export default function Jobs() {
     return (
       <div className="p-6 space-y-4">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-48 mb-4"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
+          <div className="h-8 bg-slate-200 rounded w-48 mb-4"></div>
+          <div className="h-64 bg-slate-200 rounded"></div>
         </div>
       </div>
     );
@@ -329,75 +348,75 @@ export default function Jobs() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Job Queue</h1>
-          <p className="text-gray-600 dark:text-gray-400">Monitor and manage background jobs</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos desde API. Actualización automática si está activada.</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Cola de trabajos</h1>
+          <p className="text-xs text-slate-500">Monitorea y gestiona trabajos en segundo plano</p>
+          <p className="text-xs text-slate-500 mt-0.5">Datos desde API. Actualización automática si está activada.</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`px-4 py-2 border rounded-lg flex items-center gap-2 ${
-              autoRefresh ? 'bg-green-50 border-green-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+            className={`px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center gap-2 transition-colors ${
+              autoRefresh ? 'bg-green-50 border-green-300 dark:border-green-700' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
           >
             {autoRefresh ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            Auto-refresh {autoRefresh ? 'ON' : 'OFF'}
+            Actualización automática {autoRefresh ? 'activada' : 'desactivada'}
           </button>
           <button
             onClick={() => { loadJobs(); loadStats(); }}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2"
+            className="px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/40 flex items-center gap-2 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
-            Refresh Now
+            Actualizar ahora
           </button>
           <button
             onClick={clearCompleted}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+            className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 flex items-center gap-2"
           >
             <Trash2 className="w-4 h-4" />
-            Clear Completed
+            Limpiar completados
           </button>
         </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <div className="text-sm text-gray-600 mb-1">Total</div>
-          <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
+          <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">Total</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.total}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
           <div className="flex items-center gap-2 text-sm text-blue-600 mb-1">
             <RefreshCw className="w-4 h-4" />
-            Active
+            Activos
           </div>
           <div className="text-2xl font-bold text-blue-900">{stats.active}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
           <div className="flex items-center gap-2 text-sm text-yellow-600 mb-1">
             <Clock className="w-4 h-4" />
-            Pending
+            Pendientes
           </div>
           <div className="text-2xl font-bold text-yellow-900">{stats.pending}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
           <div className="flex items-center gap-2 text-sm text-green-600 mb-1">
             <CheckCircle className="w-4 h-4" />
-            Completed
+            Completados
           </div>
           <div className="text-2xl font-bold text-green-900">{stats.completed}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
           <div className="flex items-center gap-2 text-sm text-red-600 mb-1">
             <XCircle className="w-4 h-4" />
-            Failed
+            Fallidos
           </div>
           <div className="text-2xl font-bold text-red-900">{stats.failed}</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
           <div className="flex items-center gap-2 text-sm text-orange-600 mb-1">
             <AlertCircle className="w-4 h-4" />
-            Delayed
+            Retrasados
           </div>
           <div className="text-2xl font-bold text-orange-900">{stats.delayed}</div>
         </div>
@@ -405,38 +424,39 @@ export default function Jobs() {
 
       {/* Bulk Actions */}
       {selectedJobs.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-blue-900">
-              <strong>{selectedJobs.size}</strong> job{selectedJobs.size !== 1 ? 's' : ''} selected
+            <div className="text-sm text-blue-900 dark:text-blue-100">
+              <strong>{selectedJobs.size}</strong>{' '}
+              {selectedJobs.size !== 1 ? 'trabajos seleccionados' : 'trabajo seleccionado'}
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={bulkRetry}
-                className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center gap-1"
+                className="px-3 py-1 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 flex items-center gap-1"
               >
                 <RotateCcw className="w-3 h-3" />
-                Retry
+                Reintentar
               </button>
               <button
                 onClick={bulkCancel}
-                className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 flex items-center gap-1"
+                className="px-3 py-1 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700 flex items-center gap-1"
               >
                 <StopCircle className="w-3 h-3" />
-                Cancel
+                Cancelar
               </button>
               <button
                 onClick={bulkDelete}
-                className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 flex items-center gap-1"
+                className="px-3 py-1 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 flex items-center gap-1"
               >
                 <Trash2 className="w-3 h-3" />
-                Delete
+                Eliminar
               </button>
               <button
                 onClick={() => setSelectedJobs(new Set())}
-                className="px-3 py-1 border border-gray-300 text-sm rounded hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                className="px-3 py-1 border border-slate-200 dark:border-slate-800 text-sm rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
               >
-                Clear Selection
+                Quitar selección
               </button>
             </div>
           </div>
@@ -444,65 +464,65 @@ export default function Jobs() {
       )}
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name or ID..."
-              className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="Buscar por nombre o ID..."
+              className="w-full pl-10 pr-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
             />
           </div>
 
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+            className="px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
           >
-            <option value="all">All Types</option>
-            <option value="publish">Publish</option>
-            <option value="sync">Sync</option>
-            <option value="scrape">Scrape</option>
-            <option value="analyze">Analyze</option>
-            <option value="import">Import</option>
-            <option value="export">Export</option>
-            <option value="other">Other</option>
+            <option value="all">Todos los tipos</option>
+            <option value="publish">Publicar</option>
+            <option value="sync">Sincronizar</option>
+            <option value="scrape">Raspado</option>
+            <option value="analyze">Analizar</option>
+            <option value="import">Importar</option>
+            <option value="export">Exportar</option>
+            <option value="other">Otro</option>
           </select>
 
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+            className="px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
           >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-            <option value="delayed">Delayed</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="all">Todos los estados</option>
+            <option value="pending">Pendiente</option>
+            <option value="active">Activo</option>
+            <option value="completed">Completado</option>
+            <option value="failed">Fallido</option>
+            <option value="delayed">Retrasado</option>
+            <option value="cancelled">Cancelado</option>
           </select>
 
           <select
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+            className="px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
           >
-            <option value="all">All Time</option>
-            <option value="today">Last 24 hours</option>
-            <option value="week">Last 7 days</option>
-            <option value="month">Last 30 days</option>
+            <option value="all">Todo el período</option>
+            <option value="today">Últimas 24 horas</option>
+            <option value="week">Últimos 7 días</option>
+            <option value="month">Últimos 30 días</option>
           </select>
         </div>
       </div>
 
       {/* Jobs Table */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 dark:bg-gray-700/50">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+          <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
               <th className="px-6 py-3 text-left">
                 <input
@@ -512,28 +532,28 @@ export default function Jobs() {
                   className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                 />
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Progress</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attempts</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">ID trabajo</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Nombre</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Tipo</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Estado</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Progreso</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Intentos</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Duración</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Creado</th>
+              <th className="px-6 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acciones</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
             {paginatedJobs.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-6 py-12 text-center text-gray-500">
-                  <Package className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                  <div>No jobs found</div>
+                <td colSpan={10} className="px-6 py-12 text-center text-slate-500">
+                  <Package className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                  <div>No hay trabajos</div>
                 </td>
               </tr>
             )}
             {paginatedJobs.map((job) => (
-              <tr key={job.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+              <tr key={job.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="px-6 py-4">
                   <input
                     type="checkbox"
@@ -543,50 +563,50 @@ export default function Jobs() {
                   />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-xs font-mono text-gray-600">{job.id.slice(0, 8)}...</div>
+                  <div className="text-xs font-mono text-slate-600 dark:text-slate-400">{job.id.slice(0, 8)}...</div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-gray-900">{job.name}</div>
+                  <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{job.name}</div>
                   {job.failedReason && (
                     <div className="text-xs text-red-600 mt-1">{job.failedReason}</div>
                   )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getTypeBadgeColor(job.type)}`}>
-                    {job.type}
+                    {TYPE_LABEL_ES[job.type] ?? job.type}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(job.status)}`}>
                     {getStatusIcon(job.status)}
-                    {job.status}
+                    {STATUS_LABEL_ES[job.status] ?? job.status}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="w-32">
-                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                    <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 mb-1">
                       <span>{job.progress}%</span>
                     </div>
-                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                       <div
                         className={`h-full transition-all ${
                           job.status === 'completed' ? 'bg-green-500' :
                           job.status === 'failed' ? 'bg-red-500' :
                           job.status === 'active' ? 'bg-blue-500' :
-                          'bg-gray-300'
+                          'bg-slate-300 dark:bg-slate-600'
                         }`}
                         style={{ width: `${job.progress}%` }}
                       />
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">
                   {job.attemptsMade !== undefined ? `${job.attemptsMade}/${job.attemptsMax || 3}` : '—'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">
                   {formatDuration(job.processedOn || job.timestamp, job.finishedOn)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">
                   {new Date(job.timestamp).toLocaleString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -595,7 +615,7 @@ export default function Jobs() {
                       <button
                         onClick={() => retryJob(job.id)}
                         className="text-green-600 hover:text-green-900"
-                        title="Retry"
+                        title="Reintentar"
                       >
                         <RotateCcw className="w-4 h-4" />
                       </button>
@@ -604,7 +624,7 @@ export default function Jobs() {
                       <button
                         onClick={() => cancelJob(job.id)}
                         className="text-yellow-600 hover:text-yellow-900"
-                        title="Cancel"
+                        title="Cancelar"
                       >
                         <StopCircle className="w-4 h-4" />
                       </button>
@@ -613,7 +633,7 @@ export default function Jobs() {
                       <button
                         onClick={() => deleteJob(job.id)}
                         className="text-red-600 hover:text-red-900"
-                        title="Delete"
+                        title="Eliminar"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -628,41 +648,41 @@ export default function Jobs() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
-          <div className="text-sm text-gray-700">
-            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredJobs.length)} of {filteredJobs.length} jobs
+        <div className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card px-4 py-3">
+          <div className="text-sm text-slate-700 dark:text-slate-300">
+            Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filteredJobs.length)} de {filteredJobs.length} trabajos
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 disabled:opacity-50 transition-colors"
             >
-              First
+              Primera
             </button>
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 disabled:opacity-50 transition-colors"
             >
-              Previous
+              Anterior
             </button>
-            <span className="px-3 py-1">
-              Page {currentPage} of {totalPages}
+            <span className="px-3 py-1 text-slate-700 dark:text-slate-300">
+              Página {currentPage} de {totalPages}
             </span>
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 disabled:opacity-50 transition-colors"
             >
-              Next
+              Siguiente
             </button>
             <button
               onClick={() => setCurrentPage(totalPages)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 disabled:opacity-50 transition-colors"
             >
-              Last
+              Última
             </button>
           </div>
         </div>
@@ -670,4 +690,3 @@ export default function Jobs() {
     </div>
   );
 }
-

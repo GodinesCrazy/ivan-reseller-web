@@ -35,4 +35,9 @@ export interface PublishableProduct {
   images?: string | null;
   productData?: unknown;
   targetCountry?: string | null;
+  packageWeightGrams?: number | null;
+  packageLengthCm?: number | null;
+  packageWidthCm?: number | null;
+  packageHeightCm?: number | null;
+  maxUnitsPerOrder?: number | null;
 }

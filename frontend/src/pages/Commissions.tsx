@@ -107,7 +107,7 @@ export default function Commissions() {
       console.error('Error fetching commissions:', error);
       const status = error?.response?.status;
       if (status !== 429 && status !== 403 && (status == null || status < 500)) {
-        toast.error('Error al cargar comisiones');
+        toast.error('Error loading commissions');
       }
     } finally {
       setLoading(false);
@@ -133,7 +133,7 @@ export default function Commissions() {
       fetchCommissionsData();
     } catch (error) {
       console.error('Error requesting payout:', error);
-      toast.error('Error al solicitar pago');
+      toast.error('Error requesting payout');
     } finally {
       setRequestingPayout(false);
     }
@@ -154,14 +154,13 @@ export default function Commissions() {
     };
     const Icon = icons[status] || Clock;
     return (
-      <Badge variant={variants[status] || 'secondary'} className="flex items-center gap-1">
+      <Badge variant={variants[status] || 'secondary'} className="flex items-center gap-1 text-[11px]">
         <Icon className="w-3 h-3" />
         {status}
       </Badge>
     );
   };
 
-  // Filtrado
   const filteredCommissions = commissions.filter(commission => {
     const matchesSearch = commission.productTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          commission.saleId.toLowerCase().includes(searchTerm.toLowerCase());
@@ -169,14 +168,12 @@ export default function Commissions() {
     return matchesSearch && matchesStatus;
   });
 
-  // Paginación
   const totalPages = Math.ceil(filteredCommissions.length / itemsPerPage);
   const paginatedCommissions = filteredCommissions.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
 
-  // Datos para gráficas
   const earningsData = commissions
     .filter(c => c.status === 'PAID')
     .reduce((acc: any[], commission) => {
@@ -227,101 +224,103 @@ export default function Commissions() {
     a.href = url;
     a.download = `commissions-${Date.now()}.csv`;
     a.click();
-    toast.success('Exported to CSV');
+    toast.success('Exportado a CSV');
   };
+
+  const premiumCard = 'rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card';
 
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Commissions Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">Track your earnings and manage payouts</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga.</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Comisiones</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Seguimiento de ganancias y gestión de pagos</p>
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={exportToCSV} className="flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            Export
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportToCSV} className="flex items-center gap-1.5 text-xs border-slate-200 dark:border-slate-800">
+            <Download className="w-3.5 h-3.5" />
+            Exportar
           </Button>
           <Button 
+            size="sm"
             onClick={handleRequestPayout}
             disabled={requestingPayout || safeStats.totalPending < 50}
-            className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+            className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
           >
-            <Wallet className="w-4 h-4" />
-            Request Payout (${safeStats.totalPending.toFixed(2)})
+            <Wallet className="w-3.5 h-3.5" />
+            Solicitar pago (${safeStats.totalPending.toFixed(2)})
           </Button>
         </div>
       </div>
 
-      {/* Stats Cards — Phase 34: dark mode */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-yellow-200 dark:border-yellow-800">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pending Commissions</p>
-                <p className="text-3xl font-bold text-yellow-700 dark:text-yellow-400">${stats.totalPending.toFixed(2)}</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Available for payout</p>
-              </div>
-              <Clock className="w-10 h-10 text-yellow-600 dark:text-yellow-400" />
+        <div className={premiumCard + ' p-5'}>
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Comisiones pendientes</p>
+              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">${safeStats.totalPending.toFixed(2)}</p>
+              <p className="text-[11px] text-slate-400">Available for payout</p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
+              <Clock className="w-4.5 h-4.5 text-amber-600 dark:text-amber-400" />
+            </div>
+          </div>
+        </div>
 
-        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Paid</p>
-                <p className="text-3xl font-bold text-green-700 dark:text-green-400">${safeStats.totalPaid.toFixed(2)}</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">All time earnings</p>
-              </div>
-              <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
+        <div className={premiumCard + ' p-5'}>
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Total Paid</p>
+              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">${safeStats.totalPaid.toFixed(2)}</p>
+              <p className="text-[11px] text-slate-400">All time earnings</p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center">
+              <CheckCircle className="w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+          </div>
+        </div>
 
-        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Monthly Earnings</p>
-                <p className="text-3xl font-bold text-blue-700 dark:text-blue-400">${safeStats.monthlyEarnings.toFixed(2)}</p>
-                <p className={`text-xs flex items-center gap-1 mt-1 ${safeStats.earningsChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                  <TrendingUp className="w-3 h-3" />
-                  {safeStats.earningsChange >= 0 ? '+' : ''}{safeStats.earningsChange.toFixed(1)}% vs last month
-                </p>
-              </div>
-              <TrendingUp className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+        <div className={premiumCard + ' p-5'}>
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Monthly Earnings</p>
+              <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">${safeStats.monthlyEarnings.toFixed(2)}</p>
+              <p className={`text-[11px] flex items-center gap-0.5 ${safeStats.earningsChange >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                <TrendingUp className="w-3 h-3" />
+                {safeStats.earningsChange >= 0 ? '+' : ''}{safeStats.earningsChange.toFixed(1)}% vs last month
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center">
+              <TrendingUp className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
+            </div>
+          </div>
+        </div>
 
-        <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Next Payout</p>
-                <p className="text-lg font-bold text-purple-700 dark:text-purple-400">
-                  {stats.nextPayoutDate ? new Date(stats.nextPayoutDate).toLocaleDateString() : 'N/A'}
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Scheduled payment</p>
-              </div>
-              <Calendar className="w-10 h-10 text-purple-600 dark:text-purple-400" />
+        <div className={premiumCard + ' p-5'}>
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Next Payout</p>
+              <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                {stats.nextPayoutDate ? new Date(stats.nextPayoutDate).toLocaleDateString() : 'N/A'}
+              </p>
+              <p className="text-[11px] text-slate-400">Scheduled payment</p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="w-9 h-9 rounded-lg bg-violet-50 dark:bg-violet-950/40 flex items-center justify-center">
+              <Calendar className="w-4.5 h-4.5 text-violet-600 dark:text-violet-400" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Info Banner */}
       {safeStats.totalPending < 50 && safeStats.totalPending > 0 && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+        <div className="rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/20 p-4 flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
           <div>
-            <p className="font-medium text-blue-900 dark:text-blue-200">Minimum Payout Amount</p>
-            <p className="text-sm text-blue-700 dark:text-blue-300">
+            <p className="text-sm font-medium text-blue-900 dark:text-blue-200">Minimum Payout Amount</p>
+            <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
               You need ${(50 - safeStats.totalPending).toFixed(2)} more to reach the minimum payout amount of $50.00
             </p>
           </div>
@@ -330,27 +329,27 @@ export default function Commissions() {
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="schedule">Payout Schedule</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+        <TabsList className="h-8 p-0.5 bg-slate-100 dark:bg-slate-800/60 rounded-lg">
+          <TabsTrigger value="overview" className="text-xs h-7 px-3 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">Overview</TabsTrigger>
+          <TabsTrigger value="schedule" className="text-xs h-7 px-3 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">Payout Schedule</TabsTrigger>
+          <TabsTrigger value="history" className="text-xs h-7 px-3 rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm">History</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-gray-100">Earnings Trend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+            <div className={premiumCard}>
+              <div className="px-5 pt-4 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Tendencia de ganancias</h3>
+              </div>
+              <div className="px-5 pb-5">
+                <ResponsiveContainer width="100%" height={280}>
                   <LineChart data={earningsData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                    <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
                     <Line 
                       type="monotone" 
                       dataKey="amount" 
@@ -360,115 +359,113 @@ export default function Commissions() {
                     />
                   </LineChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
-              <CardHeader>
-                <CardTitle className="text-gray-900 dark:text-gray-100">Pending vs Paid (Monthly)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+            <div className={premiumCard}>
+              <div className="px-5 pt-4 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Pending vs Paid (Monthly)</h3>
+              </div>
+              <div className="px-5 pb-5">
+                <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="pending" fill="#F59E0B" name="Pending" />
-                    <Bar dataKey="paid" fill="#10B981" name="Paid" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                    <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="pending" fill="#F59E0B" name="Pending" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="paid" fill="#10B981" name="Paid" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
-          {/* Recent Commissions */}
-          <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
-            <CardHeader>
-              <CardTitle className="text-gray-900 dark:text-gray-100">Recent Commissions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {commissions.slice(0, 5).map((commission) => (
-                  <div key={commission.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                        <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-gray-100">{commission.productTitle}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {commission.marketplace} • {new Date(commission.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
+          {/* Comisiones recientes */}
+          <div className={premiumCard}>
+            <div className="px-5 pt-4 pb-3">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Comisiones recientes</h3>
+            </div>
+            <div className="px-5 pb-5 space-y-2">
+              {commissions.slice(0, 5).map((commission) => (
+                <div key={commission.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg flex items-center justify-center">
+                      <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <p className="font-bold text-green-600 dark:text-green-400">${commission.amount.toFixed(2)}</p>
-                        {getStatusBadge(commission.status)}
-                      </div>
-                      <ArrowUpRight className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{commission.productTitle}</p>
+                      <p className="text-xs text-slate-500">
+                        {commission.marketplace} · {new Date(commission.createdAt).toLocaleDateString()}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right space-y-1">
+                      <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">${commission.amount.toFixed(2)}</p>
+                      {getStatusBadge(commission.status)}
+                    </div>
+                    <ArrowUpRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </TabsContent>
 
         {/* Payout Schedule Tab */}
         <TabsContent value="schedule" className="space-y-4">
-          <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                <Calendar className="w-5 h-5" />
+          <div className={premiumCard}>
+            <div className="px-5 pt-4 pb-3">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
                 Upcoming Payouts
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+              </h3>
+            </div>
+            <div className="px-5 pb-5">
               {payoutSchedule.length === 0 ? (
-                <div className="text-center py-8">
-                  <Calendar className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">No scheduled payouts</p>
+                <div className="text-center py-10">
+                  <Calendar className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                  <p className="text-sm text-slate-500">No scheduled payouts</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {payoutSchedule.map((payout, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                          payout.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30' :
-                          payout.status === 'processing' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                          'bg-gray-100 dark:bg-gray-700'
+                    <div key={index} className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          payout.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-950/40' :
+                          payout.status === 'processing' ? 'bg-blue-50 dark:bg-blue-950/40' :
+                          'bg-slate-100 dark:bg-slate-800'
                         }`}>
                           {payout.status === 'completed' ? (
-                            <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                            <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                           ) : payout.status === 'processing' ? (
-                            <TrendingUp className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                            <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                           ) : (
-                            <Clock className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                            <Clock className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                           )}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900 dark:text-gray-100">
-                            {new Date(payout.date).toLocaleDateString('es', { 
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {new Date(payout.date).toLocaleDateString('en', { 
                               weekday: 'long', 
                               year: 'numeric', 
                               month: 'long', 
                               day: 'numeric' 
                             })}
                           </p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">{payout.count} commissions</p>
+                          <p className="text-xs text-slate-500">{payout.count} commissions</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">${payout.amount.toFixed(2)}</p>
+                      <div className="text-right space-y-1">
+                        <p className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">${payout.amount.toFixed(2)}</p>
                         <Badge variant={
                           payout.status === 'completed' ? 'success' :
                           payout.status === 'processing' ? 'default' :
                           'warning'
-                        }>
+                        } className="text-[11px]">
                           {payout.status}
                         </Badge>
                       </div>
@@ -476,35 +473,35 @@ export default function Commissions() {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
         {/* History Tab */}
         <TabsContent value="history" className="space-y-4">
           {/* Filters */}
-          <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                <Filter className="w-5 h-5" />
+          <div className={premiumCard}>
+            <div className="px-5 pt-4 pb-3">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Filter className="w-4 h-4" />
                 Filters
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              </h3>
+            </div>
+            <div className="px-5 pb-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                   <Input
                     placeholder="Search by product or sale ID..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                    className="pl-9 h-9 text-sm border-slate-200 dark:border-slate-800 dark:bg-slate-900"
                   />
                 </div>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-gray-100"
+                  className="h-9 px-3 text-sm border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
                 >
                   <option value="ALL">All Status</option>
                   <option value="PENDING">Pending</option>
@@ -513,57 +510,60 @@ export default function Commissions() {
                   <option value="CANCELLED">Cancelled</option>
                 </select>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Commissions Table */}
-          <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
-            <CardHeader>
-              <CardTitle className="text-gray-900 dark:text-gray-100">Commission History ({filteredCommissions.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className={premiumCard}>
+            <div className="px-5 pt-4 pb-3">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Commission History
+                <span className="ml-1.5 text-xs font-normal text-slate-500">({filteredCommissions.length})</span>
+              </h3>
+            </div>
+            <div className="px-5 pb-5">
               {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-                  <p className="mt-4 text-gray-600 dark:text-gray-400">Loading commissions...</p>
+                <div className="text-center py-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-slate-200 border-t-slate-600 mx-auto"></div>
+                  <p className="mt-3 text-xs text-slate-500">Loading commissions...</p>
                 </div>
               ) : paginatedCommissions.length === 0 ? (
-                <div className="text-center py-8">
-                  <DollarSign className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">No commissions found</p>
+                <div className="text-center py-10">
+                  <DollarSign className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                  <p className="text-sm text-slate-500">No commissions found</p>
                 </div>
               ) : (
                 <>
                   <div className="overflow-x-auto">
                     <table className="w-full">
-                      <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sale ID</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Product</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Marketplace</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Payment Date</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Created</th>
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Sale ID</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Product</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Marketplace</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Amount</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Payment Date</th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Created</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      <tbody>
                         {paginatedCommissions.map((commission) => (
-                          <tr key={commission.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                            <td className="px-4 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">{commission.saleId}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">{commission.productTitle}</td>
-                            <td className="px-4 py-3">
-                              <Badge variant="outline">{commission.marketplace}</Badge>
+                          <tr key={commission.id} className="border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                            <td className="px-3 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">{commission.saleId}</td>
+                            <td className="px-3 py-3 text-sm text-slate-700 dark:text-slate-300 max-w-xs truncate">{commission.productTitle}</td>
+                            <td className="px-3 py-3">
+                              <Badge variant="outline" className="text-[11px] border-slate-200 dark:border-slate-700">{commission.marketplace}</Badge>
                             </td>
-                            <td className="px-4 py-3 text-sm font-bold text-green-600 dark:text-green-400">${commission.amount.toFixed(2)}</td>
-                            <td className="px-4 py-3">{getStatusBadge(commission.status)}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                            <td className="px-3 py-3 text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">${commission.amount.toFixed(2)}</td>
+                            <td className="px-3 py-3">{getStatusBadge(commission.status)}</td>
+                            <td className="px-3 py-3 text-sm text-slate-500">
                               {commission.paymentDate 
                                 ? new Date(commission.paymentDate).toLocaleDateString()
                                 : '-'
                               }
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                            <td className="px-3 py-3 text-sm text-slate-500">
                               {new Date(commission.createdAt).toLocaleDateString()}
                             </td>
                           </tr>
@@ -574,22 +574,26 @@ export default function Commissions() {
 
                   {/* Pagination */}
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                      <p className="text-xs text-slate-500">
                         Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredCommissions.length)} of {filteredCommissions.length} commissions
                       </p>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1.5">
                         <Button
                           variant="outline"
+                          size="sm"
                           onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                           disabled={currentPage === 1}
+                          className="text-xs h-7 border-slate-200 dark:border-slate-800"
                         >
                           Previous
                         </Button>
                         <Button
                           variant="outline"
+                          size="sm"
                           onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                           disabled={currentPage === totalPages}
+                          className="text-xs h-7 border-slate-200 dark:border-slate-800"
                         >
                           Next
                         </Button>
@@ -598,8 +602,8 @@ export default function Commissions() {
                   )}
                 </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

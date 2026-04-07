@@ -8,7 +8,7 @@ interface APISelectorStepProps {
   onUpdateData: (updates: Partial<WizardData>) => void;
   onNext: () => void;
   onBack: () => void;
-  onComplete: () => void;
+  onComplete?: () => void;
 }
 
 interface APIOption {

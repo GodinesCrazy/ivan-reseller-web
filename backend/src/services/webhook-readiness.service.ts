@@ -220,6 +220,68 @@ export async function getWebhookStatusWithProof(): Promise<Record<MarketplaceCon
   };
 }
 
+function hasAnyCredentialMaterial(credentials: Record<string, unknown> | null | undefined): boolean {
+  if (!credentials) return false;
+  return Object.values(credentials).some((value) => String(value ?? '').trim().length > 0);
+}
+
+function hasTokenLikeMaterial(credentials: Record<string, unknown> | null | undefined): boolean {
+  if (!credentials) return false;
+  const tokenKeys = [
+    'accessToken',
+    'refreshToken',
+    'token',
+    'oauthToken',
+    'clientToken',
+    'authToken',
+  ];
+  return tokenKeys.some((key) => String(credentials[key] ?? '').trim().length > 0);
+}
+
+async function applyCredentialFallbackStatuses(userId: number, statuses: any[]): Promise<any[]> {
+  const merged = Array.isArray(statuses) ? [...statuses] : [];
+  const marketplaces: MarketplaceConnector[] = ['ebay', 'mercadolibre', 'amazon'];
+  const present = new Set(
+    merged
+      .map((status) => String(status?.apiName || '').toLowerCase())
+      .filter((name) => name === 'ebay' || name === 'mercadolibre' || name === 'amazon')
+  );
+  const missing = marketplaces.filter((marketplace) => !present.has(marketplace));
+  if (missing.length === 0) return merged;
+
+  const { CredentialsManager } = await import('./credentials-manager.service');
+  for (const marketplace of missing) {
+    const entry = await CredentialsManager.getCredentialEntry(
+      userId,
+      marketplace,
+      'production'
+    ).catch(() => null);
+    const credentials =
+      entry?.credentials && typeof entry.credentials === 'object'
+        ? (entry.credentials as Record<string, unknown>)
+        : null;
+    const isConfigured = entry?.isActive === true && hasAnyCredentialMaterial(credentials);
+    if (!isConfigured) continue;
+
+    const hasTokenLike = hasTokenLikeMaterial(credentials);
+    const isAvailable = marketplace === 'amazon' ? hasAnyCredentialMaterial(credentials) : hasTokenLike;
+
+    merged.push({
+      apiName: marketplace,
+      name: `${marketplace} API`,
+      isConfigured: true,
+      isAvailable,
+      status: isAvailable ? 'healthy' : 'degraded',
+      message: 'fallback_status_from_active_credentials',
+      environment: 'production',
+      lastChecked: new Date().toISOString(),
+      trustScore: isAvailable ? 0.7 : 0.5,
+    });
+  }
+
+  return merged;
+}
+
 export function summarizeConnectorReadinessFromStatuses(
   statuses: any[],
   webhookStatus = getWebhookStatus()
@@ -288,5 +350,9 @@ export function summarizeConnectorReadinessFromStatuses(
 
 export async function getConnectorReadinessForUser(userId: number): Promise<ConnectorReadinessSummary> {
   const { statuses } = await getFastApiStatusesForUser(userId);
-  return summarizeConnectorReadinessFromStatuses(statuses, await getWebhookStatusWithProof());
+  const statusesWithFallback = await applyCredentialFallbackStatuses(userId, statuses);
+  return summarizeConnectorReadinessFromStatuses(
+    statusesWithFallback,
+    await getWebhookStatusWithProof()
+  );
 }

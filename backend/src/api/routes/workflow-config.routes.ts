@@ -54,6 +54,23 @@ const updateSchema = z
     workingCapital: optionalNum(0),
     environment: z.enum(['sandbox', 'production']).optional(),
     workflowMode: z.enum(['manual', 'automatic', 'hybrid']).optional(),
+    mlChannelMode: z.enum(['local_only', 'international_candidate', 'foreign_seller_enabled', 'blocked']).optional(),
+    mlForeignSellerEnabled: z.boolean().optional(),
+    mlInternationalPublishingEnabled: z.boolean().optional(),
+    mlReturnAddressConfigured: z.boolean().optional(),
+    mlReturnPolicyConfigured: z.boolean().optional(),
+    mlPostSaleContactConfigured: z.boolean().optional(),
+    mlResponseSlaEnabled: z.boolean().optional(),
+    mlAlertsConfigured: z.boolean().optional(),
+    mlPilotModeEnabled: z.boolean().optional(),
+    mlPilotRequireManualAck: z.boolean().optional(),
+    mlPilotMaxActivePublications: optionalNum(1, 10),
+    mlProgramVerificationManualOverride: z
+      .enum(['none', 'international_candidate', 'foreign_seller_verified'])
+      .nullable()
+      .optional(),
+    mlShippingOriginCountry: z.string().trim().min(2).max(3).optional(),
+    mlSellerOriginCountry: z.string().trim().min(2).max(3).optional(),
 
     scrapeStage: stageModeEnum.optional(),
     analyzeStage: stageModeEnum.optional(),
@@ -97,6 +114,20 @@ const updateSchema = z
 type UpdateWorkflowConfigDto = {
   environment?: 'sandbox' | 'production';
   workflowMode?: 'manual' | 'automatic' | 'hybrid';
+  mlChannelMode?: 'local_only' | 'international_candidate' | 'foreign_seller_enabled' | 'blocked';
+  mlForeignSellerEnabled?: boolean;
+  mlInternationalPublishingEnabled?: boolean;
+  mlReturnAddressConfigured?: boolean;
+  mlReturnPolicyConfigured?: boolean;
+  mlPostSaleContactConfigured?: boolean;
+  mlResponseSlaEnabled?: boolean;
+  mlAlertsConfigured?: boolean;
+  mlPilotModeEnabled?: boolean;
+  mlPilotRequireManualAck?: boolean;
+  mlPilotMaxActivePublications?: number;
+  mlProgramVerificationManualOverride?: 'none' | 'international_candidate' | 'foreign_seller_verified' | null;
+  mlShippingOriginCountry?: string | null;
+  mlSellerOriginCountry?: string | null;
   stageScrape?: 'manual' | 'automatic' | 'guided';
   stageAnalyze?: 'manual' | 'automatic' | 'guided';
   stagePublish?: 'manual' | 'automatic' | 'guided';
@@ -121,6 +152,36 @@ function normalizeWorkflowConfig(
   return {
     workflowMode: (input.workflowMode ?? existingConfig.workflowMode) as UpdateWorkflowConfigDto['workflowMode'],
     environment: (input.environment ?? existingConfig.environment) as UpdateWorkflowConfigDto['environment'],
+    mlChannelMode:
+      (input.mlChannelMode ?? existingConfig.mlChannelMode) as UpdateWorkflowConfigDto['mlChannelMode'],
+    mlForeignSellerEnabled:
+      (input.mlForeignSellerEnabled ?? existingConfig.mlForeignSellerEnabled) as UpdateWorkflowConfigDto['mlForeignSellerEnabled'],
+    mlInternationalPublishingEnabled:
+      (input.mlInternationalPublishingEnabled ?? existingConfig.mlInternationalPublishingEnabled) as UpdateWorkflowConfigDto['mlInternationalPublishingEnabled'],
+    mlReturnAddressConfigured:
+      (input.mlReturnAddressConfigured ?? existingConfig.mlReturnAddressConfigured) as UpdateWorkflowConfigDto['mlReturnAddressConfigured'],
+    mlReturnPolicyConfigured:
+      (input.mlReturnPolicyConfigured ?? existingConfig.mlReturnPolicyConfigured) as UpdateWorkflowConfigDto['mlReturnPolicyConfigured'],
+    mlPostSaleContactConfigured:
+      (input.mlPostSaleContactConfigured ?? existingConfig.mlPostSaleContactConfigured) as UpdateWorkflowConfigDto['mlPostSaleContactConfigured'],
+    mlResponseSlaEnabled:
+      (input.mlResponseSlaEnabled ?? existingConfig.mlResponseSlaEnabled) as UpdateWorkflowConfigDto['mlResponseSlaEnabled'],
+    mlAlertsConfigured:
+      (input.mlAlertsConfigured ?? existingConfig.mlAlertsConfigured) as UpdateWorkflowConfigDto['mlAlertsConfigured'],
+    mlPilotModeEnabled:
+      (input.mlPilotModeEnabled ?? existingConfig.mlPilotModeEnabled) as UpdateWorkflowConfigDto['mlPilotModeEnabled'],
+    mlPilotRequireManualAck:
+      (input.mlPilotRequireManualAck ?? existingConfig.mlPilotRequireManualAck) as UpdateWorkflowConfigDto['mlPilotRequireManualAck'],
+    mlPilotMaxActivePublications:
+      (input.mlPilotMaxActivePublications ?? existingConfig.mlPilotMaxActivePublications ?? 1) as UpdateWorkflowConfigDto['mlPilotMaxActivePublications'],
+    mlProgramVerificationManualOverride:
+      (input.mlProgramVerificationManualOverride ??
+        existingConfig.mlProgramVerificationManualOverride ??
+        null) as UpdateWorkflowConfigDto['mlProgramVerificationManualOverride'],
+    mlShippingOriginCountry:
+      (input.mlShippingOriginCountry ?? existingConfig.mlShippingOriginCountry ?? null) as UpdateWorkflowConfigDto['mlShippingOriginCountry'],
+    mlSellerOriginCountry:
+      (input.mlSellerOriginCountry ?? existingConfig.mlSellerOriginCountry ?? null) as UpdateWorkflowConfigDto['mlSellerOriginCountry'],
     workingCapital: input.workingCapital ?? (existingConfig.workingCapital as number) ?? 500,
 
     stageScrape: (stage('scrape') ?? existingConfig.stageScrape) as UpdateWorkflowConfigDto['stageScrape'],
@@ -542,6 +603,196 @@ router.post('/handle-guided-action', async (req: Request, res: Response, next) =
         error: `Unknown guided action: ${action}` 
       });
     }
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ML CHILE IMPORT / DROPSHIPPING TRUTH ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/workflow/ml-chile-truth/:productId
+ * Returns the consolidated ML Chile Business Truth for a given product.
+ * Includes: origin, ETA, shipping truth, IVA status, legal compliance, fulfillment readiness.
+ */
+router.get('/ml-chile-truth/:productId', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const productId = parseInt(req.params.productId, 10);
+    if (!Number.isFinite(productId) || productId <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid productId' });
+    }
+
+    const { prisma } = await import('../../config/database');
+    const product = await prisma.product.findFirst({
+      where: { id: productId, userId },
+      select: {
+        id: true,
+        aliexpressUrl: true,
+        aliexpressPrice: true,
+        shippingCost: true,
+        importTax: true,
+        totalCost: true,
+        targetCountry: true,
+        originCountry: true,
+        suggestedPrice: true,
+        finalPrice: true,
+        currency: true,
+        productData: true,
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    // Get most recent ML listing for this product
+    const listing = await prisma.marketplaceListing.findFirst({
+      where: { productId, userId, marketplace: 'mercadolibre', NOT: { status: 'superseded' } },
+      orderBy: { publishedAt: 'desc' },
+      select: {
+        shippingTruthStatus: true,
+        legalTextsAppended: true,
+        importHandlingTimeDays: true,
+        listingId: true,
+        listingUrl: true,
+        status: true,
+        publishedAt: true,
+      },
+    });
+
+    const handlingTimeDays = await workflowConfigService.getMlHandlingTimeDays(userId).catch(() => 30);
+
+    const { buildMLChileBusinessTruth } = await import('../../services/ml-chile-import-compliance.service');
+    const truth = buildMLChileBusinessTruth({
+      product: {
+        id: product.id,
+        aliexpressUrl: product.aliexpressUrl,
+        aliexpressPrice: product.aliexpressPrice ? Number(product.aliexpressPrice) : null,
+        shippingCost: product.shippingCost ? Number(product.shippingCost) : null,
+        importTax: product.importTax ? Number(product.importTax) : null,
+        totalCost: product.totalCost ? Number(product.totalCost) : null,
+        targetCountry: product.targetCountry,
+        originCountry: product.originCountry,
+        suggestedPrice: product.suggestedPrice ? Number(product.suggestedPrice) : null,
+        finalPrice: product.finalPrice ? Number(product.finalPrice) : null,
+        currency: product.currency,
+        productData: product.productData,
+      },
+      listing: listing
+        ? {
+            shippingTruthStatus: listing.shippingTruthStatus,
+            legalTextsAppended: listing.legalTextsAppended,
+            handlingTimeDays: listing.importHandlingTimeDays,
+            freeShipping: false,
+          }
+        : null,
+      handlingTimeDays,
+    });
+
+    return res.json({
+      success: true,
+      productId,
+      listing: listing
+        ? {
+            listingId: listing.listingId,
+            listingUrl: listing.listingUrl,
+            status: listing.status,
+            publishedAt: listing.publishedAt,
+          }
+        : null,
+      truth,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/workflow/ml-chile-checklist/:productId
+ * Returns a human-readable go/no-go checklist for a product's ML Chile readiness.
+ */
+router.get('/ml-chile-checklist/:productId', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const productId = parseInt(req.params.productId, 10);
+    if (!Number.isFinite(productId) || productId <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid productId' });
+    }
+
+    const { prisma } = await import('../../config/database');
+    const product = await prisma.product.findFirst({
+      where: { id: productId, userId },
+    });
+
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    const listing = await prisma.marketplaceListing.findFirst({
+      where: { productId, userId, marketplace: 'mercadolibre', NOT: { status: 'superseded' } },
+      orderBy: { publishedAt: 'desc' },
+    });
+
+    const handlingTimeDays = await workflowConfigService.getMlHandlingTimeDays(userId).catch(() => 30);
+    const { buildMLChileBusinessTruth } = await import('../../services/ml-chile-import-compliance.service');
+
+    const truth = buildMLChileBusinessTruth({
+      product: {
+        id: (product as any).id,
+        aliexpressUrl: (product as any).aliexpressUrl,
+        aliexpressPrice: (product as any).aliexpressPrice,
+        shippingCost: (product as any).shippingCost,
+        importTax: (product as any).importTax,
+        totalCost: (product as any).totalCost,
+        targetCountry: (product as any).targetCountry,
+        originCountry: (product as any).originCountry,
+        suggestedPrice: (product as any).suggestedPrice,
+        finalPrice: (product as any).finalPrice,
+        currency: (product as any).currency,
+        productData: (product as any).productData,
+      },
+      listing: listing
+        ? {
+            shippingTruthStatus: (listing as any).shippingTruthStatus,
+            legalTextsAppended: (listing as any).legalTextsAppended,
+            handlingTimeDays: (listing as any).importHandlingTimeDays,
+            freeShipping: false,
+          }
+        : null,
+      handlingTimeDays,
+    });
+
+    const checklist = [
+      { item: 'AliExpress URL presente', ok: truth.fulfillmentReadiness.aliexpressUrlPresent, critical: true },
+      { item: 'Precio > Costo total (gate de rentabilidad)', ok: truth.fulfillmentReadiness.profitabilityGateOk !== false, critical: true },
+      { item: 'Textos legales de importación en descripción', ok: truth.legalCompliance.legalTextsAppended, critical: false },
+      { item: 'Garantía legal (6 meses) declarada', ok: truth.legalCompliance.guaranteeIncluded, critical: false },
+      { item: 'Retracto (10 días) declarado', ok: truth.legalCompliance.retractoIncluded, critical: false },
+      { item: 'Cláusula IVA (19%) declarada', ok: truth.legalCompliance.ivaClauseIncluded, critical: false },
+      { item: 'Producto importado declarado', ok: truth.legalCompliance.importedProductDeclared, critical: false },
+      { item: 'Shipping mode me2 (o documentado)', ok: truth.shippingTruth.status !== 'unknown', critical: false },
+      { item: 'ETA internacional visible en descripción', ok: truth.legalCompliance.legalTextsAppended, critical: false },
+    ];
+
+    return res.json({
+      success: true,
+      productId,
+      overallReadiness: truth.overallReadiness,
+      checklist,
+      operatorSummary: truth.operatorSummary,
+      hasListing: !!listing,
+    });
   } catch (error: any) {
     next(error);
   }

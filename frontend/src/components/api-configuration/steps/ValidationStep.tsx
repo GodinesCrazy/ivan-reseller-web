@@ -8,7 +8,7 @@ interface ValidationStepProps {
   onUpdateData: (updates: Partial<WizardData>) => void;
   onNext: () => void;
   onBack: () => void;
-  onComplete: () => void;
+  onComplete?: () => void;
 }
 
 interface ValidationResult {
@@ -219,7 +219,7 @@ export default function ValidationStep({
           <div className="flex justify-between">
             <span className="text-gray-600 dark:text-gray-400">Campos configurados:</span>
             <span className="font-medium text-gray-900 dark:text-white">
-              {Object.keys(data.credentials).length}
+              {Object.keys(data.credentials ?? {}).length}
             </span>
           </div>
         </div>

@@ -46,7 +46,7 @@ export default function BalanceSummaryWidget() {
         }),
         api.get<LeverageRiskResponse>('/api/finance/leverage-and-risk', {
           params: { environment: 'production' },
-        }).catch(() => ({ data: {} })),
+        }).catch(() => ({ data: {} as LeverageRiskResponse })),
       ]);
       const detail = wcRes.data?.detail;
       if (detail) {

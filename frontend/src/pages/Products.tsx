@@ -47,6 +47,10 @@ import type { InventorySummary } from '@/types/dashboard';
 import type { OperationsTruthItem } from '@/types/operations';
 import { fetchOperationsTruth } from '@/services/operationsTruth.api';
 import { useAuthStore } from '@stores/authStore';
+import {
+  lifecycleToneClasses,
+  resolveOperationalLifecycleStage,
+} from '@/utils/operational-lifecycle';
 
 interface MarketplaceListing {
   id: number;
@@ -542,20 +546,27 @@ export default function Products() {
     if (normalized === 'under_review') return <Badge variant="outline" className="text-amber-700 border-amber-300 dark:text-amber-300">under_review</Badge>;
     if (normalized === 'paused') return <Badge variant="outline" className="text-orange-700 border-orange-300 dark:text-orange-300">paused</Badge>;
     if (normalized === 'failed_publish' || normalized === 'not_found') return <Badge variant="destructive">{normalized}</Badge>;
-    return <Badge variant="outline" className="text-gray-500">unknown</Badge>;
+    return <Badge variant="outline" className="text-slate-500">unknown</Badge>;
   };
 
   const totalFiltered = paginationMeta?.total ?? products.length;
   const totalPages = paginationMeta?.totalPages ?? 1;
+  const selectedOpsTruth = selectedProduct ? operationsTruthByProduct[selectedProduct.id] : null;
+  const selectedLifecycle = selectedProduct
+    ? resolveOperationalLifecycleStage({
+        product: selectedProduct,
+        operationsTruth: selectedOpsTruth,
+      })
+    : null;
 
-  const selectClass = "px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200";
+  const selectClass = "px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-slate-900 text-sm dark:text-slate-200";
 
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
       <div>
         <div className="flex justify-between items-center flex-wrap gap-2">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Productos</h1>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Productos</h1>
           <div className="flex gap-2">
             <Button variant="outline" className="flex gap-2" onClick={exportToCSV} title="Exportar productos visibles a CSV">
               <Download className="w-4 h-4" />
@@ -589,8 +600,7 @@ export default function Products() {
             </Button>
           </div>
         </div>
-        <p className="text-gray-600 dark:text-gray-400 mt-0.5">Catalogo real: legacy congelado, candidatos validados y bloqueos operativos</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Datos reales desde API · El estado visible prioriza validacion segura sobre estados legacy</p>
+        <p className="text-xs text-slate-500 mt-0.5">Catálogo real · candidatos validados, bloqueos operativos y legacy congelado</p>
         <div className="mt-3">
           <CycleStepsBreadcrumb currentStep={3} />
         </div>
@@ -622,55 +632,56 @@ export default function Products() {
 
       {!setupRequired && <InventorySummaryCard summary={inventorySummary} />}
 
+      {/* Post-sale overview */}
       {!setupRequired && postSaleOverview && postSaleOverview.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-card">
+          <CardHeader className="px-5 py-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Package className="w-5 h-5" />
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Package className="w-4 h-4" />
                 Estado post-venta por producto
               </CardTitle>
-              <Button variant="ghost" onClick={() => setShowPostSaleOverview((v) => !v)}>
+              <Button variant="ghost" size="sm" onClick={() => setShowPostSaleOverview((v) => !v)}>
                 {showPostSaleOverview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </Button>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Última venta/orden por producto publicado (eBay, Mercado Libre, Amazon)</p>
+            <p className="text-xs text-slate-500 mt-0.5">Última venta/orden por producto publicado (eBay, Mercado Libre, Amazon)</p>
           </CardHeader>
           {showPostSaleOverview && (
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+            <CardContent className="px-5 pb-4 pt-0">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 font-medium">Producto</th>
-                      <th className="text-left py-2 font-medium">Listings</th>
-                      <th className="text-left py-2 font-medium">Última orden</th>
-                      <th className="text-left py-2 font-medium">Estado</th>
-                      <th className="text-right py-2 font-medium">Acción</th>
+                    <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Producto</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Listings</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Última orden</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Estado</th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acción</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {postSaleOverview.map((row) => (
-                      <tr key={row.productId} className="border-b last:border-0">
-                        <td className="py-2 font-medium text-gray-900 dark:text-gray-100 max-w-[200px] truncate" title={row.productTitle}>{row.productTitle}</td>
-                        <td className="py-2 text-gray-600 dark:text-gray-400">
+                      <tr key={row.productId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 max-w-[200px] truncate" title={row.productTitle}>{row.productTitle}</td>
+                        <td className="px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300">
                           {row.listings.map((l) => (
                             <Badge key={`${l.marketplace}-${l.listingId}`} variant="outline" className="mr-1 text-xs">
                               {l.marketplace === 'ebay' ? 'eBay' : l.marketplace === 'mercadolibre' ? 'ML' : l.marketplace}
                             </Badge>
                           ))}
                         </td>
-                        <td className="py-2 text-gray-600 dark:text-gray-400">{row.lastOrder?.marketplaceOrderId ?? '—'}</td>
-                        <td className="py-2">
+                        <td className="px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300">{row.lastOrder?.marketplaceOrderId ?? '—'}</td>
+                        <td className="px-4 py-2.5">
                           {row.lastOrder ? (
                             <Badge variant={row.lastOrder.fulfillmentAutomationStatus === 'completed' ? 'default' : row.lastOrder.fulfillmentAutomationStatus === 'failed' ? 'destructive' : 'secondary'}>
                               {row.lastOrder.orderStatus} / {row.lastOrder.fulfillmentAutomationStatus}
                             </Badge>
                           ) : (
-                            <span className="text-gray-400">—</span>
+                            <span className="text-slate-400">—</span>
                           )}
                         </td>
-                        <td className="py-2 text-right">
+                        <td className="px-4 py-2.5 text-right">
                           {row.lastOrder && (
                             <a href="/orders" className="text-blue-600 dark:text-blue-400 hover:underline text-xs">Ver órdenes</a>
                           )}
@@ -685,11 +696,12 @@ export default function Products() {
         </Card>
       )}
 
-      <Card className="border-blue-200 dark:border-blue-900/50">
-        <CardHeader className="pb-2">
+      {/* ML Canary panel */}
+      <Card className="rounded-xl border border-blue-200 dark:border-blue-900/50 shadow-card">
+        <CardHeader className="px-5 py-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Store className="w-5 h-5 text-blue-600" />
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Store className="w-4 h-4 text-blue-600" />
               Canary publicación Mercado Libre (Chile)
             </CardTitle>
             <Button
@@ -707,43 +719,43 @@ export default function Products() {
               {mlCanaryPanelOpen ? 'Ocultar' : 'Mostrar / actualizar'}
             </Button>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Ordena tus productos <span className="font-medium">VALIDATED_READY</span> por idoneidad para un primer ciclo real (mismas comprobaciones que el preflight). Usa un candidato con{' '}
             <span className="font-medium">publishAllowed</span> y mejor <span className="font-medium">tier</span>; evita forzar un SKU con imágenes bloqueadas.
           </p>
         </CardHeader>
         {mlCanaryPanelOpen && (
-          <CardContent className="pt-0">
+          <CardContent className="px-5 pb-4 pt-0">
             {mlCanaryLoading ? (
-              <p className="text-sm text-gray-600">Ejecutando preflight en lote…</p>
+              <p className="text-sm text-slate-600">Ejecutando preflight en lote…</p>
             ) : mlCanaryData && mlCanaryData.candidates.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full">
                   <thead>
-                    <tr className="border-b text-left text-gray-600 dark:text-gray-400">
-                      <th className="py-2 pr-2">ID</th>
-                      <th className="py-2 pr-2">Título</th>
-                      <th className="py-2 pr-2">Tier</th>
-                      <th className="py-2 pr-2">Score</th>
-                      <th className="py-2 pr-2">Listo</th>
-                      <th className="py-2 text-right">Acción</th>
+                    <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">ID</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Título</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Tier</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Score</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Listo</th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acción</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {mlCanaryData.candidates.map((c) => (
-                      <tr key={c.productId} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
-                        <td className="py-2 pr-2 font-mono">{c.productId}</td>
-                        <td className="py-2 pr-2 max-w-[220px] truncate" title={c.title || ''}>
+                      <tr key={c.productId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 font-mono">{c.productId}</td>
+                        <td className="px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 max-w-[220px] truncate" title={c.title || ''}>
                           {c.title || '—'}
                         </td>
-                        <td className="py-2 pr-2">
+                        <td className="px-4 py-2.5">
                           <Badge variant={c.canaryTier === 'recommended' ? 'default' : c.canaryTier === 'blocked' ? 'destructive' : 'secondary'}>
                             {c.canaryTier}
                           </Badge>
                         </td>
-                        <td className="py-2 pr-2">{c.canaryScore}</td>
-                        <td className="py-2 pr-2">{c.publishAllowed ? 'sí' : 'no'}</td>
-                        <td className="py-2 text-right">
+                        <td className="px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300">{c.canaryScore}</td>
+                        <td className="px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300">{c.publishAllowed ? 'sí' : 'no'}</td>
+                        <td className="px-4 py-2.5 text-right">
                           <button
                             type="button"
                             className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
@@ -757,13 +769,13 @@ export default function Products() {
                   </tbody>
                 </table>
                 {mlCanaryData.candidates.some((c) => c.topBlockers.length > 0) && (
-                  <p className="text-xs text-gray-500 mt-2">
+                  <p className="text-xs text-slate-500 mt-2 px-4 pb-2">
                     Revisa bloqueadores en preview; el listado trunca causas a 5 por producto.
                   </p>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-gray-600">No hay candidatos o aún no se ha cargado. Pulsa «Mostrar / actualizar».</p>
+              <p className="text-sm text-slate-600">No hay candidatos o aún no se ha cargado. Pulsa «Mostrar / actualizar».</p>
             )}
           </CardContent>
         )}
@@ -771,47 +783,47 @@ export default function Products() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:ring-2 hover:ring-blue-300 transition-shadow" onClick={() => { updateFilter('status', 'ALL'); }}>
-          <CardContent className="pt-6">
+        <Card className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card cursor-pointer hover:ring-2 hover:ring-blue-300 transition-shadow" onClick={() => { updateFilter('status', 'ALL'); }}>
+          <CardContent className="pt-5 pb-4 px-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
-                <p className="text-2xl font-bold">{stats.total.toLocaleString()}</p>
+                <p className="text-xs text-slate-500">Total</p>
+                <p className="text-2xl font-bold tabular-nums">{stats.total.toLocaleString()}</p>
               </div>
-              <Package className="w-8 h-8 text-blue-600" />
+              <Package className="w-6 h-6 text-blue-600" />
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:ring-2 hover:ring-yellow-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'PENDING' ? 'ALL' : 'PENDING'); }}>
-          <CardContent className="pt-6">
+        <Card className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card cursor-pointer hover:ring-2 hover:ring-yellow-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'PENDING' ? 'ALL' : 'PENDING'); }}>
+          <CardContent className="pt-5 pb-4 px-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pendientes</p>
-                <p className="text-2xl font-bold text-yellow-600">{(stats.pending).toLocaleString()}</p>
+                <p className="text-xs text-slate-500">Pendientes</p>
+                <p className="text-2xl font-bold tabular-nums text-yellow-600">{(stats.pending).toLocaleString()}</p>
               </div>
-              <Clock className="w-8 h-8 text-yellow-600" />
+              <Clock className="w-6 h-6 text-yellow-600" />
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:ring-2 hover:ring-green-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'VALIDATED_READY' ? 'ALL' : 'VALIDATED_READY'); }}>
-          <CardContent className="pt-6">
+        <Card className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card cursor-pointer hover:ring-2 hover:ring-green-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'VALIDATED_READY' ? 'ALL' : 'VALIDATED_READY'); }}>
+          <CardContent className="pt-5 pb-4 px-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Validados</p>
-                <p className="text-2xl font-bold text-green-600">{(stats.validatedReady).toLocaleString()}</p>
+                <p className="text-xs text-slate-500">Validados</p>
+                <p className="text-2xl font-bold tabular-nums text-green-600">{(stats.validatedReady).toLocaleString()}</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-600" />
+              <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:ring-2 hover:ring-purple-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'PUBLISHED' ? 'ALL' : 'PUBLISHED'); }}>
-          <CardContent className="pt-6">
+        <Card className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card cursor-pointer hover:ring-2 hover:ring-purple-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'PUBLISHED' ? 'ALL' : 'PUBLISHED'); }}>
+          <CardContent className="pt-5 pb-4 px-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Publicados</p>
-                <p className="text-2xl font-bold text-purple-600">{(stats.published).toLocaleString()}</p>
+                <p className="text-xs text-slate-500">Publicados</p>
+                <p className="text-2xl font-bold tabular-nums text-purple-600">{(stats.published).toLocaleString()}</p>
                 {stats.published > 0 && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  <p className="text-[11px] text-slate-500 mt-0.5">
                     eBay: {listingsByMarketplace.ebay} · ML: {listingsByMarketplace.mercadolibre}
                     {typeof inventorySummary?.mercadolibreActiveCount === 'number' && inventorySummary.mercadolibreActiveCount !== listingsByMarketplace.mercadolibre && (
                       <span className="text-amber-600 dark:text-amber-400" title="Activos en Mercado Libre (verificado via API)">
@@ -822,42 +834,42 @@ export default function Products() {
                   </p>
                 )}
               </div>
-              <Upload className="w-8 h-8 text-purple-600" />
+              <Upload className="w-6 h-6 text-purple-600" />
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-card">
+        <CardHeader className="px-5 py-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="w-5 h-5" />
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Filter className="w-4 h-4" />
               Filtros
             </CardTitle>
             <div className="flex items-center gap-2">
               {activeFilters.length > 0 && (
-                <Button variant="ghost" onClick={resetFilters} className="text-xs text-gray-500 hover:text-red-500 h-8 px-2">
+                <Button variant="ghost" onClick={resetFilters} className="text-xs text-slate-500 hover:text-red-500 h-7 px-2">
                   Limpiar todo
                 </Button>
               )}
               <Button
                 variant="ghost"
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className="text-xs flex items-center gap-1 h-8 px-2"
+                className="text-xs flex items-center gap-1 h-7 px-2"
               >
-                {showAdvancedFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {showAdvancedFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 {showAdvancedFilters ? 'Menos filtros' : 'Mas filtros'}
               </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="px-5 pb-4 pt-0 space-y-3">
           {/* Row 1: Basic filters (always visible) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
                 placeholder="Buscar por titulo o ID..."
                 value={filters.search}
@@ -892,11 +904,11 @@ export default function Products() {
 
           {/* Row 2-3: Advanced filters (collapsible) */}
           {showAdvancedFilters && (
-            <div className="space-y-4 pt-2 border-t border-gray-100 dark:border-gray-700">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 {/* Category */}
                 <div>
-                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  <label className="flex items-center gap-1 text-[11px] font-medium text-slate-500 mb-1">
                     <Tag className="w-3 h-3" /> Categoria
                   </label>
                   <select
@@ -912,7 +924,7 @@ export default function Products() {
                 </div>
                 {/* Date field selector */}
                 <div>
-                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  <label className="flex items-center gap-1 text-[11px] font-medium text-slate-500 mb-1">
                     <Calendar className="w-3 h-3" /> Tipo de fecha
                   </label>
                   <select
@@ -926,7 +938,7 @@ export default function Products() {
                 </div>
                 {/* Date from */}
                 <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Desde</label>
+                  <label className="text-[11px] font-medium text-slate-500 mb-1 block">Desde</label>
                   <input
                     type="date"
                     value={filters.dateFrom}
@@ -936,7 +948,7 @@ export default function Products() {
                 </div>
                 {/* Date to */}
                 <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Hasta</label>
+                  <label className="text-[11px] font-medium text-slate-500 mb-1 block">Hasta</label>
                   <input
                     type="date"
                     value={filters.dateTo}
@@ -945,10 +957,10 @@ export default function Products() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 {/* Price min */}
                 <div>
-                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  <label className="flex items-center gap-1 text-[11px] font-medium text-slate-500 mb-1">
                     <DollarSign className="w-3 h-3" /> Precio minimo
                   </label>
                   <Input
@@ -962,7 +974,7 @@ export default function Products() {
                 </div>
                 {/* Price max */}
                 <div>
-                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  <label className="flex items-center gap-1 text-[11px] font-medium text-slate-500 mb-1">
                     <DollarSign className="w-3 h-3" /> Precio maximo
                   </label>
                   <Input
@@ -976,7 +988,7 @@ export default function Products() {
                 </div>
                 {/* Has marketplace link */}
                 <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Enlace marketplace</label>
+                  <label className="text-[11px] font-medium text-slate-500 mb-1 block">Enlace marketplace</label>
                   <select
                     value={filters.hasLink}
                     onChange={(e) => updateFilter('hasLink', e.target.value)}
@@ -989,7 +1001,7 @@ export default function Products() {
                 </div>
                 {/* Sort */}
                 <div>
-                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  <label className="flex items-center gap-1 text-[11px] font-medium text-slate-500 mb-1">
                     <ArrowUpDown className="w-3 h-3" /> Ordenar por
                   </label>
                   <div className="flex gap-2">
@@ -1006,7 +1018,7 @@ export default function Products() {
                     </select>
                     <button
                       onClick={() => updateFilter('sortDir', filters.sortDir === 'asc' ? 'desc' : 'asc')}
-                      className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 text-sm"
+                      className="px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-sm"
                       title={filters.sortDir === 'asc' ? 'Ascendente' : 'Descendente'}
                     >
                       {filters.sortDir === 'asc' ? '↑' : '↓'}
@@ -1023,7 +1035,7 @@ export default function Products() {
               {activeFilters.map(af => (
                 <span
                   key={af.key}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-700"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
                 >
                   {af.label}: {af.value}
                   <button onClick={() => removeFilter(af.key)} className="ml-0.5 hover:text-red-500">
@@ -1031,7 +1043,7 @@ export default function Products() {
                   </button>
                 </span>
               ))}
-              <button onClick={resetFilters} className="text-xs text-gray-400 hover:text-red-500 underline ml-1">
+              <button onClick={resetFilters} className="text-xs text-slate-400 hover:text-red-500 underline ml-1">
                 Limpiar todos
               </button>
             </div>
@@ -1040,27 +1052,27 @@ export default function Products() {
       </Card>
 
       {/* Products Table */}
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-card">
+        <CardHeader className="px-5 py-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <CardTitle>Productos ({totalFiltered.toLocaleString()})</CardTitle>
-            <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-              <span>Revenue pagina: <strong className="text-gray-700 dark:text-gray-200">{formatCurrencySimple(pageRevenue, 'USD')}</strong></span>
+            <CardTitle className="text-sm font-semibold">Productos ({totalFiltered.toLocaleString()})</CardTitle>
+            <div className="flex items-center gap-4 text-xs text-slate-500">
+              <span>Revenue pagina: <strong className="text-slate-700 dark:text-slate-200">{formatCurrencySimple(pageRevenue, 'USD')}</strong></span>
               <span>Margen unitario estimado (página): <strong className="text-green-600">{formatCurrencySimple(pageEstimatedMargin, 'USD')}</strong></span>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-5 pb-4 pt-0">
           {loading ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600 dark:text-gray-400">Cargando productos...</p>
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-sm text-slate-500">Cargando productos...</p>
             </div>
           ) : products.length === 0 ? (
             <div className="text-center py-12 max-w-md mx-auto">
-              <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="font-medium text-gray-700 dark:text-gray-300 mb-2">Sin productos</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              <Package className="w-14 h-14 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+              <p className="font-medium text-slate-700 dark:text-slate-300 mb-2">Sin productos</p>
+              <p className="text-sm text-slate-500 mb-4">
                 {activeFilters.length > 0
                   ? 'No hay productos que coincidan con los filtros aplicados.'
                   : 'No tienes productos publicados. El ciclo comienza en Tendencias.'}
@@ -1073,51 +1085,54 @@ export default function Products() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-600">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
                 <table className="w-full min-w-[900px]">
-                  <thead className="bg-gray-100 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-600">
+                  <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Producto</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">SKU</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Marketplace</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Enlaces</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Precio</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Estado</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Truth operacional</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Ganador</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Workflow</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Margen estimado</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Acciones</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Producto</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">SKU</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Marketplace</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Enlaces</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Precio</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Lifecycle canónico</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Ganador</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Workflow</th>
+                      <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Margen estimado</th>
+                      <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-slate-600 bg-white dark:bg-slate-900">
-                    {products.map((product, idx) => {
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                    {products.map((product) => {
                       const opsTruth = operationsTruthByProduct[product.id];
+                      const lifecycle = resolveOperationalLifecycleStage({
+                        product,
+                        operationsTruth: opsTruth,
+                      });
                       return (
-                      <tr key={product.id} className={`hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors ${idx % 2 === 1 ? 'bg-gray-50/50 dark:bg-slate-900/80' : ''}`}>
+                      <tr key={product.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="px-4 py-3">
                           <div
-                            className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 -m-2 p-2 rounded"
+                            className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 -m-2 p-2 rounded-lg"
                             onClick={() => { setSelectedProduct(product); setShowModal(true); }}
                           >
                             {product.imageUrl ? (
-                              <img src={product.imageUrl} alt={product.title} className="w-10 h-10 rounded object-cover" />
+                              <img src={product.imageUrl} alt={product.title} className="w-10 h-10 rounded-lg object-cover" />
                             ) : (
-                              <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center">
-                                <Package className="w-5 h-5 text-gray-400" />
+                              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center">
+                                <Package className="w-5 h-5 text-slate-400" />
                               </div>
                             )}
                             <div className="min-w-0">
-                              <div className="font-medium text-gray-900 dark:text-gray-100 max-w-xs truncate">{product.title}</div>
+                              <div className="font-medium text-sm text-slate-700 dark:text-slate-300 max-w-xs truncate">{product.title}</div>
                               {product.validationState && product.validationState !== product.status && (
-                                <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                <div className="text-xs text-slate-500 truncate">
                                   Estado seguro: {product.validationState}
                                 </div>
                               )}
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{product.sku}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{product.sku}</td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
                             {product.marketplaceListings && product.marketplaceListings.length > 0 ? (
@@ -1125,11 +1140,11 @@ export default function Products() {
                                 const mps = Array.from(new Set(product.marketplaceListings.map((l: MarketplaceListing) => l.marketplace)))
                                   .map((mp) => displayMarketplace(mp))
                                   .filter((mp) => mp !== '—');
-                                if (mps.length === 0) return <Badge variant="outline" className="text-gray-500">—</Badge>;
+                                if (mps.length === 0) return <Badge variant="outline" className="text-slate-500">—</Badge>;
                                 return mps.map((mp) => <Badge key={mp} variant="outline" className="text-xs">{mp}</Badge>);
                               })()
                             ) : (
-                              <Badge variant="outline" className="text-gray-500">{displayMarketplace(product.marketplace)}</Badge>
+                              <Badge variant="outline" className="text-slate-500">{displayMarketplace(product.marketplace)}</Badge>
                             )}
                           </div>
                         </td>
@@ -1143,7 +1158,7 @@ export default function Products() {
                                     Ver en {displayMarketplace(listing.marketplace)}
                                   </a>
                                 ) : (
-                                  <span key={listing.id} className="inline-flex items-center gap-1 text-gray-500 text-sm">
+                                  <span key={listing.id} className="inline-flex items-center gap-1 text-slate-500 text-sm">
                                     <ExternalLink className="w-4 h-4 shrink-0" />
                                     {displayMarketplace(listing.marketplace)} ({listing.listingId})
                                   </span>
@@ -1156,63 +1171,43 @@ export default function Products() {
                               </a>
                             ) : null}
                             {product.aliexpressUrl && (
-                              <a href={product.aliexpressUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:underline text-sm">
+                              <a href={product.aliexpressUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400 hover:underline text-sm">
                                 <Link2 className="w-4 h-4 shrink-0" />
                                 Proveedor
                               </a>
                             )}
                             {(!product.marketplaceListings || product.marketplaceListings.length === 0) && !product.marketplaceUrl && !product.aliexpressUrl && (
-                              <span className="text-gray-400 text-sm">—</span>
+                              <span className="text-slate-400 text-sm">—</span>
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <td className="px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-300">
                           {formatCurrencySimple(product.price, product.currency || 'USD')}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="space-y-1">
-                            {getStatusBadge(product.validationState || product.status)}
-                            {product.blockedReasons && product.blockedReasons.length > 0 && (
-                              <div className="text-xs text-red-600 dark:text-red-400 max-w-[180px] truncate" title={product.blockedReasons.map(formatBlockedReason).join(', ')}>
-                                {product.blockedReasons.slice(0, 2).map(formatBlockedReason).join(', ')}
-                              </div>
-                            )}
-                            {typeof product.feeCompleteness === 'number' && (
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                Fees: {Math.round(product.feeCompleteness * 100)}%
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {opsTruth ? (
-                            <div className="space-y-1 max-w-[220px]">
-                              <div className="flex flex-wrap gap-1 items-center">
-                                {getLiveStateBadge(opsTruth.externalMarketplaceState)}
-                                {opsTruth.externalMarketplaceSubStatus.length > 0 && (
-                                  <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate" title={opsTruth.externalMarketplaceSubStatus.join(', ')}>
-                                    {opsTruth.externalMarketplaceSubStatus.join(', ')}
-                                  </span>
-                                )}
-                              </div>
-                              {opsTruth.blockerCode ? (
-                                <div className="text-xs text-red-600 dark:text-red-400" title={opsTruth.blockerMessage || opsTruth.blockerCode}>
-                                  Blocker: {opsTruth.blockerCode}
-                                </div>
-                              ) : (
-                                <div className="text-xs text-green-600 dark:text-green-400">
-                                  Sin blocker actual
-                                </div>
-                              )}
-                              {opsTruth.nextAction && (
-                                <div className="text-[11px] text-amber-700 dark:text-amber-300 truncate" title={opsTruth.nextAction}>
-                                  Next: {opsTruth.nextAction}
-                                </div>
-                              )}
+                          <div className="space-y-1 max-w-[250px]">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${lifecycleToneClasses(lifecycle.tone)}`}
+                            >
+                              {lifecycle.label}
+                            </span>
+                            <div className="text-[11px] text-slate-600 dark:text-slate-300 truncate" title={lifecycle.detail}>
+                              {lifecycle.detail}
                             </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">Sin truth contract</span>
-                          )}
+                            {opsTruth?.blockerCode ? (
+                              <div
+                                className="text-xs text-red-600 dark:text-red-400 truncate"
+                                title={opsTruth.blockerMessage || opsTruth.blockerCode}
+                              >
+                                Blocker: {opsTruth.blockerCode}
+                              </div>
+                            ) : null}
+                            {product.validationState && product.validationState !== product.status ? (
+                              <div className="text-[11px] text-slate-500">
+                                DB: {product.status}
+                              </div>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           {product.winnerDetectedAt ? (
@@ -1224,7 +1219,7 @@ export default function Products() {
                               Ganador
                             </Badge>
                           ) : (
-                            <span className="text-gray-400">—</span>
+                            <span className="text-slate-400">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -1241,30 +1236,30 @@ export default function Products() {
                           ) : null}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => navigate(`/products/${product.id}/preview`)} className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors" title="Preview">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button onClick={() => navigate(`/products/${product.id}/preview`)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors" title="Preview">
                               <Eye className="w-4 h-4" />
                             </button>
-                            <button onClick={() => navigate(`/products/${product.id}/preview?showFinancial=true`)} className="p-1 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded transition-colors" title="Info financiera">
+                            <button onClick={() => navigate(`/products/${product.id}/preview?showFinancial=true`)} className="p-1.5 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors" title="Info financiera">
                               <Calculator className="w-4 h-4" />
                             </button>
                             {product.status === 'PENDING' && (
                               <>
-                                <button onClick={() => handleApprove(product.id)} className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded" title="Aprobar">
+                                <button onClick={() => handleApprove(product.id)} className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg" title="Aprobar">
                                   <CheckCircle className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleReject(product.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Rechazar">
+                                <button onClick={() => handleReject(product.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg" title="Rechazar">
                                   <XCircle className="w-4 h-4" />
                                 </button>
                               </>
                             )}
                             {product.status === 'VALIDATED_READY' && (
-                              <button onClick={() => handlePublish(product.id)} className="p-1 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded" title="Publicar validado">
+                              <button onClick={() => handlePublish(product.id)} className="p-1.5 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg" title="Publicar validado">
                                 <Upload className="w-4 h-4" />
                               </button>
                             )}
                             {product.status === 'PUBLISHED' && (
-                              <button onClick={() => handleUnpublish(product.id)} className="p-1 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded" title="Despublicar">
+                              <button onClick={() => handleUnpublish(product.id)} className="p-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg" title="Despublicar">
                                 <Archive className="w-4 h-4" />
                               </button>
                             )}
@@ -1272,7 +1267,7 @@ export default function Products() {
                               type="button"
                               onClick={() => setDeleteTarget(product)}
                               disabled={deleteLoading}
-                              className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded disabled:opacity-50"
+                              className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg disabled:opacity-50"
                               title={isAdminUser ? 'Eliminar producto (admin / dueño)' : 'Eliminar producto (solo si no tiene ventas)'}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1287,22 +1282,22 @@ export default function Products() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 pt-4 border-t dark:border-gray-700">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+                  <p className="text-xs text-slate-500">
                     Pagina {currentPage} de {totalPages} ({totalFiltered.toLocaleString()} productos)
                   </p>
-                  <div className="flex gap-2 items-center">
-                    <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                  <div className="flex gap-1.5 items-center">
+                    <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
                       Primera
                     </Button>
-                    <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                    <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
                       Anterior
                     </Button>
-                    <span className="text-sm font-medium px-2">{currentPage}</span>
-                    <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                    <span className="text-xs font-medium tabular-nums px-2">{currentPage}</span>
+                    <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
                       Siguiente
                     </Button>
-                    <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
+                    <Button variant="outline" className="h-7 px-2.5 text-[11px]" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
                       Ultima
                     </Button>
                   </div>
@@ -1313,15 +1308,15 @@ export default function Products() {
         </CardContent>
       </Card>
 
-      {/* Eliminar producto — confirmación explícita (no usar solo confirm() nativo) */}
+      {/* Delete confirmation modal */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-product-title">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 space-y-4 border dark:border-gray-700">
-            <h2 id="delete-product-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="delete-product-title">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800">
+            <h2 id="delete-product-title" className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               Eliminar producto
             </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Vas a eliminar de forma permanente el producto <strong className="text-gray-900 dark:text-gray-100">#{deleteTarget.id}</strong>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Vas a eliminar de forma permanente el producto <strong className="text-slate-900 dark:text-slate-100">#{deleteTarget.id}</strong>
               {deleteTarget.title ? (
                 <>
                   : <span className="italic">{deleteTarget.title.slice(0, 120)}{deleteTarget.title.length > 120 ? '…' : ''}</span>
@@ -1329,7 +1324,7 @@ export default function Products() {
               ) : null}
               . No se puede deshacer.
             </p>
-            <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded px-2 py-1.5">
+            <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-lg px-2 py-1.5">
               El backend rechaza la eliminación si el producto tiene ventas u órdenes asociadas (historial). Si está publicado, podés despublicar antes si tu flujo lo requiere.
             </p>
             <div className="flex justify-end gap-2 pt-2">
@@ -1352,12 +1347,12 @@ export default function Products() {
 
       {/* Product Detail Modal */}
       {showModal && selectedProduct && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b dark:border-gray-700 flex items-center justify-between">
-              <h2 className="text-2xl font-bold dark:text-gray-100">Detalles del producto</h2>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
-                <XCircle className="w-6 h-6" />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <h2 className="text-lg font-semibold dark:text-slate-100">Detalles del producto</h2>
+              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                <XCircle className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
@@ -1366,7 +1361,7 @@ export default function Products() {
                   <img
                     src={selectedProduct.imageUrl}
                     alt={selectedProduct.title}
-                    className="w-full max-w-md h-64 object-cover rounded-lg shadow-md"
+                    className="w-full max-w-md h-64 object-cover rounded-xl shadow-md"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       target.style.display = 'none';
@@ -1374,83 +1369,77 @@ export default function Products() {
                       if (placeholder) placeholder.style.display = 'flex';
                     }}
                   />
-                  <div className="w-full max-w-md h-64 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center hidden">
+                  <div className="w-full max-w-md h-64 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center hidden">
                     <div className="text-center">
-                      <Package className="w-16 h-16 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-500 text-sm">Imagen no disponible</p>
+                      <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
+                      <p className="text-slate-500 text-sm">Imagen no disponible</p>
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="flex justify-center">
-                  <div className="w-full max-w-md h-64 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                  <div className="w-full max-w-md h-64 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center">
                     <div className="text-center">
-                      <Package className="w-16 h-16 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-500 text-sm">Sin imagen</p>
+                      <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
+                      <p className="text-slate-500 text-sm">Sin imagen</p>
                     </div>
                   </div>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Titulo</p>
-                  <p className="font-medium dark:text-gray-100">{selectedProduct.title}</p>
+                  <p className="text-xs text-slate-500">Titulo</p>
+                  <p className="font-medium text-sm dark:text-slate-100">{selectedProduct.title}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">SKU</p>
-                  <p className="font-medium dark:text-gray-100">{selectedProduct.sku}</p>
+                  <p className="text-xs text-slate-500">SKU</p>
+                  <p className="font-medium text-sm dark:text-slate-100">{selectedProduct.sku}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Precio</p>
-                  <p className="font-medium text-lg dark:text-gray-100">
+                  <p className="text-xs text-slate-500">Precio</p>
+                  <p className="font-medium text-lg dark:text-slate-100">
                     {formatCurrencySimple(selectedProduct.price, selectedProduct.currency || 'USD')}
                   </p>
                 </div>
                 <div>
-                  <MetricLabelWithTooltip label="Marketplace" tooltipBody={metricTooltips.marketplace.body} className="text-sm text-gray-600 dark:text-gray-400">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Marketplace</p>
+                  <MetricLabelWithTooltip label="Marketplace" tooltipBody={metricTooltips.marketplace.body} className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500">Marketplace</p>
                   </MetricLabelWithTooltip>
                   <Badge variant="outline">{displayMarketplace(selectedProduct.marketplace)}</Badge>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Estado</p>
-                  <div className="flex items-center gap-2">
-                    {getStatusBadge(selectedProduct.validationState || selectedProduct.status)}
-                    <MetricLabelWithTooltip
-                      label={selectedProduct.validationState || selectedProduct.status}
-                      tooltipBody={
-                        selectedProduct.status === 'PENDING' ? metricTooltips.statusPending.body :
-                        selectedProduct.status === 'APPROVED' ? metricTooltips.statusApproved.body :
-                        selectedProduct.status === 'PUBLISHED' ? metricTooltips.statusPublished.body :
-                        selectedProduct.status === 'REJECTED' ? metricTooltips.statusRejected.body :
-                        'Estado del producto en el sistema'
-                      }
-                      className="inline-block"
-                    >
-                      <span className="cursor-help text-gray-400">?</span>
-                    </MetricLabelWithTooltip>
-                  </div>
-                  {selectedProduct.validationState && selectedProduct.validationState !== selectedProduct.status && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Estado de BD: {selectedProduct.status}
-                    </p>
+                  <p className="text-xs text-slate-500">Lifecycle canónico</p>
+                  {selectedLifecycle ? (
+                    <div className="space-y-1">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${lifecycleToneClasses(selectedLifecycle.tone)}`}
+                      >
+                        {selectedLifecycle.label}
+                      </span>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">{selectedLifecycle.detail}</p>
+                    </div>
+                  ) : (
+                    getStatusBadge(selectedProduct.validationState || selectedProduct.status)
                   )}
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Estado de BD: {selectedProduct.status}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Contexto resuelto</p>
-                  <p className="font-medium dark:text-gray-100">
+                  <p className="text-xs text-slate-500">Contexto resuelto</p>
+                  <p className="font-medium text-sm dark:text-slate-100">
                     {selectedProduct.resolvedCountry || '—'} / {selectedProduct.resolvedLanguage || '—'} / {selectedProduct.resolvedCurrency || '—'}
                   </p>
                   {typeof selectedProduct.feeCompleteness === 'number' && (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <p className="mt-1 text-[11px] text-slate-500">
                       Fees completos: {Math.round(selectedProduct.feeCompleteness * 100)}%
                     </p>
                   )}
                 </div>
                 {selectedProduct.profit ? (
                   <div>
-                    <MetricLabelWithTooltip label="Estimated unit margin" tooltipBody={metricTooltips.potentialProfit.body} className="text-sm text-gray-600 dark:text-gray-400">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Margen unitario estimado</p>
+                    <MetricLabelWithTooltip label="Estimated unit margin" tooltipBody={metricTooltips.potentialProfit.body} className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500">Margen unitario estimado</p>
                     </MetricLabelWithTooltip>
                     <p className="font-medium text-green-600 text-lg">
                       +{formatCurrencySimple(selectedProduct.estimatedUnitMargin ?? selectedProduct.profit ?? 0, selectedProduct.currency || 'USD')}
@@ -1458,13 +1447,13 @@ export default function Products() {
                   </div>
                 ) : null}
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Creado</p>
-                  <p className="font-medium dark:text-gray-100">{new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
+                  <p className="text-xs text-slate-500">Creado</p>
+                  <p className="font-medium text-sm dark:text-slate-100">{new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
               {selectedProduct.blockedReasons && selectedProduct.blockedReasons.length > 0 && (
-                <div className="pt-4 border-t dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bloqueos operativos</p>
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">Bloqueos operativos</p>
                   <div className="flex flex-wrap gap-2">
                     {selectedProduct.blockedReasons.map((reason) => (
                       <Badge key={reason} variant="destructive">
@@ -1474,44 +1463,46 @@ export default function Products() {
                   </div>
                 </div>
               )}
-              {operationsTruthByProduct[selectedProduct.id] && (
-                <div className="pt-4 border-t dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Truth operacional canónica</p>
+              {selectedOpsTruth && (
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Evidencia operacional (listado, blocker, proof)
+                  </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                     <div>
-                      <p className="text-gray-600 dark:text-gray-400">Estado live marketplace</p>
-                      <div className="mt-1">{getLiveStateBadge(operationsTruthByProduct[selectedProduct.id].externalMarketplaceState)}</div>
-                      {operationsTruthByProduct[selectedProduct.id].externalMarketplaceSubStatus.length > 0 && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {operationsTruthByProduct[selectedProduct.id].externalMarketplaceSubStatus.join(', ')}
+                      <p className="text-xs text-slate-500">Estado live marketplace</p>
+                      <div className="mt-1">{getLiveStateBadge(selectedOpsTruth.externalMarketplaceState)}</div>
+                      {selectedOpsTruth.externalMarketplaceSubStatus.length > 0 && (
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          {selectedOpsTruth.externalMarketplaceSubStatus.join(', ')}
                         </p>
                       )}
                     </div>
                     <div>
-                      <p className="text-gray-600 dark:text-gray-400">Blocker actual</p>
-                      <p className="font-medium text-gray-900 dark:text-gray-100">
-                        {operationsTruthByProduct[selectedProduct.id].blockerCode || 'Sin blocker'}
+                      <p className="text-xs text-slate-500">Blocker actual</p>
+                      <p className="font-medium text-sm text-slate-900 dark:text-slate-100">
+                        {selectedOpsTruth.blockerCode || 'Sin blocker'}
                       </p>
-                      {operationsTruthByProduct[selectedProduct.id].nextAction && (
-                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                          Next: {operationsTruthByProduct[selectedProduct.id].nextAction}
+                      {selectedOpsTruth.nextAction && (
+                        <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
+                          Next: {selectedOpsTruth.nextAction}
                         </p>
                       )}
                     </div>
                     <div>
-                      <p className="text-gray-600 dark:text-gray-400">Proof ladder</p>
-                      <p className="text-xs text-gray-700 dark:text-gray-300 mt-1">
-                        order={operationsTruthByProduct[selectedProduct.id].orderIngested ? 'yes' : 'no'} · supplier={operationsTruthByProduct[selectedProduct.id].supplierPurchaseProved ? 'yes' : 'no'} · tracking={operationsTruthByProduct[selectedProduct.id].trackingAttached ? 'yes' : 'no'} · payout={operationsTruthByProduct[selectedProduct.id].releasedFundsObtained ? 'yes' : 'no'} · realized={operationsTruthByProduct[selectedProduct.id].realizedProfitObtained ? 'yes' : 'no'}
+                      <p className="text-xs text-slate-500">Proof ladder</p>
+                      <p className="text-[11px] text-slate-700 dark:text-slate-300 mt-1">
+                        order={selectedOpsTruth.orderIngested ? 'yes' : 'no'} · supplier={selectedOpsTruth.supplierPurchaseProved ? 'yes' : 'no'} · tracking={selectedOpsTruth.trackingAttached ? 'yes' : 'no'} · payout={selectedOpsTruth.releasedFundsObtained ? 'yes' : 'no'} · realized={selectedOpsTruth.realizedProfitObtained ? 'yes' : 'no'}
                       </p>
                     </div>
-                    {operationsTruthByProduct[selectedProduct.id].agentTrace && (
+                    {selectedOpsTruth.agentTrace && (
                       <div>
-                        <p className="text-gray-600 dark:text-gray-400">Última decisión de agente</p>
-                        <p className="font-medium text-gray-900 dark:text-gray-100">
-                          {operationsTruthByProduct[selectedProduct.id].agentTrace?.agentName} · {operationsTruthByProduct[selectedProduct.id].agentTrace?.decision}
+                        <p className="text-xs text-slate-500">Última decisión de agente</p>
+                        <p className="font-medium text-sm text-slate-900 dark:text-slate-100">
+                          {selectedOpsTruth.agentTrace?.agentName} · {selectedOpsTruth.agentTrace?.decision}
                         </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {operationsTruthByProduct[selectedProduct.id].agentTrace?.reasonCode}
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          {selectedOpsTruth.agentTrace?.reasonCode}
                         </p>
                       </div>
                     )}
@@ -1519,17 +1510,17 @@ export default function Products() {
                 </div>
               )}
               {(selectedProduct.marketplaceUrl || selectedProduct.aliexpressUrl) && (
-                <div className="pt-4 border-t dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enlaces</p>
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">Enlaces</p>
                   <div className="flex flex-wrap gap-3">
                     {selectedProduct.marketplaceUrl && (
-                      <a href={selectedProduct.marketplaceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
+                      <a href={selectedProduct.marketplaceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors text-sm">
                         <Store className="w-4 h-4" />
                         Ver en {displayMarketplace(selectedProduct.marketplace)}
                       </a>
                     )}
                     {selectedProduct.aliexpressUrl && (
-                      <a href={selectedProduct.aliexpressUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                      <a href={selectedProduct.aliexpressUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm">
                         <Link2 className="w-4 h-4" />
                         Proveedor (AliExpress)
                       </a>
@@ -1538,7 +1529,7 @@ export default function Products() {
                 </div>
               )}
             </div>
-            <div className="p-6 border-t dark:border-gray-700 flex gap-3 justify-end">
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setShowModal(false)}>
                 Cerrar
               </Button>

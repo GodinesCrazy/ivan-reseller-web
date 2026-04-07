@@ -85,20 +85,20 @@ export default function SystemStatus() {
     showConnectLink?: boolean;
     reconnectHint?: string;
   }) => {
-    const tooltip = message || (connected ? undefined : 'Completa la configuración en API Settings');
+    const tooltip = message || (connected ? undefined : 'Completa la configuración en Configuración de API');
     return (
       <div
         className={`flex items-center justify-between py-3 px-4 rounded-lg border ${
           !connected && showConnectLink
             ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10'
-            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
         }`}
         title={tooltip}
       >
         <div className="flex-1 min-w-0">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
           {!connected && (message || reconnectHint) && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate" title={message || reconnectHint}>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate" title={message || reconnectHint}>
               {message || reconnectHint}
             </p>
           )}
@@ -127,7 +127,7 @@ export default function SystemStatus() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[200px]">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
       </div>
     );
   }
@@ -143,12 +143,12 @@ export default function SystemStatus() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Estado del sistema</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Estado del sistema</h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
           Salud técnica y conectores como subcapa. La verdad operativa real del negocio se muestra abajo.
         </p>
         {operationsTruth?.generatedAt && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}
             {' · '}
             Evidencia operativa: {new Date(operationsTruth.generatedAt).toLocaleString()}
@@ -167,12 +167,12 @@ export default function SystemStatus() {
       )}
 
       {status ? (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 p-4">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
           <div className="flex items-center gap-2 mb-4">
             <ShieldAlert className="h-5 w-5 text-blue-500" />
             <div>
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Connector Health</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Salud de conectores</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Estado técnico de autenticación e integraciones. No reemplaza listing truth ni proof truth.
               </p>
             </div>
@@ -220,19 +220,19 @@ export default function SystemStatus() {
           <div className="grid grid-cols-1 xl:grid-cols-[1.05fr_1fr] gap-4">
             <PostSaleProofLadderPanel
               summary={operationsTruth.summary.proofCounts}
-              title="Operational Proof State"
+              title="Estado de prueba operativa"
               subtitle="Cada etapa comercial se muestra como backend proof presente o pendiente."
             />
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Canonical Operations Scope</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Alcance operativo canónico</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 Este panel ya separa health técnico de:
               </p>
-              <ul className="mt-3 space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                <li>Local listing state vs live marketplace state</li>
-                <li>Current blockers and next action</li>
-                <li>Post-sale proof ladder</li>
-                <li>Agent decisions and evidence</li>
+              <ul className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-300">
+                <li>Estado local del listing vs estado en el marketplace</li>
+                <li>Bloqueos actuales y próxima acción</li>
+                <li>Escalera de prueba post-venta</li>
+                <li>Decisiones del agente y evidencia</li>
               </ul>
             </div>
           </div>

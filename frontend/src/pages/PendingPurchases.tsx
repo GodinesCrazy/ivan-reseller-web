@@ -114,12 +114,10 @@ export default function PendingPurchases() {
     try {
       setProcessing((prev) => ({ ...prev, [rowKey]: true }));
       
-      // Abrir AliExpress en nueva pestaña
       if (sale.aliexpressUrl) {
         window.open(sale.aliexpressUrl, '_blank');
       }
       
-      // Marcar como procesando (opcional: actualizar estado en backend)
       toast.success('Abre AliExpress para realizar la compra. Recuerda usar la dirección del comprador.');
     } catch (error: any) {
       console.error('Error processing purchase:', error);
@@ -152,9 +150,9 @@ export default function PendingPurchases() {
 
   const getStatusBadge = (canPurchase: boolean) => {
     if (canPurchase) {
-      return <Badge variant="default" className="bg-green-100 text-green-800">Capital Disponible</Badge>;
+      return <Badge variant="success">Capital disponible</Badge>;
     }
-    return <Badge variant="destructive">Capital Insuficiente</Badge>;
+    return <Badge variant="destructive">Capital insuficiente</Badge>;
   };
 
   if (loading) {
@@ -162,42 +160,33 @@ export default function PendingPurchases() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-5 p-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Orders to Fulfill</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Compras pendientes: ventas que requieren compra en AliExpress (o acción manual si el envío/etiqueta falló). Usa el enlace del proveedor y la dirección del comprador. Tras comprar, el seguimiento continúa en Órdenes.
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Compras Pendientes</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Ventas que requieren compra en proveedor · proof ladder en{' '}
+            <Link to="/control-center" className="text-primary-600 dark:text-primary-400 hover:underline">Control Center</Link>
+            {' '}·{' '}
+            <Link to="/orders?import=ebay" className="text-amber-600 dark:text-amber-400 hover:underline">Importar orden eBay</Link>
           </p>
           {pendingSales.length > 0 && (
-            <p className="text-amber-700 dark:text-amber-400 text-sm font-medium mt-1 flex items-center gap-1">
-              <AlertCircle className="w-4 h-4" />
-              Action required: {pendingSales.length} order{pendingSales.length !== 1 ? 's' : ''} pending fulfillment
+            <p className="text-amber-700 dark:text-amber-400 text-xs font-medium mt-1 flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5" />
+              {pendingSales.length} orden{pendingSales.length !== 1 ? 'es' : ''} pendiente{pendingSales.length !== 1 ? 's' : ''} de fulfillment
             </p>
           )}
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga.</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Prioriza acciones de fulfillment y la{' '}
-            <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline">
-              verdad operativa canónica
-            </Link>
-            ; las cifras de margen aquí son referenciales, no ganancia realizada.
-          </p>
-          <p className="text-xs mt-1">
-            <a href="/orders?import=ebay" className="text-amber-600 dark:text-amber-400 hover:underline">Importar orden eBay</a>
-            {' '}si la venta no llegó por webhook.
-          </p>
           <div className="mt-3">
             <CycleStepsBreadcrumb currentStep={5} />
           </div>
         </div>
-        <Button onClick={fetchPendingPurchases} variant="outline">
+        <Button onClick={fetchPendingPurchases} variant="outline" size="sm">
           Actualizar
         </Button>
       </div>
 
-      {/* Capital Info Card */}
+      {/* Operations truth panels */}
       {operationsTruth && pendingProductIds.length > 0 && (
         <div className="space-y-4">
           <OperationsTruthSummaryPanel data={operationsTruth} />
@@ -209,17 +198,20 @@ export default function PendingPurchases() {
         </div>
       )}
 
+      {/* Capital summary card */}
       {pendingSales.length > 0 && (
-        <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-          <CardContent className="pt-6">
+        <Card className="bg-blue-50/60 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+          <CardContent className="pt-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Capital de Trabajo Disponible</p>
-                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Capital de trabajo disponible</p>
+                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-1">
                   {formatCurrencySimple(pendingSales[0]?.availableCapital || 0, 'USD')}
                 </p>
               </div>
-              <DollarSign className="w-12 h-12 text-blue-600 dark:text-blue-400" />
+              <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -227,54 +219,58 @@ export default function PendingPurchases() {
 
       {/* Pending Sales List */}
       {pendingSales.length === 0 ? (
-        <Card className="dark:bg-gray-800 dark:border-gray-700">
-          <CardContent className="pt-6">
-            <div className="text-center py-12">
-              <ShoppingCart className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-              <p className="text-gray-600 dark:text-gray-400 text-lg">No hay compras pendientes</p>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">Todas las ventas están siendo procesadas automáticamente o ya fueron completadas</p>
+        <Card>
+          <CardContent className="pt-5">
+            <div className="text-center py-16">
+              <div className="mx-auto h-14 w-14 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+                <ShoppingCart className="w-7 h-7 text-slate-400 dark:text-slate-500" />
+              </div>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No hay compras pendientes</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+                Todas las ventas están siendo procesadas automáticamente o ya fueron completadas
+              </p>
             </div>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4">
           {pendingSales.map((sale) => (
-            <Card key={sale.id} className="hover:shadow-lg transition-shadow dark:bg-gray-800 dark:border-gray-700">
+            <Card key={sale.id} className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                      <Package className="w-5 h-5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Package className="w-4 h-4 flex-shrink-0 text-slate-400" />
                       {sale.productId ? (
                         <button
                           onClick={() => navigate(`/products/${sale.productId}/preview`)}
-                          className="text-left hover:text-blue-600 dark:hover:text-blue-400 hover:underline flex items-center gap-1"
+                          className="text-left hover:text-primary-600 dark:hover:text-primary-400 hover:underline flex items-center gap-1 truncate"
                         >
                           {sale.productTitle}
-                          <ExternalLink className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                          <ExternalLink className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
                         </button>
                       ) : (
-                        sale.productTitle
+                        <span className="truncate">{sale.productTitle}</span>
                       )}
                     </CardTitle>
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                       <Badge variant="outline">{sale.marketplace.toUpperCase()}</Badge>
                       <Badge variant="secondary">Orden: {sale.orderId}</Badge>
-                      <Badge variant="destructive" className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">Required action</Badge>
+                      <Badge variant="warning">Acción requerida</Badge>
                       {sale.isFailedOrder && (
-                        <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-300">Order failed — fulfill manually</Badge>
+                        <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-300">Orden fallida — fulfillment manual</Badge>
                       )}
                       {getStatusBadge(sale.canPurchase)}
                     </div>
                     {sale.isFailedOrder && sale.errorMessage && (
-                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
+                      <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
                         ⚠ {sale.errorMessage}
                       </p>
                     )}
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Precio de Venta</p>
-                    <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                  <div className="text-right ml-4 flex-shrink-0">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">Precio de venta</p>
+                    <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                       {formatCurrencySimple(sale.salePrice, 'USD')}
                     </p>
                   </div>
@@ -282,68 +278,69 @@ export default function PendingPurchases() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  {/* Fulfillment primero: verdad de acción */}
-                  <div className="space-y-2 md:order-1">
-                    <h3 className="font-semibold text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                      <Package className="w-4 h-4" />
+                  {/* Fulfillment action */}
+                  <div className="space-y-1.5 md:order-1">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5" />
                       Fulfillment — siguiente acción
                     </h3>
-                    <div className="bg-slate-50 dark:bg-slate-900/30 p-3 rounded border border-slate-200 dark:border-slate-700 space-y-2 text-sm text-gray-800 dark:text-gray-200">
-                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 space-y-2">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                         Compra en proveedor pendiente o requiere envío de tracking. Los detalles de bloqueo y prueba están en la orden y en Control Center.
                       </p>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1.5">
                         {sale.orderId && (
-                          <Link
-                            to={`/orders/${sale.orderId}`}
-                            className="inline-flex items-center justify-center rounded-lg text-xs font-semibold border-2 border-gray-300 bg-white text-gray-900 hover:bg-gray-50 dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 px-3 py-2"
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate(`/orders/${sale.orderId}`)}
                           >
-                            Abrir orden (verdad de compra)
-                          </Link>
+                            Abrir orden
+                          </Button>
                         )}
                         {sale.aliexpressUrl && (
-                          <button
-                            type="button"
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => window.open(sale.aliexpressUrl, '_blank')}
-                            className="inline-flex items-center justify-center rounded-lg text-xs font-semibold border-2 border-gray-300 bg-white text-gray-900 hover:bg-gray-50 dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 px-3 py-2"
                           >
                             Enlace proveedor
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Comprador */}
-                  <div className="space-y-2 md:order-2">
-                    <h3 className="font-semibold text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      Información del Comprador
+                  {/* Buyer info */}
+                  <div className="space-y-1.5 md:order-2">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5" />
+                      Información del comprador
                     </h3>
-                    <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded space-y-2">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 space-y-2">
                       {sale.buyerName && (
-                        <div className="flex items-start gap-2 text-sm text-gray-900 dark:text-gray-100">
-                          <User className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5" />
+                        <div className="flex items-start gap-2 text-xs text-slate-900 dark:text-slate-100">
+                          <User className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
                           <div>
-                            <span className="text-gray-600 dark:text-gray-400">Nombre: </span>
+                            <span className="text-slate-500 dark:text-slate-400">Nombre: </span>
                             <span className="font-medium">{sale.buyerName}</span>
                           </div>
                         </div>
                       )}
                       {sale.buyerEmail && (
-                        <div className="flex items-start gap-2 text-sm text-gray-900 dark:text-gray-100">
-                          <Mail className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5" />
+                        <div className="flex items-start gap-2 text-xs text-slate-900 dark:text-slate-100">
+                          <Mail className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
                           <div>
-                            <span className="text-gray-600 dark:text-gray-400">Email: </span>
+                            <span className="text-slate-500 dark:text-slate-400">Email: </span>
                             <span className="font-medium">{sale.buyerEmail}</span>
                           </div>
                         </div>
                       )}
                       {sale.shippingAddress && (
-                        <div className="flex items-start gap-2 text-sm text-gray-900 dark:text-gray-100">
-                          <MapPin className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5" />
+                        <div className="flex items-start gap-2 text-xs text-slate-900 dark:text-slate-100">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
                           <div className="flex-1">
-                            <span className="text-gray-600 dark:text-gray-400">Dirección: </span>
+                            <span className="text-slate-500 dark:text-slate-400">Dirección: </span>
                             <span className="font-medium break-words">
                               {typeof sale.shippingAddress === 'string' 
                                 ? sale.shippingAddress 
@@ -353,63 +350,63 @@ export default function PendingPurchases() {
                         </div>
                       )}
                       {!sale.buyerName && !sale.buyerEmail && !sale.shippingAddress && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 italic">Información del comprador no disponible</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 italic">Información del comprador no disponible</p>
                       )}
                     </div>
                   </div>
 
-                  {/* Referencia financiera — demoted */}
-                  <div className="space-y-2 md:col-span-2 md:order-3">
-                    <h3 className="font-semibold text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4" />
+                  {/* Cost reference */}
+                  <div className="space-y-1.5 md:col-span-2 md:order-3">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5" />
                       Referencia de costos y capital (no es ganancia realizada)
                     </h3>
-                    <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded space-y-1 border border-dashed border-gray-200 dark:border-gray-600">
-                      <div className="flex justify-between text-sm text-gray-900 dark:text-gray-100">
-                        <span className="text-gray-600 dark:text-gray-400">Costo AliExpress (ref.):</span>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 space-y-1">
+                      <div className="flex justify-between text-xs text-slate-900 dark:text-slate-100">
+                        <span className="text-slate-500 dark:text-slate-400">Costo proveedor (ref.):</span>
                         <span className="font-medium">{formatCurrencySimple(sale.aliexpressCost, 'USD')}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Capital requerido:</span>
-                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500 dark:text-slate-400">Capital requerido:</span>
+                        <span className={`font-medium ${sale.canPurchase ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                           {formatCurrencySimple(sale.requiredCapital, 'USD')}
                         </span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Capital disponible:</span>
-                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500 dark:text-slate-400">Capital disponible:</span>
+                        <span className={`font-medium ${sale.canPurchase ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                           {formatCurrencySimple(sale.availableCapital, 'USD')}
                         </span>
                       </div>
-                      <div className="flex justify-between text-xs pt-2 border-t border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
-                        <span>Margen bruto referencial (estimado, venta − coste proveedor):</span>
-                        <span className="font-medium text-gray-800 dark:text-gray-200">
+                      <div className="flex justify-between text-[11px] pt-2 border-t border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+                        <span>Margen bruto referencial (venta − coste proveedor):</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
                           {formatCurrencySimple(sale.salePrice - sale.aliexpressCost, 'USD')}
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-500 pt-1">
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 pt-1">
                         No sustituye proof de compra en proveedor ni fondos liberados. Usa la orden enlazada para el estado real.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Phase 41: Manual tracking — compré manualmente, enviar tracking */}
+                {/* Manual tracking submission */}
                 {sale.orderId && (
-                  <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Compré manualmente — enviar tracking</p>
+                  <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Enviar tracking manual</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         type="text"
                         placeholder="Número de seguimiento"
                         value={trackingInput[sale.orderId] ?? ''}
                         onChange={(e) => setTrackingInput(prev => ({ ...prev, [sale.orderId]: e.target.value }))}
-                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 min-w-[180px]"
+                        className="h-8 px-3 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 min-w-[180px] focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900"
                       />
                       <Button
                         onClick={() => handleSubmitTracking(sale)}
                         disabled={submittingTracking[sale.orderId]}
-                        className="text-sm h-9 px-3"
+                        size="sm"
                       >
                         {submittingTracking[sale.orderId] ? 'Enviando...' : 'Enviar tracking'}
                       </Button>
@@ -417,62 +414,62 @@ export default function PendingPurchases() {
                   </div>
                 )}
 
-                {/* Actions */}
-                <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <Clock className="w-4 h-4" />
-                    <span>Venta realizada: {new Date(sale.createdAt).toLocaleString()}</span>
+                {/* Actions footer */}
+                <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Venta: {new Date(sale.createdAt).toLocaleString()}</span>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {sale.orderId && (
                       <Button
                         variant="outline"
+                        size="sm"
                         onClick={() => navigate(`/orders/${sale.orderId}`)}
-                        className="flex items-center gap-2"
                       >
-                        <Package className="w-4 h-4" />
+                        <Package className="w-3.5 h-3.5 mr-1.5" />
                         Ver orden
                       </Button>
                     )}
                     {sale.aliexpressUrl && (
                       <Button
                         variant="outline"
+                        size="sm"
                         onClick={() => window.open(sale.aliexpressUrl, '_blank')}
-                        className="flex items-center gap-2"
-                        title="Supplier link (clickable) — open in new tab"
+                        title="Abrir enlace del proveedor en nueva pestaña"
                       >
-                        <ExternalLink className="w-4 h-4" />
-                        Supplier link: AliExpress
+                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                        Enlace proveedor
                       </Button>
                     )}
                     <Button
                       onClick={() => handlePurchaseNow(sale)}
                       disabled={!sale.canPurchase || processing[saleRowKey(sale)]}
-                      className="flex items-center gap-2"
+                      size="sm"
                       variant={sale.canPurchase ? "default" : "destructive"}
                     >
                       {processing[saleRowKey(sale)] ? (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white mr-1.5"></div>
                           Procesando...
                         </>
                       ) : (
                         <>
-                          <ShoppingCart className="w-4 h-4" />
-                          Realizar Compra Ahora
+                          <ShoppingCart className="w-3.5 h-3.5 mr-1.5" />
+                          Realizar compra
                         </>
                       )}
                     </Button>
                   </div>
                 </div>
 
-                {/* Warning if capital insufficient */}
+                {/* Capital insufficient warning */}
                 {!sale.canPurchase && (
-                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-lg flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-red-800 dark:text-red-200">Capital Insuficiente</p>
-                      <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                      <p className="text-xs font-semibold text-red-800 dark:text-red-200">Capital insuficiente</p>
+                      <p className="text-[11px] text-red-700 dark:text-red-300 mt-0.5">
                         Necesitas {formatCurrencySimple(sale.requiredCapital - sale.availableCapital, 'USD')} adicionales 
                         para realizar esta compra. Actualiza tu capital de trabajo en Configuración.
                       </p>
@@ -487,4 +484,3 @@ export default function PendingPurchases() {
     </div>
   );
 }
-

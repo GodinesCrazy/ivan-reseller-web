@@ -94,6 +94,7 @@ import { prisma } from '../config/database';
 import { retryMarketplaceOperation } from '../utils/retry.util';
 import logger from '../config/logger';
 import { env } from '../config/env';
+import { getMlPhysicalPackageBlockers } from '../utils/ml-physical-package-guard';
 import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
 import { toNumber } from '../utils/decimal.utils';
@@ -138,6 +139,9 @@ export interface PublishProductRequest {
   /** When true, allow publishing an already-published product (creates duplicate listing). */
   duplicateListing?: boolean;
   customData?: {
+    publishMode?: 'local' | 'international';
+    publishIntent?: 'dry_run' | 'pilot' | 'production';
+    pilotManualAck?: boolean;
     categoryId?: string;
     price?: number;
     quantity?: number;
@@ -153,6 +157,45 @@ export interface PublishResult {
   listingId?: string;
   listingUrl?: string;
   error?: string;
+  dryRun?: boolean;
+  assessment?: unknown;
+}
+
+/** Map required ML catalog attributes from real Product package fields (no fabricated defaults). */
+function mlPackageAttributeValueFromProduct(attrId: string, product: any): string | null {
+  const id = String(attrId).toUpperCase();
+  const L = product?.packageLengthCm;
+  const W = product?.packageWidthCm;
+  const H = product?.packageHeightCm;
+  const G = product?.packageWeightGrams;
+  if (id === 'WEIGHT' || id === 'NET_WEIGHT') return G != null ? `${G} g` : null;
+  if (id === 'MAX_WEIGHT') return G != null ? `${G} g` : null;
+  if (id === 'LENGTH' || id.endsWith('_LENGTH')) return L != null ? `${L} cm` : null;
+  if (id === 'WIDTH' || id.endsWith('_WIDTH')) return W != null ? `${W} cm` : null;
+  if (id === 'HEIGHT' || id === 'DEPTH' || id.endsWith('_HEIGHT') || id.endsWith('_DEPTH'))
+    return H != null ? `${H} cm` : null;
+  return null;
+}
+
+function buildMlShippingDimensionsString(product: any): string {
+  const L = Number(product?.packageLengthCm);
+  const W = Number(product?.packageWidthCm);
+  const H = Number(product?.packageHeightCm);
+  const G = Number(product?.packageWeightGrams);
+  return `${L}x${W}x${H},${G}`;
+}
+
+function toMercadoLibreRequestedMode(value: unknown): 'local' | 'international' {
+  return String(value || '').toLowerCase() === 'international' ? 'international' : 'local';
+}
+
+function toMercadoLibrePublishIntent(
+  value: unknown
+): 'dry_run' | 'pilot' | 'production' {
+  const v = String(value || '').toLowerCase();
+  if (v === 'dry_run') return 'dry_run';
+  if (v === 'pilot') return 'pilot';
+  return 'production';
 }
 
 export class MarketplaceService {
@@ -866,6 +909,8 @@ export class MarketplaceService {
         throw new AppError(credentials.issues.join(' '), 400);
       }
 
+      let publishCustomData: any = request.customData;
+
       if (request.marketplace === 'mercadolibre' && env.ML_WEB_PUBLISH_REQUIRE_ML_WEBHOOK_SECRET) {
         const { getWebhookStatus } = await import('./webhook-readiness.service');
         if (!getWebhookStatus().mercadolibre.configured) {
@@ -876,13 +921,88 @@ export class MarketplaceService {
         }
       }
 
+      if (request.marketplace === 'mercadolibre') {
+        const requestedPublishIntent = toMercadoLibrePublishIntent(
+          publishCustomData?.publishIntent
+        );
+        const requestedPublishMode = toMercadoLibreRequestedMode(publishCustomData?.publishMode);
+        let pilotApprovalId: string | null = null;
+        const pkgBlockers = getMlPhysicalPackageBlockers(product);
+        if (pkgBlockers.length > 0) {
+          throw new AppError(
+            `Mercado Libre publish blocked — physical package data incomplete: ${pkgBlockers.join('; ')}`,
+            400
+          );
+        }
+        const { buildMercadoLibrePublishPreflight } = await import('./mercadolibre-publish-preflight.service');
+        const pre = await buildMercadoLibrePublishPreflight({
+          userId,
+          productId: product.id,
+          isAdmin: false,
+          environment: userEnvironment,
+          requestedMode: requestedPublishMode,
+          publishIntent: requestedPublishIntent,
+          pilotManualAck: publishCustomData?.pilotManualAck === true,
+        });
+        if (requestedPublishIntent === 'dry_run') {
+          return {
+            success: true,
+            marketplace: 'mercadolibre',
+            dryRun: true,
+            assessment: pre,
+          };
+        }
+        if (!pre.publishAllowed) {
+          throw new AppError(
+            `Mercado Libre preflight blocked (${pre.overallState}): ${pre.blockers.join('; ')}`,
+            400
+          );
+        }
+
+        if (requestedPublishIntent === 'pilot' && requestedPublishMode === 'international') {
+          const { mlPilotOpsService } = await import('./ml-pilot-ops.service');
+          const validApproval = await mlPilotOpsService.findValidPilotApproval({
+            userId,
+            productId: product.id,
+            marketplace: 'mercadolibre',
+            requestedMode: 'international',
+          });
+          if (!validApproval) {
+            throw new AppError(
+              'Mercado Libre pilot blocked — missing a valid persistent pilot approval (approved + not expired + not consumed).',
+              400
+            );
+          }
+          const consumedApproval = await mlPilotOpsService.consumePilotApproval({
+            approvalId: validApproval.id,
+            actor: `publish_user_${userId}`,
+            evidenceSnapshot: {
+              userId,
+              productId: product.id,
+              marketplace: 'mercadolibre',
+              publishIntent: requestedPublishIntent,
+              requestedMode: requestedPublishMode,
+              consumedAt: new Date().toISOString(),
+            },
+          });
+          pilotApprovalId = consumedApproval?.id || validApproval.id;
+        }
+
+        publishCustomData = {
+          ...(publishCustomData || {}),
+          _mlPublishIntent: requestedPublishIntent,
+          _mlRequestedMode: requestedPublishMode,
+          _mlPilotApprovalId: pilotApprovalId,
+        };
+      }
+
       // Phase 53 / Phase 7: mandatory preventive validation with real supplier fallback selection.
       {
         const {
           prepareProductForSafePublishing,
           persistPreventivePublishPreparation,
         } = await import('./pre-publish-validator.service');
-        const listingSalePrice = this.getEffectiveListingPrice(product, request.customData?.price);
+        const listingSalePrice = this.getEffectiveListingPrice(product, publishCustomData?.price);
         try {
           const preparation = await prepareProductForSafePublishing({
             userId,
@@ -905,19 +1025,19 @@ export class MarketplaceService {
       // Publish to specific marketplace
       switch (request.marketplace) {
         case 'ebay':
-          return await this.publishToEbay(product, credentials, request.customData, userId);
+          return await this.publishToEbay(product, credentials, publishCustomData, userId);
 
         case 'mercadolibre':
           return await this.publishToMercadoLibre(
             product,
             credentials.credentials,
-            request.customData,
+            publishCustomData,
             userId,
             Boolean(request.duplicateListing)
           );
 
         case 'amazon':
-          return await this.publishToAmazon(product, credentials.credentials, request.customData, userId);
+          return await this.publishToAmazon(product, credentials.credentials, publishCustomData, userId);
 
         default:
           throw new AppError('Marketplace not supported', 400);
@@ -1183,6 +1303,62 @@ export class MarketplaceService {
     try {
       // Merge primaryImageIndex from productData (set in ProductPreview) into customData
       let mergedCustomData = { ...customData };
+      const resolvedPublishIntent = toMercadoLibrePublishIntent(
+        mergedCustomData?._mlPublishIntent ?? mergedCustomData?.publishIntent
+      );
+      const resolvedRequestedMode = toMercadoLibreRequestedMode(
+        mergedCustomData?._mlRequestedMode ?? mergedCustomData?.publishMode
+      );
+      const pilotApprovalId =
+        typeof mergedCustomData?._mlPilotApprovalId === 'string' &&
+        mergedCustomData._mlPilotApprovalId.trim().length > 0
+          ? mergedCustomData._mlPilotApprovalId.trim()
+          : null;
+      const shouldWritePilotLedger =
+        Boolean(userId) &&
+        resolvedPublishIntent === 'pilot' &&
+        resolvedRequestedMode === 'international';
+      const appendPilotLedger = async (input: {
+        result:
+          | 'assessment_only'
+          | 'blocked'
+          | 'enqueued'
+          | 'published'
+          | 'aborted'
+          | 'failed'
+          | 'rollback_requested'
+          | 'rollback_completed';
+        reason?: string;
+        blockers?: string[];
+        warnings?: string[];
+        evidenceSnapshot?: Record<string, unknown>;
+      }) => {
+        if (!shouldWritePilotLedger || !userId) return;
+        try {
+          const { mlPilotOpsService } = await import('./ml-pilot-ops.service');
+          await mlPilotOpsService.appendPilotDecisionLedger({
+            userId,
+            productId: product.id,
+            marketplace: 'mercadolibre',
+            publishIntent: resolvedPublishIntent,
+            requestedMode: resolvedRequestedMode,
+            modeResolved: resolvedRequestedMode,
+            result: input.result,
+            approvalId: pilotApprovalId,
+            blockers: input.blockers,
+            warnings: input.warnings,
+            evidenceSnapshot: input.evidenceSnapshot,
+            reason: input.reason,
+          });
+        } catch (ledgerError) {
+          logger.warn('[ML Publish] Pilot ledger append failed', {
+            productId: product?.id,
+            userId,
+            result: input.result,
+            error: ledgerError instanceof Error ? ledgerError.message : String(ledgerError),
+          });
+        }
+      };
       if (typeof mergedCustomData.primaryImageIndex !== 'number') {
         try {
           const pd = product.productData ? (typeof product.productData === 'string' ? JSON.parse(product.productData) : product.productData) : {};
@@ -1194,16 +1370,66 @@ export class MarketplaceService {
         }
       }
 
-      // App guard: block second publish for same productId while a listing row exists (duplicateListing bypasses when operator cleared ML but row lingers).
+      // Phase C deduplication guard: block second publish if an ACTIVE listing exists for this product.
+      // Two-layer check:
+      //   1. DB row exists → verify it's still active on ML API
+      //   2. If DB row is stale (ML listing closed externally), clean it up and allow publish
+      // allowDuplicateListing bypasses both layers for explicit operator republish.
       if (userId && !allowDuplicateListing) {
-        const existing = await prisma.marketplaceListing.findFirst({
-          where: { productId: product.id, userId, marketplace: 'mercadolibre' },
+        const existingRows = await prisma.marketplaceListing.findMany({
+          where: { productId: product.id, userId, marketplace: 'mercadolibre', NOT: { status: 'superseded' } },
+          orderBy: { publishedAt: 'desc' },
         });
-        if (existing) {
-          throw new AppError(
-            'Este producto ya está publicado en Mercado Libre. ML no permite publicaciones duplicadas del mismo producto.',
-            400
-          );
+        if (existingRows.length > 0) {
+          // Verify actual status on ML API for most recent row
+          const latestRow = existingRows[0];
+          let mlActiveFound = false;
+          let activeListingId: string | null = null;
+          try {
+            // We need credentials to query ML API; use the ones passed in
+            const tempCredsForCheck: MercadoLibreCredentials = {
+              ...credentials,
+              siteId: credentials.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+            };
+            const tempMlSvc = new MercadoLibreService(tempCredsForCheck);
+            const snap = latestRow.listingId ? await tempMlSvc.getItemStatus(latestRow.listingId) : null;
+            if (snap && snap.status === 'active') {
+              mlActiveFound = true;
+              activeListingId = latestRow.listingId;
+            } else if (snap && snap.status && snap.status !== 'active') {
+              // ML listing exists but is inactive — mark DB row accordingly and allow publish
+              await prisma.marketplaceListing.update({
+                where: { id: latestRow.id },
+                data: { status: `ml_${snap.status}` },
+              });
+              logger.info('[ML Publish] Existing DB listing is inactive on ML API — allowing republish', {
+                productId: product.id,
+                listingId: latestRow.listingId,
+                mlStatus: snap.status,
+              });
+            } else if (!snap) {
+              // ML returned no item (deleted/expired) — stale row, allow publish
+              logger.info('[ML Publish] DB listing not found on ML API (stale row) — allowing republish', {
+                productId: product.id,
+                listingId: latestRow.listingId,
+              });
+            }
+          } catch (checkErr: any) {
+            // API check failed — fall back to DB-only guard
+            logger.warn('[ML Publish] ML API status check failed — using DB row as guard', {
+              productId: product.id,
+              listingId: latestRow.listingId,
+              error: checkErr?.message,
+            });
+            mlActiveFound = true; // conservative: block if we can't verify
+            activeListingId = latestRow.listingId;
+          }
+          if (mlActiveFound) {
+            throw new AppError(
+              `Este producto ya tiene una publicación activa en Mercado Libre (${activeListingId}). Ciérrala primero o usa duplicateListing=true para republicar explícitamente.`,
+              400
+            );
+          }
         }
       }
 
@@ -1372,16 +1598,71 @@ export class MarketplaceService {
           logger.debug('Failed to generate AI description for MercadoLibre, using original', { error });
         }
       }
-      // Include AliExpress delivery estimate in description when available
-      const productData = typeof product.productData === 'string' ? (() => { try { return JSON.parse(product.productData || '{}'); } catch { return {}; } })() : (product.productData || {});
-      const estimatedDays = productData.estimatedDeliveryDays ?? productData.shipping?.estimatedDays ?? productData.deliveryDays;
-      if (typeof estimatedDays === 'number' && estimatedDays > 0) {
-        const minDays = Math.max(1, Math.floor(estimatedDays * 0.8));
-        const maxDays = Math.ceil(estimatedDays * 1.2);
-        const deliveryText = `\n\nEntrega estimada: ${minDays}-${maxDays} días (envío internacional).`;
-        const descWithDelivery = (finalDescription || '').trim() + deliveryText;
-        if (descWithDelivery.length <= 5000) finalDescription = descWithDelivery;
+
+      // Resolve handling time and free-shipping flag BEFORE the footer block so both
+      // the footer and the shipping payload below share the same computed values.
+      const { workflowConfigService: wfCfgSvcEarly } = await import('./workflow-config.service');
+      const DROPSHIPPING_HANDLING_TIME_DAYS = userId
+        ? await wfCfgSvcEarly.getMlHandlingTimeDays(userId)
+        : 30;
+      const effectiveShippingCostEarly = getEffectiveShippingCost(product);
+      const freeShipping = effectiveShippingCostEarly < 1;
+
+      // ── ML Chile Import Compliance Footer ──────────────────────────────────────
+      // Appends legal/commercial text required for imported dropshipping products:
+      // - Origen: "Producto importado de China"
+      // - ETA real para envío internacional CN→CL
+      // - Garantía legal 6 meses (Ley 19.496)
+      // - Derecho de retracto 10 días (Reglamento CE 2022)
+      // - Cláusula IVA (19% incluido, gestionado por ML, exento en aduana)
+      // Uses ETA from productData if available; falls back to configured handling time or 20-40d default.
+      {
+        const { appendMLChileImportFooter, buildMLChileBusinessTruth, logMLChilePublishTruth } = await import('./ml-chile-import-compliance.service');
+        const productDataForFooter = typeof product.productData === 'string'
+          ? (() => { try { return JSON.parse(product.productData || '{}'); } catch { return {}; } })()
+          : (product.productData || {});
+        const estimatedDaysForFooter =
+          productDataForFooter?.estimatedDeliveryDays ??
+          productDataForFooter?.shipping?.estimatedDays ??
+          productDataForFooter?.deliveryDays;
+        const footerOpts = {
+          originCountry: product.originCountry === 'CN' || !product.originCountry ? 'China' : product.originCountry,
+          etaMinDays: typeof estimatedDaysForFooter === 'number' && estimatedDaysForFooter > 0
+            ? Math.max(1, Math.floor(estimatedDaysForFooter * 0.8))
+            : DROPSHIPPING_HANDLING_TIME_DAYS > 0 ? Math.max(1, Math.floor(DROPSHIPPING_HANDLING_TIME_DAYS * 0.7)) : undefined,
+          etaMaxDays: typeof estimatedDaysForFooter === 'number' && estimatedDaysForFooter > 0
+            ? Math.ceil(estimatedDaysForFooter * 1.2)
+            : DROPSHIPPING_HANDLING_TIME_DAYS > 0 ? Math.ceil(DROPSHIPPING_HANDLING_TIME_DAYS * 1.2) : undefined,
+        };
+        const { finalDescription: descWithFooter, footerAppended, truncated } = appendMLChileImportFooter(finalDescription || '', footerOpts);
+        finalDescription = descWithFooter;
+        if (truncated) {
+          logger.warn('[ML Publish] Description truncated to fit ML Chile import footer', { productId: product.id });
+        }
+        logger.info('[ML Publish] ML Chile import footer appended', { productId: product.id, footerAppended });
+
+        // Log business truth for audit trail
+        const truthForLog = buildMLChileBusinessTruth({
+          product: {
+            id: product.id,
+            aliexpressUrl: product.aliexpressUrl,
+            aliexpressPrice: product.aliexpressPrice,
+            shippingCost: product.shippingCost,
+            importTax: product.importTax,
+            totalCost: product.totalCost,
+            targetCountry: product.targetCountry,
+            originCountry: product.originCountry,
+            suggestedPrice: product.suggestedPrice,
+            finalPrice: product.finalPrice,
+            currency: product.currency,
+            productData: product.productData,
+          },
+          listing: { legalTextsAppended: footerAppended, handlingTimeDays: DROPSHIPPING_HANDLING_TIME_DAYS, freeShipping: freeShipping },
+          handlingTimeDays: DROPSHIPPING_HANDLING_TIME_DAYS,
+        });
+        logMLChilePublishTruth(truthForLog, { productId: product.id, userId });
       }
+
       finalDescription = sanitizeDescriptionForML(finalDescription || '');
       finalTitle = sanitizeTitleForML(finalTitle);
 
@@ -1400,12 +1681,6 @@ export class MarketplaceService {
           const optionalImportant = ['COLOR', 'MATERIAL'];
           const attrIds = new Set(attributes?.map((a: any) => a.id) || []);
           attributes = [];
-          const dimensionDefaults: Record<string, { val: number; unit: string }> = {
-            WIDTH: { val: 20, unit: 'cm' }, HEIGHT: { val: 15, unit: 'cm' },
-            DEPTH: { val: 10, unit: 'cm' }, LENGTH: { val: 25, unit: 'cm' },
-            WEIGHT: { val: 500, unit: 'g' }, MAX_WEIGHT: { val: 1000, unit: 'g' },
-            NET_WEIGHT: { val: 400, unit: 'g' },
-          };
           for (const attr of requiredAttrs) {
             if (attr.id === 'BRAND') {
               const inferredBrand = inferBrandFromTitle(finalTitle);
@@ -1415,14 +1690,20 @@ export class MarketplaceService {
               const model = finalTitle.substring(0, 20).replace(/[^a-zA-Z0-9\- ]/g, '').trim();
               attributes.push({ id: 'MODEL', value: model || 'Standard' });
               attrIds.add('MODEL');
-            } else if (dimensionDefaults[attr.id]) {
-              const d = dimensionDefaults[attr.id];
-              const unit = attr.default_unit || d.unit;
-              attributes.push({ id: attr.id, value: `${d.val} ${unit}` });
-              attrIds.add(attr.id);
-            } else if (attr.values && attr.values.length > 0) {
-              attributes.push({ id: attr.id, value: attr.values[0].name });
-              attrIds.add(attr.id);
+            } else {
+              const fromPkg = mlPackageAttributeValueFromProduct(attr.id, product);
+              if (fromPkg != null) {
+                attributes.push({ id: attr.id, value: fromPkg });
+                attrIds.add(attr.id);
+              } else if (attr.values && attr.values.length > 0) {
+                attributes.push({ id: attr.id, value: attr.values[0].name });
+                attrIds.add(attr.id);
+              } else {
+                throw new AppError(
+                  `Mercado Libre category requires attribute "${attr.id}" but no real product value is available. Set package fields on the product or pass customData.attributes.`,
+                  400
+                );
+              }
             }
           }
           for (const optId of optionalImportant) {
@@ -1451,27 +1732,35 @@ export class MarketplaceService {
       }
 
       // Fase 2.1: shipping from product when available; else free_shipping if shippingCost 0 or very low.
-      // handlingTime: 25 — AliExpress dropshipping desde China a Chile tarda ~20-45 días calendario.
-      // Declarar 25 días de despacho en ML evita comprometer ETA doméstico (2-5 días) que no se puede cumplir.
-      const DROPSHIPPING_HANDLING_TIME_DAYS = 25;
-      const effectiveShippingCost = getEffectiveShippingCost(product);
-      const freeShipping = effectiveShippingCost < 1;
+      // handlingTime and freeShipping already resolved above before the footer block.
       const shippingFromProduct = (product as any).shipping;
+      const dimStr = buildMlShippingDimensionsString(product);
       const mlShipping =
         shippingFromProduct && shippingFromProduct.mode && shippingFromProduct.mode !== 'not_specified'
           ? {
               mode: shippingFromProduct.mode as string,
               freeShipping: Boolean(shippingFromProduct.freeShipping),
               handlingTime: shippingFromProduct.handlingTime ?? DROPSHIPPING_HANDLING_TIME_DAYS,
+              dimensions: dimStr,
             }
-          : { mode: 'me2' as const, freeShipping, handlingTime: DROPSHIPPING_HANDLING_TIME_DAYS };
+          : {
+              mode: 'me2' as const,
+              freeShipping,
+              handlingTime: DROPSHIPPING_HANDLING_TIME_DAYS,
+              dimensions: dimStr,
+            };
+
+      const maxUO = Math.max(1, Number(product.maxUnitsPerOrder ?? 1));
+      const rawQty = this.resolveListingQuantity(product, mergedCustomData?.quantity);
+      const listingQty = Math.min(Math.max(1, rawQty), maxUO);
 
       const mlProduct: MLProduct = {
+        __publishContext: 'marketplace_service',
         title: finalTitle,
         description: finalDescription,
         categoryId,
         price,
-        quantity: this.resolveListingQuantity(product, mergedCustomData?.quantity),
+        quantity: listingQty,
         condition: 'new',
         images: images,
         ...(attributes && attributes.length > 0 && { attributes }),
@@ -1496,11 +1785,33 @@ export class MarketplaceService {
       }
 
       if (result.success && result.itemId) {
+        // Determine shipping truth status from ML response
+        // If ML reverted me2 → not_specified (SHIPPING_TRUTH_NOT_ENFORCED_ON_ML), capture it
+        let shippingTruthStatus = 'unknown';
+        try {
+          const snap = await mlService.getItemStatus(result.itemId);
+          if (snap?.status === 'active') {
+            const shippingMode = (snap as any)?.shipping?.mode;
+            if (shippingMode === 'me2') {
+              shippingTruthStatus = 'me2_enforced';
+            } else if (mlShipping.mode === 'me2' && shippingMode && shippingMode !== 'me2') {
+              shippingTruthStatus = 'me2_attempted_not_enforced';
+            } else {
+              shippingTruthStatus = shippingMode || 'not_specified';
+            }
+          }
+        } catch {
+          shippingTruthStatus = mlShipping.mode === 'me2' ? 'me2_attempted_not_enforced' : 'not_specified';
+        }
+
         await this.updateProductMarketplaceInfo(product.id, 'mercadolibre', {
           listingId: result.itemId,
           listingUrl: result.permalink,
           publishedAt: new Date(),
           mlStatus: result.status,
+          shippingTruthStatus,
+          legalTextsAppended: true, // footer was appended above unconditionally
+          importHandlingTimeDays: DROPSHIPPING_HANDLING_TIME_DAYS,
         });
 
         // ✅ NOTA: El estado del producto se actualizará desde publisher.routes.ts
@@ -1516,6 +1827,15 @@ export class MarketplaceService {
 
       // ✅ P1: Retornar resultado correcto según éxito o fallo
       if (result.success && result.itemId) {
+        await appendPilotLedger({
+          result: 'published',
+          reason: 'pilot_publish_succeeded',
+          evidenceSnapshot: {
+            listingId: result.itemId,
+            listingUrl: result.permalink || null,
+            mlStatus: result.status || null,
+          },
+        });
         return {
           success: true,
           marketplace: 'mercadolibre',
@@ -1523,6 +1843,15 @@ export class MarketplaceService {
           listingUrl: result.permalink,
         };
       } else {
+        await appendPilotLedger({
+          result: 'failed',
+          reason: result.error || 'pilot_publish_failed',
+          blockers: ['pilot_publish:marketplace_create_listing_failed'],
+          evidenceSnapshot: {
+            mlError: result.error || null,
+            mlStatus: result.status || null,
+          },
+        });
         return {
           success: false,
           marketplace: 'mercadolibre',
@@ -1530,10 +1859,50 @@ export class MarketplaceService {
         };
       }
     } catch (error) {
+      const publishErr = error instanceof Error ? error.message : String(error);
+      try {
+        const resolvedPublishIntent = toMercadoLibrePublishIntent(
+          customData?._mlPublishIntent ?? customData?.publishIntent
+        );
+        const resolvedRequestedMode = toMercadoLibreRequestedMode(
+          customData?._mlRequestedMode ?? customData?.publishMode
+        );
+        const shouldWritePilotLedger =
+          Boolean(userId) &&
+          resolvedPublishIntent === 'pilot' &&
+          resolvedRequestedMode === 'international';
+        if (shouldWritePilotLedger && userId) {
+          const { mlPilotOpsService } = await import('./ml-pilot-ops.service');
+          await mlPilotOpsService.appendPilotDecisionLedger({
+            userId,
+            productId: product.id,
+            marketplace: 'mercadolibre',
+            publishIntent: resolvedPublishIntent,
+            requestedMode: resolvedRequestedMode,
+            modeResolved: resolvedRequestedMode,
+            result: 'failed',
+            approvalId:
+              typeof customData?._mlPilotApprovalId === 'string'
+                ? customData._mlPilotApprovalId
+                : null,
+            blockers: ['pilot_publish:exception_before_or_during_create_listing'],
+            reason: publishErr,
+            evidenceSnapshot: {
+              error: publishErr,
+            },
+          });
+        }
+      } catch (ledgerError) {
+        logger.warn('[ML Publish] Failed to persist pilot ledger on exception', {
+          productId: product?.id,
+          userId,
+          error: ledgerError instanceof Error ? ledgerError.message : String(ledgerError),
+        });
+      }
       return {
         success: false,
         marketplace: 'mercadolibre',
-        error: error.message,
+        error: publishErr,
       };
     }
   }
@@ -1603,6 +1972,16 @@ export class MarketplaceService {
           continue;
         }
 
+        const repairPkg = getMlPhysicalPackageBlockers(product);
+        if (repairPkg.length > 0) {
+          results.push({
+            listingId: listing.listingId,
+            success: false,
+            error: `Physical package data incomplete: ${repairPkg.join('; ')}`,
+          });
+          continue;
+        }
+
         // Skip listings already closed or paused on ML (update would fail or be irrelevant)
         const itemStatus = await mlService.getItemStatus(listing.listingId);
         if (itemStatus && (itemStatus.status === 'closed' || itemStatus.status === 'paused')) {
@@ -1631,24 +2010,19 @@ export class MarketplaceService {
             a.tags?.required || a.tags?.catalog_required
           );
           const finalTitle = sanitizeTitleForML(product.title);
-          const dimensionDefaults: Record<string, { val: number; unit: string }> = {
-            WIDTH: { val: 20, unit: 'cm' }, HEIGHT: { val: 15, unit: 'cm' },
-            DEPTH: { val: 10, unit: 'cm' }, LENGTH: { val: 25, unit: 'cm' },
-            WEIGHT: { val: 500, unit: 'g' }, MAX_WEIGHT: { val: 1000, unit: 'g' },
-            NET_WEIGHT: { val: 400, unit: 'g' },
-          };
           for (const attr of requiredAttrs) {
             if (attr.id === 'BRAND') {
               attributes.push({ id: 'BRAND', value: inferBrandFromTitle(finalTitle) || 'Genérico' });
             } else if (attr.id === 'MODEL') {
               const model = finalTitle.substring(0, 20).replace(/[^a-zA-Z0-9\- ]/g, '').trim();
               attributes.push({ id: 'MODEL', value: model || 'Standard' });
-            } else if (dimensionDefaults[attr.id]) {
-              const d = dimensionDefaults[attr.id];
-              const unit = attr.default_unit || d.unit;
-              attributes.push({ id: attr.id, value: `${d.val} ${unit}` });
-            } else if (attr.values && attr.values.length > 0) {
-              attributes.push({ id: attr.id, value: attr.values[0].name });
+            } else {
+              const fromPkg = mlPackageAttributeValueFromProduct(attr.id, product);
+              if (fromPkg != null) {
+                attributes.push({ id: attr.id, value: fromPkg });
+              } else if (attr.values && attr.values.length > 0) {
+                attributes.push({ id: attr.id, value: attr.values[0].name });
+              }
             }
           }
         } catch (e: any) {
@@ -2371,21 +2745,56 @@ export class MarketplaceService {
    * Update product with marketplace information
    */
   private async updateProductMarketplaceInfo(
-    productId: number, 
-    marketplace: string, 
-    info: { listingId: string; listingUrl: string; publishedAt: Date; mlStatus?: string }
+    productId: number,
+    marketplace: string,
+    info: {
+      listingId: string;
+      listingUrl: string;
+      publishedAt: Date;
+      mlStatus?: string;
+      shippingTruthStatus?: string;
+      legalTextsAppended?: boolean;
+      importHandlingTimeDays?: number;
+    }
   ): Promise<void> {
     try {
       const product = await prisma.product.findUnique({ where: { id: productId }, select: { userId: true, aliexpressUrl: true } });
       if (!product) return;
       const supplierUrl = (product.aliexpressUrl || '').trim() || null;
-      const data: any = { listingUrl: info.listingUrl, publishedAt: info.publishedAt, supplierUrl };
+      const data: any = { listingId: info.listingId, listingUrl: info.listingUrl, publishedAt: info.publishedAt, supplierUrl };
       if (info.mlStatus) data.sku = `status:${info.mlStatus}`;
-      const existing = await prisma.marketplaceListing.findFirst({ where: { marketplace, listingId: info.listingId } });
-      if (existing) {
-        await prisma.marketplaceListing.update({ where: { id: existing.id }, data });
+      if (info.shippingTruthStatus !== undefined) data.shippingTruthStatus = info.shippingTruthStatus;
+      if (info.legalTextsAppended !== undefined) data.legalTextsAppended = info.legalTextsAppended;
+      if (info.importHandlingTimeDays !== undefined) data.importHandlingTimeDays = info.importHandlingTimeDays;
+
+      // Phase C dedup fix: consolidate to ONE row per productId+marketplace.
+      // Mark any previous rows for this product+marketplace as superseded, then upsert the latest.
+      const existingRows = await prisma.marketplaceListing.findMany({
+        where: { productId, marketplace },
+        orderBy: { publishedAt: 'desc' },
+      });
+      const exactMatch = existingRows.find((r) => r.listingId === info.listingId);
+      if (exactMatch) {
+        // Update the exact row
+        await prisma.marketplaceListing.update({ where: { id: exactMatch.id }, data });
+        // Mark any other rows for this product as superseded
+        const staleIds = existingRows.filter((r) => r.id !== exactMatch.id).map((r) => r.id);
+        if (staleIds.length > 0) {
+          await prisma.marketplaceListing.updateMany({
+            where: { id: { in: staleIds } },
+            data: { status: 'superseded' },
+          });
+        }
       } else {
-        await prisma.marketplaceListing.create({ data: { productId, userId: product.userId, marketplace, listingId: info.listingId, ...data } });
+        // Create new row for new listingId
+        await prisma.marketplaceListing.create({ data: { productId, userId: product.userId, marketplace, ...data } });
+        // Mark all previous rows for this product as superseded
+        if (existingRows.length > 0) {
+          await prisma.marketplaceListing.updateMany({
+            where: { id: { in: existingRows.map((r) => r.id) } },
+            data: { status: 'superseded' },
+          });
+        }
       }
     } catch (error) {
       logger.error('Failed to update product marketplace info', {

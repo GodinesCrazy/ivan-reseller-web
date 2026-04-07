@@ -37,7 +37,8 @@ docs/PHASE0_VALIDATION_REPORT.md
 
 ## Estado del servicio Railway en el momento del deploy
 
-**Resultado**: ❌ Backend en producción retorna **502** en todos los endpoints.
+**Resultado inicial**: ❌ Backend en producción retornaba **502** (CRASHED 2/2, pre-existente).  
+**Estado actual (post-recovery)**: ✅ Backend activo. `/health` OK. `/ready` OK. Build `97fb18f` activo.
 
 **Causa raíz identificada**: Pre-existente. Según `RAILWAY_OUTAGE_DIAGNOSTICO.md` en el repositorio, el servicio ya estaba en estado `CRASHED 2/2` con `Limited Access - Paused deploys` ANTES de este push de Phase 0. El outage de Railway fue registrado como "Degraded dashboard and slow builds / Major outage".
 

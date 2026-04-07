@@ -47,8 +47,10 @@ const SEAM_REQUIRES_FRAGMENTATION = 0.3;
  */
 const WHITE_NEAR_RGB_MIN = 245;
 const WHITE_PURE_RGB_MIN = 252;
-const WHITE_NEAR_DOMINANCE_MIN = 0.58;
-const WHITE_PURE_DOMINANCE_MIN = 0.28;
+// Raised from 0.58→0.62 and 0.28→0.40: gray (#dcdcdc = 220,220,220) backgrounds produce
+// ~0% pure-white pixels and fail clearly; clean isolation on white easily clears both thresholds.
+const WHITE_NEAR_DOMINANCE_MIN = 0.62;
+const WHITE_PURE_DOMINANCE_MIN = 0.40;
 const WHITE_BORDER_RATIO_MIN = 0.9;
 const WHITE_CORNER_RATIO_MIN = 0.93;
 const WHITE_BORDER_MEAN_LUMA_MIN = 246;

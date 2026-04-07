@@ -14,6 +14,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatCurrencySimple } from '@/utils/currency';
+import { fetchOperationsTruthForProductIds } from '@/services/operationsTruth.api';
+import type { OperationsTruthItem } from '@/types/operations';
+import { lifecycleToneClasses, resolveOperationalLifecycleStage } from '@/utils/operational-lifecycle';
 import {
   retryOrderFulfill,
   importEbayOrder,
@@ -30,6 +33,8 @@ import toast from 'react-hot-toast';
 export default function Orders() {
   const { environment } = useEnvironment();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [truthByProduct, setTruthByProduct] = useState<Map<number, OperationsTruthItem>>(new Map());
+  const [truthLoading, setTruthLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -163,7 +168,9 @@ export default function Orders() {
       setError(null);
       const [ordersRes, syncRes] = await Promise.all([
         api.get<Order[]>('/api/orders', { params: { environment } }),
-        api.get<{ lastSyncAt?: string | null }>('/api/orders/sync-status').catch(() => ({ data: {} })),
+        api
+          .get<{ lastSyncAt?: string | null }>('/api/orders/sync-status')
+          .catch(() => ({ data: {} as { lastSyncAt?: string | null } })),
       ]);
       const raw = ordersRes.data || [];
       setOrders(raw.filter(isRealOrder));
@@ -174,6 +181,42 @@ export default function Orders() {
       setLoading(false);
     }
   }, [environment]);
+
+  useEffect(() => {
+    const productIds = Array.from(
+      new Set(
+        orders
+          .map((order) => Number(order.productId))
+          .filter((value) => Number.isFinite(value) && value > 0)
+      )
+    );
+    if (productIds.length === 0) {
+      setTruthByProduct(new Map());
+      setTruthLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTruthLoading(true);
+    fetchOperationsTruthForProductIds({ ids: productIds, environment })
+      .then((data) => {
+        if (cancelled) return;
+        const next = new Map<number, OperationsTruthItem>();
+        for (const item of data.items ?? []) {
+          const pid = Number(item.productId);
+          if (Number.isFinite(pid) && pid > 0) next.set(pid, item);
+        }
+        setTruthByProduct(next);
+      })
+      .catch(() => {
+        if (!cancelled) setTruthByProduct(new Map());
+      })
+      .finally(() => {
+        if (!cancelled) setTruthLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orders, environment]);
 
   const handleImportEbay = async () => {
     const amount = parseFloat(importForm.amount);
@@ -304,59 +347,48 @@ export default function Orders() {
 
   const hasFailed = orders.some((o) => o.status === 'FAILED');
   const hasManual = manualQueueOrders.length > 0;
+  const tracedOrders = orders.filter((order) => {
+    const pid = Number(order.productId);
+    return Number.isFinite(pid) && truthByProduct.has(pid);
+  }).length;
 
   return (
     <div className="space-y-6 p-6">
       <div>
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Órdenes / Envíos</h1>
-          <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Órdenes / Envíos</h1>
+          <div className="flex items-center gap-1.5">
             <Button variant="outline" size="sm" onClick={() => setShowFetchEbay((v) => !v)}>
-              <Download className="w-4 h-4 mr-1" />
-              Traer pedido desde eBay
+              <Download className="w-3.5 h-3.5 mr-1" />
+              Traer pedido eBay
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowImportEbay((v) => !v)}>
-              <Upload className="w-4 h-4 mr-1" />
-              Importar orden eBay
+              <Upload className="w-3.5 h-3.5 mr-1" />
+              Importar orden
             </Button>
             <Button variant="outline" size="sm" onClick={handleSyncMarketplace} disabled={syncingMarketplace}>
-              <RefreshCw className={`w-4 h-4 mr-1 ${syncingMarketplace ? 'animate-spin' : ''}`} />
-              Sincronizar pedidos
+              <RefreshCw className={`w-3.5 h-3.5 mr-1 ${syncingMarketplace ? 'animate-spin' : ''}`} />
+              Sincronizar
             </Button>
-            <button
-              onClick={fetchOrders}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Actualizar
-            </button>
+            <Button variant="ghost" size="sm" onClick={fetchOrders}>
+              <RefreshCw className="w-3.5 h-3.5" />
+            </Button>
           </div>
         </div>
-        <p className="text-gray-600 dark:text-gray-400 mt-0.5">
-          Órdenes de compra al proveedor y seguimiento de envíos. Estado real desde backend — sin éxito simulado. Para proof ladder (compra en proveedor, fondos liberados), usa{' '}
-          <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
-            Control Center
-          </Link>
-          {' '}y el detalle de cada orden.
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Solo se muestran órdenes reales (eBay, Mercado Libre, Amazon). Datos actualizados en cada carga.
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          Compras al proveedor y seguimiento de envíos · proof ladder en{' '}
+          <Link to="/control-center" className="text-primary-600 dark:text-primary-400 hover:underline">Control Center</Link>
+          {orders.length > 0 && <> · trazabilidad: {tracedOrders}/{orders.length}{truthLoading ? ' …' : ''}</>}
           {lastSyncAt && (
-            <> · Última sincronización: {(() => {
+            <> · {(() => {
               const mins = Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000);
-              if (mins < 1) return 'ahora mismo';
-              if (mins === 1) return 'hace 1 min';
-              return `hace ${mins} min`;
+              return mins < 1 ? 'sincronizado ahora' : `sincronizado hace ${mins} min`;
             })()}</>
           )}
         </p>
-        {(hasFailed || hasManual) && (
-          <p className="text-xs mt-1">
-            {hasFailed && (
-              <a href="/dashboard" className="text-amber-600 dark:text-amber-400 hover:underline">Ver alertas en Panel</a>
-            )}
-            {hasFailed && hasManual && ' · '}
-            {hasManual && <span className="text-orange-600 dark:text-orange-400 font-medium">Hay pedidos que requieren compra manual en AliExpress.</span>}
+        {hasManual && (
+          <p className="text-xs mt-1 text-amber-600 dark:text-amber-400 font-medium">
+            Hay pedidos que requieren compra manual en AliExpress.
           </p>
         )}
         <div className="mt-3">
@@ -365,7 +397,7 @@ export default function Orders() {
       </div>
 
       {showFetchEbay && (
-        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center">
               <CardTitle className="text-lg">Traer pedido desde eBay</CardTitle>
@@ -373,7 +405,7 @@ export default function Orders() {
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Obtiene el pedido desde la API de eBay por ID y lo crea aquí; si está mapeado, se dispara la compra en AliExpress.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Obtiene el pedido desde la API de eBay por ID y lo crea aquí; si está mapeado, se dispara la compra en AliExpress.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
@@ -385,7 +417,7 @@ export default function Orders() {
                   onChange={(e) => setFetchEbayOrderId(e.target.value)}
                   className="mt-1"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Usa el ID exacto del Centro de ventas de eBay (Administrar pedidos).</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Usa el ID exacto del Centro de ventas de eBay (Administrar pedidos).</p>
               </div>
               <Button onClick={handleFetchEbayOrder} disabled={fetchingEbay || !fetchEbayOrderId.trim()}>
                 {fetchingEbay ? 'Buscando...' : 'Traer pedido'}
@@ -396,7 +428,7 @@ export default function Orders() {
       )}
 
       {showImportEbay && (
-        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center">
               <CardTitle className="text-lg">Importar orden eBay</CardTitle>
@@ -404,7 +436,7 @@ export default function Orders() {
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Si el webhook no creó la orden, impórtala aquí. Luego aparecerá en Compras pendientes o se cumplirá automáticamente.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Si el webhook no creó la orden, impórtala aquí. Luego aparecerá en Compras pendientes o se cumplirá automáticamente.</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -512,25 +544,25 @@ export default function Orders() {
       )}
 
       {manualQueueOrders.length > 0 && (
-        <Card className="border-orange-400 dark:border-orange-600 bg-orange-50/80 dark:bg-orange-950/20">
+        <Card className="border-amber-400 dark:border-amber-600 bg-amber-50/80 dark:bg-amber-950/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg text-orange-900 dark:text-orange-100">
+            <CardTitle className="text-lg text-amber-900 dark:text-amber-100">
               Pedidos para cumplir manualmente (AliExpress)
             </CardTitle>
-            <p className="text-sm text-orange-800 dark:text-orange-200">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
               La API no pudo comprar automáticamente (p. ej. SKU_NOT_EXIST). Completa la compra en AliExpress y marca el estado.
             </p>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="text-left border-b border-orange-200 dark:border-orange-800">
-                  <th className="py-2 pr-3">Imagen</th>
-                  <th className="py-2 pr-3">Marketplace</th>
-                  <th className="py-2 pr-3">Comprador / dirección</th>
-                  <th className="py-2 pr-3">Importe</th>
-                  <th className="py-2 pr-3">Proveedor</th>
-                  <th className="py-2">Acciones</th>
+                <tr className="text-left border-b border-amber-200 dark:border-amber-800">
+                  <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Imagen</th>
+                  <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Marketplace</th>
+                  <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Comprador / dirección</th>
+                  <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Importe</th>
+                  <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Proveedor</th>
+                  <th className="py-2 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -538,18 +570,18 @@ export default function Orders() {
                   const img = getFirstProductImageUrl(order);
                   const busy = manualActionId === order.id;
                   return (
-                    <tr key={order.id} className="border-b border-orange-100 dark:border-orange-900/50">
+                    <tr key={order.id} className="border-b border-amber-100 dark:border-amber-900/50">
                       <td className="py-2 pr-3 w-16">
                         {img ? (
-                          <img src={img} alt="" className="w-14 h-14 object-cover rounded border border-orange-200 dark:border-orange-800" />
+                          <img src={img} alt="" className="w-14 h-14 object-cover rounded border border-amber-200 dark:border-amber-800" />
                         ) : (
-                          <div className="w-14 h-14 bg-orange-100 dark:bg-orange-900/40 rounded flex items-center justify-center">
-                            <Package className="w-6 h-6 text-orange-600" />
+                          <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/40 rounded flex items-center justify-center">
+                            <Package className="w-6 h-6 text-amber-600" />
                           </div>
                         )}
                       </td>
                       <td className="py-2 pr-3 align-top">
-                        <span className="font-medium">
+                        <span className="font-medium text-slate-900 dark:text-slate-100">
                           {order.paypalOrderId?.startsWith('ebay:')
                             ? 'eBay'
                             : order.paypalOrderId?.startsWith('mercadolibre:')
@@ -558,29 +590,29 @@ export default function Orders() {
                                 ? 'Amazon'
                                 : '—'}
                         </span>
-                        <div className="text-xs font-mono text-gray-600 dark:text-gray-400 mt-0.5">
+                        <div className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">
                           {order.paypalOrderId?.startsWith('ebay:')
                             ? order.paypalOrderId.slice(5)
                             : order.id.slice(0, 10) + '…'}
                         </div>
                       </td>
                       <td className="py-2 pr-3 align-top max-w-[220px]">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">{order.customerName || '—'}</div>
-                        <div className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap mt-1">{formatOrderAddress(order)}</div>
+                        <div className="font-medium text-slate-900 dark:text-slate-100">{order.customerName || '—'}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap mt-1">{formatOrderAddress(order)}</div>
                       </td>
-                      <td className="py-2 pr-3 align-top whitespace-nowrap">{formatCurrencySimple(order.price, order.currency)}</td>
+                      <td className="py-2 pr-3 align-top whitespace-nowrap text-slate-700 dark:text-slate-300">{formatCurrencySimple(order.price, order.currency)}</td>
                       <td className="py-2 pr-3 align-top">
                         {(order.productUrl || '').trim() ? (
                           <a
                             href={order.productUrl!.trim()}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                            className="text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center gap-1"
                           >
                             AliExpress <ExternalLink className="w-3 h-3" />
                           </a>
                         ) : (
-                          <span className="text-xs text-amber-700">Sin URL</span>
+                          <span className="text-xs text-amber-700 dark:text-amber-400">Sin URL</span>
                         )}
                       </td>
                       <td className="py-2 align-top">
@@ -602,7 +634,7 @@ export default function Orders() {
                           <Button
                             variant="default"
                             size="sm"
-                            className="justify-start bg-green-600 hover:bg-green-700"
+                            className="justify-start bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                             disabled={busy}
                             onClick={() => handleMarkManualQuick(order.id)}
                           >
@@ -634,44 +666,63 @@ export default function Orders() {
       )}
 
       {orders.length === 0 ? (
-        <div className="p-12 text-center text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <Package className="w-12 h-12 mx-auto mb-4 text-gray-400 dark:text-gray-500" />
+        <div className="p-12 text-center text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-800">
+          <Package className="w-12 h-12 mx-auto mb-4 text-slate-400 dark:text-slate-500" />
           <p>Sin órdenes todavía</p>
           <p className="text-sm mt-2">Las órdenes aparecen aquí tras el checkout de una venta</p>
         </div>
       ) : (
-        <div className="overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-700/50">
+        <div className="overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg">
+          <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
+            <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Orden</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Marketplace</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Título</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Comprador</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Importe</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Fecha</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Orden</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Marketplace</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Título</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Comprador</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Traza E2E</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ciclo de vida</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Estado</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Importe</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fecha</th>
                 <th className="px-6 py-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {orders.map((order) => (
-                <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td className="px-6 py-4 text-sm font-mono text-gray-900 dark:text-gray-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {orders.map((order) => {
+                const productId = Number(order.productId);
+                const truth = Number.isFinite(productId) && productId > 0 ? truthByProduct.get(productId) ?? null : null;
+                const lifecycle = resolveOperationalLifecycleStage({ operationsTruth: truth });
+                const listingRef = truth?.listingId || order.marketplaceOrderId || '—';
+                const fulfillmentState =
+                  order.status === 'PURCHASED'
+                    ? 'fulfilled'
+                    : order.status === 'PURCHASING'
+                      ? 'in_progress'
+                      : order.status === 'MANUAL_ACTION_REQUIRED' || order.status === 'FULFILLMENT_BLOCKED'
+                        ? 'manual_required'
+                        : order.status === 'FAILED'
+                          ? 'failed'
+                          : order.status === 'PAID'
+                            ? 'pending'
+                            : 'n/a';
+                return (
+                <tr key={order.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                  <td className="px-6 py-4 text-sm font-mono text-slate-700 dark:text-slate-300">
                     {order.paypalOrderId?.startsWith('ebay:')
                       ? order.paypalOrderId.slice(5)
                       : order.paypalOrderId?.startsWith('mercadolibre:')
                         ? order.paypalOrderId.slice(13).split('-')[0]
                         : order.id.slice(0, 8) + '…'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
                     {order.paypalOrderId?.startsWith('ebay:') ? 'eBay' : order.paypalOrderId?.startsWith('mercadolibre:') ? 'Mercado Libre' : order.paypalOrderId?.startsWith('amazon:') ? 'Amazon' : 'Checkout'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                  <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">
                     {order.productId ? (
                       <button
                         onClick={() => navigate(`/products/${order.productId}/preview`)}
-                        className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                        className="text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
                       >
                         {order.title}
                         <ExternalLink className="w-3.5 h-3.5" />
@@ -680,37 +731,71 @@ export default function Orders() {
                       order.title
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{order.customerName || '—'}</td>
+                  <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{order.customerName || '—'}</td>
+                  <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">
+                    <div className="space-y-1">
+                      <div>
+                        Producto:{' '}
+                        {order.productId ? (
+                          <button
+                            onClick={() => navigate(`/products/${order.productId}/preview`)}
+                            className="text-primary-600 dark:text-primary-400 hover:underline"
+                          >
+                            #{order.productId}
+                          </button>
+                        ) : (
+                          '—'
+                        )}
+                      </div>
+                      <div>
+                        Listing: <span className="font-mono">{listingRef}</span>
+                      </div>
+                      <div>
+                        Sinc: {truth?.orderIngested || order.sale ? 'ok' : 'pendiente'} · Cumplimiento: {fulfillmentState}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-xs">
+                    <div className={`inline-flex rounded-full px-2 py-0.5 font-medium ${lifecycleToneClasses(lifecycle.tone)}`}>
+                      {lifecycle.label}
+                    </div>
+                    <div className="mt-1 text-slate-500 dark:text-slate-400 max-w-[220px] truncate" title={lifecycle.detail}>
+                      {lifecycle.detail}
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <OrderStatusBadge status={order.status} />
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{formatCurrencySimple(order.price, order.currency)}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                  <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{formatCurrencySimple(order.price, order.currency)}</td>
+                  <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
                     {new Date(order.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
                         onClick={() => navigate(`/orders/${order.id}`)}
-                        className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
                       >
-                        Ver <ArrowRight className="w-4 h-4" />
-                      </button>
+                        Ver <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                      </Button>
                       {canRetryFulfill(order) && (
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300"
                           onClick={() => handleRetryFulfill(order.id)}
                           disabled={retryingId === order.id}
-                          className="flex items-center gap-1 text-sm text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300 disabled:opacity-50"
                         >
-                          <RefreshCw className={`w-4 h-4 ${retryingId === order.id ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`w-3.5 h-3.5 mr-1 ${retryingId === order.id ? 'animate-spin' : ''}`} />
                           Reintentar
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>

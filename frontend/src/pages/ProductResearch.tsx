@@ -201,37 +201,37 @@ export default function ProductResearch() {
 
   return (
     <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">Product Research</h1>
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+      <h1 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">Product Research</h1>
+      <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
         Search products, view demand and competition signals, then add to opportunities.
       </p>
 
       {/* Phase 7: Global Trends — demand signals from Global Demand Radar */}
       <section className="mb-8">
-        <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+        <h2 className="text-lg font-medium text-slate-900 dark:text-white mb-2 flex items-center gap-2">
           <Globe className="w-5 h-5 text-emerald-500" />
           Global Trends
         </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
           Keywords con alta demanda (trendScore, source, confidence). Usa uno como búsqueda para convertirlo en oportunidad.
         </p>
         {demandSignalsLoading ? (
-          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 py-4">
+          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 py-4">
             <div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
             Loading…
           </div>
         ) : demandSignals.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay señales recientes. El radar se ejecuta diariamente.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-500 py-4">No hay señales recientes. El radar se ejecuta diariamente.</p>
         ) : (
           <ul className="space-y-2">
             {demandSignals.map((s) => (
               <li
                 key={s.id}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-800/50 flex flex-wrap gap-3 items-center justify-between"
+                className="border border-slate-200 dark:border-slate-800 rounded-lg p-3 bg-white dark:bg-slate-800/50 flex flex-wrap gap-3 items-center justify-between"
               >
                 <div>
-                  <span className="font-medium text-gray-900 dark:text-white">{s.keyword}</span>
-                  <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
+                  <span className="font-medium text-slate-900 dark:text-white">{s.keyword}</span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400 ml-2">
                     Score: {s.trendScore.toFixed(0)} · Conf: {(s.confidence * 100).toFixed(0)}% · {s.source.replace(/_/g, ' ')}
                   </span>
                 </div>
@@ -251,20 +251,20 @@ export default function ProductResearch() {
 
       {/* Phase 4: Market Opportunities — auto-discovered high-potential products */}
       <section className="mb-8">
-        <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+        <h2 className="text-lg font-medium text-slate-900 dark:text-white mb-2 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-amber-500" />
           Market Opportunities
         </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
           High-potential products from the Market Intelligence Engine (score, trend, competition, margin).
         </p>
         {marketOppLoading ? (
-          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 py-4">
+          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 py-4">
             <div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
             Loading…
           </div>
         ) : marketOpportunities.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No market opportunities yet. Run runs daily; add products and listing metrics to see scores.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-500 py-4">No market opportunities yet. Run runs daily; add products and listing metrics to see scores.</p>
         ) : (
           <ul className="space-y-3">
             {marketOpportunities.map((o) => {
@@ -274,19 +274,19 @@ export default function ProductResearch() {
               return (
                 <li
                   key={o.id}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800/50 flex flex-wrap gap-4 items-center"
+                  className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-white dark:bg-slate-800/50 flex flex-wrap gap-4 items-center"
                 >
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-gray-900 dark:text-white truncate" title={o.productTitle ?? ''}>
+                    <h3 className="font-medium text-slate-900 dark:text-white truncate" title={o.productTitle ?? ''}>
                       {o.productTitle ?? '—'}
                     </h3>
-                    <div className="flex flex-wrap gap-3 mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex flex-wrap gap-3 mt-1 text-sm text-slate-600 dark:text-slate-400">
                       <span>Score: <strong>{typeof o.score === 'number' ? o.score.toFixed(0) : o.score}</strong>/100</span>
                       {o.trendScore != null && <span>Trend: {o.trendScore.toFixed(0)}</span>}
                       {o.competitionScore != null && <span>Competition: {o.competitionScore.toFixed(0)}</span>}
                       {o.marginScore != null && <span>Margin: {o.marginScore.toFixed(0)}</span>}
                       {marginPct != null && <span>Est. margin: {marginPct.toFixed(1)}%</span>}
-                      <span className="text-gray-500">{o.source}</span>
+                      <span className="text-slate-500">{o.source}</span>
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -294,7 +294,7 @@ export default function ProductResearch() {
                       <button
                         type="button"
                         onClick={() => navigate(`/products/${o.productId}/preview`)}
-                        className="text-sm px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-1"
+                        className="text-sm px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-1"
                       >
                         <Eye className="w-3 h-3" />
                         View product
@@ -305,7 +305,7 @@ export default function ProductResearch() {
                         href={o.aliexpressUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1"
+                        className="text-sm px-3 py-1.5 rounded border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1"
                       >
                         <ExternalLink className="w-3 h-3" />
                         AliExpress
@@ -321,7 +321,7 @@ export default function ProductResearch() {
 
       <div className="flex flex-wrap gap-3 items-end mb-6">
         <div className="flex-1 min-w-[200px]">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Search</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Search</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -329,11 +329,13 @@ export default function ProductResearch() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && search()}
               placeholder="e.g. wireless earbuds"
-              className="flex-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2"
+              className="flex-1 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2"
             />
             <button
               type="button"
-              onClick={search}
+              onClick={() => {
+                void search();
+              }}
               disabled={loading || !query.trim()}
               className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
             >
@@ -343,11 +345,11 @@ export default function ProductResearch() {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Region</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Region</label>
           <select
             value={region}
             onChange={(e) => setRegion(e.target.value)}
-            className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3 py-2"
+            className="rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2"
           >
             <option value="us">US</option>
             <option value="uk">UK</option>
@@ -357,7 +359,7 @@ export default function ProductResearch() {
           </select>
         </div>
         <div>
-          <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Marketplaces</span>
+          <span className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Marketplaces</span>
           <div className="flex gap-2">
             {(['ebay', 'amazon', 'mercadolibre'] as Marketplace[]).map((mp) => (
               <label key={mp} className="flex items-center gap-1 cursor-pointer">
@@ -385,7 +387,7 @@ export default function ProductResearch() {
       )}
 
       {loading && (
-        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 py-8">
+        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 py-8">
           <div className="w-5 h-5 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
           <span>Searching…</span>
         </div>
@@ -396,34 +398,34 @@ export default function ProductResearch() {
           {items.map((item, idx) => (
             <li
               key={item.aliexpressUrl + String(idx)}
-              className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800/50 flex gap-4"
+              className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-white dark:bg-slate-800/50 flex gap-4"
             >
-              <div className="flex-shrink-0 w-24 h-24 rounded overflow-hidden bg-gray-100 dark:bg-gray-700">
+              <div className="flex-shrink-0 w-24 h-24 rounded overflow-hidden bg-slate-100 dark:bg-slate-700">
                 {item.image ? (
                   <img src={item.image} alt="" className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">—</div>
+                  <div className="w-full h-full flex items-center justify-center text-slate-400">—</div>
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-gray-900 dark:text-white truncate" title={item.title}>
+                <h3 className="font-medium text-slate-900 dark:text-white truncate" title={item.title}>
                   {item.title}
                 </h3>
                 <div className="flex flex-wrap gap-4 mt-2 text-sm">
-                  <span className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                  <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
                     <DollarSign className="w-4 h-4" />
                     Cost: {formatMoney(item.costUsd, 'USD')} → Price: {formatMoney(item.suggestedPriceUsd, item.suggestedPriceCurrency)}
                   </span>
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
                     <BarChart3 className="w-4 h-4" />
                     Margin: {formatPct(item.profitMargin)} · ROI: {item.roiPercentage?.toFixed(0) ?? '—'}%
                   </span>
-                  <span className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+                  <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
                     <TrendingUp className="w-4 h-4" />
                     Demand: {item.marketDemand} · Competition: {item.competitionLevel}
                   </span>
                   {item.trendData && (
-                    <span className="text-gray-500 dark:text-gray-500">
+                    <span className="text-slate-500 dark:text-slate-500">
                       Trend: {item.trendData.trend} · Vol: {item.trendData.searchVolume ?? '—'}
                     </span>
                   )}
@@ -455,7 +457,7 @@ export default function ProductResearch() {
       )}
 
       {!loading && items.length === 0 && query && !error && (
-        <p className="text-gray-500 dark:text-gray-500 text-sm">No results. Try another search.</p>
+        <p className="text-slate-500 dark:text-slate-500 text-sm">No results. Try another search.</p>
       )}
     </div>
   );

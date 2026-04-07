@@ -389,8 +389,8 @@ const getSaleByIdParamsSchema = z.object({
   id: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)),
 });
 
-// GET /api/sales/:id - Obtener por ID
-router.get('/:id', async (req: Request, res: Response, next) => {
+// GET /api/sales/:id - Obtener por ID (id numérico para no colisionar con rutas fijas como /pending-purchases)
+router.get('/:id(\\d+)', async (req: Request, res: Response, next) => {
   try {
     // ✅ PRODUCTION READY: Validar parámetros de ruta
     const validatedParams = getSaleByIdParamsSchema.parse(req.params);

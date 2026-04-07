@@ -1,0 +1,46 @@
+# P102 — White-background failure analysis (product 32714)
+
+## Source of truth
+
+- Seller Center moderation feedback for listing `MLC3804623142`: **"No tiene fondo blanco"**.
+- This evidence overrides prior Items API-only optimism.
+
+## Exact old portada identity (failed live)
+
+- Old portada path: `C:\Ivan_Reseller_Web\artifacts\ml-image-packs\product-32714\cover_main.png`
+- Old portada SHA-256 (P101): `f0514738a2085f297fbd95eade925442cc8388e622953243ce991aa29fa21122`
+- Old listing id: `MLC3804623142`
+
+## Computed reason old portada fails white-background policy
+
+When evaluated with P102 strict+white gate (before recovery), old portada failed with:
+
+- `portada_white_background_insufficient_near_white_dominance`
+- `portada_white_background_insufficient_true_white_pixels`
+- `portada_white_background_corner_not_white_enough`
+
+Measured metrics (old portada):
+
+- `nearWhiteDominance`: **0.3008**
+- `pureWhiteDominance`: **0.0013**
+- `cornerMinNearWhite`: **0.9006**
+- `borderNearWhiteRatio`: 1.0
+- `borderMeanLuma`: 248.84
+
+Interpretation:
+
+- The image was anti-text/collage-safe, but still had a **gray/off-white dominant field** and insufficient true-white coverage.
+- Border ring was bright, but global and corner white dominance were below strict white-background thresholds.
+
+## Why local policy previously allowed it
+
+- P100/P101 local guardrail focused on structural anti-promo/anti-collage signals.
+- It did **not** enforce mandatory white-background dominance metrics.
+- Result: a catalog-gray portada could pass local gate while failing Seller Center white-background moderation.
+
+## Additional live operation evidence
+
+Attempted direct image replace on `MLC3804623142` was blocked by Mercado Libre runtime lock:
+
+- `Listing could not be switched to active for picture update (status after: under_review).`
+- This forced fallback to fresh controlled republish with corrected portada.

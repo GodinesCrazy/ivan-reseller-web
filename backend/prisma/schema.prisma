@@ -74,6 +74,9 @@ model User {
   orders                  Order[]                 // Órdenes de checkout (PayPal → AliExpress)
   purchaseLogs            PurchaseLog[] // Logs de compras automáticas
   competitorInsights      CompetitorInsight[]
+  pilotLaunchApprovals    PilotLaunchApproval[]
+  pilotDecisionLedgers    PilotDecisionLedger[]
+  pilotControlStates      PilotControlState[]
 
   @@index([email])
   @@index([username])
@@ -148,6 +151,12 @@ model Product {
   supplierStock         Int?      // Last known stock from supplier (AliExpress)
   supplierStockCheckedAt DateTime? // When supplier stock was last checked
   aliexpressSku         String?   // AliExpress sku_id from getProductInfo (for placeOrder when product has variants/stock)
+  // Phase 1: real packed dimensions/weight — required for safe Mercado Libre publish
+  packageWeightGrams  Int?
+  packageLengthCm     Int?
+  packageWidthCm      Int?
+  packageHeightCm     Int?
+  maxUnitsPerOrder    Int?      @default(1) // max buyer units per order
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -165,6 +174,9 @@ model Product {
   scalingActions       ScalingAction[]
   unprofitableListingFlags UnprofitableListingFlag[]
   orders                   Order[] // Post-sale checkout orders linked to this product
+  pilotLaunchApprovals     PilotLaunchApproval[]
+  pilotDecisionLedgers     PilotDecisionLedger[]
+  pilotControlStates       PilotControlState[]
 
   @@index([userId, status])
   @@index([status, isPublished])
@@ -352,6 +364,23 @@ model UserWorkflowConfig {
   minProfitUsd         Float? // Mínimo beneficio USD para publicar (override global)
   minRoiPct            Float? // Mínimo ROI % para publicar (override global)
 
+  // Configuración de envío para publicaciones
+  mlHandlingTimeDays   Int    @default(30) // Días de despacho declarados al comprador en MercadoLibre (plazo envío dropshipping CN→CL)
+  mlChannelMode String @default("local_only") // local_only, international_candidate, foreign_seller_enabled, blocked
+  mlForeignSellerEnabled Boolean @default(false)
+  mlInternationalPublishingEnabled Boolean @default(false)
+  mlReturnAddressConfigured Boolean @default(false)
+  mlReturnPolicyConfigured Boolean @default(false)
+  mlPostSaleContactConfigured Boolean @default(false)
+  mlResponseSlaEnabled Boolean @default(false)
+  mlAlertsConfigured Boolean @default(false)
+  mlPilotModeEnabled Boolean @default(false)
+  mlPilotRequireManualAck Boolean @default(true)
+  mlPilotMaxActivePublications Int @default(1)
+  mlProgramVerificationManualOverride String?
+  mlShippingOriginCountry String? // ISO-3166 alpha-2 (ej: CN, CL)
+  mlSellerOriginCountry String? // ISO-3166 alpha-2 (ej: CN, CL)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -468,6 +497,10 @@ model MarketplaceListing {
   // Phase 15: Listing state reconciliation — sync with marketplace reality
   status            String    @default("active") // active | paused | failed_publish | not_found
   lastReconciledAt  DateTime?
+  // ML Chile Import Compliance (Phase 51+ import/dropshipping truth model)
+  shippingTruthStatus   String?  // me2_enforced | me2_attempted_not_enforced | not_specified | unknown
+  legalTextsAppended    Boolean  @default(false) // Whether ML Chile import legal footer was appended to description
+  importHandlingTimeDays Int?    // Configured handling time (days) used at publish time
 
   // Relations
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -688,6 +721,94 @@ model MarketplacePublication {
   @@index([userId, marketplace, publishStatus])
   @@index([productId, marketplace])
   @@map("marketplace_publications")
+}
+
+model PilotLaunchApproval {
+  id               String   @id @default(cuid())
+  userId           Int
+  marketplace      String
+  productId        Int
+  requestedMode    String
+  decision         String   @default("approved") // approved | rejected | expired | consumed
+  approvedBy       String
+  reason           String?
+  evidenceSnapshot Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  expiresAt        DateTime
+  consumedAt       DateTime?
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  pilotLedgers     PilotDecisionLedger[]
+
+  @@index([userId, marketplace, decision, expiresAt])
+  @@index([productId, marketplace])
+  @@map("pilot_launch_approvals")
+}
+
+model PilotCategoryAllowlist {
+  id          Int      @id @default(autoincrement())
+  marketplace String
+  siteId      String
+  categoryKey String
+  enabled     Boolean  @default(true)
+  notes       String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([marketplace, siteId, categoryKey])
+  @@index([marketplace, siteId, enabled])
+  @@map("pilot_category_allowlists")
+}
+
+model PilotDecisionLedger {
+  id                        Int      @id @default(autoincrement())
+  userId                    Int
+  marketplace               String
+  productId                 Int
+  publishIntent             String
+  requestedMode             String
+  modeResolved              String
+  result                    String // assessment_only | blocked | enqueued | published | aborted | failed | rollback_requested | rollback_completed
+  approvalId                String?
+  blockers                  Json?
+  warnings                  Json?
+  programVerificationSnapshot Json?
+  pilotReadinessSnapshot    Json?
+  evidenceSnapshot          Json?
+  reason                    String?
+  createdAt                 DateTime @default(now())
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  approval  PilotLaunchApproval? @relation(fields: [approvalId], references: [id], onDelete: SetNull)
+
+  @@index([userId, marketplace, createdAt])
+  @@index([productId, marketplace, createdAt])
+  @@index([result, createdAt])
+  @@map("pilot_decision_ledgers")
+}
+
+model PilotControlState {
+  id               Int      @id @default(autoincrement())
+  userId           Int
+  marketplace      String
+  productId        Int
+  state            String   @default("ready") // ready | aborted | rollback_requested | rollback_completed
+  reason           String?
+  evidenceSnapshot Json?
+  createdBy        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketplace, productId])
+  @@index([marketplace, state])
+  @@map("pilot_control_states")
 }
 
 // ✅ OPORTUNIDADES DE NEGOCIO
@@ -1164,6 +1285,26 @@ model Order {
   @@index([userId])
   @@index([manualFulfillmentRequired])
   @@map("orders")
+}
+
+// Inbound Mercado Libre notifications: idempotent ledger + async processing status
+model MercadoLibreWebhookEvent {
+  id               String   @id @default(cuid())
+  idempotencyKey   String   @unique
+  topic            String?
+  resource         String?
+  payloadJson      String   @db.Text
+  status           String   @default("received")
+  errorMessage     String?  @db.Text
+  correlationId    String?
+  bullmqJobId      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  processedAt      DateTime?
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("mercado_libre_webhook_events")
 }
 
 // Dynamic pricing history

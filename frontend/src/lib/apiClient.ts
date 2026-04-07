@@ -1,6 +1,6 @@
 /**
  * ? FIX AUTH: Helper centralizado para requests API con credentials garantizados
- * Asegura que TODAS las requests envíen cookies automáticamente
+ * Asegura que TODAS las requests envï¿½en cookies automï¿½ticamente
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
@@ -11,13 +11,13 @@ export { api as default } from '../services/api';
 
 /**
  * ? Helper para fetch() con credentials garantizados
- * Usar este helper en lugar de fetch() directo para asegurar que cookies se envíen
+ * Usar este helper en lugar de fetch() directo para asegurar que cookies se envï¿½en
  */
 export async function apiFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  // ? CRÍTICO: Asegurar credentials: 'include' siempre
+  // ? CRï¿½TICO: Asegurar credentials: 'include' siempre
   const fetchOptions: RequestInit = {
     ...options,
     credentials: 'include', // Siempre incluir cookies
@@ -30,11 +30,11 @@ export async function apiFetch(
       'Content-Type': 'application/json',
     };
   } else if (options.body && fetchOptions.headers) {
-    // Merge headers
-    fetchOptions.headers = {
-      ...fetchOptions.headers,
-      'Content-Type': options.headers?.['Content-Type'] || 'application/json',
-    };
+    const headers = new Headers(fetchOptions.headers);
+    if (!headers.get('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    fetchOptions.headers = headers;
   }
 
   return fetch(url, fetchOptions);
@@ -47,7 +47,7 @@ export async function apiFetch(
 export function createApiClient(config?: AxiosRequestConfig): AxiosInstance {
   const client = axios.create({
     baseURL: API_BASE_URL,
-    withCredentials: true, // ? CRÍTICO: Siempre incluir cookies
+    withCredentials: true, // ? CRï¿½TICO: Siempre incluir cookies
     headers: {
       'Content-Type': 'application/json',
       ...config?.headers,
@@ -57,3 +57,4 @@ export function createApiClient(config?: AxiosRequestConfig): AxiosInstance {
 
   return client;
 }
+

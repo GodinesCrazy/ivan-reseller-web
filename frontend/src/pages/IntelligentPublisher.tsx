@@ -19,6 +19,7 @@ import {
   isPendingRowPublishBlocked,
   isMlCanaryCandidateRow,
 } from '@/pages/intelligentPublisher/publishRowGuards';
+import { lifecycleToneClasses, resolveOperationalLifecycleStage } from '@/utils/operational-lifecycle';
 
 // Usar proxy de imágenes para evitar bloqueo de hotlink de AliExpress
 function toProxyUrl(url: string): string {
@@ -42,12 +43,22 @@ function formatDateEs(date: Date | string): string {
 
 function getLiveStateBadge(state: string | null | undefined) {
   const normalized = String(state || '').trim().toLowerCase();
-  if (normalized === 'active') return <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">active</span>;
-  if (normalized === 'under_review') return <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">under_review</span>;
-  if (normalized === 'paused') return <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">paused</span>;
-  if (normalized === 'failed_publish' || normalized === 'not_found') return <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">{normalized}</span>;
-  return <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">unknown</span>;
+  const toneClass =
+    normalized === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+    normalized === 'under_review' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' :
+    normalized === 'paused' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' :
+    (normalized === 'failed_publish' || normalized === 'not_found') ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+    'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200';
+  const label = normalized || 'desconocido';
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${toneClass}`}>{label}</span>;
 }
+
+type PendingApproveRequest = {
+  marketplaces: string[];
+  publishMode: 'local' | 'international';
+  publishIntent: 'dry_run' | 'pilot' | 'production';
+  pilotManualAck: boolean;
+};
 
 export default function IntelligentPublisher() {
   const location = useLocation();
@@ -104,10 +115,10 @@ export default function IntelligentPublisher() {
       const [wcRes, allocRes] = await Promise.all([
         api.get<{ detail?: { availableCash?: number } }>('/api/finance/working-capital-detail', {
           params: { environment },
-        }).catch(() => ({ data: {} })),
+        }).catch(() => ({ data: {} as { detail?: { availableCash?: number } } })),
         api.get<{ capitalAllocation?: { canPublish?: boolean; remainingExposure?: number } }>('/api/finance/leverage-and-risk', {
           params: { environment },
-        }).catch(() => ({ data: {} })),
+        }).catch(() => ({ data: {} as { capitalAllocation?: { canPublish?: boolean; remainingExposure?: number } } })),
       ]);
       const detail = wcRes.data?.detail;
       const alloc = allocRes.data?.capitalAllocation;
@@ -144,10 +155,9 @@ export default function IntelligentPublisher() {
     }
   }, [loadListings, loadCapitalData]);
 
-  // ✅ CORREGIDO: Recargar cuando se monta el componente O cuando cambia la location (navegación)
   useEffect(() => {
     void loadPublisherData();
-  }, [loadPublisherData, location.pathname]); // ✅ Agregar location.pathname para recargar al navegar
+  }, [loadPublisherData, location.pathname]);
 
   useLiveData({
     fetchFn: () => void loadPublisherData({ silent: true }),
@@ -293,10 +303,12 @@ export default function IntelligentPublisher() {
     return null;
   }, [operationsTruthByListing, operationsTruthByProduct]);
 
-  const approve = useCallback(async (productId: string, marketplaces: string[]) => {
+  const approve = useCallback(async (productId: string, request: PendingApproveRequest) => {
+    const { marketplaces, publishMode, publishIntent, pilotManualAck } = request;
     const truth = operationsTruthByProduct.get(Number(productId));
     const loading = isPendingTruthLoading(pending.length, operationsTruthLoading);
-    if (isPendingRowPublishBlocked(truth, loading)) {
+    const allowDryRunBlocked = publishIntent === 'dry_run' && marketplaces.includes('mercadolibre');
+    if (isPendingRowPublishBlocked(truth, loading) && !allowDryRunBlocked) {
       toast.error(
         'Este producto tiene bloqueos operativos (ver bloque inferior). Resuélvelos antes de aprobar; no se publicará desde aquí hasta entonces.'
       );
@@ -306,12 +318,36 @@ export default function IntelligentPublisher() {
       toast.error('Selecciona al menos un marketplace; no hay ninguno preseleccionado por seguridad.');
       return;
     }
+    if (publishMode === 'international' && !marketplaces.includes('mercadolibre')) {
+      toast.error('El modo international aplica al flujo Mercado Libre. Selecciona ML o usa local.');
+      return;
+    }
+    if (publishIntent !== 'production' && !marketplaces.includes('mercadolibre')) {
+      toast.error('Intento pilot/dry_run solo aplica cuando Mercado Libre está seleccionado.');
+      return;
+    }
     try {
-      const response = await api.post(`/api/publisher/approve/${productId}`, { marketplaces });
+      const response = await api.post(`/api/publisher/approve/${productId}`, {
+        marketplaces,
+        publishMode,
+        publishIntent,
+        pilotManualAck,
+        customData: {
+          publishMode,
+          publishIntent,
+          pilotManualAck,
+        },
+      });
       const data = response.data;
       setPending((prev) => prev.filter((p) => String(p.id) !== String(productId)));
 
-      // Job encolado: publicación asíncrona (mismo flujo que Queue Publishing Jobs)
+      if (data?.dryRun === true) {
+        toast.success('Dry-run completado. No se publicó; revisa el preflight retornado por backend.', {
+          duration: 6000,
+        });
+        return;
+      }
+
       if (data?.jobQueued === true) {
         toast.success(
           'Producto aprobado. La publicación se está procesando; recibirás una notificación cuando termine.',
@@ -320,7 +356,6 @@ export default function IntelligentPublisher() {
         return;
       }
 
-      // Fallback síncrono (Redis no disponible): usar publishResults
       if (data?.publishResults && Array.isArray(data.publishResults)) {
         const successCount = data.publishResults.filter((r: any) => r.success).length;
         const totalCount = data.publishResults.length;
@@ -576,7 +611,6 @@ export default function IntelligentPublisher() {
     loadListings(1, mp);
   }, [loadListings]);
 
-  // Memoizar progreso de bulk status
   const bulkProgress = useMemo(() => {
     return bulkStatus.total ? (bulkStatus.queued / bulkStatus.total) * 100 : 0;
   }, [bulkStatus.total, bulkStatus.queued]);
@@ -590,39 +624,45 @@ export default function IntelligentPublisher() {
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold mb-2">Publicador inteligente</h1>
-      <p className="text-gray-600 mb-4">
-        Prepara, aprueba y publica anuncios con verdad canónica de listing, blocker y next action. Las estimaciones comerciales siguen siendo secundarias y no equivalen a proof comercial.
-      </p>
+    <div className="p-6 space-y-4">
+      {/* Page header */}
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Publicador inteligente</h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          Prepara, aprueba y publica anuncios con verdad canónica de listing, blocker y next action. Las estimaciones comerciales son secundarias y no equivalen a proof comercial.
+        </p>
+      </div>
+
+      {/* Operations truth panels */}
       {operationsTruth && (
-        <div className="space-y-4 mb-4">
+        <div className="space-y-4">
           <OperationsTruthSummaryPanel data={operationsTruth} />
           <div className="grid grid-cols-1 xl:grid-cols-[1.05fr_1fr] gap-4">
             <PostSaleProofLadderPanel
               summary={operationsTruth.summary.proofCounts}
-              title="Proof ladder around current publishing sample"
-              subtitle="Publication activity no longer implies released funds or realized profit."
+              title="Escalera de proof en la muestra de publicación actual"
+              subtitle="La actividad de publicación no implica fondos liberados ni ganancia realizada."
             />
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Publishing truth rule</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Publishing surfaces must foreground external listing state, blockers, and next actions before any estimated margin.
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Regla de verdad del publicador</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Las superficies de publicación deben anteponer el estado externo del listing, blockers y próximas acciones antes de cualquier margen estimado.
               </p>
             </div>
           </div>
           <AgentDecisionTracePanel items={operationsTruth.items} />
         </div>
       )}
+
       {/* Bulk publish toolbar */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded mb-4 flex flex-col gap-3">
-        <div className="text-sm font-medium">Publicación masiva seleccionada (encolar trabajos)</div>
-        <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1.5">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-3 flex flex-col gap-2">
+        <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">Publicación masiva seleccionada (encolar trabajos)</div>
+        <p className="text-[11px] text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-2 py-1.5">
           Por seguridad de canario ML: <strong>ningún marketplace viene preseleccionado</strong>. Solo se encolan productos{' '}
           <strong>sin bloqueo canónico</strong> (p. ej. missingSku queda fuera). Elegí Mercado Libre explícitamente antes de encolar.
         </p>
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="text-xs text-gray-600 dark:text-gray-400">Marketplaces para cola:</span>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">Marketplaces para cola:</span>
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.ebay} onChange={(e)=>setBulkMk(v=>({...v, ebay: e.target.checked}))}/> eBay</label>
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.mercadolibre} onChange={(e)=>setBulkMk(v=>({...v, mercadolibre: e.target.checked}))}/> ML</label>
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.amazon} onChange={(e)=>setBulkMk(v=>({...v, amazon: e.target.checked}))}/> Amazon</label>
@@ -630,7 +670,7 @@ export default function IntelligentPublisher() {
             type="button"
             disabled={bulkPendingBusy || bulkStatus.running}
             onClick={() => setBulkMk({ ebay: false, mercadolibre: true, amazon: false })}
-            className="px-2 py-1 text-xs border rounded border-primary-300 text-primary-800 dark:text-primary-200"
+            className="px-2 py-0.5 text-[11px] border rounded-md border-primary-300 text-primary-800 dark:text-primary-200 hover:bg-primary-50 dark:hover:bg-primary-950/20"
           >
             Preset: solo ML
           </button>
@@ -638,12 +678,12 @@ export default function IntelligentPublisher() {
             type="button"
             disabled={bulkPendingBusy || bulkStatus.running}
             onClick={() => setBulkMk({ ebay: false, mercadolibre: false, amazon: false })}
-            className="px-2 py-1 text-xs border rounded text-gray-600"
+            className="px-2 py-0.5 text-[11px] border rounded-md border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             Limpiar marketplaces
           </button>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
             const productIds = Object.entries(selected).filter(([,v])=>v).map(([k])=>k);
             const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
@@ -665,14 +705,14 @@ export default function IntelligentPublisher() {
             }
             setBulkStatus(s=>({ ...s, running: false }));
             toast.success('Trabajos de publicación encolados (solo filas sin bloqueo).');
-          }} className="px-3 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50">Encolar trabajos de publicación</button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=>{ const all: Record<string, boolean> = {}; pending.forEach((p:any)=> all[String(p.id)]=true); setSelected(all); }} className="px-3 py-2 border rounded text-sm disabled:opacity-50">Seleccionar todo</button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={selectBlockedPendingOnly} className="px-3 py-2 border border-red-300 text-red-800 dark:text-red-200 rounded text-sm disabled:opacity-50" title="Selecciona filas con bloqueo canónico para rechazar o eliminar en bloque">
-            Seleccionar solo bloqueados
+          }} className="px-2.5 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors">Encolar trabajos</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=>{ const all: Record<string, boolean> = {}; pending.forEach((p:any)=> all[String(p.id)]=true); setSelected(all); }} className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md text-xs disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800">Seleccionar todo</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={selectBlockedPendingOnly} className="px-2.5 py-1.5 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-200 rounded-md text-xs disabled:opacity-50 hover:bg-red-50 dark:hover:bg-red-950/20" title="Selecciona filas con bloqueo canónico para rechazar o eliminar en bloque">
+            Solo bloqueados
           </button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=> setSelected({}) } className="px-3 py-2 border rounded text-sm disabled:opacity-50">Limpiar</button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingReject} className="px-3 py-2 border border-amber-600 text-amber-800 dark:text-amber-200 rounded text-sm hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">Rechazar seleccionados</button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingRemove} className="px-3 py-2 border border-red-600 text-red-700 dark:text-red-300 rounded text-sm hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-50 inline-flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" /> Eliminar seleccionados</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=> setSelected({}) } className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md text-xs disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800">Limpiar</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingReject} className="px-2.5 py-1.5 border border-amber-600 text-amber-800 dark:text-amber-200 rounded-md text-xs hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">Rechazar sel.</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingRemove} className="px-2.5 py-1.5 border border-red-600 text-red-700 dark:text-red-300 rounded-md text-xs hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-50 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Eliminar sel.</button>
           <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
             const allIds = pending.map((p:any)=> String(p.id));
             const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
@@ -694,64 +734,70 @@ export default function IntelligentPublisher() {
             }
             setBulkStatus(s=>({ ...s, running: false }));
             toast.success('Encolados solo pendientes sin bloqueo canónico');
-          }} className="px-3 py-2 bg-green-600 text-white rounded text-sm disabled:opacity-50">Publicar todo (sin bloqueados)</button>
+          }} className="px-2.5 py-1.5 bg-green-600 text-white rounded-md text-xs font-medium disabled:opacity-50 hover:bg-green-700 transition-colors">Publicar todo (sin bloqueados)</button>
         </div>
-        <div className="h-2 bg-gray-100 rounded overflow-hidden">
-          <div className="h-full bg-primary-500" style={{ width: `${bulkProgress}%` }} />
+        <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+          <div className="h-full bg-primary-500 rounded-full transition-all duration-300" style={{ width: `${bulkProgress}%` }} />
         </div>
-        <div className="text-xs text-gray-600">En cola: {bulkStatus.queued}/{bulkStatus.total} • Errores: {bulkStatus.errors}</div>
+        <div className="text-[11px] text-slate-500 dark:text-slate-400">En cola: {bulkStatus.queued}/{bulkStatus.total} · Errores: {bulkStatus.errors}</div>
       </div>
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded mb-4">
-        <div className="text-sm font-medium mb-2">Añadir producto para aprobación (URL de AliExpress)</div>
+
+      {/* Add product for approval */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-3">
+        <div className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">Añadir producto para aprobación (URL de AliExpress)</div>
         <div className="flex gap-2">
-          <input className="flex-1 px-3 py-2 border rounded" placeholder="https://www.aliexpress.com/item/..." value={url} onChange={(e)=>setUrl(e.target.value)} />
+          <input className="flex-1 px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-sm placeholder:text-slate-400" placeholder="https://www.aliexpress.com/item/..." value={url} onChange={(e)=>setUrl(e.target.value)} />
           <button onClick={async()=>{
             try {
               await api.post('/api/publisher/add_for_approval', { aliexpressUrl: url, scrape: true });
-              const { data } = await api.get('/api/publisher/pending'); // ✅ Usar nuevo endpoint
+              const { data } = await api.get('/api/publisher/pending');
               setPending(data?.items || []);
               setUrl('');
               toast.success('Producto añadido para aprobación');
             } catch (e:any) {
               toast.error('Error al añadir producto');
             }
-          }} className="px-4 py-2 bg-primary-600 text-white rounded">Añadir</button>
+          }} className="px-4 py-1.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">Añadir</button>
         </div>
       </div>
+
+      {/* Capital strip */}
       {capitalData != null && (
-        <div className="p-4 rounded border bg-white mb-3 flex flex-wrap items-center gap-4">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-3 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <Wallet className="w-4 h-4 text-gray-500" />
-            <span className="text-sm text-gray-600">Capital disponible:</span>
-            <span className="font-semibold text-gray-900">{formatCurrencySimple(capitalData.availableCash, 'USD')}</span>
+            <Wallet className="w-4 h-4 text-slate-400" />
+            <span className="text-xs text-slate-500">Capital disponible:</span>
+            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{formatCurrencySimple(capitalData.availableCash, 'USD')}</span>
           </div>
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-gray-500" />
-            <span className="text-sm text-gray-600">Puede publicar:</span>
+            <TrendingUp className="w-4 h-4 text-slate-400" />
+            <span className="text-xs text-slate-500">Puede publicar:</span>
             {capitalData.canPublish ? (
-              <span className="font-medium text-green-600">
+              <span className="text-sm font-medium text-green-600 dark:text-green-400">
                 Sí
                 {capitalData.remainingExposure > 0 && (
-                  <span className="text-gray-500 font-normal ml-1">(+{formatCurrencySimple(capitalData.remainingExposure, 'USD')})</span>
+                  <span className="text-slate-500 font-normal ml-1">(+{formatCurrencySimple(capitalData.remainingExposure, 'USD')})</span>
                 )}
               </span>
             ) : (
-              <span className="font-medium text-amber-600">Límite alcanzado</span>
+              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">Límite alcanzado</span>
             )}
           </div>
         </div>
       )}
-      <div className="p-4 border rounded bg-white text-gray-700 dark:text-gray-300 mb-3 space-y-3">
+
+      {/* Pending approvals header + filters */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-3 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            Aprobaciones pendientes: <span className="font-semibold">{pending.length}</span>
+          <div className="text-sm text-slate-700 dark:text-slate-300">
+            Aprobaciones pendientes: <span className="font-semibold text-slate-900 dark:text-slate-100">{pending.length}</span>
             {pending.length > 0 && (
-              <span className="ml-2 text-xs text-gray-500">
+              <span className="ml-2 text-[11px] text-slate-500">
                 ({pending.filter((p: any) => p.source === 'autopilot').length} del Autopilot)
               </span>
             )}
             {pendingFilteredSorted.length !== pending.length && (
-              <span className="ml-2 text-xs font-medium text-primary-700 dark:text-primary-300">
+              <span className="ml-2 text-[11px] font-medium text-primary-700 dark:text-primary-300">
                 Vista: {pendingFilteredSorted.length} fila(s)
               </span>
             )}
@@ -766,14 +812,14 @@ export default function IntelligentPublisher() {
                 toast.error('Error al actualizar');
               }
             }}
-            className="text-sm text-primary-600 hover:text-primary-700 disabled:opacity-50"
+            className="text-xs font-medium text-primary-600 hover:text-primary-700 disabled:opacity-50"
             disabled={bulkPendingBusy || Object.keys(pendingRowBusy).length > 0}
           >
             Actualizar
           </button>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm border-t border-gray-100 dark:border-gray-700 pt-3">
-          <span className="font-medium text-gray-700 dark:text-gray-200 flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-2 text-xs border-t border-slate-200 dark:border-slate-800 pt-2.5">
+          <span className="font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
             Vista canario ML
           </span>
@@ -782,10 +828,10 @@ export default function IntelligentPublisher() {
               key={key}
               type="button"
               onClick={() => setPendingViewFilter(key)}
-              className={`px-2.5 py-1 rounded-md border text-xs font-medium ${
+              className={`px-2.5 py-1 rounded-md border text-[11px] font-medium transition-colors ${
                 pendingViewFilter === key
                   ? 'bg-primary-600 text-white border-primary-600'
-                  : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300'
+                  : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
             >
               {key === 'all' && 'Todos'}
@@ -793,12 +839,12 @@ export default function IntelligentPublisher() {
               {key === 'blocked_only' && 'Solo bloqueados'}
             </button>
           ))}
-          <label className="inline-flex items-center gap-1 ml-2 text-gray-600 dark:text-gray-400">
-            Orden:
+          <label className="inline-flex items-center gap-1 ml-2 text-slate-600 dark:text-slate-400">
+            <span className="text-[11px]">Orden:</span>
             <select
               value={pendingSort}
               onChange={(e) => setPendingSort(e.target.value as typeof pendingSort)}
-              className="border rounded px-1 py-0.5 text-xs bg-white dark:bg-gray-800"
+              className="border border-slate-300 dark:border-slate-600 rounded-md px-1.5 py-0.5 text-[11px] bg-white dark:bg-slate-800"
             >
               <option value="smart">Publicables primero + margen ML</option>
               <option value="ml_margin_desc">Margen ML (estim.)</option>
@@ -806,11 +852,13 @@ export default function IntelligentPublisher() {
             </select>
           </label>
         </div>
-        <p className="text-[11px] text-gray-500 dark:text-gray-400">
+        <p className="text-[10px] text-slate-500 dark:text-slate-400">
           «Solo ML publicables»: sin bloqueo canónico y con margen ML estimado &gt; 0. Los bloqueados (p. ej. missingSku) no muestran aprobar como acción principal.
         </p>
       </div>
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
+
+      {/* Pending products list */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card overflow-hidden">
         {displayedPending.map((p: any) => {
           const truth = operationsTruthByProduct.get(Number(p.id)) ?? null;
           return (
@@ -822,7 +870,7 @@ export default function IntelligentPublisher() {
               truthLoading={rowTruthLoading}
               selected={!!selected[String(p.id)]}
               onSelectChange={(checked) => setSelected((s) => ({ ...s, [String(p.id)]: checked }))}
-              onApprove={(marketplaces) => approve(String(p.id), marketplaces)}
+              onApprove={(request) => approve(String(p.id), request)}
               onReject={() => rejectPendingOne(String(p.id))}
               onRemove={() => removePendingOne(String(p.id))}
               rowBusy={pendingRowBusy[String(p.id)]}
@@ -830,50 +878,51 @@ export default function IntelligentPublisher() {
           );
         })}
         {pendingFilteredSorted.length === 0 && pending.length > 0 && (
-          <div className="p-4 text-sm text-gray-600">Ningún pendiente coincide con el filtro actual.</div>
+          <div className="p-4 text-xs text-slate-500">Ningún pendiente coincide con el filtro actual.</div>
         )}
-        {pending.length === 0 && <div className="p-4 text-sm text-gray-600">No hay productos pendientes.</div>}
+        {pending.length === 0 && <div className="p-4 text-xs text-slate-500">No hay productos pendientes.</div>}
         {pendingFilteredSorted.length > 0 && pendingTotalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 py-3 px-4 border-t bg-gray-50 dark:bg-gray-700/50 rounded-b text-sm">
+          <div className="flex items-center justify-center gap-3 py-2.5 px-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-xs">
             <button
               disabled={pendingPage <= 1}
               onClick={() => setPendingPage((prev) => Math.max(1, prev - 1))}
-              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-gray-600 font-medium"
+              className="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700 font-medium transition-colors"
             >
-              <ChevronLeft className="w-4 h-4 inline" /> Anterior
+              <ChevronLeft className="w-3.5 h-3.5 inline" /> Anterior
             </button>
-            <span className="text-gray-600 font-medium">
+            <span className="text-slate-600 dark:text-slate-400 font-medium">
               Página {pendingPage} de {pendingTotalPages} ({pendingFilteredSorted.length} en vista)
             </span>
             <button
               disabled={pendingPage >= pendingTotalPages}
               onClick={() => setPendingPage((prev) => Math.min(pendingTotalPages, prev + 1))}
-              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-gray-600 font-medium"
+              className="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700 font-medium transition-colors"
             >
-              Siguiente <ChevronRight className="w-4 h-4 inline" />
+              Siguiente <ChevronRight className="w-3.5 h-3.5 inline" />
             </button>
           </div>
         )}
       </div>
 
-      <div className="mt-6">
+      {/* Published listings section */}
+      <div className="mt-2">
         <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-          <div className="text-lg font-semibold">Anuncios publicados ({listingsTotal})</div>
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Anuncios publicados ({listingsTotal})</div>
           {listingsTotal > 0 && (
-            <span className="text-sm text-gray-500">
+            <span className="text-[11px] text-slate-500">
               Mostrando {((listingsPage - 1) * LISTINGS_PER_PAGE) + 1}–{Math.min(listingsPage * LISTINGS_PER_PAGE, listingsTotal)} de {listingsTotal} listados
             </span>
           )}
         </div>
-        <div className="flex flex-wrap gap-2 mb-3 items-center">
+        <div className="flex flex-wrap gap-1.5 mb-3 items-center">
           {(['all', 'ebay', 'mercadolibre', 'amazon'] as const).map((mp) => (
             <button
               key={mp}
               onClick={() => handleListingsMarketplaceFilter(mp)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
                 listingsMarketplaceFilter === mp
                   ? 'bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
               }`}
             >
               {mp === 'all' ? 'Todos' : mp === 'mercadolibre' ? 'Mercado Libre' : mp === 'ebay' ? 'eBay' : 'Amazon'}
@@ -883,36 +932,55 @@ export default function IntelligentPublisher() {
             type="button"
             onClick={handleRepairAllMlListings}
             disabled={repairingMl}
-            className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800/50 disabled:opacity-50 inline-flex items-center gap-1.5"
+            className="ml-auto px-3 py-1 rounded-lg text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800/50 disabled:opacity-50 inline-flex items-center gap-1.5 transition-colors"
             title="Corregir título, descripción y atributos de todos los listados ML (error VIP67)"
           >
-            <Wrench className="w-4 h-4" />
+            <Wrench className="w-3.5 h-3.5" />
             {repairingMl ? 'Reparando…' : 'Reparar todos los listados ML'}
           </button>
         </div>
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
+
+        {/* Listings table */}
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card overflow-hidden">
+          <div className="hidden sm:grid grid-cols-[auto_1fr_auto] gap-3 px-3 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 w-10" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Producto / Listing</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Enlace</span>
+          </div>
           {listings.map((l:any)=>(
-            <div key={l.id} className="p-3 border-b flex items-center gap-3">
+            <div key={l.id} className="px-3 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-b-0 flex items-center gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
               {l.productImage && (
-                <img src={toProxyUrl(l.productImage)} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" referrerPolicy="no-referrer" />
+                <img src={toProxyUrl(l.productImage)} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0 ring-1 ring-slate-200 dark:ring-slate-700" referrerPolicy="no-referrer" />
               )}
               <div className="flex-1 min-w-0 text-sm">
-                <div className="font-medium truncate">{l.productTitle || l.listingId}</div>
-                <div className="text-gray-500 text-xs">{l.marketplace.toUpperCase()} – {l.listingId} – {l.publishedAt ? formatDateEs(l.publishedAt) : ''}</div>
+                <div className="font-medium text-slate-900 dark:text-slate-100 truncate">{l.productTitle || l.listingId}</div>
+                <div className="text-slate-500 text-[11px] mt-0.5">{l.marketplace.toUpperCase()} – {l.listingId} – {l.publishedAt ? formatDateEs(l.publishedAt) : ''}</div>
                 {(() => {
                   const truth = resolveListingTruth(l);
                   if (!truth) {
-                    return <div className="text-[11px] text-gray-400 mt-1">Sin canonical listing truth asociado</div>;
+                    return <div className="text-[11px] text-slate-400 mt-1">Sin verdad canónica de listing asociada</div>;
                   }
+                  const lifecycle = resolveOperationalLifecycleStage({ operationsTruth: truth });
                   return (
-                    <div className="mt-1 space-y-1">
+                    <div className="mt-1.5 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${lifecycleToneClasses(lifecycle.tone)}`}>
+                          {lifecycle.label}
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate" title={lifecycle.detail}>
+                          {lifecycle.detail}
+                        </span>
+                      </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {getLiveStateBadge(truth.externalMarketplaceState)}
                         {truth.externalMarketplaceSubStatus.length > 0 && (
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate" title={truth.externalMarketplaceSubStatus.join(', ')}>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate" title={truth.externalMarketplaceSubStatus.join(', ')}>
                             {truth.externalMarketplaceSubStatus.join(', ')}
                           </span>
                         )}
+                      </div>
+                      <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                        Orden: {truth.orderIngested ? 'ingestada' : 'pendiente'} · Compra: {truth.supplierPurchaseProved ? 'probada' : 'pendiente'} · Tracking: {truth.trackingAttached ? 'adjunto' : 'faltante'}
                       </div>
                       {truth.blockerCode ? (
                         <div className="text-[11px] text-red-600 dark:text-red-400" title={truth.blockerMessage || truth.blockerCode}>
@@ -923,7 +991,7 @@ export default function IntelligentPublisher() {
                       )}
                       {truth.nextAction && (
                         <div className="text-[11px] text-amber-700 dark:text-amber-300" title={truth.nextAction}>
-                          Next: {truth.nextAction}
+                          Siguiente: {truth.nextAction}
                         </div>
                       )}
                     </div>
@@ -931,28 +999,30 @@ export default function IntelligentPublisher() {
                 })()}
               </div>
               {l.listingUrl && (
-                <a href={l.listingUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 text-sm hover:underline flex-shrink-0">Abrir</a>
+                <a href={l.listingUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 text-xs font-medium hover:underline flex-shrink-0 inline-flex items-center gap-1">
+                  <ExternalLink className="w-3 h-3" /> Abrir
+                </a>
               )}
             </div>
           ))}
-          {listings.length===0 && <div className="p-3 text-sm text-gray-600">Aún no hay anuncios.</div>}
+          {listings.length===0 && <div className="p-4 text-xs text-slate-500">Aún no hay anuncios publicados.</div>}
         </div>
         {listingsTotalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 mt-3 py-3 border-t bg-gray-50 dark:bg-gray-700/50 rounded-b text-sm">
+          <div className="flex items-center justify-center gap-3 mt-3 py-2.5 border-t border-slate-200 dark:border-slate-800 text-xs">
             <button
               disabled={listingsPage <= 1}
               onClick={() => goToListingsPage(Math.max(1, listingsPage - 1))}
-              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-gray-600 font-medium"
+              className="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700 font-medium transition-colors"
             >
-              <ChevronLeft className="w-4 h-4 inline" /> Anterior
+              <ChevronLeft className="w-3.5 h-3.5 inline" /> Anterior
             </button>
-            <span className="text-gray-600 font-medium">Página {listingsPage} de {listingsTotalPages} ({listingsTotal} total)</span>
+            <span className="text-slate-600 dark:text-slate-400 font-medium">Página {listingsPage} de {listingsTotalPages} ({listingsTotal} total)</span>
             <button
               disabled={listingsPage >= listingsTotalPages}
               onClick={() => goToListingsPage(Math.min(listingsTotalPages, listingsPage + 1))}
-              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-gray-600 font-medium"
+              className="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700 font-medium transition-colors"
             >
-              Siguiente <ChevronRight className="w-4 h-4 inline" />
+              Siguiente <ChevronRight className="w-3.5 h-3.5 inline" />
             </button>
           </div>
         )}
@@ -961,7 +1031,6 @@ export default function IntelligentPublisher() {
   );
 }
 
-// ✅ Tarjeta de producto pendiente con imágenes y más detalle
 function PendingProductCard({
   product: p,
   productId,
@@ -980,7 +1049,7 @@ function PendingProductCard({
   truthLoading: boolean;
   selected: boolean;
   onSelectChange: (checked: boolean) => void;
-  onApprove: (marketplaces: string[]) => void;
+  onApprove: (request: PendingApproveRequest) => void;
   onReject: () => void;
   onRemove: () => void;
   rowBusy?: 'reject' | 'remove';
@@ -992,6 +1061,9 @@ function PendingProductCard({
     mercadolibre: false,
     amazon: false,
   });
+  const [publishMode, setPublishMode] = useState<'local' | 'international'>('local');
+  const [publishIntent, setPublishIntent] = useState<'dry_run' | 'pilot' | 'production'>('production');
+  const [pilotManualAck, setPilotManualAck] = useState(false);
   const rowBlockedVisual = isPendingRowPublishBlocked(operationsTruth, truthLoading);
 
   useEffect(() => {
@@ -1008,12 +1080,20 @@ function PendingProductCard({
       toast.error('Elegí al menos un marketplace; ninguno viene marcado por defecto.');
       return;
     }
-    onApprove(mks);
+    onApprove({
+      marketplaces: mks,
+      publishMode,
+      publishIntent,
+      pilotManualAck,
+    });
   };
 
   const applySoloMl = () => {
     setMarketplaces({ ebay: false, mercadolibre: true, amazon: false });
   };
+  const strictBlock = rowBlockedVisual && publishIntent !== 'dry_run';
+  const allowDryRunWhileBlocked = rowBlockedVisual && publishIntent === 'dry_run' && marketplaces.mercadolibre;
+  const publishActionBlocked = rowBlockedVisual && !allowDryRunWhileBlocked;
 
   const desc = p.description || '';
   const showDesc = desc.length > 0;
@@ -1021,17 +1101,17 @@ function PendingProductCard({
 
   return (
     <div
-      className={`p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
-        rowBlockedVisual && !truthLoading ? 'bg-red-50/40 dark:bg-red-950/20 border-l-4 border-l-red-500 pl-3' : ''
+      className={`px-3 py-3 border-b border-slate-100 dark:border-slate-800 last:border-b-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-colors ${
+        rowBlockedVisual && !truthLoading ? 'bg-red-50/40 dark:bg-red-950/20 border-l-4 border-l-red-500 pl-2.5' : ''
       } ${truthLoading ? 'opacity-90' : ''}`}
     >
       <div className="flex items-start gap-3 flex-1 w-full">
-        <input type="checkbox" className="mt-1 flex-shrink-0" checked={selected} disabled={!!rowBusy} onChange={(e) => onSelectChange(e.target.checked)} />
+        <input type="checkbox" className="mt-1 flex-shrink-0 accent-primary-600" checked={selected} disabled={!!rowBusy} onChange={(e) => onSelectChange(e.target.checked)} />
         <ImageCarousel images={imgSources} title={sanitizeProductTitle(p.title)} />
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-gray-900">{sanitizeProductTitle(p.title)}</div>
+          <div className="font-medium text-sm text-slate-900 dark:text-slate-100">{sanitizeProductTitle(p.title)}</div>
           {showDesc && (
-            <div className="text-xs text-gray-600 mt-1">
+            <div className="text-[11px] text-slate-500 mt-1">
               {expanded ? desc : descShort}
               {desc.length > 150 && (
                 <button type="button" onClick={() => setExpanded(!expanded)} className="ml-1 text-primary-600 hover:underline">
@@ -1040,39 +1120,39 @@ function PendingProductCard({
               )}
             </div>
           )}
-          <div className="text-xs text-gray-500 mt-1 space-y-2">
+          <div className="text-[11px] text-slate-500 mt-1.5 space-y-2">
             {truthLoading && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800 p-2 text-xs text-amber-900 dark:text-amber-100 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <div className="rounded-lg border border-amber-200 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800 p-2 text-[11px] text-amber-900 dark:text-amber-100 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                 Comprobando bloqueos canónicos… la acción de publicar permanece deshabilitada hasta tener verdad operativa.
               </div>
             )}
             {operationsTruth && (
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">Verdad operativa (listing / blocker)</p>
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-2.5 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Verdad operativa (listing / blocker)</p>
                 <div className="flex flex-wrap gap-2 items-center">
                   {getLiveStateBadge(operationsTruth.externalMarketplaceState)}
                   {operationsTruth.externalMarketplaceSubStatus.length > 0 && (
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
                       {operationsTruth.externalMarketplaceSubStatus.join(', ')}
                     </span>
                   )}
                 </div>
                 {operationsTruth.blockerCode ? (
-                  <p className="text-xs text-red-600 dark:text-red-400" title={operationsTruth.blockerMessage || operationsTruth.blockerCode}>
+                  <p className="text-[11px] text-red-600 dark:text-red-400" title={operationsTruth.blockerMessage || operationsTruth.blockerCode}>
                     Blocker: {operationsTruth.blockerCode}
                     {operationsTruth.blockerMessage ? ` — ${operationsTruth.blockerMessage}` : ''}
                   </p>
                 ) : (
-                  <p className="text-xs text-green-600 dark:text-green-400">Sin blocker canónico actual</p>
+                  <p className="text-[11px] text-green-600 dark:text-green-400">Sin blocker canónico actual</p>
                 )}
                 {operationsTruth.nextAction && (
-                  <p className="text-xs text-amber-700 dark:text-amber-300">Siguiente acción: {operationsTruth.nextAction}</p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300">Siguiente acción: {operationsTruth.nextAction}</p>
                 )}
               </div>
             )}
-            <div className="rounded-md border border-dashed border-gray-200 dark:border-gray-600 p-2 space-y-1 text-[11px] text-gray-500 dark:text-gray-400">
-              <p className="font-medium text-gray-600 dark:text-gray-300">Costos y margen — solo estimación pre-publicación</p>
+            <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-700 p-2 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="font-medium text-slate-600 dark:text-slate-300">Costos y margen — solo estimación pre-publicación</p>
               <div>
                 Coste: {formatCurrencySimple(p.estimatedCost ?? p.aliexpressPrice ?? 0, p.currency || 'USD')}
                 {p.shippingCost != null && p.shippingCost > 0 && (
@@ -1084,32 +1164,32 @@ function PendingProductCard({
                 {' → '}Sugerido: {formatCurrencySimple(p.suggestedPrice ?? 0, p.currency || 'USD')}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span>Margen bruto estimado: <span className="font-semibold text-gray-700 dark:text-gray-200">{formatCurrencySimple(p.estimatedProfit ?? 0, p.currency || 'USD')}</span></span>
-                <span>ROI estimado: <span className="font-semibold text-gray-700 dark:text-gray-200">{Number(p.estimatedROI ?? 0).toFixed(1)}%</span></span>
+                <span>Margen bruto estimado: <span className="font-semibold text-slate-700 dark:text-slate-200">{formatCurrencySimple(p.estimatedProfit ?? 0, p.currency || 'USD')}</span></span>
+                <span>ROI estimado: <span className="font-semibold text-slate-700 dark:text-slate-200">{Number(p.estimatedROI ?? 0).toFixed(1)}%</span></span>
               </div>
               {p.estimatedProfitByMarketplace && (
                 <div className="flex items-center gap-2 flex-wrap">
                   {Object.entries(p.estimatedProfitByMarketplace).map(([mk, val]) => (
                     <span key={mk}>
                       {mk === 'mercadolibre' ? 'ML' : mk} (estim.):{' '}
-                      <span className="text-gray-700 dark:text-gray-200">
+                      <span className="text-slate-700 dark:text-slate-200">
                         +{formatCurrencySimple(Number(val), p.currency || 'USD')}
                       </span>
                     </span>
                   ))}
                 </div>
               )}
-              <p className="text-[10px] text-gray-500 dark:text-gray-500 pt-1">
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 pt-1">
                 No es ganancia realizada ni prueba de listing activo; prioriza el bloque de verdad operativa arriba.
               </p>
             </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className={`px-2 py-0.5 rounded text-xs ${p.source === 'autopilot' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+              <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${p.source === 'autopilot' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
                 {p.source === 'autopilot' ? '🤖 Autopilot' : '👤 Manual'}
               </span>
-              {p.category && <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">{p.category}</span>}
-              {p.deliveryDays != null && p.deliveryDays > 0 && <span className="text-gray-500">{p.deliveryDays} días envío</span>}
-              {p.queuedAt && <span className="text-gray-400">En cola: {formatDateEs(p.queuedAt)}</span>}
+              {p.category && <span className="px-2 py-0.5 rounded-md text-[11px] bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">{p.category}</span>}
+              {p.deliveryDays != null && p.deliveryDays > 0 && <span className="text-slate-500">{p.deliveryDays} días envío</span>}
+              {p.queuedAt && <span className="text-slate-400">En cola: {formatDateEs(p.queuedAt)}</span>}
               {p.aliexpressUrl && (
                 <a href={p.aliexpressUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary-600 hover:underline">
                   <ExternalLink className="w-3 h-3" /> Ver en AliExpress
@@ -1121,61 +1201,100 @@ function PendingProductCard({
       </div>
       <div className="flex flex-col items-stretch sm:items-end gap-2 flex-shrink-0 min-w-[200px]">
         <div className="flex flex-wrap items-center gap-2 justify-end">
-          <span className="text-[10px] text-gray-500 w-full text-right sm:w-auto">Marketplaces (sin preselección)</span>
+          <span className="text-[10px] text-slate-500 w-full text-right sm:w-auto">Marketplaces (sin preselección)</span>
         </div>
-        <div className={`flex flex-wrap items-center gap-3 justify-end ${rowBlockedVisual ? 'opacity-60' : ''}`}>
-          <label className="text-sm">
+        <div className={`flex flex-wrap items-center gap-3 justify-end ${strictBlock ? 'opacity-60' : ''}`}>
+          <label className="text-xs text-slate-700 dark:text-slate-300">
             <input
               type="checkbox"
               checked={marketplaces.ebay}
               onChange={(e) => setMarketplaces((m) => ({ ...m, ebay: e.target.checked }))}
-              className="mr-1"
-              disabled={!!rowBusy || rowBlockedVisual}
+              className="mr-1 accent-primary-600"
+              disabled={!!rowBusy || strictBlock}
             />{' '}
             eBay
           </label>
-          <label className="text-sm">
+          <label className="text-xs text-slate-700 dark:text-slate-300">
             <input
               type="checkbox"
               checked={marketplaces.mercadolibre}
               onChange={(e) => setMarketplaces((m) => ({ ...m, mercadolibre: e.target.checked }))}
-              className="mr-1"
-              disabled={!!rowBusy || rowBlockedVisual}
+              className="mr-1 accent-primary-600"
+              disabled={!!rowBusy || strictBlock}
             />{' '}
             ML
           </label>
-          <label className="text-sm">
+          <label className="text-xs text-slate-700 dark:text-slate-300">
             <input
               type="checkbox"
               checked={marketplaces.amazon}
               onChange={(e) => setMarketplaces((m) => ({ ...m, amazon: e.target.checked }))}
-              className="mr-1"
-              disabled={!!rowBusy || rowBlockedVisual}
+              className="mr-1 accent-primary-600"
+              disabled={!!rowBusy || strictBlock}
             />{' '}
             Amazon
           </label>
           <button
             type="button"
-            disabled={!!rowBusy || rowBlockedVisual}
+            disabled={!!rowBusy || strictBlock}
             onClick={applySoloMl}
-            className="px-2 py-0.5 text-[11px] border rounded border-primary-400 text-primary-800 dark:text-primary-200"
+            className="px-2 py-0.5 text-[11px] border rounded-md border-primary-400 text-primary-800 dark:text-primary-200 hover:bg-primary-50 dark:hover:bg-primary-950/20 transition-colors"
           >
             Solo ML
           </button>
         </div>
-        <div className="flex flex-wrap gap-2 justify-end">
-          {rowBlockedVisual ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto sm:min-w-[320px]">
+          <label className="text-[11px] text-slate-600 dark:text-slate-300">
+            Modo
+            <select
+              value={publishMode}
+              onChange={(e) => setPublishMode(e.target.value as 'local' | 'international')}
+              className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1 text-[11px]"
+              disabled={!!rowBusy}
+            >
+              <option value="local">local</option>
+              <option value="international">international</option>
+            </select>
+          </label>
+          <label className="text-[11px] text-slate-600 dark:text-slate-300">
+            Intento
+            <select
+              value={publishIntent}
+              onChange={(e) =>
+                setPublishIntent(e.target.value as 'dry_run' | 'pilot' | 'production')
+              }
+              className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1 text-[11px]"
+              disabled={!!rowBusy}
+            >
+              <option value="production">production</option>
+              <option value="pilot">pilot</option>
+              <option value="dry_run">dry_run</option>
+            </select>
+          </label>
+          <label className="text-[11px] text-slate-600 dark:text-slate-300 flex items-end gap-1 pb-1">
+            <input
+              type="checkbox"
+              checked={pilotManualAck}
+              onChange={(e) => setPilotManualAck(e.target.checked)}
+              disabled={!!rowBusy}
+              className="accent-primary-600"
+            />
+            pilotManualAck
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-1.5 justify-end">
+          {publishActionBlocked ? (
             <button
               type="button"
               disabled
-              className="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-sm flex items-center gap-1 whitespace-nowrap cursor-not-allowed"
+              className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-md text-xs flex items-center gap-1 whitespace-nowrap cursor-not-allowed"
               title={
                 truthLoading
                   ? 'Esperando verdad operativa'
                   : operationsTruth?.blockerMessage || operationsTruth?.blockerCode || 'Bloqueado'
               }
             >
-              <AlertTriangle className="w-4 h-4" />
+              <AlertTriangle className="w-3.5 h-3.5" />
               {truthLoading ? 'Verificando…' : 'No publicable (bloqueado)'}
             </button>
           ) : (
@@ -1183,28 +1302,29 @@ function PendingProductCard({
               type="button"
               disabled={!!rowBusy}
               onClick={handleApprove}
-              className="px-3 py-2 bg-blue-600 text-white rounded text-sm flex items-center gap-1 whitespace-nowrap disabled:opacity-50"
+              className="px-2.5 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium flex items-center gap-1 whitespace-nowrap disabled:opacity-50 hover:bg-blue-700 transition-colors"
             >
-              <Check className="w-4 h-4" /> Aprobar y publicar
+              <Check className="w-3.5 h-3.5" />
+              {publishIntent === 'dry_run' ? 'Ejecutar dry-run' : 'Aprobar y publicar'}
             </button>
           )}
           <button
             type="button"
             disabled={!!rowBusy}
             onClick={() => navigate(`/products/${encodeURIComponent(productId)}/preview`)}
-            className="px-3 py-2 border border-gray-400 text-gray-800 dark:text-gray-200 rounded text-sm whitespace-nowrap disabled:opacity-50"
+            className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-md text-xs whitespace-nowrap disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
           >
-            Vista previa / resolver
+            Vista previa
           </button>
-          <button type="button" disabled={!!rowBusy} onClick={onReject} className="px-3 py-2 border border-amber-600 text-amber-800 dark:text-amber-200 rounded text-sm whitespace-nowrap disabled:opacity-50">
+          <button type="button" disabled={!!rowBusy} onClick={onReject} className="px-2.5 py-1.5 border border-amber-600 text-amber-800 dark:text-amber-200 rounded-md text-xs whitespace-nowrap disabled:opacity-50 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors">
             {rowBusy === 'reject' ? 'Rechazando…' : 'Rechazar'}
           </button>
-          <button type="button" disabled={!!rowBusy} onClick={onRemove} className="px-3 py-2 border border-red-600 text-red-700 dark:text-red-300 rounded text-sm inline-flex items-center gap-1 whitespace-nowrap disabled:opacity-50">
-            <Trash2 className="w-3.5 h-3.5" />
+          <button type="button" disabled={!!rowBusy} onClick={onRemove} className="px-2.5 py-1.5 border border-red-600 text-red-700 dark:text-red-300 rounded-md text-xs inline-flex items-center gap-1 whitespace-nowrap disabled:opacity-50 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors">
+            <Trash2 className="w-3 h-3" />
             {rowBusy === 'remove' ? 'Eliminando…' : 'Eliminar'}
           </button>
         </div>
-        {rowBlockedVisual &&
+        {publishActionBlocked &&
           !truthLoading &&
           (String(operationsTruth?.blockerCode ?? '').trim() ||
             String(operationsTruth?.publicationReadinessState ?? '').toUpperCase() === 'BLOCKED') && (
@@ -1221,7 +1341,6 @@ function PendingProductCard({
   );
 }
 
-// ✅ MEJORADO: Carrusel de imágenes (usa proxy para AliExpress para evitar bloqueo de hotlink)
 function ImageCarousel({ images, title }: { images: string[]; title: string }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -1231,8 +1350,8 @@ function ImageCarousel({ images, title }: { images: string[]; title: string }) {
 
   if (!rawImages.length) {
     return (
-      <div className="w-20 h-20 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
-        <span className="text-gray-400 text-xs">No img</span>
+      <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0 ring-1 ring-slate-200 dark:ring-slate-700">
+        <span className="text-slate-400 text-[10px]">Sin imagen</span>
       </div>
     );
   }
@@ -1242,7 +1361,7 @@ function ImageCarousel({ images, title }: { images: string[]; title: string }) {
   const prevImage = () => setCurrentIndex((prev) => (prev - 1 + len) % len);
 
   return (
-    <div className="relative w-20 h-20 rounded overflow-hidden flex-shrink-0 group">
+    <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 group ring-1 ring-slate-200 dark:ring-slate-700">
       <img 
         src={displayImages[currentIndex]} 
         alt={`${title} - Imagen ${currentIndex + 1}`}
@@ -1262,7 +1381,6 @@ function ImageCarousel({ images, title }: { images: string[]; title: string }) {
         }}
       />
       
-      {/* Controles del carrusel (solo si hay múltiples imágenes) */}
       {images.length > 1 && (
         <>
           <button
@@ -1270,7 +1388,7 @@ function ImageCarousel({ images, title }: { images: string[]; title: string }) {
               e.stopPropagation();
               prevImage();
             }}
-            className="absolute left-0 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-1 rounded-r opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute left-0 top-1/2 -translate-y-1/2 bg-black/50 text-white p-0.5 rounded-r opacity-0 group-hover:opacity-100 transition-opacity"
             aria-label="Imagen anterior"
           >
             <ChevronLeft className="w-3 h-3" />
@@ -1280,14 +1398,13 @@ function ImageCarousel({ images, title }: { images: string[]; title: string }) {
               e.stopPropagation();
               nextImage();
             }}
-            className="absolute right-0 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-1 rounded-l opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute right-0 top-1/2 -translate-y-1/2 bg-black/50 text-white p-0.5 rounded-l opacity-0 group-hover:opacity-100 transition-opacity"
             aria-label="Siguiente imagen"
           >
             <ChevronRight className="w-3 h-3" />
           </button>
           
-          {/* Indicador de posición */}
-          <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs text-center py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] text-center py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             {currentIndex + 1} / {len}
           </div>
         </>

@@ -8,7 +8,7 @@ interface OAuthFlowStepProps {
   onUpdateData: (updates: Partial<WizardData>) => void;
   onNext: () => void;
   onBack: () => void;
-  onComplete: () => void;
+  onComplete?: () => void;
 }
 
 const OAUTH_APIS = ['ebay', 'mercadolibre'];

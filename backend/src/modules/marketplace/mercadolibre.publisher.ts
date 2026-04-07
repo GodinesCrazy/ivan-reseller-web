@@ -5,6 +5,7 @@ import type { MarketplacePublisher } from './marketplace.publisher';
 import type { PublishMode, PublishResult, PublishableProduct, ValidationResult } from './marketplace.types';
 import { toNumber } from '../../utils/decimal.utils';
 import { resolveMercadoLibrePublishImageInputs } from '../../services/mercadolibre-image-remediation.service';
+import { hasCompleteMlPhysicalPackage } from '../../utils/ml-physical-package-guard';
 
 export class MercadoLibrePublisher implements MarketplacePublisher {
   private userId?: number;
@@ -58,6 +59,17 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
   }
 
   async publishProduct(product: PublishableProduct, mode: PublishMode): Promise<PublishResult> {
+    const allowLegacyPublisherPath =
+      process.env.ALLOW_LEGACY_ML_BATCH_PUBLISH === 'true' &&
+      process.env.ALLOW_UNSAFE_LEGACY_ML_PUBLISHER === 'true';
+    if (!allowLegacyPublisherPath) {
+      return {
+        status: 'failed',
+        message:
+          'Legacy MercadoLibre publisher path is disabled for safety. Use canonical publish flow (/api/publisher/approve or /api/marketplace/publish).',
+      };
+    }
+
     const credentials = await this.resolveCredentials();
     const mlService = new MercadoLibreService(credentials);
 
@@ -112,17 +124,32 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
       };
     }
 
+    if (!hasCompleteMlPhysicalPackage(product)) {
+      return {
+        status: 'failed',
+        message:
+          'MercadoLibre publish blocked: product must have packageWeightGrams, packageLengthCm, packageWidthCm, packageHeightCm, and maxUnitsPerOrder (>=1).',
+      };
+    }
+    const L = Number(product.packageLengthCm);
+    const W = Number(product.packageWidthCm);
+    const H = Number(product.packageHeightCm);
+    const G = Number(product.packageWeightGrams);
+    const dimStr = `${L}x${W}x${H},${G}`;
+    const maxU = Math.max(1, Number(product.maxUnitsPerOrder ?? 1));
+
     const result = await mlService.createListing({
       title,
       description,
       categoryId,
       price,
-      quantity: 1,
+      quantity: maxU,
       condition: 'new',
       images: imageResolution.images,
       shipping: {
         mode: 'me2',
         freeShipping: false,
+        dimensions: dimStr,
       },
     });
 

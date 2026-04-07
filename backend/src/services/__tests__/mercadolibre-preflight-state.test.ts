@@ -4,6 +4,7 @@ describe('resolveMercadoLibrePreflightOverallState', () => {
   const allOk = {
     productStatusOk: true,
     hasAliUrl: true,
+    packageOk: true,
     credentialsOk: true,
     mlApiOk: true,
     languageOk: true,
@@ -33,5 +34,14 @@ describe('resolveMercadoLibrePreflightOverallState', () => {
         postsaleOk: false,
       })
     ).toBe('blocked_postsale_readiness');
+  });
+
+  it('returns blocked_physical_package when package data is incomplete', () => {
+    expect(
+      resolveMercadoLibrePreflightOverallState({
+        ...allOk,
+        packageOk: false,
+      })
+    ).toBe('blocked_physical_package');
   });
 });

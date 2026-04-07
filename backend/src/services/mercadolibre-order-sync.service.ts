@@ -7,6 +7,7 @@ import { prisma } from '../config/database';
 import logger from '../config/logger';
 import MarketplaceService from './marketplace.service';
 import { toNumber } from '../utils/decimal.utils';
+import { getWebhookStatusWithProof, getWebhookStatus } from './webhook-readiness.service';
 
 const marketplaceService = new MarketplaceService();
 const ML_PAYPAL_PREFIX = 'mercadolibre:';
@@ -37,6 +38,20 @@ export async function syncMercadoLibreOrdersForUser(
   };
 
   try {
+    const forcePolling = process.env.ML_FORCE_ORDER_POLLING === 'true';
+    if (!forcePolling) {
+      const webhook = await getWebhookStatusWithProof().catch(() => getWebhookStatus());
+      const mlWebhook = webhook.mercadolibre;
+      if (mlWebhook?.configured === true && mlWebhook?.eventFlowReady === true) {
+        logger.info('[ML-SYNC] Polling skipped: canonical webhook flow is ready', {
+          userId,
+          configured: mlWebhook.configured,
+          eventFlowReady: mlWebhook.eventFlowReady,
+        });
+        return result;
+      }
+    }
+
     const credsResult = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);
     if (!credsResult?.isActive || !credsResult?.credentials?.accessToken) {
       result.errors.push('Mercado Libre credentials not found or inactive');
@@ -113,10 +128,21 @@ export async function syncMercadoLibreOrdersForUser(
         });
         if (!product) continue;
 
-        const price = toNumber(product.aliexpressPrice ?? 0) > 0
+        // order.price stores the SUPPLIER cost (aliexpressPrice) in USD for capital/purchase checks.
+        // The real ML sale amount (CLP) is stored in shippingAddress JSON as _mlSaleAmountCLP.
+        const supplierCostUsd = toNumber(product.aliexpressPrice ?? 0) > 0
           ? toNumber(product.aliexpressPrice)
           : toNumber((product as any).suggestedPrice ?? 0);
-        const amount = price > 0 ? price : (order as any).total_amount ?? (order as any).totalAmount ?? 0;
+        const purchaseCost = supplierCostUsd > 0 ? supplierCostUsd : toNumber((order as any).total_amount ?? (order as any).totalAmount ?? 0);
+
+        // Capture ML sale amount in CLP for order-time profitability gate
+        const mlSaleAmountCLP = toNumber((order as any).total_amount ?? (order as any).totalAmount ?? 0);
+
+        const addrWithSaleMeta = {
+          ...normalizedAddr,
+          // Prefixed underscore = system metadata embedded in the address JSON
+          ...(mlSaleAmountCLP > 0 ? { _mlSaleAmountCLP: mlSaleAmountCLP } : {}),
+        };
 
         const newOrder = await prisma.order.create({
           data: {
@@ -124,12 +150,12 @@ export async function syncMercadoLibreOrdersForUser(
             productId: product.id,
             paypalOrderId: orderItems.length === 1 ? paypalOrderId : `${ML_PAYPAL_PREFIX}${mlOrderId}-${itemId}`,
             title: product.title || `ML Order ${mlOrderId}`,
-            price: amount,
+            price: purchaseCost,
             currency: 'USD',
             status: 'PAID',
             customerName: buyerNick,
             customerEmail: (buyer as any).email || `${buyerNick}@mercadolibre.cl`,
-            shippingAddress: JSON.stringify(normalizedAddr),
+            shippingAddress: JSON.stringify(addrWithSaleMeta),
             productUrl: (product.aliexpressUrl || '').trim(),
           },
         });
@@ -141,6 +167,8 @@ export async function syncMercadoLibreOrdersForUser(
           mlOrderId,
           internalOrderId: newOrder.id,
           productId: product.id,
+          supplierCostUsd: purchaseCost,
+          mlSaleAmountCLP: mlSaleAmountCLP || null,
         });
 
         if ((newOrder.productUrl || '').trim()) {

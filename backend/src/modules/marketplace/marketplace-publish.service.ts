@@ -261,6 +261,11 @@ export class MarketplacePublishService {
       images: p.images,
       productData: p.productData,
       targetCountry: p.targetCountry,
+      packageWeightGrams: p.packageWeightGrams ?? null,
+      packageLengthCm: p.packageLengthCm ?? null,
+      packageWidthCm: p.packageWidthCm ?? null,
+      packageHeightCm: p.packageHeightCm ?? null,
+      maxUnitsPerOrder: p.maxUnitsPerOrder ?? null,
     }));
   }
 

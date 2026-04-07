@@ -27,6 +27,11 @@ export const syncQueue = isRedisAvailable && bullMQRedis
   ? new Queue('sync', { connection: bullMQRedis as any })
   : null;
 
+/** Mercado Libre inbound webhook — async order ingestion (Phase 1). */
+export const mlWebhookQueue = isRedisAvailable && bullMQRedis
+  ? new Queue('ml-webhook', { connection: bullMQRedis as any })
+  : null;
+
 // Job data interfaces
 export interface ScrapingJobData {
   userId: number;
@@ -57,6 +62,11 @@ export interface SyncJobData {
   productId: number;
   type: 'inventory' | 'price' | 'status';
   data: any;
+}
+
+export interface MlWebhookJobData {
+  eventId: string;
+  correlationId: string;
 }
 
 // Job Services
@@ -143,6 +153,52 @@ class JobService {
       removeOnFail: 5,
       ...options,
     });
+  }
+
+  async addMlWebhookJob(data: MlWebhookJobData, options?: any) {
+    if (!isRedisAvailable || !mlWebhookQueue) {
+      logger.warn('Redis not available - ml-webhook queue disabled');
+      return null;
+    }
+    return await mlWebhookQueue.add('process-ml-webhook', data, {
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 4000 },
+      removeOnComplete: 200,
+      removeOnFail: 80,
+      ...options,
+    });
+  }
+
+  async processMlWebhookJob(job: Job<MlWebhookJobData>) {
+    const { eventId, correlationId } = job.data;
+    const {
+      processMercadoLibreWebhookPayload,
+      markMercadoLibreWebhookProcessed,
+      markMercadoLibreWebhookFailed,
+    } = await import('./mercadolibre-webhook-async.service');
+
+    const row = await prisma.mercadoLibreWebhookEvent.findUnique({ where: { id: eventId } });
+    if (!row) {
+      throw new Error(`MercadoLibreWebhookEvent not found: ${eventId}`);
+    }
+
+    let body: Record<string, any>;
+    try {
+      body = JSON.parse(row.payloadJson) as Record<string, any>;
+    } catch (e: any) {
+      await markMercadoLibreWebhookFailed(eventId, `invalid payload JSON: ${e?.message || String(e)}`);
+      throw e;
+    }
+
+    try {
+      await processMercadoLibreWebhookPayload(body, correlationId);
+      await markMercadoLibreWebhookProcessed(eventId);
+      return { ok: true, eventId };
+    } catch (e: any) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await markMercadoLibreWebhookFailed(eventId, msg);
+      throw e;
+    }
   }
 
   /**
@@ -621,6 +677,7 @@ let scrapingWorker: Worker | null = null;
 let publishingWorker: Worker | null = null;
 let payoutWorker: Worker | null = null;
 let syncWorker: Worker | null = null;
+let mlWebhookWorker: Worker | null = null;
 let workersInitialized = false;
 
 /**
@@ -689,6 +746,17 @@ function initializeWorkers(): void {
     }
   );
 
+  mlWebhookWorker = new Worker(
+    'ml-webhook',
+    async (job: Job<MlWebhookJobData>) => {
+      return await jobService.processMlWebhookJob(job);
+    },
+    {
+      connection: bullMQRedis as any,
+      concurrency: 4,
+    }
+  );
+
   // Worker event listeners
   const setupWorkerEvents = (worker: Worker, name: string) => {
     worker.on('completed', (job) => {
@@ -708,6 +776,7 @@ function initializeWorkers(): void {
   if (publishingWorker) setupWorkerEvents(publishingWorker, 'Publishing');
   if (payoutWorker) setupWorkerEvents(payoutWorker, 'Payout');
   if (syncWorker) setupWorkerEvents(syncWorker, 'Sync');
+  if (mlWebhookWorker) setupWorkerEvents(mlWebhookWorker, 'ML-Webhook');
   
   workersInitialized = true;
 }
@@ -727,6 +796,7 @@ process.on('SIGINT', async () => {
     if (publishingWorker) closePromises.push(publishingWorker.close());
     if (payoutWorker) closePromises.push(payoutWorker.close());
     if (syncWorker) closePromises.push(syncWorker.close());
+    if (mlWebhookWorker) closePromises.push(mlWebhookWorker.close());
     
     await Promise.all(closePromises);
     

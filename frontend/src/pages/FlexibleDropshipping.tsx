@@ -307,7 +307,7 @@ export default function FlexibleDropshipping() {
       case 'walmart': return 'bg-cyan-100 text-cyan-700';
       case 'mercadolibre': return 'bg-yellow-100 text-yellow-700';
       case 'all': return 'bg-purple-100 text-purple-700';
-      default: return 'bg-gray-100 text-gray-700';
+      default: return 'bg-slate-100 text-slate-700';
     }
   };
 
@@ -319,8 +319,8 @@ export default function FlexibleDropshipping() {
     return (
       <div className="p-6 space-y-4">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-48 mb-4"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
+          <div className="h-8 bg-slate-200 rounded w-48 mb-4"></div>
+          <div className="h-64 bg-slate-200 rounded"></div>
         </div>
       </div>
     );
@@ -331,13 +331,13 @@ export default function FlexibleDropshipping() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Flexible Dropshipping</h1>
-          <p className="text-gray-600">Multi-supplier, multi-marketplace strategy controls</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Flexible Dropshipping</h1>
+          <p className="text-slate-600">Multi-supplier, multi-marketplace strategy controls</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => openSupplierModal()}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2"
+            className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 flex items-center gap-2"
           >
             <Settings className="w-4 h-4" />
             Manage Suppliers
@@ -354,54 +354,54 @@ export default function FlexibleDropshipping() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-green-100 rounded-lg">
               <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600">Active Rules</div>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-sm text-slate-600">Active Rules</div>
+              <div className="text-2xl font-bold text-slate-900">
                 {rules.filter(r => r.active).length}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Package className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600">Total Rules</div>
-              <div className="text-2xl font-bold text-gray-900">{rules.length}</div>
+              <div className="text-sm text-slate-600">Total Rules</div>
+              <div className="text-2xl font-bold text-slate-900">{rules.length}</div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-purple-100 rounded-lg">
               <ShoppingCart className="w-6 h-6 text-purple-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600">Active Suppliers</div>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-sm text-slate-600">Active Suppliers</div>
+              <div className="text-2xl font-bold text-slate-900">
                 {suppliers.filter(s => s.active).length}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-yellow-100 rounded-lg">
               <TrendingUp className="w-6 h-6 text-yellow-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600">Avg. Margin</div>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-sm text-slate-600">Avg. Margin</div>
+              <div className="text-2xl font-bold text-slate-900">
                 {rules.length > 0 
                   ? ((rules.reduce((sum, r) => sum + r.minMargin, 0) / rules.length).toFixed(1))
                   : '0'}%
@@ -412,10 +412,10 @@ export default function FlexibleDropshipping() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
@@ -450,44 +450,44 @@ export default function FlexibleDropshipping() {
       </div>
 
       {/* Rules Table */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 dark:bg-gray-700/50">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50 dark:bg-slate-800/50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rule Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Margin Range</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Multiplier</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Auto Features</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Priority</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Rule Name</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Supplier</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Marketplace</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Margin Range</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Multiplier</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Auto Features</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Status</th>
+              <th className="px-6 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Actions</th>
             </tr>
           </thead>
-          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+          <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
             {paginatedRules.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={9} className="px-6 py-8 text-center text-slate-500">
                   No rules found
                 </td>
               </tr>
             )}
             {paginatedRules.map((rule) => (
-              <tr key={rule.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+              <tr key={rule.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium">
+                  <span className="px-3 py-1 bg-slate-100 rounded-full text-sm font-medium">
                     #{rule.priority}
                   </span>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-gray-900">{rule.name}</div>
+                  <div className="text-sm font-medium text-slate-900">{rule.name}</div>
                   {rule.description && (
-                    <div className="text-sm text-gray-500">{rule.description}</div>
+                    <div className="text-sm text-slate-500">{rule.description}</div>
                   )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
+                  <div className="text-sm text-slate-900">
                     {suppliers.find(s => s.id === rule.supplierId)?.name || 'Unknown'}
                   </div>
                 </td>
@@ -497,12 +497,12 @@ export default function FlexibleDropshipping() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
+                  <div className="text-sm text-slate-900">
                     {rule.minMargin}% - {rule.maxMargin}%
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-slate-900">
                     ×{rule.priceMultiplier}
                   </div>
                 </td>
@@ -549,7 +549,7 @@ export default function FlexibleDropshipping() {
                     </button>
                     <button
                       onClick={() => toggleRuleStatus(rule.id, rule.active)}
-                      className="text-gray-600 hover:text-gray-900"
+                      className="text-slate-600 hover:text-slate-900"
                       title={rule.active ? 'Deactivate' : 'Activate'}
                     >
                       {rule.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
@@ -571,15 +571,15 @@ export default function FlexibleDropshipping() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
-          <div className="text-sm text-gray-700">
+        <div className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3">
+          <div className="text-sm text-slate-700">
             Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredRules.length)} of {filteredRules.length} rules
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50 disabled:opacity-50"
             >
               Previous
             </button>
@@ -589,7 +589,7 @@ export default function FlexibleDropshipping() {
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50 disabled:opacity-50"
             >
               Next
             </button>
@@ -600,19 +600,19 @@ export default function FlexibleDropshipping() {
       {/* Modal: Create/Edit Rule */}
       {showRuleModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <h3 className="text-xl font-semibold">
                 {selectedRule ? 'Edit Rule' : 'Create New Rule'}
               </h3>
-              <button onClick={() => setShowRuleModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowRuleModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Rule Name *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Rule Name *</label>
                   <input
                     type="text"
                     value={ruleForm.name}
@@ -623,7 +623,7 @@ export default function FlexibleDropshipping() {
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
                   <textarea
                     value={ruleForm.description}
                     onChange={(e) => setRuleForm({ ...ruleForm, description: e.target.value })}
@@ -634,7 +634,7 @@ export default function FlexibleDropshipping() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Supplier *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Supplier *</label>
                   <select
                     value={ruleForm.supplierId}
                     onChange={(e) => setRuleForm({ ...ruleForm, supplierId: Number(e.target.value) })}
@@ -648,7 +648,7 @@ export default function FlexibleDropshipping() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Marketplace</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Marketplace</label>
                   <select
                     value={ruleForm.marketplace}
                     onChange={(e) => setRuleForm({ ...ruleForm, marketplace: e.target.value as any })}
@@ -663,7 +663,7 @@ export default function FlexibleDropshipping() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Min Margin (%)</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Min Margin (%)</label>
                   <input
                     type="number"
                     value={ruleForm.minMargin}
@@ -675,7 +675,7 @@ export default function FlexibleDropshipping() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Max Margin (%)</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Max Margin (%)</label>
                   <input
                     type="number"
                     value={ruleForm.maxMargin}
@@ -687,7 +687,7 @@ export default function FlexibleDropshipping() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Price Multiplier</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Price Multiplier</label>
                   <input
                     type="number"
                     value={ruleForm.priceMultiplier}
@@ -699,7 +699,7 @@ export default function FlexibleDropshipping() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
                   <input
                     type="number"
                     value={ruleForm.priority}
@@ -717,7 +717,7 @@ export default function FlexibleDropshipping() {
                       onChange={(e) => setRuleForm({ ...ruleForm, autoRepricing: e.target.checked })}
                       className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                     />
-                    <span className="text-sm font-medium text-gray-700">Enable Auto-Repricing</span>
+                    <span className="text-sm font-medium text-slate-700">Enable Auto-Repricing</span>
                   </label>
 
                   <label className="flex items-center gap-2">
@@ -727,7 +727,7 @@ export default function FlexibleDropshipping() {
                       onChange={(e) => setRuleForm({ ...ruleForm, autoStockSync: e.target.checked })}
                       className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                     />
-                    <span className="text-sm font-medium text-gray-700">Enable Auto Stock Sync</span>
+                    <span className="text-sm font-medium text-slate-700">Enable Auto Stock Sync</span>
                   </label>
 
                   <label className="flex items-center gap-2">
@@ -737,7 +737,7 @@ export default function FlexibleDropshipping() {
                       onChange={(e) => setRuleForm({ ...ruleForm, active: e.target.checked })}
                       className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                     />
-                    <span className="text-sm font-medium text-gray-700">Rule Active</span>
+                    <span className="text-sm font-medium text-slate-700">Rule Active</span>
                   </label>
                 </div>
               </div>
@@ -753,10 +753,10 @@ export default function FlexibleDropshipping() {
                 </div>
               </div>
             </div>
-            <div className="p-6 border-t flex justify-end gap-3">
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
               <button
                 onClick={() => setShowRuleModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                className="px-4 py-2 border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50"
               >
                 Cancel
               </button>
@@ -775,22 +775,22 @@ export default function FlexibleDropshipping() {
       {/* Modal: Manage Suppliers */}
       {showSupplierModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <h3 className="text-xl font-semibold">Manage Suppliers</h3>
-              <button onClick={() => setShowSupplierModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowSupplierModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6">
               {/* Supplier Form */}
-              <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
-                <h4 className="font-semibold text-gray-900 mb-4">
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-6">
+                <h4 className="font-semibold text-slate-900 mb-4">
                   {selectedSupplier ? 'Edit Supplier' : 'Add New Supplier'}
                 </h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Name *</label>
                     <input
                       type="text"
                       value={supplierForm.name}
@@ -800,7 +800,7 @@ export default function FlexibleDropshipping() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">API URL</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">API URL</label>
                     <input
                       type="url"
                       value={supplierForm.apiUrl}
@@ -810,7 +810,7 @@ export default function FlexibleDropshipping() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">API Key</label>
                     <input
                       type="password"
                       value={supplierForm.apiKey}
@@ -820,7 +820,7 @@ export default function FlexibleDropshipping() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Shipping Time (days)</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Shipping Time (days)</label>
                     <input
                       type="number"
                       value={supplierForm.shippingTime}
@@ -830,7 +830,7 @@ export default function FlexibleDropshipping() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Reliability Score (%)</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Reliability Score (%)</label>
                     <input
                       type="number"
                       value={supplierForm.reliabilityScore}
@@ -848,7 +848,7 @@ export default function FlexibleDropshipping() {
                         onChange={(e) => setSupplierForm({ ...supplierForm, active: e.target.checked })}
                         className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                       />
-                      <span className="text-sm font-medium text-gray-700">Active</span>
+                      <span className="text-sm font-medium text-slate-700">Active</span>
                     </label>
                   </div>
                 </div>
@@ -866,7 +866,7 @@ export default function FlexibleDropshipping() {
                           active: true
                         });
                       }}
-                      className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                      className="px-4 py-2 border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50"
                     >
                       Cancel Edit
                     </button>
@@ -883,13 +883,13 @@ export default function FlexibleDropshipping() {
 
               {/* Suppliers List */}
               <div>
-                <h4 className="font-semibold text-gray-900 mb-4">Current Suppliers ({suppliers.length})</h4>
+                <h4 className="font-semibold text-slate-900 mb-4">Current Suppliers ({suppliers.length})</h4>
                 <div className="space-y-2">
                   {suppliers.map(supplier => (
-                    <div key={supplier.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <div key={supplier.id} className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <div className="flex-1">
-                        <div className="font-medium text-gray-900">{supplier.name}</div>
-                        <div className="text-sm text-gray-500">
+                        <div className="font-medium text-slate-900">{supplier.name}</div>
+                        <div className="text-sm text-slate-500">
                           Shipping: {supplier.shippingTime || 'N/A'} days | 
                           Reliability: {supplier.reliabilityScore || 'N/A'}%
                         </div>
@@ -912,7 +912,7 @@ export default function FlexibleDropshipping() {
                         </button>
                         <button
                           onClick={() => toggleSupplierStatus(supplier.id, supplier.active)}
-                          className="p-2 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
+                          className="p-2 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded"
                         >
                           {supplier.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
                         </button>
@@ -926,7 +926,7 @@ export default function FlexibleDropshipping() {
                     </div>
                   ))}
                   {suppliers.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
+                    <div className="text-center py-8 text-slate-500">
                       No suppliers configured yet
                     </div>
                   )}

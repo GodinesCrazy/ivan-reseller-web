@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import { useLiveData } from './useLiveData';
 
 describe('useLiveData', () => {
@@ -18,7 +18,9 @@ describe('useLiveData', () => {
     }
     render(<Host />);
     expect(fetchFn).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(5000);
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 

@@ -61,10 +61,10 @@ export default function SetupRequired() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="h-12 w-12 mx-auto mb-4 rounded-full border-4 border-gray-300 border-t-blue-600 animate-spin" />
-          <p className="text-gray-600">Verificando configuración...</p>
+          <div className="h-12 w-12 mx-auto mb-4 rounded-full border-4 border-slate-200 dark:border-slate-700 border-t-blue-600 animate-spin" />
+          <p className="text-slate-600 dark:text-slate-400">Verificando configuración...</p>
         </div>
       </div>
     );
@@ -76,7 +76,7 @@ export default function SetupRequired() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-2xl w-full bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-8">
+      <div className="max-w-2xl w-full bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-8">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-100 rounded-full mb-4">
             <svg
@@ -99,16 +99,16 @@ export default function SetupRequired() {
               />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">
             Configuración Requerida
           </h1>
-          <p className="text-gray-600">
+          <p className="text-slate-600 dark:text-slate-400">
             Configura tus APIs y tu email de PayPal para comenzar a vender y recibir ganancias
           </p>
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">
             ¿Qué necesitas configurar?
           </h2>
           <div className="space-y-4">
@@ -130,10 +130,10 @@ export default function SetupRequired() {
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                     Marketplace (eBay, Amazon o MercadoLibre)
                   </p>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
                     Necesario para publicar productos
                   </p>
                 </div>
@@ -157,10 +157,10 @@ export default function SetupRequired() {
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                     API de Búsqueda (AliExpress Affiliate, ScraperAPI o ZenRows)
                   </p>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
                     Necesario para buscar productos y oportunidades
                   </p>
                 </div>
@@ -187,14 +187,14 @@ export default function SetupRequired() {
           <button
             onClick={handleRefresh}
             disabled={checking}
-            className="flex-1 bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-6 py-3 rounded-lg font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {checking ? 'Verificando...' : 'Verificar de nuevo'}
           </button>
         </div>
 
         <div className="mt-6 text-center space-y-2">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             ¿Primera vez?{' '}
             <a
               href="/onboarding"
@@ -203,7 +203,7 @@ export default function SetupRequired() {
               Completa el asistente de configuración
             </a>
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             ¿Necesitas ayuda?{' '}
             <a
               href="/help"

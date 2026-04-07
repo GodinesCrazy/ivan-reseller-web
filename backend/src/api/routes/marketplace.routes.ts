@@ -30,7 +30,13 @@ const publishProductSchema = z.object({
   marketplace: z.enum(['ebay', 'mercadolibre', 'amazon']),
   environment: z.enum(['sandbox', 'production']).optional(),
   duplicateListing: z.boolean().optional(),
+  publishMode: z.enum(['local', 'international']).optional(),
+  publishIntent: z.enum(['dry_run', 'pilot', 'production']).optional(),
+  pilotManualAck: z.boolean().optional(),
   customData: z.object({
+    publishMode: z.enum(['local', 'international']).optional(),
+    publishIntent: z.enum(['dry_run', 'pilot', 'production']).optional(),
+    pilotManualAck: z.boolean().optional(),
     categoryId: z.string().optional(),
     price: z.number().optional(),
     quantity: z.number().optional(),
@@ -75,6 +81,37 @@ const syncInventorySchema = z.object({
   productId: z.number(),
   quantity: z.number().min(0),
 });
+
+const pilotApprovalCreateSchema = z.object({
+  productId: z.number().int().positive(),
+  requestedMode: z.enum(['local', 'international']).default('international'),
+  approvedBy: z.string().min(1).max(120),
+  reason: z.string().max(1000).optional(),
+  expiresAt: z.string().datetime().optional(),
+  evidenceSnapshot: z.record(z.any()).optional(),
+});
+
+const pilotAllowlistUpsertSchema = z.object({
+  enabled: z.boolean(),
+  notes: z.string().max(1000).optional(),
+  createdBy: z.string().max(120).optional(),
+  siteId: z.string().max(12).optional(),
+});
+
+const pilotControlStateSchema = z.object({
+  state: z.enum(['ready', 'aborted', 'rollback_requested', 'rollback_completed']),
+  reason: z.string().max(1000).optional(),
+  createdBy: z.string().max(120).optional(),
+  evidenceSnapshot: z.record(z.any()).optional(),
+});
+
+function parseBooleanQuery(value: unknown): boolean | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1') return true;
+  if (normalized === 'false' || normalized === '0') return false;
+  return undefined;
+}
 
 /**
  * GET /api/marketplace/validate/:marketplace
@@ -151,6 +188,285 @@ router.get('/validate/:marketplace', async (req: Request, res: Response, next: N
 });
 
 /**
+ * GET /api/marketplace/mercadolibre/program-verification
+ * Canonical external/declarative program verification snapshot for MLC channel readiness.
+ */
+router.get('/mercadolibre/program-verification', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const environment = req.query.environment as 'sandbox' | 'production' | undefined;
+    const requestedMode =
+      String(req.query.requestedMode || req.query.mode || '').toLowerCase() === 'international'
+        ? 'international'
+        : 'local';
+    const { buildMercadoLibreProgramVerification } = await import(
+      '../../services/mercadolibre-publish-preflight.service'
+    );
+    const data = await buildMercadoLibreProgramVerification({
+      userId: req.user!.userId,
+      environment,
+      requestedMode,
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/marketplace/mercadolibre/pilot-approvals
+ * Creates persistent auditable pilot approval for a product.
+ */
+router.post('/mercadolibre/pilot-approvals', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = pilotApprovalCreateSchema.parse(req.body || {});
+    const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+    const approval = await mlPilotOpsService.createPilotLaunchApproval({
+      userId: req.user!.userId,
+      productId: input.productId,
+      marketplace: 'mercadolibre',
+      requestedMode: input.requestedMode,
+      approvedBy: input.approvedBy,
+      reason: input.reason,
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+      evidenceSnapshot: input.evidenceSnapshot,
+    });
+    return res.status(201).json({ success: true, data: approval });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/marketplace/mercadolibre/pilot-approvals
+ * Lists pilot approvals for the authenticated user.
+ */
+router.get('/mercadolibre/pilot-approvals', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const productIdRaw = req.query.productId;
+    const decisionRaw = req.query.decision;
+    const limitRaw = Number(req.query.limit);
+    const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+    const approvals = await mlPilotOpsService.listPilotApprovals({
+      userId: req.user!.userId,
+      marketplace: 'mercadolibre',
+      productId:
+        productIdRaw != null && Number.isFinite(Number(productIdRaw))
+          ? Number(productIdRaw)
+          : undefined,
+      decision:
+        typeof decisionRaw === 'string' &&
+        ['approved', 'rejected', 'expired', 'consumed'].includes(decisionRaw)
+          ? (decisionRaw as any)
+          : undefined,
+      limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+    });
+    return res.json({ success: true, count: approvals.length, data: approvals });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/marketplace/mercadolibre/pilot-approvals/:approvalId
+ * Retrieves a single pilot approval.
+ */
+router.get(
+  '/mercadolibre/pilot-approvals/:approvalId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+      const approval = await mlPilotOpsService.getPilotApprovalById(
+        req.user!.userId,
+        String(req.params.approvalId || '')
+      );
+      return res.json({ success: true, data: approval });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/marketplace/mercadolibre/pilot-category-allowlist
+ * Lists category allowlist entries for MLC pilot.
+ */
+router.get(
+  '/mercadolibre/pilot-category-allowlist',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const siteId = String(req.query.siteId || 'MLC').toUpperCase();
+      const enabled = parseBooleanQuery(req.query.enabled);
+      const limit = Number(req.query.limit);
+      const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+      const entries = await mlPilotOpsService.listPilotCategoryAllowlist({
+        marketplace: 'mercadolibre',
+        siteId,
+        enabled,
+        limit: Number.isFinite(limit) ? limit : undefined,
+      });
+      return res.json({ success: true, count: entries.length, data: entries });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * PUT /api/marketplace/mercadolibre/pilot-category-allowlist/:categoryKey
+ * Upserts category allowlist entry for MLC pilot.
+ */
+router.put(
+  '/mercadolibre/pilot-category-allowlist/:categoryKey',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const payload = pilotAllowlistUpsertSchema.parse(req.body || {});
+      const categoryKey = String(req.params.categoryKey || '').trim();
+      if (!categoryKey) {
+        return res.status(400).json({ success: false, error: 'categoryKey is required' });
+      }
+      const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+      const entry = await mlPilotOpsService.upsertPilotCategoryAllowlistEntry({
+        marketplace: 'mercadolibre',
+        siteId: payload.siteId || 'MLC',
+        categoryKey,
+        enabled: payload.enabled,
+        notes: payload.notes,
+        createdBy: payload.createdBy || req.user?.username || `user_${req.user!.userId}`,
+      });
+      return res.json({ success: true, data: entry });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/marketplace/mercadolibre/pilot-ledger
+ * Lists pilot decision ledger rows (assessment + attempts).
+ */
+router.get('/mercadolibre/pilot-ledger', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const productIdRaw = req.query.productId;
+    const limit = Number(req.query.limit);
+    const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+    const rows = await mlPilotOpsService.listPilotDecisionLedger({
+      userId: req.user!.userId,
+      productId:
+        productIdRaw != null && Number.isFinite(Number(productIdRaw))
+          ? Number(productIdRaw)
+          : undefined,
+      marketplace: 'mercadolibre',
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+    return res.json({ success: true, count: rows.length, data: rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/marketplace/mercadolibre/pilot-control/:productId
+ * Returns current abort/rollback control state for product.
+ */
+router.get('/mercadolibre/pilot-control/:productId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const productId = Number(req.params.productId);
+    if (!Number.isFinite(productId) || productId <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid productId' });
+    }
+    const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+    const state = await mlPilotOpsService.getPilotControlState({
+      userId: req.user!.userId,
+      productId,
+      marketplace: 'mercadolibre',
+    });
+    return res.json({
+      success: true,
+      data: state || {
+        userId: req.user!.userId,
+        productId,
+        marketplace: 'mercadolibre',
+        state: 'ready',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/marketplace/mercadolibre/pilot-control/:productId
+ * Sets abort/rollback control state and appends ledger evidence.
+ */
+router.post('/mercadolibre/pilot-control/:productId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const productId = Number(req.params.productId);
+    if (!Number.isFinite(productId) || productId <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid productId' });
+    }
+    const payload = pilotControlStateSchema.parse(req.body || {});
+    const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+    const control = await mlPilotOpsService.setPilotControlState({
+      userId: req.user!.userId,
+      productId,
+      marketplace: 'mercadolibre',
+      state: payload.state,
+      reason: payload.reason,
+      createdBy: payload.createdBy || req.user?.username || `user_${req.user!.userId}`,
+      evidenceSnapshot: payload.evidenceSnapshot,
+    });
+    if (
+      payload.state === 'aborted' ||
+      payload.state === 'rollback_requested' ||
+      payload.state === 'rollback_completed'
+    ) {
+      await mlPilotOpsService.appendPilotDecisionLedger({
+        userId: req.user!.userId,
+        productId,
+        marketplace: 'mercadolibre',
+        publishIntent: 'pilot',
+        requestedMode: 'international',
+        modeResolved: 'international',
+        result: payload.state,
+        reason: payload.reason || `pilot_control:${payload.state}`,
+        evidenceSnapshot: {
+          controlState: payload.state,
+          createdBy: payload.createdBy || req.user?.username || `user_${req.user!.userId}`,
+        },
+      });
+    }
+    return res.json({ success: true, data: control });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/marketplace/mercadolibre/pilot-post-publish/:productId
+ * Returns minimum post-publication pilot monitoring snapshot.
+ */
+router.get(
+  '/mercadolibre/pilot-post-publish/:productId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const productId = Number(req.params.productId);
+      if (!Number.isFinite(productId) || productId <= 0) {
+        return res.status(400).json({ success: false, error: 'Invalid productId' });
+      }
+      const { mlPilotOpsService } = await import('../../services/ml-pilot-ops.service');
+      const data = await mlPilotOpsService.getPilotPostPublishStatus({
+        userId: req.user!.userId,
+        productId,
+        marketplace: 'mercadolibre',
+      });
+      return res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
  * POST /api/marketplace/publish
  * Publish product to a single marketplace
  * ✅ P0.4: Validar credenciales antes de publicar
@@ -160,6 +476,21 @@ router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response
   try {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'productId')) {
       const data = publishProductSchema.parse(req.body);
+      const resolvedPublishMode =
+        data.publishMode ||
+        data.customData?.publishMode ||
+        'local';
+      const resolvedPublishIntent =
+        data.publishIntent ||
+        data.customData?.publishIntent ||
+        'production';
+      const customDataWithMode = {
+        ...(data.customData || {}),
+        publishMode: resolvedPublishMode,
+        publishIntent: resolvedPublishIntent,
+        pilotManualAck:
+          data.pilotManualAck === true || data.customData?.pilotManualAck === true,
+      };
 
       // ✅ P0.4: Validar credenciales antes de publicar
       const credentials = await marketplaceService.getCredentials(
@@ -200,16 +531,17 @@ router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response
         {
           productId: data.productId,
           marketplace: data.marketplace,
-          customData: data.customData,
+          customData: customDataWithMode,
           duplicateListing: data.duplicateListing,
         },
         data.environment
       );
 
       if (result.success) {
-        res.status(201).json({
+        const isDryRun = result.dryRun === true;
+        res.status(isDryRun ? 200 : 201).json({
           success: true,
-          message: 'Product published successfully',
+          message: isDryRun ? 'Dry-run completed. No publication executed.' : 'Product published successfully',
           data: result,
         });
       } else {
@@ -223,6 +555,16 @@ router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response
     }
 
     const data = publishBatchSchema.parse(req.body);
+    const allowLegacyMlBatchPublish = process.env.ALLOW_LEGACY_ML_BATCH_PUBLISH === 'true';
+    if (data.marketplace === 'mercadolibre' && !allowLegacyMlBatchPublish) {
+      return res.status(423).json({
+        success: false,
+        error: 'mercadolibre_batch_publish_blocked_phase1',
+        message:
+          'MercadoLibre batch publish path is blocked to prevent canonical guard bypass. Use /api/marketplace/publish (single product) or /api/publisher/approve/:id. Legacy path requires explicit emergency flags and is not allowed for normal operation.',
+      });
+    }
+
     const result = await marketplacePublishService.publish({
       userId: req.user!.userId,
       marketplace: data.marketplace,

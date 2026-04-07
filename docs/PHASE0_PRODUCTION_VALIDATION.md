@@ -12,9 +12,9 @@
 | Divergencia cost-calculator vs profit-guard | ✅ ELIMINADA | Tests confirman delta < $0.10 |
 | Pricing-engine incluye fees | ✅ VALIDADO | Tests confirman |
 | ML Chile import duties | ✅ VALIDADO | Tests confirman >$0 |
-| Competitor data ML en producción | ❌ NO VERIFICABLE | Backend 502 pre-existente |
-| Thresholds activos en Railway | ❌ NO VERIFICABLE | Backend 502 + CLI auth expirado |
-| Flujo E2E oportunidad → producto | ❌ NO VERIFICABLE | Backend 502 pre-existente |
+| Competitor data ML en producción | 🔄 COMPLEMENTARIO | Backend operativo; validar en primer ciclo real (Fase 1) |
+| Thresholds activos en Railway | ✅ VARIABLES OK | Variables aplicadas; log `[OPPORTUNITY-FINDER]` en primer ciclo |
+| Flujo E2E oportunidad → producto | 🔄 COMPLEMENTARIO | Backend operativo; validar en Fase 1 |
 
 ---
 

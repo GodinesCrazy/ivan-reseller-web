@@ -145,6 +145,13 @@ interface ExecutiveReport {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
+const SEVERITY_LABEL_ES: Record<'low' | 'medium' | 'high' | 'critical', string> = {
+  low: 'bajo',
+  medium: 'medio',
+  high: 'alto',
+  critical: 'crítico',
+};
+
 export default function Reports() {
   const { environment } = useEnvironment();
   const [loading, setLoading] = useState(false);
@@ -166,7 +173,7 @@ export default function Reports() {
       id: 'products',
       name: 'Productos',
       icon: Package,
-      description: 'Performance y métricas de productos'
+      description: 'Rendimiento y métricas de productos'
     },
     {
       id: 'users',
@@ -178,19 +185,19 @@ export default function Reports() {
       id: 'marketplace-analytics',
       name: 'Marketplaces',
       icon: TrendingUp,
-      description: 'Analytics comparativo por marketplace'
+      description: 'Análisis comparativo por marketplace'
     },
     {
       id: 'listing-performance',
       name: 'Rendimiento Listings',
       icon: BarChart3,
-      description: 'Impresiones, clics, ventas y conversión por listing (Phase 2)'
+      description: 'Impresiones, clics, ventas y conversión por listing (Fase 2)'
     },
     {
       id: 'winning-products',
       name: 'Productos Ganadores',
       icon: Trophy,
-      description: 'Productos detectados como ganadores por impresiones, conversión y ventas (Phase 3)'
+      description: 'Productos detectados como ganadores por impresiones, conversión y ventas (Fase 3)'
     },
     {
       id: 'successful-operations',
@@ -431,8 +438,8 @@ export default function Reports() {
             <CardContent className="flex items-center p-4">
               <card.icon className="h-8 w-8 text-blue-600 mr-3" />
               <div>
-                <p className="text-sm font-medium text-gray-600">{card.title}</p>
-                <p className="text-2xl font-bold text-gray-900">{card.value}</p>
+                <p className="text-sm font-medium text-slate-600">{card.title}</p>
+                <p className="text-2xl font-bold text-slate-900">{card.value}</p>
               </div>
             </CardContent>
           </Card>
@@ -484,10 +491,10 @@ export default function Reports() {
     return (
       <div className="space-y-3">
         {performers.slice(0, 5).map((performer, index) => (
-          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
             <div>
               <p className="font-medium">{performer.username}</p>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-600">
                 {performer.totalProducts} productos • {performer.totalSales} ventas
               </p>
             </div>
@@ -495,7 +502,7 @@ export default function Reports() {
               <p className="font-bold text-green-600">
                 ${safeNumber(performer.totalRevenue).toLocaleString()}
               </p>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-600">
                 {performer.conversionRate.toFixed(1)}% conversión
               </p>
             </div>
@@ -523,7 +530,7 @@ export default function Reports() {
               <p className="text-sm">{alert.message}</p>
             </div>
             <Badge variant="secondary" className="ml-auto">
-              {alert.severity}
+              {SEVERITY_LABEL_ES[alert.severity]}
             </Badge>
           </div>
         ))}
@@ -536,7 +543,7 @@ export default function Reports() {
     if (loading) {
       return (
         <div className="flex items-center justify-center py-12">
-          <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+          <RefreshCw className="h-8 w-8 animate-spin text-slate-400" />
         </div>
       );
     }
@@ -544,8 +551,8 @@ export default function Reports() {
     if (!successStats || !learningPatterns) {
       return (
         <div className="text-center py-12">
-          <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">No hay datos de operaciones exitosas disponibles</p>
+          <AlertCircle className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+          <p className="text-slate-600">No hay datos de operaciones exitosas disponibles</p>
         </div>
       );
     }
@@ -556,23 +563,23 @@ export default function Reports() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Operaciones</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-600">Total Operaciones</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{successStats.total || 0}</div>
-              <p className="text-xs text-gray-500 mt-1">Operaciones completadas</p>
+              <p className="text-xs text-slate-500 mt-1">Operaciones completadas</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Tasa de Éxito</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-600">Tasa de Éxito</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
                 {successStats.successRate?.toFixed(1) || 0}%
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 {successStats.successful || 0} exitosas
               </p>
             </CardContent>
@@ -580,25 +587,25 @@ export default function Reports() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Precisión Promedio</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-600">Precisión Promedio</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
                 {safeNumber(successStats.avgProfitAccuracy).toFixed(1)}%
               </div>
-              <p className="text-xs text-gray-500 mt-1">Exactitud de predicción</p>
+              <p className="text-xs text-slate-500 mt-1">Exactitud de predicción</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Días Promedio</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-600">Días Promedio</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-purple-600">
                 {successStats.avgDaysToComplete?.toFixed(1) || 0}
               </div>
-              <p className="text-xs text-gray-500 mt-1">Tiempo de ciclo completo</p>
+              <p className="text-xs text-slate-500 mt-1">Tiempo de ciclo completo</p>
             </CardContent>
           </Card>
         </div>
@@ -616,11 +623,11 @@ export default function Reports() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-2xl font-bold text-orange-600">{successStats.withReturns || 0}</div>
-                  <p className="text-sm text-gray-600">Con Devoluciones</p>
+                  <p className="text-sm text-slate-600">Con Devoluciones</p>
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-red-600">{successStats.withIssues || 0}</div>
-                  <p className="text-sm text-gray-600">Con Problemas</p>
+                  <p className="text-sm text-slate-600">Con Problemas</p>
                 </div>
               </div>
             </CardContent>
@@ -642,7 +649,7 @@ export default function Reports() {
                 <div className="text-2xl font-bold text-purple-600">
                   {safeNumber(learningPatterns.avgProfitAccuracy).toFixed(1)}%
                 </div>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-slate-600 mt-1">
                   La IA predice correctamente la ganancia en promedio
                 </p>
               </div>
@@ -652,7 +659,7 @@ export default function Reports() {
                 <div className="text-2xl font-bold text-blue-600">
                   {learningPatterns.avgDaysToComplete?.toFixed(1) || 0} días
                 </div>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-slate-600 mt-1">
                   Tiempo promedio desde publicación hasta entrega completa
                 </p>
               </div>
@@ -665,9 +672,9 @@ export default function Reports() {
                       .sort(([, a]: any, [, b]: any) => b - a)
                       .slice(0, 5)
                       .map(([category, count]: [string, any]) => (
-                        <div key={category} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div key={category} className="flex items-center justify-between p-2 bg-slate-50 rounded">
                           <span className="text-sm font-medium">{category}</span>
-                          <span className="text-sm text-gray-600">{count} operaciones</span>
+                          <span className="text-sm text-slate-600">{count} operaciones</span>
                         </div>
                       ))}
                   </div>
@@ -690,7 +697,7 @@ export default function Reports() {
               <div className="text-3xl font-bold text-green-600">
                 {safeNumber(successStats.avgCustomerSatisfaction).toFixed(1)}/5
               </div>
-              <p className="text-sm text-gray-600 mt-2">Calificación promedio de clientes</p>
+              <p className="text-sm text-slate-600 mt-2">Calificación promedio de clientes</p>
             </CardContent>
           </Card>
         )}
@@ -702,17 +709,17 @@ export default function Reports() {
     <div className="space-y-6">
       <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 p-4">
         <p className="text-sm text-amber-900 dark:text-amber-100">
-          <strong>Analytics only — not operational proof.</strong> Los reportes aquí son datos agregados y analíticos. Para verdad operativa canónica (blockers, proof ladder, listing state), usa{' '}
+          <strong>Solo analítica — no es prueba operativa.</strong> Los reportes aquí son datos agregados y analíticos. Para la verdad operativa canónica (bloqueos, escalera de prueba, estado del listing), usa{' '}
           <Link to="/control-center" className="font-medium text-amber-800 dark:text-amber-200 hover:underline">
-            Control Center
+            Centro de control
           </Link>
-          , Órdenes y Finance.
+          , Órdenes y Finanzas.
         </p>
       </div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reportes y Analytics</h1>
-          <p className="text-gray-600">Genera reportes detallados y analiza el rendimiento</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Reportes y Analytics</h1>
+          <p className="text-xs text-slate-500">Genera reportes detallados y analiza el rendimiento</p>
         </div>
         <Button onClick={generateReport} disabled={loading}>
           {loading ? (
@@ -804,7 +811,7 @@ export default function Reports() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Performance por Marketplace</CardTitle>
+                    <CardTitle>Rendimiento por marketplace</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {renderMarketplaceChart(executiveData.marketplaceBreakdown)}
@@ -824,7 +831,7 @@ export default function Reports() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Top Performers</CardTitle>
+                    <CardTitle>Principales desempeños</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {renderTopPerformers(executiveData.topPerformers)}
@@ -839,7 +846,7 @@ export default function Reports() {
                     {executiveData.alerts.length > 0 ? (
                       renderAlerts(executiveData.alerts)
                     ) : (
-                      <p className="text-gray-500 text-center py-4">
+                      <p className="text-slate-500 text-center py-4">
                         No hay alertas activas
                       </p>
                     )}
@@ -859,7 +866,7 @@ export default function Reports() {
                   <type.icon className="h-5 w-5 mr-2" />
                   {type.name}
                 </CardTitle>
-                <p className="text-gray-600">{type.description}</p>
+                <p className="text-slate-600">{type.description}</p>
               </CardHeader>
               <CardContent>
                 {reportData && reportData.summary && (
@@ -868,21 +875,21 @@ export default function Reports() {
                     
                     {reportData.data && reportData.data.length > 0 ? (
                       <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
+                        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                          <thead className="bg-slate-50 dark:bg-slate-900/50">
                             <tr>
                               {Object.keys(reportData.data[0]).map((key) => (
-                                <th key={key} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th key={key} className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">
                                   {key}
                                 </th>
                               ))}
                             </tr>
                           </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
+                          <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
                             {reportData.data.slice(0, 10).map((row: any, index: number) => (
-                              <tr key={index} className="hover:bg-gray-50">
+                              <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/80">
                                 {Object.values(row).map((value: any, cellIndex) => (
-                                  <td key={cellIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  <td key={cellIndex} className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-slate-100">
                                     {value?.toString() || '-'}
                                   </td>
                                 ))}
@@ -891,7 +898,7 @@ export default function Reports() {
                           </tbody>
                         </table>
                         {reportData.data.length > 10 && (
-                          <p className="text-center text-gray-500 py-4">
+                          <p className="text-center text-slate-500 py-4">
                             Mostrando 10 de {reportData.data.length} registros. 
                             Usa formato Excel o PDF para ver todos los datos.
                           </p>
@@ -899,8 +906,8 @@ export default function Reports() {
                       </div>
                     ) : (
                       <div className="text-center py-8">
-                        <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-500">
+                        <FileText className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                        <p className="text-slate-500">
                           Configura los filtros y genera un reporte para ver los datos
                         </p>
                       </div>
@@ -920,7 +927,7 @@ export default function Reports() {
                 <BarChart3 className="h-5 w-5" />
                 Rendimiento por listing
               </CardTitle>
-              <p className="text-gray-600">Impresiones, clics, ventas y conversión desde GET /api/analytics/listings</p>
+              <p className="text-slate-600">Impresiones, clics, ventas y conversión desde GET /api/analytics/listings</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-4 items-center">
@@ -959,7 +966,7 @@ export default function Reports() {
 
               {listingAnalyticsLoading && (
                 <div className="flex justify-center py-8">
-                  <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+                  <RefreshCw className="h-8 w-8 animate-spin text-slate-400" />
                 </div>
               )}
 
@@ -968,7 +975,7 @@ export default function Reports() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Card>
                       <CardContent className="pt-4">
-                        <p className="text-sm text-gray-600">Impresiones</p>
+                        <p className="text-sm text-slate-600">Impresiones</p>
                         <p className="text-2xl font-bold">
                           {listingAnalytics.listings.reduce((s, r) => s + (r.impressions || 0), 0).toLocaleString()}
                         </p>
@@ -976,7 +983,7 @@ export default function Reports() {
                     </Card>
                     <Card>
                       <CardContent className="pt-4">
-                        <p className="text-sm text-gray-600">Clics</p>
+                        <p className="text-sm text-slate-600">Clics</p>
                         <p className="text-2xl font-bold">
                           {listingAnalytics.listings.reduce((s, r) => s + (r.clicks || 0), 0).toLocaleString()}
                         </p>
@@ -984,7 +991,7 @@ export default function Reports() {
                     </Card>
                     <Card>
                       <CardContent className="pt-4">
-                        <p className="text-sm text-gray-600">Ventas</p>
+                        <p className="text-sm text-slate-600">Ventas</p>
                         <p className="text-2xl font-bold">
                           {listingAnalytics.listings.reduce((s, r) => s + (r.sales || 0), 0).toLocaleString()}
                         </p>
@@ -992,7 +999,7 @@ export default function Reports() {
                     </Card>
                     <Card>
                       <CardContent className="pt-4">
-                        <p className="text-sm text-gray-600">Conv. promedio</p>
+                        <p className="text-sm text-slate-600">Conv. promedio</p>
                         <p className="text-2xl font-bold">
                           {(() => {
                             const withRate = listingAnalytics.listings.filter((r) => r.conversionRate != null && r.conversionRate > 0);
@@ -1031,29 +1038,29 @@ export default function Reports() {
                   )}
 
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                      <thead className="bg-gray-50 dark:bg-gray-800">
+                    <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                      <thead>
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Listing / Producto</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Marketplace</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Impresiones</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Clics</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">CTR</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Ventas</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Conv.%</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Salud</th>
+                          <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Listing / Producto</th>
+                          <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Marketplace</th>
+                          <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Impresiones</th>
+                          <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Clics</th>
+                          <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">CTR</th>
+                          <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Ventas</th>
+                          <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Conv.%</th>
+                          <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Salud</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
                         {listingAnalytics.listings.slice(0, 50).map((r) => {
                           const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null;
                           const health = r.healthScore ?? listingHealthScore(r);
                           return (
                             <tr key={`${r.listingId}-${r.marketplace}`}>
-                              <td className="px-3 py-2 text-sm text-gray-900 dark:text-gray-100 truncate max-w-[200px]" title={r.productTitle ?? ''}>
+                              <td className="px-3 py-2 text-sm text-slate-900 dark:text-slate-100 truncate max-w-[200px]" title={r.productTitle ?? ''}>
                                 {r.productTitle ?? r.marketplaceListingId}
                               </td>
-                              <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{r.marketplace}</td>
+                              <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-400">{r.marketplace}</td>
                               <td className="px-3 py-2 text-sm text-right">{r.impressions.toLocaleString()}</td>
                               <td className="px-3 py-2 text-sm text-right">{r.clicks.toLocaleString()}</td>
                               <td className="px-3 py-2 text-sm text-right">{ctr != null ? `${ctr.toFixed(2)}%` : '—'}</td>
@@ -1062,7 +1069,7 @@ export default function Reports() {
                                 {r.conversionRate != null ? `${(Number(r.conversionRate) * 100).toFixed(2)}%` : '—'}
                               </td>
                               <td className="px-3 py-2 text-sm text-right">
-                                <span className={`font-medium ${health >= 60 ? 'text-green-600 dark:text-green-400' : health >= 30 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}`} title="Visibilidad, conversión y ventas">
+                                <span className={`font-medium ${health >= 60 ? 'text-green-600 dark:text-green-400' : health >= 30 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`} title="Visibilidad, conversión y ventas">
                                   {health}
                                 </span>
                               </td>
@@ -1072,14 +1079,14 @@ export default function Reports() {
                       </tbody>
                     </table>
                     {listingAnalytics.listings.length > 50 && (
-                      <p className="text-center text-gray-500 py-2 text-sm">Mostrando 50 de {listingAnalytics.listings.length} listings</p>
+                      <p className="text-center text-slate-500 py-2 text-sm">Mostrando 50 de {listingAnalytics.listings.length} listings</p>
                     )}
                   </div>
                 </>
               )}
 
               {!listingAnalyticsLoading && listingAnalytics && listingAnalytics.listings.length === 0 && (
-                <p className="text-gray-500 text-center py-8">No hay datos de listings en el período seleccionado.</p>
+                <p className="text-slate-500 text-center py-8">No hay datos de listings en el período seleccionado.</p>
               )}
             </CardContent>
           </Card>
@@ -1093,7 +1100,7 @@ export default function Reports() {
                 <Trophy className="h-5 w-5" />
                 Productos ganadores
               </CardTitle>
-              <p className="text-gray-600">Detectados por impresiones, conversión y velocidad de ventas (motor Phase 3)</p>
+              <p className="text-slate-600">Detectados por impresiones, conversión y velocidad de ventas (motor Fase 3)</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-4 items-center">
@@ -1131,33 +1138,33 @@ export default function Reports() {
               </div>
               {winningProductsLoading && (
                 <div className="flex justify-center py-8">
-                  <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+                  <RefreshCw className="h-8 w-8 animate-spin text-slate-400" />
                 </div>
               )}
               {!winningProductsLoading && winningProducts && winningProducts.winners.length > 0 && (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead>
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Score</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ventas</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Velocidad</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Conv.%</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Detectado</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Producto</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Marketplace</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Puntuación</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Ventas</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Velocidad</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Conv.%</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">Detectado</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
                       {winningProducts.winners.map((w: any) => (
                         <tr key={w.id}>
-                          <td className="px-3 py-2 text-sm text-gray-900 truncate max-w-[220px]" title={w.productTitle ?? ''}>{w.productTitle ?? `Product ${w.productId}`}</td>
-                          <td className="px-3 py-2 text-sm text-gray-600">{w.marketplace}</td>
+                          <td className="px-3 py-2 text-sm text-slate-900 dark:text-slate-100 truncate max-w-[220px]" title={w.productTitle ?? ''}>{w.productTitle ?? `Producto ${w.productId}`}</td>
+                          <td className="px-3 py-2 text-sm text-slate-600 dark:text-slate-400">{w.marketplace}</td>
                           <td className="px-3 py-2 text-sm text-right font-medium">{typeof w.score === 'number' ? w.score.toFixed(2) : w.score}</td>
                           <td className="px-3 py-2 text-sm text-right">{w.sales != null ? w.sales : '—'}</td>
                           <td className="px-3 py-2 text-sm text-right">{w.salesVelocity != null ? w.salesVelocity.toFixed(2) : '—'}</td>
                           <td className="px-3 py-2 text-sm text-right">{w.conversionRate != null ? `${(w.conversionRate * 100).toFixed(2)}%` : '—'}</td>
-                          <td className="px-3 py-2 text-sm text-gray-500">{w.detectedAt ? new Date(w.detectedAt).toLocaleDateString() : '—'}</td>
+                          <td className="px-3 py-2 text-sm text-slate-500">{w.detectedAt ? new Date(w.detectedAt).toLocaleDateString() : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1165,7 +1172,7 @@ export default function Reports() {
                 </div>
               )}
               {!winningProductsLoading && winningProducts && winningProducts.winners.length === 0 && (
-                <p className="text-gray-500 text-center py-8">No hay productos ganadores detectados en el período. El worker se ejecuta diariamente.</p>
+                <p className="text-slate-500 text-center py-8">No hay productos ganadores detectados en el período. El worker se ejecuta diariamente.</p>
               )}
             </CardContent>
           </Card>

@@ -1490,6 +1490,21 @@ export class AutopilotSystem extends EventEmitter {
    */
   private async pollMarketplaceOrders(userId: number, environment?: 'sandbox' | 'production'): Promise<void> {
     try {
+      const forcePolling = process.env.ML_FORCE_ORDER_POLLING === 'true';
+      if (!forcePolling) {
+        const { getWebhookStatusWithProof, getWebhookStatus } = await import('./webhook-readiness.service');
+        const webhook = await getWebhookStatusWithProof().catch(() => getWebhookStatus());
+        const mlWebhook = webhook.mercadolibre;
+        if (mlWebhook?.configured === true && mlWebhook?.eventFlowReady === true) {
+          logger.info('[AUTOPILOT] Skipping ML order polling: canonical webhook flow is ready', {
+            userId,
+            configured: mlWebhook.configured,
+            eventFlowReady: mlWebhook.eventFlowReady,
+          });
+          return;
+        }
+      }
+
       const creds = await this.marketplaceService.getCredentials(userId, 'mercadolibre', environment);
       if (!creds?.isActive || !creds.credentials?.accessToken) return;
 

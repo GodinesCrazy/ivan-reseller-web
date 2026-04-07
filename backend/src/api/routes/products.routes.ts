@@ -428,6 +428,16 @@ router.get('/:id/publish-preflight', wrapAsync(async (req: Request, res: Respons
   const productId = Number(req.params.id);
   const marketplace = String(req.query.marketplace || 'mercadolibre').toLowerCase();
   const environment = req.query.environment as 'sandbox' | 'production' | undefined;
+  const requestedMode =
+    String(req.query.requestedMode || req.query.mode || '').toLowerCase() === 'international'
+      ? 'international'
+      : 'local';
+  const publishIntentRaw = String(req.query.publishIntent || '').toLowerCase();
+  const publishIntent =
+    publishIntentRaw === 'dry_run' || publishIntentRaw === 'pilot' || publishIntentRaw === 'production'
+      ? (publishIntentRaw as 'dry_run' | 'pilot' | 'production')
+      : 'production';
+  const pilotManualAck = String(req.query.pilotManualAck || '').toLowerCase() === 'true';
 
   if (!productId || Number.isNaN(productId)) {
     return res.status(400).json({ success: false, error: 'Invalid product ID' });
@@ -451,9 +461,44 @@ router.get('/:id/publish-preflight', wrapAsync(async (req: Request, res: Respons
     productId,
     isAdmin,
     environment,
+    requestedMode,
+    publishIntent,
+    pilotManualAck,
   });
 
   res.json({ success: true, data });
+}));
+
+// GET /api/products/:id/publish-dry-run — explicit dry run assessment (never publishes)
+router.get('/:id/publish-dry-run', wrapAsync(async (req: Request, res: Response) => {
+  const productId = Number(req.params.id);
+  const environment = req.query.environment as 'sandbox' | 'production' | undefined;
+  const requestedMode =
+    String(req.query.requestedMode || req.query.mode || '').toLowerCase() === 'international'
+      ? 'international'
+      : 'local';
+
+  if (!productId || Number.isNaN(productId)) {
+    return res.status(400).json({ success: false, error: 'Invalid product ID' });
+  }
+
+  const userRole = req.user?.role?.toUpperCase();
+  const isAdmin = userRole === 'ADMIN';
+  const userId = req.user!.userId;
+
+  const { buildMercadoLibrePublishPreflight } = await import(
+    '../../services/mercadolibre-publish-preflight.service'
+  );
+  const data = await buildMercadoLibrePublishPreflight({
+    userId,
+    productId,
+    isAdmin,
+    environment,
+    requestedMode,
+    publishIntent: 'dry_run',
+  });
+
+  res.json({ success: true, dryRun: true, data });
 }));
 
 // GET /api/products/:id - Obtener por ID

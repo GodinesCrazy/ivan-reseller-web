@@ -34,7 +34,7 @@ export default function SystemLogs() {
       const es = new EventSource(`${base}/api/logs/stream`, { withCredentials: true } as any);
       esRef.current = es;
       es.onopen = () => { setConnected(true); setError(null); };
-      es.onerror = () => setError('Stream not available yet');
+      es.onerror = () => setError('El stream aún no está disponible');
       es.onmessage = (ev) => {
         if (paused) return;
         const payload = ev.data;
@@ -132,31 +132,31 @@ export default function SystemLogs() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">System Logs</h1>
-          <p className="text-gray-600">Live stream, filtros y exportación</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Registros del sistema</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Stream en vivo, filtros y exportación</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={toggleStream}
-            className={`px-4 py-2 border rounded-lg flex items-center gap-2 ${paused ? 'bg-yellow-50 border-yellow-300' : 'hover:bg-gray-50 dark:bg-gray-700/50'}`}
-            title={paused ? 'Resume stream' : 'Pause stream'}
+            className={`px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center gap-2 ${paused ? 'bg-yellow-50 border-yellow-300 dark:border-yellow-700' : 'hover:bg-slate-50 dark:hover:bg-slate-900/50 dark:bg-slate-900/50'}`}
+            title={paused ? 'Reanudar stream' : 'Pausar stream'}
           >
             {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-            {paused ? 'Resume' : 'Pause'}
+            {paused ? 'Reanudar' : 'Pausar'}
           </button>
           <button
             onClick={clearLogs}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700/50 flex items-center gap-2"
+            className="px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900/50 dark:bg-slate-900/50 flex items-center gap-2"
           >
             <Trash2 className="w-4 h-4" />
-            Clear
+            Limpiar
           </button>
           <button
             onClick={exportCsv}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+            className="px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
-            Export CSV
+            Exportar CSV
           </button>
         </div>
       </div>
@@ -164,30 +164,30 @@ export default function SystemLogs() {
       {/* Status */}
       <div className="flex items-center gap-3 text-sm">
         <span className={`px-2 py-1 rounded ${connected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {connected ? 'Connected' : 'Disconnected'}
+          {connected ? 'Conectado' : 'Desconectado'}
         </span>
-        <span className="text-gray-600">{filtered.length} matches</span>
+        <span className="text-slate-600 dark:text-slate-400">{filtered.length} coincidencias</span>
         {error && <span className="text-red-600">{error}</span>}
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 border rounded-lg p-4">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
               placeholder="Buscar en mensaje/módulo..."
-              className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+              className="w-full pl-10 pr-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary-500"
             />
           </div>
           <select
             value={level}
             onChange={(e) => { setLevel(e.target.value as LogLevel); setCurrentPage(1); }}
-            className="px-3 py-2 border rounded-lg"
+            className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
           >
-            <option value="all">All levels</option>
+            <option value="all">Todos los niveles</option>
             <option value="debug">Debug</option>
             <option value="info">Info</option>
             <option value="warn">Warn</option>
@@ -197,9 +197,9 @@ export default function SystemLogs() {
           <select
             value={moduleFilter}
             onChange={(e) => { setModuleFilter(e.target.value); setCurrentPage(1); }}
-            className="px-3 py-2 border rounded-lg"
+            className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
           >
-            <option value="all">All modules</option>
+            <option value="all">Todos los módulos</option>
             {modules.map(m => (
               <option key={m} value={m}>{m}</option>
             ))}
@@ -214,34 +214,34 @@ export default function SystemLogs() {
       </div>
 
       {/* Logs list (most recent first) */}
-      <div ref={boxRef} className="h-96 overflow-auto border rounded bg-white dark:bg-gray-800 p-0">
+      <div ref={boxRef} className="h-96 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-0">
         {pageItems.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-gray-500">No logs</div>
+          <div className="h-full flex items-center justify-center text-slate-500">Sin registros</div>
         ) : (
           <table className="min-w-full text-sm">
-            <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700/50 border-b">
+            <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800">
               <tr>
-                <th className="px-3 py-2 text-left">Timestamp</th>
-                <th className="px-3 py-2 text-left">Level</th>
-                <th className="px-3 py-2 text-left">Module</th>
-                <th className="px-3 py-2 text-left">Message</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Marca de tiempo</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Nivel</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Módulo</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Mensaje</th>
               </tr>
             </thead>
             <tbody>
               {pageItems.map((l, idx) => (
-                <tr key={idx} className="border-b last:border-b-0 hover:bg-gray-50 dark:bg-gray-700/50">
-                  <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{new Date(l.timestamp).toLocaleString()}</td>
+                <tr key={idx} className="border-b border-slate-200 dark:border-slate-800 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{new Date(l.timestamp).toLocaleString()}</td>
                   <td className="px-3 py-2">
                     <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
                       l.level === 'error' ? 'bg-red-100 text-red-700' :
                       l.level === 'warn' ? 'bg-yellow-100 text-yellow-700' :
                       l.level === 'debug' ? 'bg-purple-100 text-purple-700' :
-                      l.level === 'trace' ? 'bg-gray-100 text-gray-700' :
+                      l.level === 'trace' ? 'bg-slate-100 text-slate-700' :
                       'bg-blue-100 text-blue-700'
                     }`}>{l.level}</span>
                   </td>
-                  <td className="px-3 py-2 text-gray-700">{l.module || '-'}</td>
-                  <td className="px-3 py-2 text-gray-900">
+                  <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{l.module || '-'}</td>
+                  <td className="px-3 py-2 text-slate-900 dark:text-slate-100">
                     <div className="whitespace-pre-wrap break-words">{l.message}</div>
                   </td>
                 </tr>
@@ -253,16 +253,16 @@ export default function SystemLogs() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white dark:bg-gray-800 border rounded-lg px-4 py-3">
-          <div className="text-sm text-gray-700">
-            Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} logs
+        <div className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card px-4 py-3">
+          <div className="text-sm text-slate-700 dark:text-slate-300">
+            Mostrando {(currentPage - 1) * pageSize + 1} a {Math.min(currentPage * pageSize, filtered.length)} de {filtered.length} registros
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="px-3 py-1 border rounded disabled:opacity-50">First</button>
-            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1 border rounded disabled:opacity-50">Previous</button>
-            <span className="px-3 py-1">Page {currentPage} of {totalPages}</span>
-            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1 border rounded disabled:opacity-50">Next</button>
-            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="px-3 py-1 border rounded disabled:opacity-50">Last</button>
+            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded disabled:opacity-50">Primera</button>
+            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded disabled:opacity-50">Anterior</button>
+            <span className="px-3 py-1 text-slate-700 dark:text-slate-300">Página {currentPage} de {totalPages}</span>
+            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded disabled:opacity-50">Siguiente</button>
+            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded disabled:opacity-50">Última</button>
           </div>
         </div>
       )}

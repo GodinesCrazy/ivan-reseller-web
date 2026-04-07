@@ -975,6 +975,136 @@ function findMinimumProfitableListingSalePriceUsd(params: {
   throw new Error('Could not find a listing price that meets preventive profit floors');
 }
 
+async function attemptRefreshMlChileFreightTruth(params: {
+  userId: number;
+  product: PrePublishProductShape;
+  aeProductId: string;
+  shipCountry: string;
+}): Promise<CanonicalMlChileFreightTruthResult | null> {
+  if (String(params.shipCountry || '').trim().toUpperCase() !== 'CL') {
+    return null;
+  }
+
+  const sendGoodsCountryCode =
+    String(params.product.originCountry || 'CN').trim().toUpperCase() || 'CN';
+  const skuId = String(params.product.aliexpressSku || '').trim() || undefined;
+
+  try {
+    const freightQuotes = await aliexpressDropshippingAPIService.calculateBuyerFreight({
+      countryCode: 'CL',
+      productId: params.aeProductId,
+      productNum: 1,
+      sendGoodsCountryCode,
+      skuId,
+      price: String(
+        Math.max(0, toNumber((params.product.aliexpressPrice ?? 0) as Parameters<typeof toNumber>[0]))
+      ),
+      priceCurrency: 'USD',
+    });
+
+    const selection = selectMlChileFreightOption(freightQuotes.options);
+    if (!selection.selected) {
+      return {
+        status: 'freight_truth_stale',
+        ok: false,
+        reason: `live freight refresh failed: ${selection.reason || 'no valid CL freight option'}`,
+      };
+    }
+
+    const shippingUsd = toUsd(
+      selection.selected.freightAmount,
+      selection.selected.freightCurrency || 'USD'
+    );
+    if (!Number.isFinite(shippingUsd) || shippingUsd < 0) {
+      return {
+        status: 'freight_truth_inconsistent',
+        ok: false,
+        reason: 'live freight refresh returned invalid shipping USD amount',
+      };
+    }
+
+    const productCostUsd = Math.max(
+      0,
+      toNumber((params.product.aliexpressPrice ?? 0) as Parameters<typeof toNumber>[0])
+    );
+    const landed = calculateMlChileLandedCost({
+      productCost: productCostUsd,
+      shippingCost: shippingUsd,
+      currency: 'USD',
+    });
+    const checkedAt = new Date().toISOString();
+    const currentMeta = parseProductMetadata(params.product.productData);
+    const nextMeta = {
+      ...currentMeta,
+      mlChileFreight: {
+        freightSummaryCode: 'freight_quote_found_for_cl',
+        checkedAt,
+        targetCountry: 'CL',
+        sendGoodsCountryCode,
+        freightOptionsCount: freightQuotes.options.length,
+        rawOptionNodeCount: freightQuotes.rawOptionNodeCount,
+        rawTopKeys: freightQuotes.rawTopKeys,
+        selectedServiceName: selection.selected.serviceName,
+        selectedFreightAmount: selection.selected.freightAmount,
+        selectedFreightCurrency: selection.selected.freightCurrency,
+        selectedEstimatedDeliveryTime: selection.selected.estimatedDeliveryTime ?? null,
+        selectionReason: selection.reason,
+      },
+      mlChileLandedCost: {
+        costCurrency: landed.costCurrency,
+        importTaxMethod: landed.importTaxMethod,
+        importTaxAmount: landed.importTaxAmount,
+        totalCost: landed.totalCost,
+        landedCostCompleteness: landed.landedCostCompleteness,
+        checkedAt,
+      },
+    };
+
+    await prisma.product.update({
+      where: { id: params.product.id },
+      data: {
+        targetCountry: 'CL',
+        shippingCost: landed.shippingCost,
+        importTax: landed.importTaxAmount,
+        totalCost: landed.totalCost,
+        productData: JSON.stringify(nextMeta),
+      },
+    });
+
+    const refreshedTruth = resolveCanonicalMlChileFreightTruth(
+      {
+        ...params.product,
+        targetCountry: 'CL',
+        shippingCost: landed.shippingCost,
+        importTax: landed.importTaxAmount,
+        productData: nextMeta,
+      },
+      'CL'
+    );
+
+    if (refreshedTruth.ok) {
+      logger.info('[PRE-PUBLISH] Refreshed stale ML Chile freight truth automatically', {
+        userId: params.userId,
+        productId: params.product.id,
+        aeProductId: params.aeProductId,
+        selectedServiceName: selection.selected.serviceName,
+        selectedFreightAmount: selection.selected.freightAmount,
+        selectedFreightCurrency: selection.selected.freightCurrency,
+      });
+    }
+
+    return refreshedTruth;
+  } catch (error: any) {
+    logger.warn('[PRE-PUBLISH] Could not auto-refresh stale ML Chile freight truth', {
+      userId: params.userId,
+      productId: params.product.id,
+      aeProductId: params.aeProductId,
+      error: error?.message || String(error),
+    });
+    return null;
+  }
+}
+
 /**
  * P89 / Phase 53: supplier + landed cost + fee intelligence + ledger completeness + profit floors.
  * Used by prepareProductForSafePublishing and web preflight (canonical MLC pricing truth).
@@ -1004,10 +1134,22 @@ export async function runPreventiveEconomicsCore(
     return { ok: false, message: 'AliExpress Dropshipping API is not connected; cannot validate supplier' };
   }
 
-  const persistedMlChileFreightTruth =
+  let persistedMlChileFreightTruth =
     marketplace === 'mercadolibre' && shipCountry === 'CL'
       ? resolveCanonicalMlChileFreightTruth(product, shipCountry)
       : null;
+
+  if (marketplace === 'mercadolibre' && shipCountry === 'CL' && !persistedMlChileFreightTruth?.ok) {
+    const refreshedTruth = await attemptRefreshMlChileFreightTruth({
+      userId,
+      product,
+      aeProductId,
+      shipCountry,
+    });
+    if (refreshedTruth) {
+      persistedMlChileFreightTruth = refreshedTruth;
+    }
+  }
 
   if (marketplace === 'mercadolibre' && shipCountry === 'CL' && !persistedMlChileFreightTruth?.ok) {
     return {

@@ -572,7 +572,7 @@ export default function Users() {
     switch (roleUpper) {
       case 'ADMIN': return 'bg-purple-100 text-purple-700';
       case 'USER': return 'bg-blue-100 text-blue-700';
-      default: return 'bg-gray-100 text-gray-700';
+      default: return 'bg-slate-100 text-slate-700';
     }
   }, []);
 
@@ -584,8 +584,8 @@ export default function Users() {
     return (
       <div className="p-6 space-y-4">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-48 mb-4"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
+          <div className="h-8 bg-slate-200 rounded w-48 mb-4"></div>
+          <div className="h-64 bg-slate-200 rounded"></div>
         </div>
       </div>
     );
@@ -596,13 +596,13 @@ export default function Users() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Users Management</h1>
-          <p className="text-gray-600">Manage system users, roles and permissions</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Users Management</h1>
+          <p className="text-slate-600">Manage system users, roles and permissions</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/admin')}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700/50 flex items-center gap-2"
+            className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 dark:bg-slate-800/50 flex items-center gap-2"
           >
             <Shield className="w-4 h-4" />
             Admin Panel
@@ -618,11 +618,11 @@ export default function Users() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 border rounded-lg p-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Search */}
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
@@ -668,29 +668,29 @@ export default function Users() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white dark:bg-gray-800 border rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 dark:bg-gray-700/50">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+          <thead className="bg-slate-50 dark:bg-slate-800/50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">User</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Email</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Role</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Status</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Created</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Last Login</th>
+              <th className="px-6 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">Actions</th>
             </tr>
           </thead>
-          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
             {paginatedUsers.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
                   No users found
                 </td>
               </tr>
             )}
             {paginatedUsers.map((user) => (
-              <tr key={user.id} className="hover:bg-gray-50 dark:bg-gray-700/50">
+              <tr key={user.id} className="hover:bg-slate-50 dark:bg-slate-800/50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <div className="flex-shrink-0 h-10 w-10">
@@ -701,14 +701,14 @@ export default function Users() {
                       </div>
                     </div>
                     <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                      <div className="text-sm text-gray-500">ID: {user.id}</div>
+                      <div className="text-sm font-medium text-slate-900">{user.name}</div>
+                      <div className="text-sm text-slate-500">ID: {user.id}</div>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">{user.email}</div>
-                  {user.phone && <div className="text-sm text-gray-500">{user.phone}</div>}
+                  <div className="text-sm text-slate-900">{user.email}</div>
+                  {user.phone && <div className="text-sm text-slate-500">{user.phone}</div>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex flex-col gap-1">
@@ -722,10 +722,10 @@ export default function Users() {
                     {user.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                   {new Date(user.createdAt).toLocaleDateString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                   {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -746,7 +746,7 @@ export default function Users() {
                     </button>
                     <button
                       onClick={() => toggleUserStatus(user.id, user.status)}
-                      className="text-gray-600 hover:text-gray-900"
+                      className="text-slate-600 hover:text-slate-900"
                       title={user.status === 'active' ? 'Deactivate' : 'Activate'}
                     >
                       {user.status === 'active' ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
@@ -782,22 +782,22 @@ export default function Users() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white dark:bg-gray-800 border rounded-lg px-4 py-3">
-          <div className="text-sm text-gray-700">
+        <div className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3">
+          <div className="text-sm text-slate-700">
             Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredUsers.length)} of {filteredUsers.length} users
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded hover:bg-slate-50 dark:bg-slate-800/50 disabled:opacity-50"
             >
               First
             </button>
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded hover:bg-slate-50 dark:bg-slate-800/50 disabled:opacity-50"
             >
               Previous
             </button>
@@ -807,14 +807,14 @@ export default function Users() {
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded hover:bg-slate-50 dark:bg-slate-800/50 disabled:opacity-50"
             >
               Next
             </button>
             <button
               onClick={() => setCurrentPage(totalPages)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 dark:bg-gray-700/50 disabled:opacity-50"
+              className="px-3 py-1 border border-slate-200 dark:border-slate-800 rounded hover:bg-slate-50 dark:bg-slate-800/50 disabled:opacity-50"
             >
               Last
             </button>
@@ -825,28 +825,28 @@ export default function Users() {
       {/* Modal: User Details */}
       {showDetailsModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <h3 className="text-xl font-semibold">User Details</h3>
-              <button onClick={() => setShowDetailsModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowDetailsModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-6">
               {/* Personal Info */}
               <div>
-                <h4 className="font-semibold text-gray-900 mb-3">Personal Information</h4>
+                <h4 className="font-semibold text-slate-900 mb-3">Personal Information</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-sm text-gray-500">Name</div>
+                    <div className="text-sm text-slate-500">Name</div>
                     <div className="font-medium">{selectedUser.name}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Email</div>
+                    <div className="text-sm text-slate-500">Email</div>
                     <div className="font-medium">{selectedUser.email}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Role</div>
+                    <div className="text-sm text-slate-500">Role</div>
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(selectedUser.role)}`}>
                       {selectedUser.role.toUpperCase()}
                     </span>
@@ -854,16 +854,16 @@ export default function Users() {
                   {userProfile && (
                     <>
                       <div>
-                        <div className="text-sm text-gray-500">Commission Rate</div>
+                        <div className="text-sm text-slate-500">Commission Rate</div>
                         <div className="font-medium">{(userProfile.commissionRate * 100).toFixed(1)}%</div>
-                        <div className="text-xs text-gray-400">Sobre utilidad de operación exitosa</div>
+                        <div className="text-xs text-slate-400">Sobre utilidad de operación exitosa</div>
                       </div>
                       <div>
-                        <div className="text-sm text-gray-500">Fixed Monthly Cost</div>
+                        <div className="text-sm text-slate-500">Fixed Monthly Cost</div>
                         <div className="font-medium">${userProfile.fixedMonthlyCost.toFixed(2)} USD</div>
                       </div>
                       <div>
-                        <div className="text-sm text-gray-500">Balance</div>
+                        <div className="text-sm text-slate-500">Balance</div>
                         <div className="font-medium">${userProfile.balance.toFixed(2)} USD</div>
                       </div>
                     </>
@@ -874,7 +874,7 @@ export default function Users() {
               {/* Statistics */}
               {userProfile && (
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-3">Statistics</h4>
+                  <h4 className="font-semibold text-slate-900 mb-3">Statistics</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 bg-blue-50 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
@@ -911,13 +911,13 @@ export default function Users() {
               {/* API Credentials */}
               {userProfile && userProfile.apiCredentials && userProfile.apiCredentials.length > 0 && (
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-3">API Credentials</h4>
+                  <h4 className="font-semibold text-slate-900 mb-3">API Credentials</h4>
                   <div className="space-y-2">
                     {userProfile.apiCredentials.map((cred: any) => (
-                      <div key={cred.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
+                      <div key={cred.id} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded">
                         <div>
                           <span className="font-medium">{cred.apiName}</span>
-                          <span className="text-sm text-gray-500 ml-2">({cred.environment})</span>
+                          <span className="text-sm text-slate-500 ml-2">({cred.environment})</span>
                         </div>
                         <span className={`px-2 py-1 text-xs rounded ${cred.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                           {cred.isActive ? 'Active' : 'Inactive'}
@@ -930,29 +930,29 @@ export default function Users() {
 
               {/* Account Info */}
               <div>
-                <h4 className="font-semibold text-gray-900 mb-3">Account Information</h4>
+                <h4 className="font-semibold text-slate-900 mb-3">Account Information</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-sm text-gray-500">Status</div>
+                    <div className="text-sm text-slate-500">Status</div>
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(selectedUser.status)}`}>
                       {selectedUser.status}
                     </span>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Created</div>
+                    <div className="text-sm text-slate-500">Created</div>
                     <div className="font-medium">{new Date(selectedUser.createdAt).toLocaleString()}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Last Login</div>
+                    <div className="text-sm text-slate-500">Last Login</div>
                     <div className="font-medium">{selectedUser.lastLogin ? new Date(selectedUser.lastLogin).toLocaleString() : 'Never'}</div>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="p-6 border-t flex justify-end gap-3">
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
               <button
                 onClick={() => setShowDetailsModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:bg-gray-700/50"
+                className="px-4 py-2 border rounded-lg hover:bg-slate-50 dark:bg-slate-800/50"
               >
                 Close
               </button>
@@ -970,16 +970,16 @@ export default function Users() {
       {/* Modal: Edit User */}
       {showEditModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="p-6 border-b flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <h3 className="text-xl font-semibold">Edit User</h3>
-              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Username *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Username *</label>
                 <input
                   type="text"
                   value={formData.username}
@@ -989,7 +989,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
                 <input
                   type="text"
                   value={formData.fullName}
@@ -999,7 +999,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Email *</label>
                 <input
                   type="email"
                   value={formData.email}
@@ -1008,7 +1008,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Password (leave empty to keep current)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Password (leave empty to keep current)</label>
                 <input
                   type="password"
                   value={formData.password}
@@ -1018,7 +1018,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Role</label>
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value as 'ADMIN' | 'USER' })}
@@ -1029,7 +1029,7 @@ export default function Users() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Commission Rate</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Commission Rate</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1041,7 +1041,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Fixed Monthly Cost</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Fixed Monthly Cost</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1052,7 +1052,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
                 <select
                   value={formData.isActive ? 'active' : 'inactive'}
                   onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'active' })}
@@ -1063,10 +1063,10 @@ export default function Users() {
                 </select>
               </div>
             </div>
-            <div className="p-6 border-t flex justify-end gap-3">
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
               <button
                 onClick={() => setShowEditModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:bg-gray-700/50"
+                className="px-4 py-2 border rounded-lg hover:bg-slate-50 dark:bg-slate-800/50"
               >
                 Cancel
               </button>
@@ -1085,16 +1085,16 @@ export default function Users() {
       {/* Modal: New User */}
       {showNewUserModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="p-6 border-b flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <h3 className="text-xl font-semibold">Create New User</h3>
-              <button onClick={() => setShowNewUserModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowNewUserModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Username *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Username *</label>
                 <input
                   type="text"
                   value={formData.username}
@@ -1104,7 +1104,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
                 <input
                   type="text"
                   value={formData.fullName}
@@ -1114,7 +1114,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Email *</label>
                 <input
                   type="email"
                   value={formData.email}
@@ -1124,7 +1124,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Password *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Password *</label>
                 <input
                   type="password"
                   value={formData.password}
@@ -1134,7 +1134,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Role</label>
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value as 'ADMIN' | 'USER' })}
@@ -1145,7 +1145,7 @@ export default function Users() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Commission Rate</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Commission Rate</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1157,7 +1157,7 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Fixed Monthly Cost</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Fixed Monthly Cost</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1168,10 +1168,10 @@ export default function Users() {
                 />
               </div>
             </div>
-            <div className="p-6 border-t flex justify-end gap-3">
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
               <button
                 onClick={() => setShowNewUserModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:bg-gray-700/50"
+                className="px-4 py-2 border rounded-lg hover:bg-slate-50 dark:bg-slate-800/50"
               >
                 Cancel
               </button>

@@ -9,7 +9,7 @@ interface CredentialsFormStepProps {
   onUpdateData: (updates: Partial<WizardData>) => void;
   onNext: () => void;
   onBack: () => void;
-  onComplete: () => void;
+  onComplete?: () => void;
 }
 
 interface FieldDefinition {
@@ -52,7 +52,7 @@ export default function CredentialsFormStep({
       if (result.success && result.data) {
         const api = result.data.find((a: any) => a.apiName === data.selectedAPI);
         if (api) {
-          const env = data.selectedEnvironment;
+          const env = data.selectedEnvironment ?? 'production';
           const envConfig = api.supportsEnvironments && api.environments?.[env];
           const apiFields = envConfig?.fields || api.fields || [];
           
@@ -153,7 +153,7 @@ export default function CredentialsFormStep({
     // Actualizar credenciales
     onUpdateData({
       credentials: {
-        ...data.credentials,
+        ...(data.credentials ?? {}),
         [fieldKey]: value,
       },
     });
@@ -175,8 +175,9 @@ export default function CredentialsFormStep({
   }
 
   const requiredFields = fields.filter(f => f.required);
-  const filledRequiredFields = requiredFields.filter(f => 
-    data.credentials[f.key] && data.credentials[f.key].trim().length > 0
+  const credentials = data.credentials ?? {};
+  const filledRequiredFields = requiredFields.filter(
+    (f) => credentials[f.key] && credentials[f.key].trim().length > 0
   );
   const allRequiredFilled = filledRequiredFields.length === requiredFields.length;
 
@@ -198,7 +199,7 @@ export default function CredentialsFormStep({
 
       <div className="space-y-4">
         {fields.map((field) => {
-          const value = data.credentials[field.key] || '';
+          const value = credentials[field.key] || '';
           const error = fieldErrors[field.key];
           const isValid = fieldValid[field.key];
           const showPassword = showPasswords[field.key];

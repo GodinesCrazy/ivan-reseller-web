@@ -21,6 +21,8 @@ export interface MercadoLibreCredentials {
 }
 
 export interface MLProduct {
+  /** Phase 1.1: allows canonical publish flow verification; direct calls are blocked unless explicitly overridden. */
+  __publishContext?: 'marketplace_service';
   title: string;
   description: string;
   categoryId: string;
@@ -39,6 +41,8 @@ export interface MLProduct {
     freeShipping?: boolean;
     /** Días de despacho declarados al comprador (handling_time en API ML). */
     handlingTime?: number;
+    /** Mercado Envíos me2: "LxWxH_cm,weight_grams" (ej. 10x10x8,300) */
+    dimensions?: string;
   };
 }
 
@@ -575,6 +579,42 @@ export class MercadoLibreService {
       throw new AppError('MercadoLibre authentication required', 401);
     }
 
+    const directCreateAllowed = process.env.ML_ALLOW_DIRECT_CREATE_LISTING === 'true';
+    const isCanonicalPublish = product.__publishContext === 'marketplace_service';
+    if (!directCreateAllowed && !isCanonicalPublish) {
+      throw new AppError(
+        'MercadoLibre direct createListing path is blocked in Phase 1.1. Use canonical MarketplaceService publish flow, or set ML_ALLOW_DIRECT_CREATE_LISTING=true for controlled emergency scripts.',
+        423,
+      );
+    }
+
+    // Phase 1 remediation: for MLC/me2 flows, physical package dimensions are mandatory and must be real.
+    const normalizedShippingMode = String(product.shipping?.mode || '').trim().toLowerCase();
+    const requiresStrictPackageTruth = this.credentials.siteId === 'MLC' || normalizedShippingMode === 'me2';
+    if (requiresStrictPackageTruth) {
+      const dimensions = String(product.shipping?.dimensions || '').trim();
+      if (!dimensions) {
+        throw new AppError(
+          'MercadoLibre publish blocked: shipping.dimensions is required (format LxWxH,grams) for MLC/me2.',
+          400,
+        );
+      }
+      const parsed = dimensions.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)$/i);
+      if (!parsed) {
+        throw new AppError(
+          'MercadoLibre publish blocked: shipping.dimensions must use real package format LxWxH,grams (e.g. 12x10x8,350).',
+          400,
+        );
+      }
+      const dims = parsed.slice(1).map((n) => Number(n));
+      if (dims.some((n) => !Number.isFinite(n) || n <= 0)) {
+        throw new AppError(
+          'MercadoLibre publish blocked: shipping.dimensions values must be positive and non-zero.',
+          400,
+        );
+      }
+    }
+
     // Pre-upload images to ML to avoid AliExpress CDN anti-hotlinking blocks
     const uploadedIds = await this.uploadImages(product.images);
 
@@ -625,9 +665,15 @@ export class MercadoLibreService {
       if (typeof product.shipping.handlingTime === 'number' && product.shipping.handlingTime > 0) {
         shippingPayload.handling_time = product.shipping.handlingTime;
       }
+      if (product.shipping.dimensions && String(product.shipping.dimensions).trim().length > 0) {
+        shippingPayload.dimensions = String(product.shipping.dimensions).trim();
+      }
       listingData.shipping = shippingPayload;
     } else if (this.credentials.siteId === 'MLC') {
-      listingData.shipping = { mode: 'me2', free_shipping: false };
+      throw new AppError(
+        'MercadoLibre publish blocked: shipping.mode cannot be not_specified for MLC. Provide explicit me2 shipping data.',
+        400,
+      );
     }
 
     const listingTypes = ['gold_special', 'gold_pro', 'free'];
@@ -654,6 +700,50 @@ export class MercadoLibreService {
       try {
         const response = await this.apiClient.post('/items', listingData);
         const itemId = response.data.id;
+
+        // MLC: ML silently reverts me2→not_specified during POST for some categories
+        // (warning: shipping.lost_me2_by_catalog). The listing is immediately active
+        // which means a follow-up PUT to set me2 also fails ("Cannot update item
+        // [status:active]"). This is a hard ML platform limitation — shipping.mode
+        // cannot be changed on active listings via API.
+        //
+        // Mitigation in effect:
+        //  1. The listing description includes explicit international shipping info (20-30 days)
+        //  2. The buyer sees "Entrega a acordar con el vendedor" instead of the me2 ETA
+        //  3. The account has mandatory_settings.mode=me2; listings with not_specified
+        //     may be flagged by ML's automated compliance scan → forbidden
+        //
+        // Status flag: SHIPPING_TRUTH_NOT_ENFORCED_ON_ML
+        // Recommended action: contact ML support for account-level me2 exemption for
+        // international dropshipping, or switch to not_specified as official mode.
+        if (this.credentials.siteId === 'MLC') {
+          const handlingTime = (product.shipping as any)?.handlingTime ?? 0;
+          const dimStr =
+            product.shipping?.dimensions && String(product.shipping.dimensions).trim().length > 0
+              ? String(product.shipping.dimensions).trim()
+              : undefined;
+          try {
+            await this.apiClient.put(`/items/${itemId}`, {
+              shipping: {
+                mode: 'me2',
+                free_shipping: product.shipping?.freeShipping ?? false,
+                ...(handlingTime > 0 ? { handling_time: handlingTime } : {}),
+                ...(dimStr ? { dimensions: dimStr } : {}),
+                local_pick_up: false,
+              },
+            });
+            logger.info('[MercadoLibre] me2 shipping enforced post-creation', { itemId, handlingTime });
+          } catch (shippingErr: any) {
+            const shippingErrMsg = shippingErr?.response?.data?.message || shippingErr?.message;
+            logger.warn('[MercadoLibre] SHIPPING_TRUTH_NOT_ENFORCED_ON_ML — me2 could not be set post-creation', {
+              itemId,
+              handlingTime,
+              error: shippingErrMsg,
+              impact: 'Listing will show not_specified shipping; description contains ETA info',
+              action: 'Monitor for under_review:forbidden triggered by ML compliance scan',
+            });
+          }
+        }
 
         const verified = await this.getItemStatus(itemId);
         if (verified && verified.status !== 'active') {
@@ -1133,6 +1223,39 @@ export class MercadoLibreService {
       });
     } catch (error: any) {
       throw new AppError(`MercadoLibre close listing error: ${error.response?.data?.message || error.message}`, 400);
+    }
+  }
+
+  /**
+   * Get user information
+   */
+  async getAuthenticatedUserProfile(): Promise<{
+    id?: string | number;
+    nickname?: string;
+    site_id?: string;
+    seller_experience?: string;
+    tags?: unknown;
+    status?: unknown;
+  }> {
+    try {
+      const meResponse = await this.apiClient.get('/users/me');
+      return meResponse.data || {};
+    } catch (meError: any) {
+      if (!this.credentials.userId) {
+        throw new AppError(
+          `MercadoLibre authenticated profile error: ${meError.response?.data?.message || meError.message}`,
+          400
+        );
+      }
+      try {
+        const fallbackResponse = await this.apiClient.get(`/users/${this.credentials.userId}`);
+        return fallbackResponse.data || {};
+      } catch (fallbackError: any) {
+        throw new AppError(
+          `MercadoLibre authenticated profile error: ${fallbackError.response?.data?.message || fallbackError.message}`,
+          400
+        );
+      }
     }
   }
 

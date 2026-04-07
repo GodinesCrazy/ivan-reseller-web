@@ -148,7 +148,7 @@ const STATUS_BADGE_STYLES: Record<string, { className: string; label: string }> 
     label: 'Error en reintento automático',
   },
   unknown: {
-    className: 'bg-gray-100 border-gray-200 text-gray-600',
+    className: 'bg-slate-100 border-slate-200 text-slate-600',
     label: 'Sin información',
   },
 };
@@ -954,10 +954,10 @@ export default function APISettings() {
               const env = typeof item.environment === 'string' ? item.environment : 'production';
               const apiNameRaw = (item.apiName || item.name || normalizedName) as string;
               const apiNameKey = apiNameRaw.toLowerCase();
-              const envKey = makeEnvKey(apiNameKey, env);
+              const itemEnvKey = makeEnvKey(apiNameKey, env);
               const messageValue = item.message ?? item.error;
               const available = Boolean(item.isAvailable ?? item.available);
-              statusMap[envKey] = {
+              statusMap[itemEnvKey] = {
                 apiName: apiNameKey,
                 environment: env,
                 available,
@@ -973,7 +973,7 @@ export default function APISettings() {
                 const alternateApiName = apiNameKey === 'googletrends' ? 'serpapi' : 'googletrends';
                 const alternateEnvKey = makeEnvKey(alternateApiName, env);
                 statusMap[alternateEnvKey] = {
-                  ...statusMap[envKey],
+                  ...statusMap[itemEnvKey],
                   apiName: alternateApiName,
                 };
               }
@@ -1404,7 +1404,7 @@ export default function APISettings() {
         return {
           status: 'configured',
           message: statusInfo && 'message' in statusInfo && (statusInfo as APIStatus).message
-            ? (statusInfo as APIStatus).message
+            ? String((statusInfo as APIStatus).message)
             : 'Configurado y funcionando',
         };
       }
@@ -1440,7 +1440,7 @@ export default function APISettings() {
         return {
           status: 'configured',
           message: statusInfo && 'message' in statusInfo && statusInfo.message 
-            ? statusInfo.message 
+            ? String(statusInfo.message)
             : 'Configurado y funcionando',
         };
       }
@@ -2611,7 +2611,7 @@ export default function APISettings() {
           const age = Date.now() - startedAt;
           const BLOCK_MS = 2 * 60 * 1000;
           if (Number.isFinite(startedAt) && startedAt > 0 && age <= BLOCK_MS) {
-            toast.warning('OAuth de AliExpress en curso. Si ya volviste de AliExpress, espera unos segundos o recarga la página.');
+            toast('OAuth de AliExpress en curso. Si ya volviste de AliExpress, espera unos segundos o recarga la página.', { icon: '⚠️' });
             return;
           }
           clearAliExpressOAuthRedirectingFlag();
@@ -2619,7 +2619,7 @@ export default function APISettings() {
       } catch (_) {}
     }
     if (oauthInProgressRef.current[apiName]) {
-      toast.info('OAuth en curso. Espera a que termine la redirección.');
+      toast('OAuth en curso. Espera a que termine la redirección.', { icon: 'ℹ️' });
       return;
     }
     if (!isAliExpressDropshipping && openOAuthWindowRef.current?.apiName === apiName) {
@@ -3211,9 +3211,9 @@ export default function APISettings() {
         };
       default:
         return {
-          icon: <Clock className="h-5 w-5 text-gray-500" />,
+          icon: <Clock className="h-5 w-5 text-slate-500" />,
           text: 'Preparando sesión manual…',
-          textClass: 'text-gray-600',
+          textClass: 'text-slate-600',
         };
     }
   }, [manualSessionStatus]);
@@ -3431,7 +3431,7 @@ export default function APISettings() {
       if (status?.optional) {
         return <AlertTriangle className="w-5 h-5 text-amber-500" />;
       }
-      return <AlertTriangle className="w-5 h-5 text-gray-400" />;
+      return <AlertTriangle className="w-5 h-5 text-slate-400" />;
     }
     
     if (!credential.isActive) {
@@ -3453,7 +3453,7 @@ export default function APISettings() {
           return <XCircle className="w-5 h-5 text-red-500" />;
         case 'unknown':
         default:
-          return <AlertTriangle className="w-5 h-5 text-gray-400" />;
+          return <AlertTriangle className="w-5 h-5 text-slate-400" />;
       }
     }
 
@@ -3579,7 +3579,7 @@ export default function APISettings() {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-        <span className="ml-2 text-gray-600">Cargando configuración...</span>
+        <span className="ml-2 text-slate-500">Cargando configuración...</span>
       </div>
     );
   }
@@ -3590,8 +3590,8 @@ export default function APISettings() {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
-            <Settings className="w-8 h-8 text-blue-600" />
-            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Configuración de APIs</h1>
+            <Settings className="w-6 h-6 text-blue-600" />
+            <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Configuración de APIs</h1>
           </div>
           {/* ✅ MEJORA UX: Botón para abrir wizard */}
           <button
@@ -3607,7 +3607,7 @@ export default function APISettings() {
           </button>
         </div>
         <div className="flex items-center justify-between">
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-xs text-slate-500">
             Configura tus credenciales para las APIs de marketplaces y servicios. Las credenciales se guardan encriptadas.
           </p>
           {/* ✅ Botón para testear todas las APIs */}
@@ -3647,29 +3647,29 @@ export default function APISettings() {
 
       {/* ✅ Sección de APIs Mínimas para Dropshipping */}
       {minimumDropshippingAPIs && (
-        <div className="mb-6 rounded-lg border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-lg">
-          <div className="border-b border-blue-200 bg-blue-100 px-6 py-4">
+        <div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+          <div className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600">
                   <span className="text-xl">🎯</span>
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-800">APIs Mínimas para Dropshipping Completo</h2>
-                  <p className="text-sm text-gray-600">Configura estas APIs para operar dropshipping desde búsqueda hasta compra automatizada</p>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">APIs Mínimas para Dropshipping Completo</h2>
+                  <p className="text-xs text-slate-500">Configura estas APIs para operar dropshipping desde búsqueda hasta compra automatizada</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
                 {/* Badge de progreso */}
                 <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm">
                   <div className="flex items-center gap-2">
-                    <div className="h-3 w-24 rounded-full bg-gray-200 overflow-hidden">
+                    <div className="h-3 w-24 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500"
                         style={{ width: `${minimumDropshippingAPIs.progress.percentage}%` }}
                       />
                     </div>
-                    <span className="text-sm font-semibold text-gray-700">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                       {minimumDropshippingAPIs.progress.configured}/{minimumDropshippingAPIs.progress.total}
                     </span>
                   </div>
@@ -3696,18 +3696,18 @@ export default function APISettings() {
                     return apiItem.status === 'healthy' ? 'text-green-600' : 
                            apiItem.status === 'degraded' ? 'text-amber-600' : 'text-red-600';
                   }
-                  return isConfigured ? 'text-amber-600' : 'text-gray-400';
+                  return isConfigured ? 'text-amber-600' : 'text-slate-400';
                 };
                 
                 return (
                   <div
                     key={apiItem.apiName}
-                    className={`rounded-lg border-2 p-4 transition-all ${
+                    className={`rounded-xl border p-4 transition-all ${
                       isConfigured && isAvailable
-                        ? 'border-green-300 bg-green-50'
+                        ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30'
                         : isConfigured
-                        ? 'border-amber-300 bg-amber-50'
-                        : 'border-gray-300 bg-white'
+                        ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
                     }`}
                   >
                     <div className="flex items-start justify-between mb-2">
@@ -3717,11 +3717,11 @@ export default function APISettings() {
                         ) : isConfigured ? (
                           <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0" />
                         ) : (
-                          <XCircle className="w-6 h-6 text-gray-400 flex-shrink-0" />
+                          <XCircle className="w-6 h-6 text-slate-400 flex-shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-gray-800 mb-1">{apiItem.name}</h3>
-                          <p className="text-xs text-gray-600 mb-2">{apiItem.description}</p>
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">{apiItem.name}</h3>
+                          <p className="text-xs text-slate-500 mb-2">{apiItem.description}</p>
                           {apiItem.apiName === 'marketplace' && apiItem.alternatives && (
                             <div className="mt-2 space-y-1">
                               {apiItem.alternatives.map((alt) => (
@@ -3729,9 +3729,9 @@ export default function APISettings() {
                                   {alt.isConfigured ? (
                                     <CheckCircle className="w-4 h-4 text-green-600" />
                                   ) : (
-                                    <XCircle className="w-4 h-4 text-gray-400" />
+                                    <XCircle className="w-4 h-4 text-slate-400" />
                                   )}
-                                  <span className={alt.isConfigured ? 'text-green-700 font-medium' : 'text-gray-500'}>
+                                  <span className={alt.isConfigured ? 'text-green-700 font-medium' : 'text-slate-500'}>
                                     {alt.name}
                                   </span>
                                 </div>
@@ -3741,7 +3741,7 @@ export default function APISettings() {
                         </div>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
                       {isConfigured && isAvailable ? (
                         <p className="text-xs text-green-700 font-medium">✅ Configurada y funcionando</p>
                       ) : isConfigured ? (
@@ -3806,23 +3806,23 @@ export default function APISettings() {
               onChange={(e) => setShowOnlyEssential(e.target.checked)}
               className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
             />
-            <span className="text-sm font-medium text-gray-700">Mostrar solo APIs esenciales</span>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Mostrar solo APIs esenciales</span>
           </label>
         </div>
       </div>
 
       {/* ✅ Resultados de Tests de APIs */}
       {showApiTestResults && apiTestResults && (
-        <div className="mb-6 rounded-lg border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
+        <div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card">
+          <div className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <TestTube className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-semibold text-gray-800">Resultados de Pruebas de APIs</h2>
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Resultados de Pruebas de APIs</h2>
               </div>
               <button
                 onClick={() => setShowApiTestResults(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               >
                 <XCircle className="w-5 h-5" />
               </button>
@@ -3830,17 +3830,17 @@ export default function APISettings() {
             <div className="mt-3 flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
-                <span className="text-gray-700">{apiTestResults.ok} OK</span>
+                <span className="text-slate-700 dark:text-slate-300">{apiTestResults.ok} OK</span>
               </div>
               <div className="flex items-center gap-2">
                 <XCircle className="w-4 h-4 text-red-500" />
-                <span className="text-gray-700">{apiTestResults.error} ERROR</span>
+                <span className="text-slate-700 dark:text-slate-300">{apiTestResults.error} ERROR</span>
               </div>
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <span className="text-gray-700">{apiTestResults.skip} SKIP</span>
+                <span className="text-slate-700 dark:text-slate-300">{apiTestResults.skip} SKIP</span>
               </div>
-              <div className="text-gray-500">
+              <div className="text-slate-500">
                 Total: {apiTestResults.total}
               </div>
             </div>
@@ -3850,12 +3850,12 @@ export default function APISettings() {
               {apiTestResults.results.map((result, index) => (
                 <div
                   key={index}
-                  className={`rounded-lg border p-4 ${
+                  className={`rounded-xl border p-4 ${
                     result.status === 'OK'
-                      ? 'border-green-200 bg-green-50'
+                      ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30'
                       : result.status === 'ERROR'
-                      ? 'border-red-200 bg-red-50'
-                      : 'border-gray-200 bg-gray-50'
+                      ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50'
                   }`}
                 >
                   <div className="flex items-start justify-between">
@@ -3868,20 +3868,20 @@ export default function APISettings() {
                         ) : (
                           <AlertTriangle className="w-5 h-5 text-amber-600" />
                         )}
-                        <h3 className="font-semibold text-gray-800">{result.name}</h3>
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{result.name}</h3>
                         {result.environment !== 'other' && (
-                          <span className="px-2 py-0.5 text-xs font-medium rounded bg-gray-200 text-gray-700">
+                          <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
                             {result.environment === 'sandbox' ? 'Sandbox' : 'Production'}
                           </span>
                         )}
                       </div>
                       <p className={`text-sm ${
-                        result.status === 'OK' ? 'text-green-700' : result.status === 'ERROR' ? 'text-red-700' : 'text-gray-600'
+                        result.status === 'OK' ? 'text-green-700' : result.status === 'ERROR' ? 'text-red-700' : 'text-slate-600'
                       }`}>
                         {result.message}
                       </p>
                       {result.latencyMs !== undefined && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-slate-500 mt-1">
                           Latencia: {result.latencyMs}ms
                         </p>
                       )}
@@ -3923,7 +3923,7 @@ export default function APISettings() {
                   </button>
                   <button
                     onClick={() => setError(null)}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition text-sm"
+                    className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600 transition text-sm"
                   >
                     Cerrar
                   </button>
@@ -4030,14 +4030,14 @@ export default function APISettings() {
             <div
               key={apiDef.name}
               data-api-name={apiDef.name}
-              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card hover:shadow-md transition-shadow"
             >
               {/* Card Header */}
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1">
                   <span className="text-3xl">{apiDef.icon}</span>
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                       {displayName}
                       {/* Botón de ayuda contextual */}
                       <button
@@ -4056,7 +4056,7 @@ export default function APISettings() {
                           href={apiDef.docsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-gray-500 hover:text-gray-700"
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                           title="Ver documentación oficial"
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -4064,24 +4064,24 @@ export default function APISettings() {
                         </a>
                       )}
                     </h3>
-                    <p className="text-sm text-gray-600">{description}</p>
+                    <p className="text-xs text-slate-500">{description}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       <span
                         className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${
                           isGlobalScope
-                            ? 'bg-purple-50 border-purple-200 text-purple-700'
-                            : 'bg-gray-100 border-gray-200 text-gray-600'
+                            ? 'bg-purple-50 border-purple-200 text-purple-700 dark:bg-purple-950/30 dark:border-purple-800 dark:text-purple-300'
+                            : 'bg-slate-100 border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
                         }`}
                       >
                         {isGlobalScope ? 'Compartida (global)' : 'Personal'}
                       </span>
                       {isGlobalScope && credential?.owner ? (
-                        <span className="text-gray-500">
+                        <span className="text-slate-500">
                           Administrada por {credential.owner.fullName || credential.owner.username}
                         </span>
                       ) : null}
                       {!isGlobalScope && credential?.sharedBy ? (
-                        <span className="text-gray-500">
+                        <span className="text-slate-500">
                           Actualizada por {credential.sharedBy.fullName || credential.sharedBy.username}
                         </span>
                       ) : null}
@@ -4092,7 +4092,7 @@ export default function APISettings() {
                       
                       if (unifiedStatus.status === 'not_configured') {
                         return (
-                          <div className="mt-2 px-3 py-2 bg-gray-50 border border-gray-200 text-gray-700 rounded">
+                          <div className="mt-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg">
                             <p className="font-semibold text-sm">📋 {unifiedStatus.message}</p>
                             {unifiedStatus.actionMessage && (
                               <p className="text-xs mt-1">{unifiedStatus.actionMessage}</p>
@@ -4149,7 +4149,7 @@ export default function APISettings() {
                         };
                         
                         return (
-                          <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded">
+                          <div className="mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 rounded-lg">
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
                                 <p className="font-semibold text-sm">⚠️ {unifiedStatus.message}</p>
@@ -4174,7 +4174,7 @@ export default function APISettings() {
                                     type="button"
                                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopyOAuthUrl(); }}
                                     disabled={oauthing === apiDef.name}
-                                    className="px-3 py-1 text-xs font-semibold bg-gray-600 text-white rounded hover:bg-gray-700 transition disabled:opacity-50"
+                                    className="px-3 py-1 text-xs font-semibold bg-slate-600 text-white rounded hover:bg-slate-700 transition disabled:opacity-50"
                                     title="Copiar link OAuth"
                                   >
                                     Copiar link
@@ -4188,7 +4188,7 @@ export default function APISettings() {
                       
                       if (unifiedStatus.status === 'error') {
                         return (
-                          <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 text-red-700 rounded">
+                          <div className="mt-2 px-3 py-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg">
                             <p className="font-semibold text-sm">❌ {unifiedStatus.message}</p>
                             {unifiedStatus.actionMessage && (
                               <p className="text-xs mt-1">{unifiedStatus.actionMessage}</p>
@@ -4199,7 +4199,7 @@ export default function APISettings() {
                       
                       // configured
                       return (
-                        <div className="mt-2 px-3 py-2 bg-green-50 border border-green-200 text-green-700 rounded">
+                        <div className="mt-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 rounded-lg">
                           <p className="font-semibold text-sm">✅ {unifiedStatus.message}</p>
                         </div>
                       );
@@ -4247,7 +4247,7 @@ export default function APISettings() {
                               {badgeTheme.label}
                             </div>
                             {statusInfo.message && statusInfo.message !== unifiedStatus.message ? (
-                              <p className="text-gray-500">{statusInfo.message}</p>
+                              <p className="text-slate-500">{statusInfo.message}</p>
                             ) : null}
                           </div>
                         );
@@ -4261,7 +4261,7 @@ export default function APISettings() {
                         return (
                           <div className="mt-2 space-y-2 text-xs">
                             {statusInfo.message ? (
-                              <p className="text-gray-500">{statusInfo.message}</p>
+                              <p className="text-slate-500">{statusInfo.message}</p>
                             ) : null}
                           </div>
                         );
@@ -4320,7 +4320,7 @@ export default function APISettings() {
                     {supportsEnv && (
                       <div className="mt-2">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium text-gray-600">Entorno:</span>
+                          <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Entorno:</span>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
                             currentEnvironment === 'sandbox'
                               ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
@@ -4339,7 +4339,7 @@ export default function APISettings() {
                                   ? env === 'sandbox'
                                     ? 'bg-yellow-50 border-yellow-400 text-yellow-800 shadow-sm'
                                     : 'bg-green-50 border-green-400 text-green-800 shadow-sm'
-                                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'
+                                  : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-600 hover:border-slate-400 hover:bg-slate-50'
                               }`}
                             >
                               {env === 'sandbox' ? '🧪' : '🚀'} {env === 'sandbox' ? 'Sandbox' : 'Producción'}
@@ -4367,7 +4367,7 @@ export default function APISettings() {
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2">
                     {getStatusIcon(apiDef.name, currentEnvironment)}
-                    <span className="text-sm font-medium text-gray-700">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                       {getStatusText(apiDef.name, currentEnvironment)}
                     </span>
                   </div>
@@ -4381,8 +4381,8 @@ export default function APISettings() {
                         disabled={!isAdmin && isGlobalScope}
                         className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                           credential.isActive
-                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            ? 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
                         } ${!isAdmin && isGlobalScope ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         {credential.isActive ? 'ON' : 'OFF'}
@@ -4446,7 +4446,7 @@ export default function APISettings() {
                           }
                           setExpandedApi(nextExpanded);
                         }}
-                        className="p-2 text-gray-600 hover:bg-gray-100 rounded"
+                        className="p-2 text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
                         title="Editar"
                       >
                         <Pencil className="w-5 h-5" />
@@ -4485,7 +4485,7 @@ export default function APISettings() {
 
               {/* Expanded Form */}
               {isExpanded && (
-                <div className="border-t border-gray-200 p-4 bg-gray-50">
+                <div className="border-t border-slate-200 dark:border-slate-800 p-4 bg-slate-50 dark:bg-slate-900/50">
                   <div className="space-y-4">
                     {/* ✅ MEJORA: Selector de entorno mejorado en formulario expandido */}
                     {supportsEnv && (
@@ -4493,7 +4493,7 @@ export default function APISettings() {
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <Globe className="w-4 h-4 text-blue-600" />
-                            <span className="text-sm font-semibold text-gray-700">Entorno de Configuración</span>
+                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Entorno de Configuración</span>
                           </div>
                           {loadingEnvironment[formKey] && (
                             <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
@@ -4509,7 +4509,7 @@ export default function APISettings() {
                                   ? env === 'sandbox'
                                     ? 'bg-yellow-50 border-yellow-400 text-yellow-800 shadow-md'
                                     : 'bg-green-50 border-green-400 text-green-800 shadow-md'
-                                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'
+                                  : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-600 hover:border-slate-400 hover:bg-slate-50'
                               }`}
                             >
                               {env === 'sandbox' ? '🧪' : '🚀'}
@@ -4547,14 +4547,14 @@ export default function APISettings() {
                       
                       return (
                         <div className="flex flex-col gap-2">
-                          <span className="text-sm font-medium text-gray-600">Alcance:</span>
-                          <div className="inline-flex rounded border border-gray-200 overflow-hidden w-fit">
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Alcance:</span>
+                          <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden w-fit">
                             <button
                               onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'user')}
                               className={`px-3 py-1 text-sm font-medium transition ${
                                 currentScope === 'user'
                                   ? 'bg-blue-600 text-white'
-                                  : 'bg-white text-gray-600 hover:bg-gray-100'
+                                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                               }`}
                             >
                               Personal
@@ -4564,19 +4564,19 @@ export default function APISettings() {
                               className={`px-3 py-1 text-sm font-medium transition ${
                                 currentScope === 'global'
                                   ? 'bg-blue-600 text-white'
-                                  : 'bg-white text-gray-600 hover:bg-gray-100'
+                                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                               }`}
                             >
                               Compartida
                             </button>
                           </div>
                           {currentScope === 'user' && credential?.sharedBy ? (
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-slate-500">
                               Última actualización por {credential.sharedBy.fullName || credential.sharedBy.username}
                             </p>
                           ) : null}
                           {currentScope === 'global' && credential?.owner ? (
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-slate-500">
                               Administrada por {credential.owner.fullName || credential.owner.username}
                             </p>
                           ) : null}
@@ -4628,7 +4628,7 @@ export default function APISettings() {
 
                       return (
                         <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2">
                             {fieldLabel}
                             {fieldRequired && <span className="text-red-500">*</span>}
                             {/* ✅ MEJORA UX: Tooltip de ayuda */}
@@ -4652,12 +4652,12 @@ export default function APISettings() {
                                 data-field-key={fieldKey}
                                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                   inputDisabled
-                                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed'
                                     : validation.status === 'invalid'
-                                    ? 'border-red-500 bg-red-50'
+                                    ? 'border-red-500 bg-red-50 dark:bg-red-950/20'
                                     : validation.status === 'valid'
-                                    ? 'border-green-500 bg-green-50'
-                                    : 'border-gray-300'
+                                    ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
+                                    : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900'
                                 }`}
                               >
                                 <option value="">{fieldPlaceholder || 'Selecciona...'}</option>
@@ -4679,19 +4679,19 @@ export default function APISettings() {
                                   data-field-key={fieldKey}
                                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                     inputDisabled 
-                                      ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
+                                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed' 
                                       : validation.status === 'invalid'
-                                      ? 'border-red-500 bg-red-50'
+                                      ? 'border-red-500 bg-red-50 dark:bg-red-950/20'
                                       : validation.status === 'valid'
-                                      ? 'border-green-500 bg-green-50'
-                                      : 'border-gray-300'
+                                      ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
+                                      : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900'
                                   }`}
                                 />
                                 {fieldType === 'password' && (
                                   <button
                                     type="button"
                                     onClick={() => setShowPasswords((prev: Record<string, boolean>) => ({ ...prev, [showKey]: !prev[showKey] }))}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                                   >
                                     {showPasswords[showKey] ? (
                                       <EyeOff className="w-5 h-5" />
@@ -4723,7 +4723,7 @@ export default function APISettings() {
                             </div>
                           )}
                           {fieldHelpText && validation.status === 'idle' && (
-                            <p className="mt-1 text-xs text-gray-500">{fieldHelpText}</p>
+                            <p className="mt-1 text-xs text-slate-500">{fieldHelpText}</p>
                           )}
                         </div>
                       );
@@ -4752,7 +4752,7 @@ export default function APISettings() {
                           setExpandedApi(null);
                           setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
                         }}
-                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+                        className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
                       >
                         Cancelar
                       </button>
@@ -4785,19 +4785,19 @@ export default function APISettings() {
       {oauthBlockedModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-800">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 ⚠️ Ventana de OAuth bloqueada
               </h2>
               <button
                 onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined })}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               >
                 ✕
               </button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              <p className="text-gray-700">
+              <p className="text-slate-700 dark:text-slate-300">
                 El navegador bloqueó la ventana emergente de OAuth. Tienes dos opciones:
               </p>
               
@@ -4834,8 +4834,8 @@ export default function APISettings() {
               
               <div className="space-y-3">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">Opción 1: Abrir en esta ventana</h3>
-                  <p className="text-sm text-gray-700 mb-3">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">Opción 1: Abrir en esta ventana</h3>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">
                     Se abrirá la página de autorización en esta misma ventana. Después de autorizar, deberás volver manualmente a esta página.
                   </p>
                   <button
@@ -4849,11 +4849,11 @@ export default function APISettings() {
                 </div>
                 
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-gray-900 mb-2">Opción 2: Copiar URL y abrir manualmente</h3>
-                  <p className="text-sm text-gray-700 mb-3">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">Opción 2: Copiar URL y abrir manualmente</h3>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">
                     Copia la URL y ábrela en una nueva pestaña o ventana. Después de autorizar, vuelve a esta página.
                   </p>
-                  <div className="bg-gray-50 p-2 rounded text-xs font-mono break-all mb-3 border border-gray-200">
+                  <div className="bg-slate-50 dark:bg-slate-800 p-2 rounded-lg text-xs font-mono break-all mb-3 border border-slate-200 dark:border-slate-700">
                     {oauthBlockedModal.authUrl}
                   </div>
                   <button
@@ -4879,10 +4879,10 @@ export default function APISettings() {
                 </p>
               </div>
             </div>
-            <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
+            <div className="flex justify-end gap-2 border-t border-slate-200 dark:border-slate-800 px-6 py-4">
               <button
                 onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined })}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition"
+                className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition"
               >
                 Cancelar
               </button>
@@ -4894,11 +4894,11 @@ export default function APISettings() {
       {manualCookieModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-800">Guardar cookies de AliExpress manualmente</h2>
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Guardar cookies de AliExpress manualmente</h2>
               <button
                 onClick={closeManualCookieModal}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                 disabled={manualCookieSaving}
               >
                 ✕
@@ -4957,7 +4957,7 @@ export default function APISettings() {
                 ) : null}
               </div>
 
-              <div className="flex items-start justify-between rounded border border-gray-200 bg-gray-50 px-3 py-2">
+              <div className="flex items-start justify-between rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2">
                 <div className={`flex items-center gap-2 text-sm ${manualSessionStatusDisplay.textClass}`}>
                   {manualSessionStatusDisplay.icon}
                   <span>{manualSessionStatusDisplay.text}</span>
@@ -4985,9 +4985,9 @@ export default function APISettings() {
                 </pre>
               </div>
 
-              <div className="rounded border border-gray-200 bg-white p-3">
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-700">Snippet manual (solo si falla el automático)</span>
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Snippet manual (solo si falla el automático)</span>
                   <button
                     onClick={handleCopyFallbackSnippet}
                     className="text-xs font-semibold text-blue-600 hover:text-blue-800"
@@ -4996,13 +4996,13 @@ export default function APISettings() {
                     Copiar
                   </button>
                 </div>
-                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-800">
+                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-slate-800 dark:text-slate-200">
 {fallbackCookieSnippet}
                 </pre>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-gray-700">Pega aquí el JSON generado (solo modo manual)</label>
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Pega aquí el JSON generado (solo modo manual)</label>
                 <textarea
                   value={manualCookieInput}
                   onChange={(event) => {
@@ -5010,24 +5010,24 @@ export default function APISettings() {
                     if (manualCookieError) setManualCookieError(null);
                   }}
                   rows={6}
-                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring focus:ring-blue-200"
+                  className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring focus:ring-blue-200"
                   placeholder='[{"name":"aep_usuc_f","value":"...","domain":".aliexpress.com","path":"/"}, … ]'
                   disabled={manualCookieSaving}
                 />
                 {manualCookieError ? (
                   <p className="mt-2 text-sm text-red-600">{manualCookieError}</p>
                 ) : (
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-slate-500">
                     Usa este campo solo si el método automático no funcionó y copiaste el JSON manualmente.
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 px-6 py-4">
               <button
                 onClick={closeManualCookieModal}
-                className="rounded px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={manualCookieSaving}
                 type="button"
               >

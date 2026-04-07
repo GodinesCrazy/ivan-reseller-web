@@ -255,7 +255,6 @@ export default function AdminPanel() {
     }
   };
 
-  // ✅ P0.5: Cargar solicitudes de acceso
   const loadAccessRequests = async () => {
     try {
       setLoadingAccessRequests(true);
@@ -269,7 +268,6 @@ export default function AdminPanel() {
     }
   };
 
-  // ✅ P0.5: Aprobar solicitud de acceso
   const handleApproveRequest = async () => {
     if (!selectedRequest || !tempPassword || tempPassword.length < 8) {
       toast.error('La contraseña debe tener al menos 8 caracteres');
@@ -286,7 +284,7 @@ export default function AdminPanel() {
       setSelectedRequest(null);
       setTempPassword('');
       loadAccessRequests();
-      loadDashboard(); // Recargar usuarios
+      loadDashboard();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Error aprobando solicitud');
     } finally {
@@ -294,7 +292,6 @@ export default function AdminPanel() {
     }
   };
 
-  // ✅ P0.5: Rechazar solicitud de acceso
   const handleRejectRequest = async (reason?: string) => {
     if (!selectedRequest) return;
 
@@ -324,59 +321,59 @@ export default function AdminPanel() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 p-4">
+      <div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 p-4">
         <p className="text-sm text-slate-700 dark:text-slate-300">
-          <strong>Panel técnico y de administración</strong> — gestión de usuarios, comisiones y configuración de plataforma. No sustituye verdad operativa canónica (Órdenes, Ventas, Finance,{' '}
+          <strong>Panel técnico y de administración</strong> — gestión de usuarios, comisiones y configuración de plataforma. No sustituye verdad operativa canónica (Órdenes, Ventas, Finanzas,{' '}
           <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
-            Control Center
+            Centro de Control
           </Link>
           ).
         </p>
       </div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Panel de Administración</h1>
-        <p className="text-gray-600 dark:text-gray-400">Gestiona usuarios, comisiones y configuraciones del sistema</p>
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-1">Panel de Administración</h1>
+        <p className="text-xs text-slate-500">Gestiona usuarios, comisiones y configuraciones del sistema</p>
       </div>
 
       {/* Estadísticas — agregados admin */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md transition-colors">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Total Usuarios</h3>
-          <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{dashboardData.totalUsers}</p>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 transition-colors">
+          <h3 className="text-sm font-medium text-slate-500">Total Usuarios</h3>
+          <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 tabular-nums mt-1">{dashboardData.totalUsers}</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md transition-colors">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Usuarios Activos</h3>
-          <p className="text-3xl font-bold text-green-600 dark:text-green-400">{dashboardData.activeUsers}</p>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 transition-colors">
+          <h3 className="text-sm font-medium text-slate-500">Usuarios Activos</h3>
+          <p className="text-3xl font-bold text-green-600 dark:text-green-400 tabular-nums mt-1">{dashboardData.activeUsers}</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md transition-colors">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Ingresos Totales (agregado admin)</h3>
-          <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">${dashboardData.totalRevenue.toFixed(2)}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Desde ledger admin — no es proof operativo</p>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 transition-colors">
+          <h3 className="text-sm font-medium text-slate-500">Ingresos Totales (agregado admin)</h3>
+          <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 tabular-nums mt-1">${dashboardData.totalRevenue.toFixed(2)}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Desde ledger admin — no es proof operativo</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md transition-colors">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Comisiones Mensuales (agregado)</h3>
-          <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">${dashboardData.monthlyCommissions.toFixed(2)}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Desde ledger admin</p>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 transition-colors">
+          <h3 className="text-sm font-medium text-slate-500">Comisiones Mensuales (agregado)</h3>
+          <p className="text-3xl font-bold text-orange-600 dark:text-orange-400 tabular-nums mt-1">${dashboardData.monthlyCommissions.toFixed(2)}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Desde ledger admin</p>
         </div>
       </div>
 
       {/* Acciones */}
-      <div className="flex gap-4 mb-6">
+      <div className="flex flex-wrap gap-3 mb-6">
         <button
           onClick={() => setShowCreateUser(true)}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium"
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           ➕ Crear Usuario
         </button>
         <button
           onClick={processMonthlyCharges}
-          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium"
+          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           💰 Procesar Cobros Mensuales
         </button>
         <button
           onClick={() => setShowCommissionsTab(!showCommissionsTab)}
-          className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium"
+          className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           {showCommissionsTab ? '👁️ Ocultar' : '💰 Ver'} Comisiones Admin
         </button>
@@ -385,7 +382,7 @@ export default function AdminPanel() {
             setShowPlatformConfigTab(!showPlatformConfigTab);
             if (!showPlatformConfigTab) loadPlatformConfig();
           }}
-          className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg font-medium"
+          className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           {showPlatformConfigTab ? '👁️ Ocultar' : '⚙️ Config'} Plataforma
         </button>
@@ -396,7 +393,7 @@ export default function AdminPanel() {
               loadAccessRequests();
             }
           }}
-          className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium relative"
+          className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors relative"
         >
           {showAccessRequestsTab ? '👁️ Ocultar' : '📋 Ver'} Solicitudes de Acceso
           {accessRequests.filter(r => r.status === 'PENDING').length > 0 && (
@@ -409,10 +406,10 @@ export default function AdminPanel() {
 
       {/* Comisiones Admin */}
       {showCommissionsTab && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-6 transition-colors">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Comisiones de Administrador</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card mb-6 transition-colors">
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Comisiones de Administrador</h2>
+            <p className="text-xs text-slate-500 mt-1">
               Comisiones ganadas por usuarios creados por ti
             </p>
           </div>
@@ -423,79 +420,77 @@ export default function AdminPanel() {
             </div>
           ) : (
             <>
-              {/* Estadísticas */}
               {adminCommissionStats && (
-                <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-950/50 border-b border-slate-200 dark:border-slate-800">
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
-                      <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{adminCommissionStats.total}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">${adminCommissionStats.totalAmount.toFixed(2)}</p>
+                      <p className="text-xs text-slate-500">Total</p>
+                      <p className="text-xl font-bold text-slate-900 dark:text-slate-100 tabular-nums">{adminCommissionStats.total}</p>
+                      <p className="text-xs text-slate-400 tabular-nums">${adminCommissionStats.totalAmount.toFixed(2)}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Pendientes</p>
-                      <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{adminCommissionStats.pending}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">${adminCommissionStats.pendingAmount.toFixed(2)}</p>
+                      <p className="text-xs text-slate-500">Pendientes</p>
+                      <p className="text-xl font-bold text-orange-600 dark:text-orange-400 tabular-nums">{adminCommissionStats.pending}</p>
+                      <p className="text-xs text-slate-400 tabular-nums">${adminCommissionStats.pendingAmount.toFixed(2)}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Pagadas</p>
-                      <p className="text-xl font-bold text-green-600 dark:text-green-400">{adminCommissionStats.paid}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">${adminCommissionStats.paidAmount.toFixed(2)}</p>
+                      <p className="text-xs text-slate-500">Pagadas</p>
+                      <p className="text-xl font-bold text-green-600 dark:text-green-400 tabular-nums">{adminCommissionStats.paid}</p>
+                      <p className="text-xs text-slate-400 tabular-nums">${adminCommissionStats.paidAmount.toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Lista de Comisiones */}
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-900">
+                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                  <thead className="bg-slate-50 dark:bg-slate-950/50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Usuario
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Producto
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Venta
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Monto
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Estado
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Fecha
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
                     {adminCommissions.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
                           No hay comisiones registradas aún
                         </td>
                       </tr>
                     ) : (
                       adminCommissions.map((commission) => (
-                        <tr key={commission.id}>
+                        <tr key={commission.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
                               {commission.sale.user.username}
                             </div>
-                            <div className="text-sm text-gray-500 dark:text-gray-400">{commission.sale.user.email}</div>
+                            <div className="text-xs text-slate-500">{commission.sale.user.email}</div>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="text-sm text-gray-900 dark:text-gray-100">{commission.sale.product.title}</div>
+                            <div className="text-sm text-slate-900 dark:text-slate-100">{commission.sale.product.title}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900 dark:text-gray-100">#{commission.sale.orderId}</div>
-                            <div className="text-sm text-gray-500 dark:text-gray-400">${commission.sale.salePrice.toFixed(2)}</div>
+                            <div className="text-sm text-slate-900 dark:text-slate-100 tabular-nums">#{commission.sale.orderId}</div>
+                            <div className="text-xs text-slate-500 tabular-nums">${commission.sale.salePrice.toFixed(2)}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                            <div className="text-sm font-semibold text-purple-600 dark:text-purple-400 tabular-nums">
                               ${commission.amount.toFixed(2)}
                             </div>
                           </td>
@@ -516,7 +511,7 @@ export default function AdminPanel() {
                                 : 'Programada'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 tabular-nums">
                             {new Date(commission.createdAt).toLocaleDateString()}
                           </td>
                         </tr>
@@ -532,16 +527,16 @@ export default function AdminPanel() {
 
       {/* Configuración Plataforma (comisión %, PayPal admin) */}
       {showPlatformConfigTab && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-6 transition-colors">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Configuración de Plataforma</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card mb-6 transition-colors">
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Configuración de Plataforma</h2>
+            <p className="text-xs text-slate-500 mt-1">
               Comisión por venta y email PayPal para recibir las comisiones de la plataforma
             </p>
           </div>
           <div className="p-6 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Comisión plataforma (%)
               </label>
               <input
@@ -554,14 +549,14 @@ export default function AdminPanel() {
                   ...platformConfigForm,
                   platformCommissionPct: parseFloat(e.target.value) || 0
                 })}
-                className="w-full max-w-xs border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                className="w-full max-w-xs border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500 transition-colors"
               />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-xs text-slate-500">
                 Porcentaje que se retiene de la ganancia del usuario en cada venta (0-100%)
               </p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Email PayPal (admin)
               </label>
               <input
@@ -571,10 +566,10 @@ export default function AdminPanel() {
                   ...platformConfigForm,
                   adminPaypalEmail: e.target.value
                 })}
-                className="w-full max-w-md border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                className="w-full max-w-md border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500 transition-colors"
                 placeholder="admin@paypal.com"
               />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-xs text-slate-500">
                 Cuenta PayPal donde se reciben las comisiones de la plataforma
               </p>
             </div>
@@ -582,7 +577,7 @@ export default function AdminPanel() {
               <button
                 onClick={savePlatformConfig}
                 disabled={savingPlatformConfig || platformConfigForm.platformCommissionPct < 0 || platformConfigForm.platformCommissionPct > 100}
-                className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
+                className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
               >
                 {savingPlatformConfig ? 'Guardando...' : 'Guardar'}
               </button>
@@ -591,12 +586,12 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {/* ✅ P0.5: Solicitudes de Acceso */}
+      {/* Solicitudes de Acceso */}
       {showAccessRequestsTab && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-6 transition-colors">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Solicitudes de Acceso</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card mb-6 transition-colors">
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Solicitudes de Acceso</h2>
+            <p className="text-xs text-slate-500 mt-1">
               Gestiona las solicitudes de acceso al sistema
             </p>
           </div>
@@ -607,35 +602,35 @@ export default function AdminPanel() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
+              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                <thead className="bg-slate-50 dark:bg-slate-950/50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Username</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nombre</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Estado</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Fecha</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Acciones</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Email</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Usuario</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Nombre</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Estado</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Fecha</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
                   {accessRequests.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                      <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
                         No hay solicitudes de acceso
                       </td>
                     </tr>
                   ) : (
                     accessRequests.map((request) => (
-                      <tr key={request.id}>
+                      <tr key={request.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{request.email}</div>
+                          <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{request.email}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-100">{request.username || '-'}</div>
+                          <div className="text-sm text-slate-900 dark:text-slate-100">{request.username || '-'}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 dark:text-gray-100">{request.fullName || '-'}</div>
+                          <div className="text-sm text-slate-900 dark:text-slate-100">{request.fullName || '-'}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
@@ -650,7 +645,7 @@ export default function AdminPanel() {
                             {request.status === 'APPROVED' ? 'Aprobada' : request.status === 'REJECTED' ? 'Rechazada' : 'Pendiente'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 tabular-nums">
                           {new Date(request.requestedAt || request.createdAt).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -688,49 +683,49 @@ export default function AdminPanel() {
       )}
 
       {/* Lista de Usuarios */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden transition-colors">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Usuarios del Sistema</h2>
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card overflow-hidden transition-colors">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Usuarios del Sistema</h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-900">
+          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <thead className="bg-slate-50 dark:bg-slate-950/50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Usuario</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Comisiones</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Balance</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estadísticas</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Acciones</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Usuario</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Comisiones</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Balance</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Estadísticas</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Estado</th>
+                <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Acciones</th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
               {dashboardData.users.map((user) => (
-                <tr key={user.id}>
+                <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{user.username}</div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">{user.email}</div>
-                        {user.fullName && <div className="text-xs text-gray-400 dark:text-gray-500">{user.fullName}</div>}
+                        <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{user.username}</div>
+                        <div className="text-xs text-slate-500">{user.email}</div>
+                        {user.fullName && <div className="text-xs text-slate-400 dark:text-slate-500">{user.fullName}</div>}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 dark:text-gray-100">
+                    <div className="text-sm text-slate-900 dark:text-slate-100 tabular-nums">
                       {(user.commissionRate * 100).toFixed(1)}% por venta
                     </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                    <div className="text-xs text-slate-500 tabular-nums">
                       ${user.fixedMonthlyCost.toFixed(2)} mensual
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 dark:text-gray-100">${user.balance.toFixed(2)}</div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">Total: ${user.totalEarnings.toFixed(2)}</div>
+                    <div className="text-sm text-slate-900 dark:text-slate-100 tabular-nums">${user.balance.toFixed(2)}</div>
+                    <div className="text-xs text-slate-500 tabular-nums">Total: ${user.totalEarnings.toFixed(2)}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 dark:text-gray-100">{user._count.sales} ventas</div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">{user._count.products} productos</div>
+                    <div className="text-sm text-slate-900 dark:text-slate-100 tabular-nums">{user._count.sales} ventas</div>
+                    <div className="text-xs text-slate-500 tabular-nums">{user._count.products} productos</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -761,52 +756,52 @@ export default function AdminPanel() {
 
       {/* Modal Crear Usuario */}
       {showCreateUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md transition-colors">
-            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">Crear Nuevo Usuario</h2>
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 w-full max-w-md transition-colors">
+            <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-slate-100">Crear Nuevo Usuario</h2>
             <form onSubmit={handleSubmit(onCreateUser)} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Username</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre de usuario</label>
                 <input
                   {...register('username')}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
                 />
-                {errors.username && <p className="text-red-500 dark:text-red-400 text-xs">{errors.username.message}</p>}
+                {errors.username && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{errors.username.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
                 <input
                   type="email"
                   {...register('email')}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
                 />
-                {errors.email && <p className="text-red-500 dark:text-red-400 text-xs">{errors.email.message}</p>}
+                {errors.email && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{errors.email.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Contraseña Temporal</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Contraseña Temporal</label>
                 <input
                   type="password"
                   {...register('password')}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
                 />
-                {errors.password && <p className="text-red-500 dark:text-red-400 text-xs">{errors.password.message}</p>}
+                {errors.password && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{errors.password.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre Completo (Opcional)</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre Completo (Opcional)</label>
                 <input
                   {...register('fullName')}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Rol</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Rol</label>
                 <select
                   {...register('role')}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
                 >
                   <option value="USER">Usuario</option>
                   <option value="ADMIN">Administrador</option>
@@ -814,7 +809,7 @@ export default function AdminPanel() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Comisión por Transacción (%) - Ejemplo: 0.15 = 15%
                 </label>
                 <input
@@ -823,37 +818,37 @@ export default function AdminPanel() {
                   min="0"
                   max="1"
                   {...register('commissionRate', { valueAsNumber: true })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
                 />
-                {errors.commissionRate && <p className="text-red-500 dark:text-red-400 text-xs">{errors.commissionRate.message}</p>}
+                {errors.commissionRate && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{errors.commissionRate.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Costo Fijo Mensual (USD)</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Costo Fijo Mensual (USD)</label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
                   {...register('fixedMonthlyCost', { valueAsNumber: true })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
                 />
-                {errors.fixedMonthlyCost && <p className="text-red-500 dark:text-red-400 text-xs">{errors.fixedMonthlyCost.message}</p>}
+                {errors.fixedMonthlyCost && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{errors.fixedMonthlyCost.message}</p>}
               </div>
 
               <div className="flex items-center">
                 <input
                   type="checkbox"
                   {...register('isActive')}
-                  className="h-4 w-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded"
+                  className="h-4 w-4 text-blue-600 border-slate-300 dark:border-slate-600 rounded"
                 />
-                <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">Usuario Activo</label>
+                <label className="ml-2 block text-sm text-slate-700 dark:text-slate-300">Usuario Activo</label>
               </div>
 
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md disabled:opacity-50"
+                  className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
                 >
                   {isLoading ? 'Creando...' : 'Crear Usuario'}
                 </button>
@@ -863,7 +858,7 @@ export default function AdminPanel() {
                     setShowCreateUser(false);
                     reset();
                   }}
-                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md"
+                  className="flex-1 bg-slate-500 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
                 >
                   Cancelar
                 </button>
@@ -875,9 +870,9 @@ export default function AdminPanel() {
 
       {/* Modal Editar Comisiones */}
       {showCommissionModal && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md transition-colors">
-            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">Editar Comisiones - {selectedUser.username}</h2>
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 w-full max-w-md transition-colors">
+            <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-slate-100">Editar Comisiones - {selectedUser.username}</h2>
             <CommissionEditor
               user={selectedUser}
               onSave={updateCommissions}
@@ -887,35 +882,35 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {/* ✅ P0.5: Modal Aprobar Solicitud */}
+      {/* Modal Aprobar Solicitud */}
       {showApproveModal && selectedRequest && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md transition-colors">
-            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">Aprobar Solicitud de Acceso</h2>
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 w-full max-w-md transition-colors">
+            <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-slate-100">Aprobar Solicitud de Acceso</h2>
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Email: <strong className="text-gray-900 dark:text-gray-100">{selectedRequest.email}</strong></p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Username: <strong className="text-gray-900 dark:text-gray-100">{selectedRequest.username}</strong></p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Email: <strong className="text-slate-900 dark:text-slate-100">{selectedRequest.email}</strong></p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Usuario: <strong className="text-slate-900 dark:text-slate-100">{selectedRequest.username}</strong></p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Contraseña Temporal (mínimo 8 caracteres) *
                 </label>
                 <input
                   type="password"
                   value={tempPassword}
                   onChange={(e) => setTempPassword(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-green-500/40 focus:border-green-500 transition-colors"
                   placeholder="Ingresa una contraseña temporal"
                   minLength={8}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">El usuario deberá cambiar esta contraseña en su primer login</p>
+                <p className="text-xs text-slate-500 mt-1">El usuario deberá cambiar esta contraseña en su primer login</p>
               </div>
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={handleApproveRequest}
                   disabled={loadingAccessRequests || !tempPassword || tempPassword.length < 8}
-                  className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md disabled:opacity-50"
+                  className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
                 >
                   {loadingAccessRequests ? 'Aprobando...' : 'Aprobar y Crear Usuario'}
                 </button>
@@ -925,7 +920,7 @@ export default function AdminPanel() {
                     setSelectedRequest(null);
                     setTempPassword('');
                   }}
-                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md"
+                  className="flex-1 bg-slate-500 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
                 >
                   Cancelar
                 </button>
@@ -935,24 +930,24 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {/* ✅ P0.5: Modal Rechazar Solicitud */}
+      {/* Modal Rechazar Solicitud */}
       {showRejectModal && selectedRequest && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md transition-colors">
-            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">Rechazar Solicitud de Acceso</h2>
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 w-full max-w-md transition-colors">
+            <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-slate-100">Rechazar Solicitud de Acceso</h2>
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Email: <strong className="text-gray-900 dark:text-gray-100">{selectedRequest.email}</strong></p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Username: <strong className="text-gray-900 dark:text-gray-100">{selectedRequest.username}</strong></p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Email: <strong className="text-slate-900 dark:text-slate-100">{selectedRequest.email}</strong></p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Usuario: <strong className="text-slate-900 dark:text-slate-100">{selectedRequest.username}</strong></p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Razón del Rechazo (opcional)
                 </label>
                 <textarea
                   id="rejectionReason"
                   rows={3}
-                  className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-red-500/40 focus:border-red-500 transition-colors"
                   placeholder="Especifica el motivo del rechazo (opcional)"
                 />
               </div>
@@ -963,7 +958,7 @@ export default function AdminPanel() {
                     handleRejectRequest(reason);
                   }}
                   disabled={loadingAccessRequests}
-                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-md disabled:opacity-50"
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
                 >
                   {loadingAccessRequests ? 'Rechazando...' : 'Rechazar Solicitud'}
                 </button>
@@ -972,7 +967,7 @@ export default function AdminPanel() {
                     setShowRejectModal(false);
                     setSelectedRequest(null);
                   }}
-                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md"
+                  className="flex-1 bg-slate-500 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
                 >
                   Cancelar
                 </button>
@@ -998,7 +993,7 @@ function CommissionEditor({ user, onSave, onCancel }: CommissionEditorProps) {
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
           Comisión por Transacción (%) - Actual: {(user.commissionRate * 100).toFixed(1)}%
         </label>
         <input
@@ -1008,15 +1003,15 @@ function CommissionEditor({ user, onSave, onCancel }: CommissionEditorProps) {
           max="1"
           value={commissionRate}
           onChange={(e) => setCommissionRate(parseFloat(e.target.value) || 0)}
-          className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
         />
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+        <p className="text-xs text-slate-500 mt-1">
           Ingresa como decimal: 0.15 = 15%, 0.20 = 20%
         </p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
           Costo Fijo Mensual (USD) - Actual: ${user.fixedMonthlyCost.toFixed(2)}
         </label>
         <input
@@ -1025,19 +1020,19 @@ function CommissionEditor({ user, onSave, onCancel }: CommissionEditorProps) {
           min="0"
           value={fixedMonthlyCost}
           onChange={(e) => setFixedMonthlyCost(parseFloat(e.target.value) || 0)}
-          className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          className="mt-1 block w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-colors"
         />
       </div>
 
-      <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md">
-        <h4 className="font-medium text-gray-700 dark:text-gray-300">Vista Previa del Cobro Mensual:</h4>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
+      <div className="bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+        <h4 className="font-medium text-slate-700 dark:text-slate-300 text-sm">Vista Previa del Cobro Mensual:</h4>
+        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 tabular-nums">
           • Costo fijo: ${fixedMonthlyCost.toFixed(2)}
         </p>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
+        <p className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
           • Comisión por venta: {(commissionRate * 100).toFixed(1)}% de cada transacción exitosa
         </p>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
+        <p className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
           • Ejemplo: Si el usuario genera $1000 en ganancias, pagará: 
           ${fixedMonthlyCost.toFixed(2)} + ${(1000 * commissionRate).toFixed(2)} = ${(fixedMonthlyCost + (1000 * commissionRate)).toFixed(2)}
         </p>
@@ -1046,13 +1041,13 @@ function CommissionEditor({ user, onSave, onCancel }: CommissionEditorProps) {
       <div className="flex gap-3 pt-4">
         <button
           onClick={() => onSave(user.id, commissionRate, fixedMonthlyCost)}
-          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md"
+          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
         >
           Guardar Cambios
         </button>
         <button
           onClick={onCancel}
-          className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md"
+          className="flex-1 bg-slate-500 hover:bg-slate-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors"
         >
           Cancelar
         </button>

@@ -63,7 +63,8 @@ export function mergeOperationsTruthResponses(responses: OperationsTruthResponse
     }
   }
   mergedSummary.blockerCounts = Array.from(blockerAcc.entries()).map(([blockerCode, count]) => ({ blockerCode, count }));
-  const generatedAt = responses.map((r) => r.generatedAt).sort().at(-1) ?? responses[0].generatedAt;
+  const sortedGeneratedAt = responses.map((r) => r.generatedAt).sort();
+  const generatedAt = sortedGeneratedAt[sortedGeneratedAt.length - 1] ?? responses[0].generatedAt;
   return { generatedAt, items, summary: mergedSummary };
 }
 

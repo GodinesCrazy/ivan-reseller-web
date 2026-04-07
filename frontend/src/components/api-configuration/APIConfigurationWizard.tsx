@@ -8,8 +8,12 @@ import OAuthFlowStep from './steps/OAuthFlowStep';
 import ValidationStep from './steps/ValidationStep';
 
 export interface WizardData {
+  // Canonical wizard fields (steps/*)
   selectedAPI?: string;
   selectedEnvironment?: 'sandbox' | 'production';
+  // Legacy compatibility fields (wizard-steps/* still compiled in repo)
+  marketplace?: string;
+  environment?: 'sandbox' | 'production';
   credentials?: Record<string, string>;
   oauthCompleted?: boolean;
   validationResult?: {

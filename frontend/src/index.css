@@ -3,80 +3,235 @@
 @tailwind utilities;
 
 /*
- * Ivan Reseller — design tokens (contrast-first, SaaS-grade)
- * Spacing scale: 4 / 8 / 12 / 16 / 24 / 32
+ * Ivan Reseller — Premium SaaS Design Tokens
+ * Enterprise-grade operational cockpit
  */
 @layer base {
   :root {
-    --navbar-height: 4.5rem; /* 72px — sync with Sidebar mobile top offset */
+    --navbar-height: 3.5rem;
+    --sidebar-width: 15.5rem;
     --ir-radius: 0.5rem;
     --ir-radius-lg: 0.75rem;
-    --ir-text-primary: 17 24 39;
-    --ir-text-secondary: 75 85 99;
-    --ir-text-muted: 107 114 128;
-    --ir-surface: 249 250 251;
+    --ir-radius-xl: 1rem;
+
+    --ir-text-primary: 15 23 42;
+    --ir-text-secondary: 71 85 105;
+    --ir-text-muted: 148 163 184;
+
+    --ir-surface: 248 250 252;
     --ir-surface-elevated: 255 255 255;
-    --ir-border: 229 231 235;
-    --ir-focus-ring: 37 99 235;
+    --ir-surface-sunken: 241 245 249;
+
+    --ir-border: 226 232 240;
+    --ir-border-subtle: 241 245 249;
+    --ir-focus-ring: 59 130 246;
+
+    --ir-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    --ir-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+    --ir-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+    --ir-shadow-md: 0 8px 16px -4px rgb(0 0 0 / 0.06), 0 4px 6px -4px rgb(0 0 0 / 0.04);
   }
 
   html.dark {
-    --ir-text-primary: 248 250 252;
-    --ir-text-secondary: 226 232 240;
+    --ir-text-primary: 241 245 249;
+    --ir-text-secondary: 203 213 225;
     --ir-text-muted: 148 163 184;
-    --ir-surface: 15 23 42;
-    --ir-surface-elevated: 30 41 59;
-    --ir-border: 71 85 105;
+
+    --ir-surface: 2 6 23;
+    --ir-surface-elevated: 15 23 42;
+    --ir-surface-sunken: 2 6 23;
+
+    --ir-border: 51 65 85;
+    --ir-border-subtle: 30 41 59;
     --ir-focus-ring: 96 165 250;
+
+    --ir-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.15);
+    --ir-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.25), 0 1px 2px -1px rgb(0 0 0 / 0.2);
+    --ir-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+    --ir-shadow-md: 0 8px 16px -4px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.25);
   }
 
   html {
-    @apply bg-gray-50;
+    background-color: rgb(var(--ir-surface));
     scroll-behavior: smooth;
   }
-  html.dark {
-    @apply bg-slate-950;
-  }
+
   body {
     @apply antialiased;
     background-color: rgb(var(--ir-surface));
     color: rgb(var(--ir-text-primary));
-    font-feature-settings: "kern" 1, "liga" 1;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
     line-height: 1.5;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  html.dark body {
-    color: rgb(var(--ir-text-primary));
-  }
+
   #root {
     @apply min-h-screen;
   }
 
-  /* Typography hierarchy */
   h1 {
-    @apply text-2xl md:text-3xl font-bold tracking-tight text-gray-900 dark:text-slate-50;
+    @apply text-xl font-semibold tracking-tight;
+    color: rgb(var(--ir-text-primary));
   }
   h2 {
-    @apply text-xl md:text-2xl font-semibold tracking-tight text-gray-900 dark:text-slate-50;
+    @apply text-lg font-semibold tracking-tight;
+    color: rgb(var(--ir-text-primary));
   }
   h3 {
-    @apply text-lg font-semibold text-gray-900 dark:text-slate-100;
+    @apply text-base font-semibold;
+    color: rgb(var(--ir-text-primary));
   }
 
-  /* Accessible focus (keyboard) */
   :where(a, button, input, select, textarea):focus-visible {
     outline: 2px solid rgb(var(--ir-focus-ring));
     outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: rgb(59 130 246 / 0.2);
+  }
+}
+
+@layer components {
+  .ir-panel {
+    background: rgb(var(--ir-surface-elevated));
+    border: 1px solid rgb(var(--ir-border));
+    border-radius: var(--ir-radius-lg);
+    box-shadow: var(--ir-shadow-sm);
+  }
+
+  .ir-panel-flush {
+    background: rgb(var(--ir-surface-elevated));
+    border: 1px solid rgb(var(--ir-border));
+    border-radius: var(--ir-radius-lg);
+  }
+
+  .ir-table-header {
+    @apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider;
+    color: rgb(var(--ir-text-muted));
+    background: rgb(var(--ir-surface-sunken));
+  }
+
+  .ir-table-cell {
+    @apply px-4 py-3 text-sm;
+    color: rgb(var(--ir-text-secondary));
+  }
+
+  .ir-table-row {
+    @apply transition-colors;
+    border-bottom: 1px solid rgb(var(--ir-border-subtle));
+  }
+  .ir-table-row:hover {
+    background: rgb(var(--ir-surface-sunken));
+  }
+
+  .ir-section-title {
+    @apply text-xs font-semibold uppercase tracking-wider;
+    color: rgb(var(--ir-text-muted));
+    letter-spacing: 0.06em;
+  }
+
+  .ir-metric {
+    @apply text-2xl font-bold tabular-nums tracking-tight;
+    color: rgb(var(--ir-text-primary));
+  }
+
+  .ir-metric-sm {
+    @apply text-lg font-semibold tabular-nums;
+    color: rgb(var(--ir-text-primary));
+  }
+
+  .ir-metric-label {
+    @apply text-xs font-medium;
+    color: rgb(var(--ir-text-muted));
+  }
+
+  .ir-page-header {
+    @apply flex flex-col gap-1;
+  }
+  .ir-page-header h1 {
+    @apply text-xl font-semibold tracking-tight;
+  }
+  .ir-page-header p {
+    @apply text-sm;
+    color: rgb(var(--ir-text-muted));
+  }
+
+  .ir-status-dot {
+    @apply w-2 h-2 rounded-full shrink-0;
+  }
+
+  .ir-kpi-card {
+    @apply ir-panel p-4;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .ir-empty-state {
+    @apply flex flex-col items-center justify-center py-12 text-center;
+  }
+  .ir-empty-state svg {
+    @apply w-10 h-10 mb-3 opacity-30;
+    color: rgb(var(--ir-text-muted));
+  }
+  .ir-empty-state p {
+    @apply text-sm;
+    color: rgb(var(--ir-text-muted));
   }
 }
 
 @layer utilities {
   .ir-surface-card {
-    @apply bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600;
+    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800;
   }
   .ir-text-muted {
     color: rgb(var(--ir-text-muted));
   }
   .ir-text-secondary {
     color: rgb(var(--ir-text-secondary));
+  }
+  .ir-text-primary {
+    color: rgb(var(--ir-text-primary));
+  }
+  .ir-border {
+    border-color: rgb(var(--ir-border));
+  }
+  .ir-border-subtle {
+    border-color: rgb(var(--ir-border-subtle));
+  }
+
+  .ir-fade-in {
+    animation: ir-fade-in 0.2s ease-out;
+  }
+  @keyframes ir-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .ir-slide-in {
+    animation: ir-slide-in 0.2s ease-out;
+  }
+  @keyframes ir-slide-in {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--ir-border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgb(var(--ir-border));
+    border-radius: 3px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
   }
 }

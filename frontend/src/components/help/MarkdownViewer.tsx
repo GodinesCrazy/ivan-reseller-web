@@ -48,8 +48,9 @@ export default function MarkdownViewer({ content, className = '' }: MarkdownView
             </td>
           ),
           // Estilizar código
-          code: ({ inline, children, ...props }) => {
-            if (inline) {
+          code: ({ className, children, ...props }) => {
+            const isInlineCode = !className;
+            if (isInlineCode) {
               return (
                 <code
                   className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded text-sm font-mono"
@@ -61,7 +62,7 @@ export default function MarkdownViewer({ content, className = '' }: MarkdownView
             }
             return (
               <code
-                className="block p-4 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg text-sm font-mono overflow-x-auto"
+                className={`block p-4 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg text-sm font-mono overflow-x-auto ${className ?? ''}`}
                 {...props}
               >
                 {children}

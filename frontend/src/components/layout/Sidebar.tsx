@@ -2,27 +2,24 @@ import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useInventoryBadges } from '@/hooks/useInventoryBadges';
-import { 
-  LayoutDashboard, 
-  Package, 
-  DollarSign, 
-  Receipt, 
-  CreditCard,
-  Users, 
-  Settings,
+import {
+  LayoutDashboard,
+  Package,
+  DollarSign,
+  Receipt,
+  Users,
   Search,
   Bot,
   Wallet,
-  TrendingUp,
   Send,
-  Briefcase,
-  FileText,
   Globe,
   Terminal,
   HelpCircle,
-  Video,
   ShoppingCart,
-  Activity
+  Activity,
+  Key,
+  Repeat2,
+  Server,
 } from 'lucide-react';
 
 interface NavItem {
@@ -44,8 +41,8 @@ const navGroups: NavGroup[] = [
     items: [
       { path: '/dashboard', label: 'Panel', icon: LayoutDashboard },
       { path: '/control-center', label: 'Control Center', icon: Activity },
-      { path: '/dashboard?tab=trends', label: 'Ciclo (Tendencias)', icon: TrendingUp },
       { path: '/opportunities', label: 'Oportunidades', icon: Search },
+      { path: '/publisher', label: 'Publicador', icon: Send },
       { path: '/autopilot', label: 'Autopilot', icon: Bot },
     ],
   },
@@ -53,26 +50,16 @@ const navGroups: NavGroup[] = [
     title: 'Catálogo y ventas',
     items: [
       { path: '/products', label: 'Productos', icon: Package },
-      { path: '/sales', label: 'Ventas', icon: DollarSign },
       { path: '/orders', label: 'Órdenes', icon: Receipt },
-      { path: '/checkout', label: 'Checkout', icon: CreditCard },
       { path: '/pending-purchases', label: 'Compras pendientes', icon: ShoppingCart },
+      { path: '/sales', label: 'Ventas', icon: DollarSign },
     ],
   },
   {
     title: 'Finanzas',
     items: [
-      { path: '/commissions', label: 'Comisiones', icon: Receipt },
       { path: '/finance', label: 'Finanzas', icon: Wallet },
-    ],
-  },
-  {
-    title: 'Herramientas',
-    items: [
-      { path: '/flexible', label: 'Dropshipping flexible', icon: TrendingUp },
-      { path: '/publisher', label: 'Publicador inteligente', icon: Send },
-      { path: '/jobs', label: 'Trabajos', icon: Briefcase },
-      { path: '/reports', label: 'Reportes', icon: FileText },
+      { path: '/commissions', label: 'Comisiones', icon: Receipt },
     ],
   },
   {
@@ -86,14 +73,11 @@ const navGroups: NavGroup[] = [
   {
     title: 'Configuración',
     items: [
-      { path: '/regional', label: 'Configuración regional', icon: Globe },
-      { path: '/system-status', label: 'Estado del sistema', icon: Activity },
-      { path: '/workflow-config', label: 'Config. workflows', icon: Settings },
-      { path: '/settings', label: 'Configuración', icon: Settings },
-      { path: '/api-settings', label: 'API Settings', icon: Settings },
-      { path: '/meeting-room', label: 'Sala de reuniones', icon: Video },
-      { path: '/help', label: 'Centro de ayuda', icon: HelpCircle },
-      { path: '/onboarding', label: 'Asistente de configuración', icon: Settings },
+      { path: '/api-settings', label: 'API & Credenciales', icon: Key },
+      { path: '/workflow-config', label: 'Workflows', icon: Repeat2 },
+      { path: '/regional', label: 'Regional', icon: Globe },
+      { path: '/system-status', label: 'Estado del sistema', icon: Server },
+      { path: '/help', label: 'Ayuda', icon: HelpCircle },
     ],
   },
 ];
@@ -114,13 +98,13 @@ export default function Sidebar() {
   });
 
   const navContent = (
-    <nav className="p-4 space-y-6">
+    <nav className="py-3 px-2.5 space-y-5 scrollbar-thin">
       {visibleGroups.map((group) => (
         <div key={group.title}>
-          <h3 className="px-4 mb-2 text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-widest">
+          <p className="px-3 mb-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.08em]">
             {group.title}
-          </h3>
-          <div className="space-y-1">
+          </p>
+          <div className="space-y-0.5">
             {group.items
               .filter((item) => !item.roles || item.roles.includes(userRole))
               .map((item) => {
@@ -136,17 +120,17 @@ export default function Sidebar() {
                   to={item.path}
                   onClick={close}
                   className={({ isActive }) =>
-                    `flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-colors text-sm ${
+                    `flex items-center gap-2.5 px-3 py-[7px] rounded-lg transition-colors text-[13px] ${
                       isActive
-                        ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-800 dark:text-primary-300 font-semibold border border-primary-200/80 dark:border-primary-700/50'
-                        : 'text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800/80 border border-transparent'
+                        ? 'bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
                     }`
                   }
                 >
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
-                  <span>{item.label}</span>
+                  <item.icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate">{item.label}</span>
                   {badgeCount > 0 && (
-                    <span className="ml-auto min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center rounded-full bg-amber-500 text-white text-xs font-medium">
+                    <span className="ml-auto min-w-[1.125rem] h-[18px] px-1 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-semibold leading-none">
                       {badgeCount > 99 ? '99+' : badgeCount}
                     </span>
                   )}
@@ -161,10 +145,9 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Overlay en mobile cuando sidebar abierto */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden"
           onClick={close}
           aria-hidden="true"
         />
@@ -173,8 +156,8 @@ export default function Sidebar() {
         className={`
           fixed lg:static left-0 z-50
           top-[var(--navbar-height)] h-[calc(100vh-var(--navbar-height))] lg:top-0 lg:min-h-[calc(100vh-var(--navbar-height))] lg:h-auto
-          w-64
-          bg-white dark:bg-slate-900 shadow-md border-r border-gray-200 dark:border-slate-700
+          w-[var(--sidebar-width)]
+          bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800
           overflow-y-auto overflow-x-hidden transition-transform duration-200 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0

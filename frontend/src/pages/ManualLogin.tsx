@@ -13,6 +13,8 @@ interface SessionInfo {
   completedAt?: string;
 }
 
+const ALIEXPRESS_LOGIN_URL = 'https://www.aliexpress.com/';
+
 const providerLabels: Record<string, string> = {
   aliexpress: 'AliExpress',
 };

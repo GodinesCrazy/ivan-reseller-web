@@ -429,12 +429,12 @@ export default function Settings() {
     <div className="p-6 space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-600">Manage your account settings and preferences</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Settings</h1>
+        <p className="text-slate-600 dark:text-slate-400">Manage your account settings and preferences</p>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-slate-200 dark:border-slate-800">
         <nav className="flex space-x-8">
           {tabs.map((tab) => (
             <button
@@ -443,7 +443,7 @@ export default function Settings() {
               className={`py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
                 activeTab === tab.id
                   ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -454,26 +454,26 @@ export default function Settings() {
       </div>
 
       {/* Tab Content */}
-      <div className="bg-white border rounded-lg p-6">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
         {/* General Settings */}
         {activeTab === 'general' && (
           <div className="space-y-6">
             <div>
               <h2 className="text-xl font-semibold mb-4">General Settings</h2>
-              <p className="text-gray-600 mb-6">Configure your system preferences</p>
+              <p className="text-slate-600 dark:text-slate-400 mb-6">Configure your system preferences</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Language */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   <Globe className="w-4 h-4 inline mr-2" />
                   Language
                 </label>
                 <select
                   value={generalSettings.language}
                   onChange={(e) => setGeneralSettings({ ...generalSettings, language: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="en">English</option>
                   <option value="es">Español</option>
@@ -483,11 +483,11 @@ export default function Settings() {
 
               {/* Timezone */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Timezone</label>
                 <select
                   value={generalSettings.timezone}
                   onChange={(e) => setGeneralSettings({ ...generalSettings, timezone: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="America/New_York">Eastern Time (ET)</option>
                   <option value="America/Chicago">Central Time (CT)</option>
@@ -502,11 +502,11 @@ export default function Settings() {
 
               {/* Date Format */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date Format</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Date Format</label>
                 <select
                   value={generalSettings.dateFormat}
                   onChange={(e) => setGeneralSettings({ ...generalSettings, dateFormat: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="MM/DD/YYYY">MM/DD/YYYY (US)</option>
                   <option value="DD/MM/YYYY">DD/MM/YYYY (EU)</option>
@@ -516,11 +516,11 @@ export default function Settings() {
 
               {/* Currency */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Currency Format</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Currency Format</label>
                 <select
                   value={generalSettings.currencyFormat}
                   onChange={(e) => setGeneralSettings({ ...generalSettings, currencyFormat: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="USD">$ USD - US Dollar</option>
                   <option value="EUR">€ EUR - Euro</option>
@@ -533,7 +533,7 @@ export default function Settings() {
 
               {/* Theme */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Theme</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Theme</label>
                 <select
                   value={generalSettings.theme}
                   onChange={(e) => {
@@ -542,7 +542,7 @@ export default function Settings() {
                     // ✅ CORRECCIÓN TEMA: Aplicar tema inmediatamente al cambiar, sin esperar a guardar
                     updateTheme(newTheme as 'light' | 'dark' | 'auto');
                   }}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="light">Light</option>
                   <option value="dark">Dark</option>
@@ -553,21 +553,21 @@ export default function Settings() {
 
             {/* ✅ LÍMITE DE PRODUCTOS PENDIENTES (solo admin) */}
             {isAdmin && (
-              <div className="pt-6 border-t">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Límite de Productos Pendientes</h3>
-                <p className="text-sm text-gray-600 mb-4">
+              <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">Límite de Productos Pendientes</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
                   Límite máximo de productos en estado pendiente de publicación. Este valor ayuda a controlar el uso de recursos del sistema.
                 </p>
 
                 {pendingProductsLimit && (
-                  <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-800">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">Productos pendientes actuales:</span>
-                      <span className="text-sm font-semibold text-gray-900">
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Productos pendientes actuales:</span>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {pendingProductsLimit.current} / {pendingProductsLimit.limit}
                       </span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 mb-2">
                       <div
                         className={`h-2 rounded-full transition-all ${
                           pendingProductsLimit.percentage >= 90
@@ -579,7 +579,7 @@ export default function Settings() {
                         style={{ width: `${Math.min(pendingProductsLimit.percentage, 100)}%` }}
                       />
                     </div>
-                    <div className="flex items-center justify-between text-xs text-gray-600">
+                    <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                       <span>Restantes: {pendingProductsLimit.remaining}</span>
                       <span>{pendingProductsLimit.percentage}% utilizado</span>
                     </div>
@@ -588,7 +588,7 @@ export default function Settings() {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                       Máximo de Productos Pendientes
                     </label>
                     <input
@@ -597,10 +597,10 @@ export default function Settings() {
                       max="5000"
                       value={newLimitValue}
                       onChange={(e) => setNewLimitValue(parseInt(e.target.value) || 100)}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                       placeholder="100"
                     />
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                       Valor entre 10 y 5000. Valor por defecto: 100
                     </p>
                   </div>
@@ -621,33 +621,33 @@ export default function Settings() {
 
             {/* ✅ OPTIMIZACIÓN DE TIEMPO DE PUBLICACIÓN (solo admin) */}
             {isAdmin && (
-              <div className="pt-6 border-t">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Optimización de Tiempo de Publicación</h3>
-                <p className="text-sm text-gray-600 mb-4">
+              <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">Optimización de Tiempo de Publicación</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
                   Configura el optimizador de tiempo de publicación que analiza el rendimiento de tus listings y sugiere cuándo mantener, mejorar o despublicar productos.
                 </p>
 
                 {lifetimeConfig && (
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                         Modo de Operación
                       </label>
                       <select
                         value={lifetimeConfig.mode}
                         onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, mode: e.target.value as 'automatic' | 'manual' })}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                       >
                         <option value="manual">Manual (Solo sugerencias)</option>
                         <option value="automatic">Automático (El sistema toma decisiones)</option>
                       </select>
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         Manual: Solo muestra recomendaciones. Automático: El sistema puede despublicar o pausar listings automáticamente.
                       </p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                         Días Mínimos de Aprendizaje
                       </label>
                       <input
@@ -656,15 +656,15 @@ export default function Settings() {
                         max="30"
                         value={lifetimeConfig.minLearningDays}
                         onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, minLearningDays: parseInt(e.target.value) || 7 })}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                       />
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         Período mínimo antes de evaluar un listing (1-30 días). Valor por defecto: 7 días.
                       </p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                         Tiempo Máximo de Publicación (días)
                       </label>
                       <input
@@ -673,15 +673,15 @@ export default function Settings() {
                         max="365"
                         value={lifetimeConfig.maxLifetimeDaysDefault}
                         onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, maxLifetimeDaysDefault: parseInt(e.target.value) || 30 })}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                       />
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         Tiempo máximo sugerido de permanencia por defecto (7-365 días). Valor por defecto: 30 días.
                       </p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                         ROI Mínimo Aceptable (%)
                       </label>
                       <input
@@ -691,15 +691,15 @@ export default function Settings() {
                         step="0.1"
                         value={lifetimeConfig.minRoiPercent}
                         onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, minRoiPercent: parseFloat(e.target.value) || 10 })}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                       />
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         ROI mínimo para considerar un listing como aceptable (0-1000%). Valor por defecto: 10%.
                       </p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                         Ganancia Diaria Mínima (USD)
                       </label>
                       <input
@@ -708,9 +708,9 @@ export default function Settings() {
                         step="0.01"
                         value={lifetimeConfig.minDailyProfitUsd}
                         onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, minDailyProfitUsd: parseFloat(e.target.value) || 0.5 })}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                        className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                       />
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         Ganancia diaria mínima aceptable en USD. Valor por defecto: $0.50.
                       </p>
                     </div>
@@ -730,7 +730,7 @@ export default function Settings() {
               </div>
             )}
 
-            <div className="flex justify-end pt-4 border-t">
+            <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
               <button
                 onClick={saveGeneralSettings}
                 disabled={saving}
@@ -748,7 +748,7 @@ export default function Settings() {
           <div className="space-y-6">
             <div>
               <h2 className="text-xl font-semibold mb-4">API Configuration</h2>
-              <p className="text-gray-600 mb-6">Manage your marketplace API credentials and connections</p>
+              <p className="text-slate-600 dark:text-slate-400 mb-6">Manage your marketplace API credentials and connections</p>
             </div>
 
             {/* Quick Links - type="button" evita submit accidental; rutas absolutas */}
@@ -756,46 +756,46 @@ export default function Settings() {
               <button
                 type="button"
                 onClick={() => navigate('/api-settings')}
-                className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
+                className="p-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950/30 transition-colors text-left"
               >
                 <SettingsIcon className="w-6 h-6 text-primary-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">API Configuration</h3>
-                <p className="text-sm text-gray-600">Configure all marketplace and service APIs</p>
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100">API Configuration</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Configure all marketplace and service APIs</p>
               </button>
 
               <button
                 type="button"
                 onClick={() => navigate('/other-credentials')}
-                className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
+                className="p-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950/30 transition-colors text-left"
               >
                 <Lock className="w-6 h-6 text-primary-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">Other Credentials</h3>
-                <p className="text-sm text-gray-600">Manage AliExpress login and non-API credentials</p>
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100">Other Credentials</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Manage AliExpress login and non-API credentials</p>
               </button>
             </div>
 
             {/* API Status */}
             <div>
-              <h3 className="font-semibold text-gray-900 mb-3">API Status</h3>
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">API Status</h3>
               <div className="space-y-2">
                 {apiStatus.length === 0 && (
-                  <p className="text-gray-500 text-sm">No APIs configured yet</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">No APIs configured yet</p>
                 )}
                 {apiStatus.map((api, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-800">
                     <div className="flex items-center gap-3">
                       {api.status === 'active' ? (
                         <CheckCircle className="w-5 h-5 text-green-600" />
                       ) : (
-                        <XCircle className="w-5 h-5 text-gray-400" />
+                        <XCircle className="w-5 h-5 text-slate-400 dark:text-slate-500" />
                       )}
                       <div>
-                        <div className="font-medium text-gray-900 capitalize">{api.name}</div>
-                        <div className="text-xs text-gray-500">Last test: {api.lastTest}</div>
+                        <div className="font-medium text-slate-900 dark:text-slate-100 capitalize">{api.name}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">Last test: {api.lastTest}</div>
                       </div>
                     </div>
                     <span className={`px-2 py-1 text-xs rounded-full ${
-                      api.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                      api.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                     }`}>
                       {api.status}
                     </span>
@@ -811,17 +811,17 @@ export default function Settings() {
           <div className="space-y-6">
             <div>
               <h2 className="text-xl font-semibold mb-4">Notification Settings</h2>
-              <p className="text-gray-600 mb-6">Choose what notifications you want to receive</p>
+              <p className="text-slate-600 dark:text-slate-400 mb-6">Choose what notifications you want to receive</p>
             </div>
 
             {/* Notification Channels */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-gray-600" />
+                  <Mail className="w-5 h-5 text-slate-600 dark:text-slate-400" />
                   <div>
-                    <div className="font-medium text-gray-900">Email Notifications</div>
-                    <div className="text-sm text-gray-600">Receive notifications via email</div>
+                    <div className="font-medium text-slate-900 dark:text-slate-100">Email Notifications</div>
+                    <div className="text-sm text-slate-600 dark:text-slate-400">Receive notifications via email</div>
                   </div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -831,16 +831,16 @@ export default function Settings() {
                     onChange={(e) => setNotifications({ ...notifications, emailNotifications: e.target.checked })}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 dark:after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                 </label>
               </div>
 
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-3">
-                  <Bell className="w-5 h-5 text-gray-600" />
+                  <Bell className="w-5 h-5 text-slate-600 dark:text-slate-400" />
                   <div>
-                    <div className="font-medium text-gray-900">Push Notifications</div>
-                    <div className="text-sm text-gray-600">Receive push notifications in browser</div>
+                    <div className="font-medium text-slate-900 dark:text-slate-100">Push Notifications</div>
+                    <div className="text-sm text-slate-600 dark:text-slate-400">Receive push notifications in browser</div>
                   </div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -850,14 +850,14 @@ export default function Settings() {
                     onChange={(e) => setNotifications({ ...notifications, pushNotifications: e.target.checked })}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 dark:after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                 </label>
               </div>
             </div>
 
             {/* Event Preferences */}
             <div>
-              <h3 className="font-semibold text-gray-900 mb-3">Event Notifications</h3>
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">Event Notifications</h3>
               <div className="space-y-3">
                 {[
                   { key: 'newOpportunity', label: 'New Opportunity Detected', description: 'Get notified when AI finds a profitable opportunity' },
@@ -866,10 +866,10 @@ export default function Settings() {
                   { key: 'publishError', label: 'Publishing Error', description: 'Get notified when a product fails to publish' },
                   { key: 'lowStock', label: 'Low Stock Alert', description: 'Get notified when product stock is low' }
                 ].map((event) => (
-                  <div key={event.key} className="flex items-start justify-between p-3 border rounded-lg">
+                  <div key={event.key} className="flex items-start justify-between p-3 border border-slate-200 dark:border-slate-800 rounded-lg">
                     <div className="flex-1">
-                      <div className="font-medium text-gray-900">{event.label}</div>
-                      <div className="text-sm text-gray-600">{event.description}</div>
+                      <div className="font-medium text-slate-900 dark:text-slate-100">{event.label}</div>
+                      <div className="text-sm text-slate-600 dark:text-slate-400">{event.description}</div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer ml-4">
                       <input
@@ -881,7 +881,7 @@ export default function Settings() {
                         })}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                      <div className="w-11 h-6 bg-slate-200 dark:bg-slate-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 dark:after:border-slate-500 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                     </label>
                   </div>
                 ))}
@@ -903,7 +903,7 @@ export default function Settings() {
               </button>
             </div>
 
-            <div className="flex justify-end pt-4 border-t">
+            <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
               <button
                 onClick={saveNotifications}
                 disabled={saving}
@@ -921,24 +921,24 @@ export default function Settings() {
           <div className="space-y-6">
             <div>
               <h2 className="text-xl font-semibold mb-4">Profile Settings</h2>
-              <p className="text-gray-600 mb-6">Update your personal information and password</p>
+              <p className="text-slate-600 dark:text-slate-400 mb-6">Update your personal information and password</p>
             </div>
 
             {/* Profile Information */}
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Full Name</label>
                 <input
                   type="text"
                   value={profile.name}
                   onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                   placeholder="John Doe"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   <Mail className="w-4 h-4 inline mr-2" />
                   Email
                 </label>
@@ -946,13 +946,13 @@ export default function Settings() {
                   type="email"
                   value={profile.email}
                   onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                   placeholder="john@example.com"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   <Phone className="w-4 h-4 inline mr-2" />
                   Phone
                 </label>
@@ -960,13 +960,13 @@ export default function Settings() {
                   type="tel"
                   value={profile.phone}
                   onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                   placeholder="+1 (555) 123-4567"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   <LinkIcon className="w-4 h-4 inline mr-2" />
                   Email PayPal (recibir ganancias)
                 </label>
@@ -974,16 +974,16 @@ export default function Settings() {
                   type="email"
                   value={profile.paypalPayoutEmail ?? ''}
                   onChange={(e) => setProfile({ ...profile, paypalPayoutEmail: e.target.value || null })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                   placeholder="tu@paypal.com"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   Email de tu cuenta PayPal para recibir las ganancias de tus ventas
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   <LinkIcon className="w-4 h-4 inline mr-2" />
                   Email Payoneer (recibir pagos de eBay)
                 </label>
@@ -991,15 +991,15 @@ export default function Settings() {
                   type="email"
                   value={profile.payoneerPayoutEmail ?? ''}
                   onChange={(e) => setProfile({ ...profile, payoneerPayoutEmail: e.target.value || null })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
                   placeholder="tu@payoneer.com"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   Email de tu cuenta Payoneer para recibir pagos de eBay y otros marketplaces
                 </p>
               </div>
 
-              <div className="flex justify-end pt-4 border-t">
+              <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
                 <button
                   onClick={saveProfile}
                   disabled={saving}
@@ -1012,22 +1012,22 @@ export default function Settings() {
             </div>
 
             {/* Change Password */}
-            <div className="pt-6 border-t">
-              <h3 className="font-semibold text-gray-900 mb-4">Change Password</h3>
+            <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-4">Change Password</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Current Password</label>
                   <div className="relative">
                     <input
                       type={showPasswords.current ? 'text' : 'password'}
                       value={passwordData.currentPassword}
                       onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 pr-10"
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500 pr-10"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                     >
                       {showPasswords.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -1035,19 +1035,19 @@ export default function Settings() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">New Password</label>
                   <div className="relative">
                     <input
                       type={showPasswords.new ? 'text' : 'password'}
                       value={passwordData.newPassword}
                       onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 pr-10"
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500 pr-10"
                       placeholder="At least 8 characters"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                     >
                       {showPasswords.new ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -1055,18 +1055,18 @@ export default function Settings() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Confirm New Password</label>
                   <div className="relative">
                     <input
                       type={showPasswords.confirm ? 'text' : 'password'}
                       value={passwordData.confirmPassword}
                       onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 pr-10"
+                      className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500 pr-10"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                     >
                       {showPasswords.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
