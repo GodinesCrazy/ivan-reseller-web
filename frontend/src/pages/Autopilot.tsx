@@ -35,9 +35,6 @@ import { formatLastRun } from '@/utils/date';
 import { useAuthStore } from '@stores/authStore';
 import { fetchOperationsTruth } from '@/services/operationsTruth.api';
 import type { OperationsTruthResponse } from '@/types/operations';
-import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
-import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
-import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
 
 interface Workflow {
   id: number;
@@ -1062,33 +1059,30 @@ export default function Autopilot() {
         </div>
       )}
 
-      {operationsTruth && (
-        <div className="space-y-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 p-4">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Verdad operativa canónica (muestra reciente)</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Blockers, listing externo y pruebas — prioridad sobre narrativa de fases del Autopilot.
-              </p>
-            </div>
-            <Link
-              to="/control-center"
-              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              Abrir Control Center →
+      {operationsTruth && (() => {
+        const totalBlockers = (operationsTruth.summary.blockerCounts ?? []).reduce((s, b) => s + Number(b.count || 0), 0);
+        const active = operationsTruth.summary.liveStateCounts?.active ?? 0;
+        if (totalBlockers === 0 && active === 0) return null;
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {active > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                {active} listing{active !== 1 ? 's' : ''} activo{active !== 1 ? 's' : ''}
+              </span>
+            )}
+            {totalBlockers > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                {totalBlockers} blocker{totalBlockers !== 1 ? 's' : ''} activo{totalBlockers !== 1 ? 's' : ''}
+              </span>
+            )}
+            <Link to="/control-center" className="text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:underline transition-colors">
+              Ver detalle en Control Center →
             </Link>
           </div>
-          <OperationsTruthSummaryPanel data={operationsTruth} />
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <PostSaleProofLadderPanel
-              summary={operationsTruth.summary.proofCounts}
-              title="Proof ladder (subset)"
-              subtitle="No confundir publicaciones u oportunidades con fondos liberados o beneficio realizado."
-            />
-            <AgentDecisionTracePanel items={operationsTruth.items} />
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Estado del ciclo — telemetría de ejecución (1-4); post-venta probada arriba / en órdenes */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card overflow-hidden">

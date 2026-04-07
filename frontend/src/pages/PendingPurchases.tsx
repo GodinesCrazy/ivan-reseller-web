@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import {
   ShoppingCart,
   ExternalLink,
@@ -21,12 +21,7 @@ import toast from 'react-hot-toast';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
-import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
-import { fetchOperationsTruth } from '@/services/operationsTruth.api';
-import type { OperationsTruthResponse } from '@/types/operations';
-import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
-import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
 
 interface PendingSale {
   id: number | string;
@@ -58,32 +53,6 @@ export default function PendingPurchases() {
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
   const [trackingInput, setTrackingInput] = useState<Record<string, string>>({});
   const [submittingTracking, setSubmittingTracking] = useState<Record<string, boolean>>({});
-  const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
-
-  const pendingProductIds = useMemo(() => {
-    const ids = pendingSales
-      .map((s) => (typeof s.productId === 'number' ? s.productId : Number(s.productId)))
-      .filter((n) => Number.isFinite(n) && n > 0);
-    return Array.from(new Set(ids)).slice(0, 50);
-  }, [pendingSales]);
-
-  useEffect(() => {
-    if (pendingProductIds.length === 0) {
-      setOperationsTruth(null);
-      return;
-    }
-    let cancelled = false;
-    fetchOperationsTruth({ ids: pendingProductIds, environment })
-      .then((data) => {
-        if (!cancelled) setOperationsTruth(data);
-      })
-      .catch(() => {
-        if (!cancelled) setOperationsTruth(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pendingProductIds, environment]);
 
   const fetchPendingPurchases = useCallback(async () => {
     try {
@@ -173,25 +142,12 @@ export default function PendingPurchases() {
             </span>
           ) : undefined
         }
-        below={<CycleStepsBreadcrumb currentStep={5} />}
         actions={
           <Button onClick={fetchPendingPurchases} variant="outline" size="sm">
             Actualizar
           </Button>
         }
       />
-
-      {/* Operations truth panels */}
-      {operationsTruth && pendingProductIds.length > 0 && (
-        <div className="space-y-4">
-          <OperationsTruthSummaryPanel data={operationsTruth} />
-          <PostSaleProofLadderPanel
-            summary={operationsTruth.summary.proofCounts}
-            title="Proof ladder (muestra de productos en esta cola)"
-            subtitle="Cada fila sigue siendo acción de compra en proveedor; el ladder resume pruebas registradas en backend."
-          />
-        </div>
-      )}
 
       {/* Capital summary card */}
       {pendingSales.length > 0 && (

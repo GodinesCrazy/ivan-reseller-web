@@ -37,11 +37,7 @@ import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
-import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
-import SalesReadinessPanel from '@/components/SalesReadinessPanel';
-import type { OperationsTruthResponse } from '@/types/operations';
-import { fetchOperationsTruth } from '@/services/operationsTruth.api';
 
 interface Sale {
   id: string;
@@ -129,7 +125,6 @@ export default function Sales() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
 
   const fetchSalesData = useCallback(async () => {
     try {
@@ -139,9 +134,6 @@ export default function Sales() {
         api.get('/api/sales/stats', { params: { days: dateRange, environment } }),
         api.get('/api/sales/sync-status').catch(() => ({ data: {} })),
       ]);
-      fetchOperationsTruth({ limit: 20, environment })
-        .then((data) => setOperationsTruth(data))
-        .catch(() => setOperationsTruth(null));
       setSales(salesResponse.data?.sales || salesResponse.data || []);
       setStats(statsResponse.data || {});
       setLastSyncAt(syncResponse?.data?.lastSyncAt ?? null);
@@ -268,7 +260,6 @@ export default function Sales() {
             ? `Ventas registradas · sincronizado hace ${Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000)} min`
             : 'Ventas registradas · ganancia realizada confirmada en Control Center'
         }
-        below={<CycleStepsBreadcrumb currentStep={4} />}
         actions={
           <Button onClick={exportToCSV} className="flex items-center gap-2">
             <Download className="w-4 h-4" />
@@ -276,12 +267,6 @@ export default function Sales() {
           </Button>
         }
       />
-
-      <SalesReadinessPanel onSyncComplete={fetchSalesData} />
-
-      <p className="text-xs text-slate-500 mb-2">
-        Las tarjetas inferiores son agregados del período — no sustituyen proof de fondos liberados ni ganancia realizada.
-      </p>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -427,17 +412,6 @@ export default function Sales() {
                     />
                   </div>
                 </div>
-                {operationsTruth && (
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-3 text-sm">
-                    <p className="font-medium text-slate-900 dark:text-slate-100">Fondos liberados comprobados</p>
-                    <p className="text-slate-600 dark:text-slate-400 mt-1">
-                      {operationsTruth.summary.proofCounts.releasedFundsObtained} productos con proof de payout.
-                    </p>
-                    <p className="text-slate-600 dark:text-slate-400 mt-1">
-                      {operationsTruth.summary.proofCounts.realizedProfitObtained} productos con proof de ganancia realizada.
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           </div>

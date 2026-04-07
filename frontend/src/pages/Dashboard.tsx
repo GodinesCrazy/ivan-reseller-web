@@ -1,18 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Search,
   TrendingUp,
   Brain,
-  Settings,
   BarChart3,
   AlertCircle,
   ChevronRight,
-  Lightbulb,
   DollarSign,
   ShoppingBag,
   Activity,
-  Globe,
   Package,
   Radio,
   CheckCircle2,
@@ -22,14 +18,12 @@ import {
   RefreshCw,
   Target,
   Layers,
+  Settings,
+  Search,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@services/api';
-import UniversalSearchDashboard from '@components/UniversalSearchDashboard';
 import LoadingSpinner, { CardSkeleton } from '@/components/ui/LoadingSpinner';
-
-import AIOpportunityFinder from '../components/AIOpportunityFinder';
-import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import InventorySummaryCard from '@/components/InventorySummaryCard';
 import AutopilotLiveWidget from '@/components/AutopilotLiveWidget';
 import BalanceSummaryWidget from '@/components/BalanceSummaryWidget';
@@ -49,7 +43,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabParam && ['overview', 'trends', 'search', 'opportunities', 'suggestions', 'automation'].includes(tabParam) ? tabParam : 'overview');
+  const [activeTab, setActiveTab] = useState(tabParam && ['overview', 'trends'].includes(tabParam) ? tabParam : 'overview');
   const { environment, setEnvironment, isProduction: isProductionMode } = useEnvironment();
 
   // Real backend health state
@@ -110,7 +104,7 @@ export default function Dashboard() {
 
   // Sincronizar tab desde URL (p. ej. /dashboard?tab=trends)
   useEffect(() => {
-    if (tabParam && ['overview', 'trends', 'search', 'opportunities', 'suggestions', 'automation'].includes(tabParam)) {
+    if (tabParam && ['overview', 'trends'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -365,10 +359,6 @@ export default function Dashboard() {
   const tabs = [
     { id: 'overview', label: 'Resumen', icon: BarChart3 },
     { id: 'trends', label: 'Tendencias', icon: TrendingUp },
-    { id: 'search', label: 'Búsqueda Universal', icon: Search },
-    { id: 'opportunities', label: 'Oportunidades IA', icon: Brain },
-    { id: 'suggestions', label: 'Sugerencias IA', icon: Lightbulb },
-    { id: 'automation', label: 'Automatización', icon: Settings }
   ];
 
   const getActivityIcon = (type: string) => {
@@ -1072,25 +1062,6 @@ export default function Dashboard() {
                   ))}
                 </div>
               )}
-            </div>
-          )}
-          {activeTab === 'search' && <UniversalSearchDashboard />}
-          {activeTab === 'opportunities' && <AIOpportunityFinder />}
-          {activeTab === 'suggestions' && <AISuggestionsPanel />}
-          {activeTab === 'automation' && (
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-8">
-              <div className="max-w-sm mx-auto text-center">
-                <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
-                  <Settings className="h-5 w-5 text-slate-400 dark:text-slate-500" />
-                </div>
-                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">Automatización</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Reglas de automatización y configuración avanzada del sistema. Disponible próximamente.
-                </p>
-                <Link to="/autopilot" className="inline-flex items-center gap-1 mt-4 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
-                  Ir a Autopilot <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
             </div>
           )}
         </div>

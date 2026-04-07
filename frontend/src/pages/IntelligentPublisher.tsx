@@ -9,9 +9,6 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
-import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
-import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
-import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
 import { fetchOperationsTruthForProductIds } from '@/services/operationsTruth.api';
 import type { OperationsTruthItem, OperationsTruthResponse } from '@/types/operations';
 import {
@@ -633,26 +630,31 @@ export default function IntelligentPublisher() {
         </p>
       </div>
 
-      {/* Operations truth panels */}
-      {operationsTruth && (
-        <div className="space-y-4">
-          <OperationsTruthSummaryPanel data={operationsTruth} />
-          <div className="grid grid-cols-1 xl:grid-cols-[1.05fr_1fr] gap-4">
-            <PostSaleProofLadderPanel
-              summary={operationsTruth.summary.proofCounts}
-              title="Escalera de proof en la muestra de publicación actual"
-              subtitle="La actividad de publicación no implica fondos liberados ni ganancia realizada."
-            />
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Regla de verdad del publicador</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Las superficies de publicación deben anteponer el estado externo del listing, blockers y próximas acciones antes de cualquier margen estimado.
-              </p>
-            </div>
+      {/* Blocker summary — compact signal for this publish queue */}
+      {operationsTruth && (() => {
+        const totalBlockers = (operationsTruth.summary.blockerCounts ?? []).reduce((s, b) => s + Number(b.count || 0), 0);
+        const active = operationsTruth.summary.liveStateCounts?.active ?? 0;
+        if (totalBlockers === 0 && active === 0) return null;
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {active > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                {active} listing{active !== 1 ? 's' : ''} activo{active !== 1 ? 's' : ''}
+              </span>
+            )}
+            {totalBlockers > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                {totalBlockers} blocker{totalBlockers !== 1 ? 's' : ''} activo{totalBlockers !== 1 ? 's' : ''}
+              </span>
+            )}
+            <a href="/control-center" className="text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:underline transition-colors">
+              Ver detalle en Control Center →
+            </a>
           </div>
-          <AgentDecisionTracePanel items={operationsTruth.items} />
-        </div>
-      )}
+        );
+      })()}
 
       {/* Bulk publish toolbar */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-3 flex flex-col gap-2">

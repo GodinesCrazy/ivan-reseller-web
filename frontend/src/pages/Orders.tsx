@@ -8,7 +8,6 @@ import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X, Download, Clip
 import api from '@/services/api';
 import PageHeader from '@/components/ui/PageHeader';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
-import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -373,7 +372,6 @@ export default function Orders() {
             </span>
           ) : undefined
         }
-        below={<CycleStepsBreadcrumb currentStep={6} />}
         actions={
           <div className="flex items-center gap-1.5 flex-wrap">
             <Button variant="outline" size="sm" onClick={() => setShowFetchEbay((v) => !v)}>
@@ -394,6 +392,44 @@ export default function Orders() {
           </div>
         }
       />
+
+      {/* Order status KPI strip */}
+      {orders.length > 0 && (() => {
+        const byStatus = orders.reduce<Record<string, number>>((acc, o) => {
+          acc[o.status] = (acc[o.status] ?? 0) + 1;
+          return acc;
+        }, {});
+        const paid = (byStatus['PAID'] ?? 0) + (byStatus['PURCHASING'] ?? 0);
+        const purchased = byStatus['PURCHASED'] ?? 0;
+        const failed = byStatus['FAILED'] ?? 0;
+        const manual = manualQueueOrders.length;
+        const strips = [
+          { label: 'Pagadas / comprando', count: paid, tone: paid > 0 ? 'amber' : 'slate' },
+          { label: 'Compradas', count: purchased, tone: purchased > 0 ? 'emerald' : 'slate' },
+          { label: 'Fallidas', count: failed, tone: failed > 0 ? 'red' : 'slate' },
+          { label: 'Acción manual', count: manual, tone: manual > 0 ? 'red' : 'slate' },
+        ] as const;
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {strips.map(({ label, count, tone }) => (
+              <div key={label} className={`ir-panel p-3 ${
+                tone === 'emerald' ? 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/40 dark:bg-emerald-900/10' :
+                tone === 'amber' ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-900/10' :
+                tone === 'red' ? 'border-red-200 dark:border-red-800/50 bg-red-50/40 dark:bg-red-900/10' :
+                ''
+              }`}>
+                <p className={`text-xl font-bold tabular-nums ${
+                  tone === 'emerald' ? 'text-emerald-700 dark:text-emerald-300' :
+                  tone === 'amber' ? 'text-amber-700 dark:text-amber-300' :
+                  tone === 'red' ? 'text-red-700 dark:text-red-300' :
+                  'text-slate-900 dark:text-white'
+                }`}>{count}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {showFetchEbay && (
         <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
