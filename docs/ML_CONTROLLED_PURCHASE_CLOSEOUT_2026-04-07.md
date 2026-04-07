@@ -4,16 +4,16 @@
 - Production webhook status (`GET /api/webhooks/status`):
   - `mercadolibre.configured=false`
   - `mercadolibre.eventFlowReady=false`
-  - `mercadolibre.inboundEventSeen=false`
-  - `proofLevel=not-configured`
-- DB proof state (`npx tsx scripts/check-ml-webhook-proof-state.ts` at 2026-04-07T00:24:09Z):
+  - `mercadolibre.inboundEventSeen=true`
+  - `proofLevel=inbound-event-seen`
+- DB proof state (`npx tsx scripts/check-ml-webhook-proof-state.ts` at 2026-04-07T01:28:53Z):
   - `mercado_libre_webhook_events`: no rows
-  - `system_configs.webhook_event_proof:mercadolibre`: absent
-- Inbound probe sent to production webhook returned `200 {"success":true}` but still no ledger/proof evidence.
+  - `system_configs.webhook_event_proof:mercadolibre`: present (`inboundEventSeen=true`, `eventFlowReady=false`)
+- Inbound probe sent to production webhook returns `200 {"success":true}` and now persists proof (`inbound-event-seen`).
 
 ## Root blockers still open
 1. `WEBHOOK_SECRET_MERCADOLIBRE` is not configured in production runtime.
-2. No inbound event evidence is persisted (ledger/proof remains empty).
+2. Inbound evidence exists, but not cryptographically verified (`verified=false`), so `eventFlowReady` remains false.
 3. Railway CLI session is not authenticated in this environment (`railway whoami` => Unauthorized), so env/deploy cannot be applied directly from this session.
 
 ## What was executed directly in this run
@@ -74,11 +74,15 @@ Commands:
   - Authenticated: **NO** (`railway whoami` => `Unauthorized`)
   - Token in env: **NO** (`RAILWAY_TOKEN` / `RAILWAY_API_TOKEN` absent)
   - Login attempt from this session: `railway login` and `railway login --browserless` both fail with `Cannot login in non-interactive mode`.
-- Production endpoint revalidation:
-  - `GET /api/webhooks/status` => `200` with `configured=false`, `eventFlowReady=false`, `inboundEventSeen=false`.
+- Production endpoint revalidation (after git push deploy):
+  - Runtime version: `sha=71bf20e`, `buildTime=2026-04-07T01:27:23`
+  - `GET /api/webhooks/status` => `200` with `configured=false`, `eventFlowReady=false`, `inboundEventSeen=true`.
   - `GET /api/sales/pending-purchases` => `401` (exposed).
   - Pilot endpoints (`pilot-approvals`, `pilot-category-allowlist`, `pilot-ledger`, `pilot-control`, `pilot-post-publish`) => `401` (exposed).
 - DB evidence revalidation:
   - `mercado_libre_webhook_events` remains empty.
-  - `webhook_event_proof:mercadolibre` remains absent.
+  - `webhook_event_proof:mercadolibre` present with:
+    - `inboundEventSeen=true`
+    - `proofLevel=inbound-event-seen`
+    - `eventFlowReady=false`
 - Candidate `32714` was restored to publishable price baseline (`suggestedPrice=14.2`, `finalPrice=14.2`), and preflight artifact remains `ready_to_publish` with no blockers.
