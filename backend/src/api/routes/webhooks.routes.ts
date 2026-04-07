@@ -255,6 +255,28 @@ router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), as
   const correlationId = (req as any).correlationId ?? `webhook-ml-${Date.now()}`;
   try {
     const body: any = req.body || {};
+    const signatureVerified = (req as any).webhookSignatureVerified === true;
+    const eventType = String(body?.topic || body?.resource || 'mercadolibre_event');
+    const earlyOrderReference =
+      body?.data?.id != null
+        ? String(body.data.id)
+        : body?._id != null
+          ? String(body._id)
+          : body?.id != null
+            ? String(body.id)
+            : null;
+    await recordWebhookEventProof({
+      marketplace: 'mercadolibre',
+      eventType,
+      orderReference: earlyOrderReference,
+      verified: signatureVerified,
+    }).catch((proofError) => {
+      logger.warn('[WEBHOOK_MERCADOLIBRE] Could not persist early webhook proof', {
+        correlationId,
+        error: proofError instanceof Error ? proofError.message : String(proofError),
+      });
+    });
+
     let listingId = body.listingId || body.resourceId || body?.order?.order_items?.[0]?.item?.id || body?.order_items?.[0]?.item?.id;
     let amount = Number(body.amount || body.total_amount || body?.order?.total_amount || body?.order_items?.[0]?.unit_price);
     let orderId = String(body.id || body.order_id || body.resource || body?.data?.id || '');
@@ -323,7 +345,7 @@ router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), as
       marketplace: 'mercadolibre',
       eventType: String(body?.topic || body?.resource || 'mercadolibre_event'),
       orderReference: orderId || null,
-      verified: true,
+      verified: signatureVerified,
     });
     await recordSaleFromWebhook(
       { marketplace: 'mercadolibre', listingId, amount, orderId: orderId || undefined, buyer, buyerEmail, shippingAddress },

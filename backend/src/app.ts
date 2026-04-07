@@ -1082,6 +1082,10 @@ app.use(express.json({
   limit: '1mb',
   strict: false, // Permitir JSON más flexible (acepta comentarios, trailing commas, etc.)
   type: ['application/json', 'application/*+json'], // Aceptar diferentes content-types
+  verify: (req, _res, buf) => {
+    // Preserve exact payload bytes for webhook signature verification.
+    (req as any).rawBody = buf.toString('utf8');
+  },
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

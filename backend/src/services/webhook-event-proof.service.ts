@@ -104,20 +104,22 @@ export async function recordWebhookEventProof(params: {
   }
 
   const now = new Date().toISOString();
+  const verified = params.verified !== false;
+  const proofLevel: WebhookProofLevel = verified ? 'event-ready' : 'inbound-event-seen';
   const next = {
     ...current,
     marketplace: params.marketplace,
-    webhookVerified: params.verified !== false,
-    eventFlowReady: params.verified !== false,
+    webhookVerified: verified,
+    eventFlowReady: verified,
     inboundEventSeen: true,
     destinationRegistered:
       current.destinationRegistered === true || !!current.matchedDestinationId,
     subscriptionRegistered:
       current.subscriptionRegistered === true ||
       (Array.isArray(current.matchedSubscriptionIds) && current.matchedSubscriptionIds.length > 0),
-    proofLevel: 'event-ready',
+    proofLevel,
     lastWebhookEventAt: now,
-    lastWebhookVerificationAt: params.verified !== false ? now : (current.lastWebhookVerificationAt || null),
+    lastWebhookVerificationAt: verified ? now : (current.lastWebhookVerificationAt || null),
     lastEventType: params.eventType,
     lastOrderReference: params.orderReference || null,
     matchedDestinationId:

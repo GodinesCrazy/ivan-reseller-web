@@ -64,19 +64,31 @@ function validateMercadoLibreSignature(
   }
 
   try {
-    // MercadoLibre usa formato: sha256={hash}
-    // También puede incluir el user_id: sha256={hash},{user_id}
-    const hashPart = signature.split(',')[0].replace('sha256=', '');
+    // MercadoLibre commonly sends `sha256=<hex>` and may include extra tokens.
+    // Be tolerant to token ordering and optional `v1=<hex>` style.
+    const rawTokens = signature
+      .split(',')
+      .map((token) => token.trim())
+      .filter(Boolean);
+    let hashPart =
+      rawTokens.find((token) => token.toLowerCase().startsWith('sha256='))?.split('=')[1] ||
+      rawTokens.find((token) => token.toLowerCase().startsWith('v1='))?.split('=')[1] ||
+      rawTokens[0];
+    hashPart = String(hashPart || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(hashPart)) {
+      return { valid: false, error: 'Invalid signature format' };
+    }
     
     const expectedHash = crypto
       .createHmac('sha256', secret)
       .update(payload)
-      .digest('hex');
+      .digest('hex')
+      .toLowerCase();
 
-    // Comparación segura (timing-safe)
+    // Comparación segura (timing-safe) sobre bytes hex decodificados.
     const isValid = crypto.timingSafeEqual(
-      Buffer.from(hashPart),
-      Buffer.from(expectedHash)
+      Buffer.from(hashPart, 'hex'),
+      Buffer.from(expectedHash, 'hex')
     );
 
     return { valid: isValid, error: isValid ? undefined : 'Invalid signature' };
@@ -151,6 +163,8 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
     
     // Si está deshabilitado globalmente o para este marketplace, saltar validación
     if (!verifySignature || !globalVerify) {
+      (req as any).webhookSignatureVerified = false;
+      (req as any).webhookSignatureSkippedReason = 'verification_disabled';
       const isProduction = env.NODE_ENV === 'production';
       if (isProduction && !verifySignature) {
         logger.warn('[WebhookSignature] Signature verification disabled in production', {
@@ -166,9 +180,11 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
     }
 
     // Obtener payload (body raw para firma)
-    const payload = req.body ? (typeof req.body === 'string' 
-      ? req.body 
-      : JSON.stringify(req.body)) : '';
+    const payload = typeof (req as any).rawBody === 'string'
+      ? ((req as any).rawBody as string)
+      : req.body
+        ? (typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
+        : '';
     
     // Obtener secret desde env
     const secretEnvVar = `WEBHOOK_SECRET_${marketplace.toUpperCase()}`;
@@ -177,10 +193,25 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
     const requiresSharedSecret = marketplace !== 'ebay';
 
     if (requiresSharedSecret && secretEmpty) {
+      const isProduction = env.NODE_ENV === 'production';
+      if (isProduction) {
+        logger.error('[WebhookSignature] Rejecting webhook: shared secret missing in production', {
+          marketplace,
+          envVar: secretEnvVar,
+        });
+        return res.status(503).json({
+          success: false,
+          error: 'webhook_secret_missing',
+          envVar: secretEnvVar,
+        });
+      }
+
       logger.warn('[WebhookSignature] Webhook accepted without verification: secret not configured', {
         marketplace,
         envVar: secretEnvVar,
       });
+      (req as any).webhookSignatureVerified = false;
+      (req as any).webhookSignatureSkippedReason = 'secret_missing';
       return next();
     }
 
@@ -238,11 +269,15 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
             error: 'Invalid signature',
           });
         }
+        (req as any).webhookSignatureVerified = false;
+        (req as any).webhookSignatureSkippedReason = 'invalid_signature_allowed_in_dev';
       }
     } else {
       logger.debug('[WebhookSignature] Signature validated successfully', {
         marketplace,
       });
+      (req as any).webhookSignatureVerified = true;
+      (req as any).webhookSignatureSkippedReason = null;
     }
 
     next();
