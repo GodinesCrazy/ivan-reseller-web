@@ -256,7 +256,7 @@ export default function Sales() {
       <PageHeader
         icon={DollarSign}
         title="Ventas"
-        below={<CycleStepsBreadcrumb currentStep={4} />}
+        below={<CycleStepsBreadcrumb currentStep={8} />}
         subtitle={
           lastSyncAt
             ? `Ventas registradas · sincronizado hace ${Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000)} min`

@@ -648,7 +648,7 @@ export default function IntelligentPublisher() {
           Prepara, aprueba y publica anuncios con verdad canónica de listing, blocker y next action. Las estimaciones comerciales son secundarias y no equivalen a proof comercial.
         </p>
         <div className="mt-2">
-          <CycleStepsBreadcrumb currentStep={3} />
+          <CycleStepsBreadcrumb currentStep={4} />
         </div>
       </div>
 

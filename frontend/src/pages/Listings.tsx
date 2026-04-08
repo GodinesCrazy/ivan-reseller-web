@@ -166,7 +166,7 @@ export default function Listings() {
       <PageHeader
         icon={Globe}
         title="Listings"
-        below={<CycleStepsBreadcrumb currentStep={3} />}
+        below={<CycleStepsBreadcrumb currentStep={5} />}
         subtitle={`${total} listings en marketplace · última reconciliación disponible en cada fila`}
         badge={
           activeCount > 0 ? (

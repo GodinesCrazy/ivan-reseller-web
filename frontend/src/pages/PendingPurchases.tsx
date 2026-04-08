@@ -134,7 +134,7 @@ export default function PendingPurchases() {
       <PageHeader
         icon={ShoppingCart}
         title="Compras Pendientes"
-        below={<CycleStepsBreadcrumb currentStep={5} />}
+        below={<CycleStepsBreadcrumb currentStep={7} />}
         subtitle="Ventas que requieren compra en proveedor · proof ladder en Control Center"
         badge={
           pendingSales.length > 0 ? (
@@ -150,6 +150,29 @@ export default function PendingPurchases() {
           </Button>
         }
       />
+
+      {/* ── CONTEXTO DEL CICLO DE DROPSHIPPING ──────────────────────────────
+           Paso 7 de 8 — El cliente ya compró en el marketplace y la orden fue
+           sincronizada. Tu siguiente acción obligatoria: comprar el producto al
+           proveedor (AliExpress) y enviar el número de tracking al marketplace. */}
+      <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 flex flex-wrap items-start gap-3">
+        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500 text-white font-black text-sm shrink-0 mt-0.5">7</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+            Paso 7 — Compra al proveedor y envío de tracking
+          </p>
+          <p className="text-xs text-amber-800 dark:text-amber-200 mt-0.5">
+            El cliente ya pagó en el marketplace. Realiza la compra en AliExpress usando la dirección del comprador y luego envía el número de seguimiento para completar el ciclo.
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[11px] text-amber-700 dark:text-amber-300">
+            <span className="opacity-60">Etapa anterior:</span>
+            <button type="button" onClick={() => navigate('/orders')} className="hover:underline font-medium">← Orden recibida</button>
+            <span className="opacity-40 mx-1">·</span>
+            <span className="opacity-60">Siguiente etapa:</span>
+            <button type="button" onClick={() => navigate('/sales')} className="hover:underline font-medium">Envío / Cierre →</button>
+          </div>
+        </div>
+      </div>
 
       {/* Capital summary card */}
       {pendingSales.length > 0 && (

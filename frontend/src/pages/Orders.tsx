@@ -433,6 +433,73 @@ export default function Orders() {
         );
       })()}
 
+      {/* ── CICLO DE DROPSHIPPING — CONTEXTO ─────────────────────────────────
+           Muestra de forma explícita la etapa actual del ciclo: el cliente ya
+           compró en el marketplace. Siguiente acción: comprar al proveedor. */}
+      {orders.length > 0 && (() => {
+        const pending = orders.filter((o) => o.status === 'PAID').length;
+        const buying = orders.filter((o) => o.status === 'PURCHASING').length;
+        const purchased = orders.filter((o) => o.status === 'PURCHASED').length;
+        const failed = orders.filter((o) => o.status === 'FAILED' || o.status === 'FULFILLMENT_BLOCKED' || o.status === 'MANUAL_ACTION_REQUIRED').length;
+        const stages = [
+          { label: 'Listing activo',     step: 5, count: null as number | null,  tone: 'done',    nav: '/listings' },
+          { label: 'Orden recibida',     step: 6, count: pending,                tone: pending > 0 ? 'active' : 'done', nav: null },
+          { label: 'Compra proveedor',   step: 7, count: buying,                 tone: buying > 0 ? 'active' : 'idle',  nav: '/pending-purchases' },
+          { label: 'Fulfillment',        step: 7, count: purchased,              tone: purchased > 0 ? 'done' : 'idle', nav: null },
+          { label: 'Cierre / Envío',     step: 8, count: null as number | null,  tone: 'idle',    nav: '/sales' },
+        ] as const;
+        return (
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2.5">
+              Posición en el ciclo de dropshipping
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+              {stages.map((s, i) => (
+                <span key={s.label} className="flex items-center gap-1.5">
+                  {i > 0 && <span className="text-slate-300 dark:text-slate-600 select-none">→</span>}
+                  {s.nav ? (
+                    <button
+                      type="button"
+                      onClick={() => navigate(s.nav!)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-colors border ${
+                        s.tone === 'active'
+                          ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700'
+                          : s.tone === 'done'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                          : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {s.label}
+                      {s.count != null && s.count > 0 && (
+                        <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold">{s.count}</span>
+                      )}
+                    </button>
+                  ) : (
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium border ${
+                      s.tone === 'active'
+                        ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700'
+                        : s.tone === 'done'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                    }`}>
+                      {s.label}
+                      {s.count != null && s.count > 0 && (
+                        <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold">{s.count}</span>
+                      )}
+                    </span>
+                  )}
+                </span>
+              ))}
+              {failed > 0 && (
+                <span className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800">
+                  ⚠ {failed} requiere acción manual
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {showFetchEbay && (
         <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
           <CardHeader className="pb-2">

@@ -713,6 +713,67 @@ export default function Products() {
 
       {!setupRequired && <InventorySummaryCard summary={inventorySummary} />}
 
+      {/* ── PIPELINE OVERVIEW ─────────────────────────────────────────────────
+           Muestra de un vistazo dónde están los productos en el ciclo completo
+           de dropshipping: desde validados hasta órdenes activas. */}
+      {!setupRequired && (stats.validatedReady > 0 || stats.published > 0) && (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2.5">
+            Estado del pipeline de dropshipping
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            {/* Paso 3: Productos validados listos */}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer hover:shadow-sm ${
+              stats.validatedReady > 0
+                ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-200'
+                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-400'
+            }`} onClick={() => updateFilter('status', 'VALIDATED_READY')}>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+              <span className="font-bold tabular-nums">{stats.validatedReady}</span>
+              <span>listos para publicar</span>
+            </div>
+
+            <span className="text-slate-300 dark:text-slate-600 select-none font-bold">→</span>
+
+            {/* Paso 4: En publisher (APPROVED) */}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer hover:shadow-sm ${
+              (stats.total > 0 && stats.pending > 0)
+                ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-200'
+                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-400'
+            }`} onClick={() => navigate('/publisher')}>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+              <span className="font-bold tabular-nums">{stats.pending}</span>
+              <span>en publisher</span>
+            </div>
+
+            <span className="text-slate-300 dark:text-slate-600 select-none font-bold">→</span>
+
+            {/* Paso 5: Listings activos */}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer hover:shadow-sm ${
+              stats.published > 0
+                ? 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30 text-purple-800 dark:text-purple-200'
+                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-400'
+            }`} onClick={() => navigate('/listings')}>
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+              <span className="font-bold tabular-nums">{stats.published}</span>
+              <span>listings activos</span>
+            </div>
+
+            <span className="text-slate-300 dark:text-slate-600 select-none font-bold">→</span>
+
+            {/* Paso 6: Órdenes */}
+            <div
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-medium transition-colors cursor-pointer hover:border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:text-amber-800 dark:hover:text-amber-200 hover:shadow-sm"
+              onClick={() => navigate('/orders')}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+              <span>órdenes</span>
+              <ArrowRight className="w-3 h-3 ml-0.5" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Post-sale overview */}
       {!setupRequired && postSaleOverview && postSaleOverview.length > 0 && (
         <Card className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-card">
