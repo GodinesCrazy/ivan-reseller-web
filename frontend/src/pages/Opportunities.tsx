@@ -271,6 +271,12 @@ export default function Opportunities() {
     setLoading(true);
     setError(null);
     let requestCanceled = false;
+    let timedOut = false;
+    // Hard cap: if backend never responds, unblock the UI after 120s
+    const searchTimeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 120_000);
     try {
       const params: Record<string, string | number> = {
         query: effectiveQuery,
@@ -335,10 +341,20 @@ export default function Opportunities() {
         },
         { replace: true }
       );
-      await fetchAuthStatuses();
+      // Fire-and-forget: auth status is a background update; awaiting it can
+      // block the finally{setLoading(false)} if /api/auth-status hangs.
+      void fetchAuthStatuses();
     } catch (e: any) {
       if (axios.isCancel(e)) {
-        requestCanceled = true;
+        if (timedOut) {
+          // Timeout-initiated abort: surface a clear error and reset loading
+          setError('La búsqueda tardó demasiado (>2 min). Intentá de nuevo o reducí los filtros.');
+          setItems([]);
+          setPaginationMeta(null);
+        } else {
+          // User-initiated abort (new search started): leave state to the next request
+          requestCanceled = true;
+        }
         return;
       }
       if (e?.response?.status === 202) {
@@ -363,20 +379,21 @@ export default function Opportunities() {
         
         setPendingSearchUrl(targetUrl || null);
         setShowAliExpressModal(true);
-        
+
         setError('Se requiere iniciar sesión en AliExpress para continuar.');
-        await fetchAuthStatuses();
+        void fetchAuthStatuses();
       } else {
         setError(e?.response?.data?.error || e.message || 'Error fetching opportunities');
         const status = e?.response?.status;
         if (status !== 429 && status !== 403 && (status == null || status < 500)) {
           toast.error(e?.response?.data?.error || e.message || 'Error fetching opportunities');
         }
-        await fetchAuthStatuses();
+        void fetchAuthStatuses();
       }
       setItems([]);
       setPaginationMeta(null);
     } finally {
+      clearTimeout(searchTimeoutId);
       if (!requestCanceled) {
         setLoading(false);
       }
@@ -488,10 +505,12 @@ export default function Opportunities() {
     const marketplacesParam = urlParams.get('marketplaces');
     const autoSearch = urlParams.get('autoSearch') === 'true';
     
+    let autoSearchTimer: ReturnType<typeof setTimeout> | undefined;
+
     if (keywordParam) {
       setQuery(keywordParam);
       if (marketplacesParam) {
-        const mpList = marketplacesParam.split(',').filter(mp => 
+        const mpList = marketplacesParam.split(',').filter(mp =>
           ['ebay', 'amazon', 'mercadolibre'].includes(mp.toLowerCase())
         ) as Marketplace[];
         if (mpList.length > 0) {
@@ -499,9 +518,9 @@ export default function Opportunities() {
         }
       }
       window.history.replaceState({}, '', window.location.pathname);
-      
+
       if (autoSearch && keywordParam.trim()) {
-        setTimeout(() => {
+        autoSearchTimer = setTimeout(() => {
           void fetchOpportunitiesPage(1, keywordParam.trim());
         }, 100);
       }
@@ -509,6 +528,7 @@ export default function Opportunities() {
       void fetchOpportunitiesPage(getInitialPage());
     }
     return () => {
+      if (autoSearchTimer !== undefined) clearTimeout(autoSearchTimer);
       if (searchAbortRef.current) {
         searchAbortRef.current.abort();
       }
@@ -958,32 +978,42 @@ export default function Opportunities() {
           comparableHealth.ebay === 'error') &&
         marketplaces.some((m) => m === 'mercadolibre' || m === 'ebay') && (
           <div className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-sm space-y-2">
-            <div className="font-semibold text-xs">Comparables de mercado (misma ruta que Oportunidades)</div>
+            <div className="font-semibold text-xs">Precios de referencia (comparables) — degradados</div>
+            {/* Explicit separation: connection OK vs comparables probe failing */}
+            <div className="flex flex-wrap gap-3 text-[11px]">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-medium">
+                ✓ Conexión y OAuth activos
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">
+                ⚠ Sondeo de comparables fallando
+              </span>
+            </div>
             <p className="text-[11px] opacity-90">
-              Publicación u OAuth pueden estar bien; esta advertencia es solo sobre la búsqueda de listados comparables desde el servidor.
+              Tu conexión a los marketplaces y la publicación <strong>no están afectadas</strong>. Este aviso aplica exclusivamente al sondeo de <em>precios de referencia</em> (listados comparables que el servidor consulta para estimar precios sugeridos).
             </p>
             <ul className="text-[11px] list-disc list-inside space-y-1">
               {(comparableHealth.mercadolibre === 'degraded' ||
                 comparableHealth.mercadolibre === 'error') &&
                 marketplaces.includes('mercadolibre') && (
                   <li>
-                    <strong>Mercado Libre:</strong>{' '}
-                    {comparableHealth.messages?.mercadolibre ||
-                      'Catálogo público / comparables no responde correctamente desde este backend.'}
+                    <strong>Mercado Libre — catálogo de comparables:</strong>{' '}
+                    {comparableHealth.messages?.mercadolibre
+                      ? `${comparableHealth.messages.mercadolibre} (solo afecta precios de referencia, no tu cuenta ni publicaciones)`
+                      : 'El catálogo público de ML no devolvió listados desde este backend. Puede ser temporal o por IP/región.'}
                   </li>
                 )}
               {(comparableHealth.ebay === 'degraded' || comparableHealth.ebay === 'error') &&
                 marketplaces.includes('ebay') && (
                   <li>
-                    <strong>eBay Browse:</strong>{' '}
+                    <strong>eBay Browse — comparables:</strong>{' '}
                     {comparableHealth.messages?.ebay ||
                       'Browse API no verificada para comparables desde este entorno.'}
                   </li>
                 )}
             </ul>
             <p className="text-[10px] opacity-80">
-              Revisá <strong>API Settings</strong> para el estado separado (publicación vs comparables). Mientras tanto, columnas con{' '}
-              <strong>ESTIMADO</strong> reflejan ausencia de datos reales de comparables.
+              Impacto real: columnas con <strong>ESTIMADO</strong> usarán margen calculado sin precios de mercado reales.
+              En <strong>API Settings</strong> verás el estado de tu OAuth/token (que está OK); esto es independiente.
             </p>
           </div>
         )}
@@ -1207,19 +1237,19 @@ export default function Opportunities() {
                       Comisiones: ${Number(Object.values(it.feesConsidered).reduce((a, b) => a + (Number(b ?? 0)), 0)).toFixed(2)}
                     </div>
                   )}
-                  {it.commercialTruth?.competitionSources &&
-                  it.commercialTruth.competitionSources.length > 0 ? (
+                  {Array.isArray(it.commercialTruth?.competitionSources) &&
+                  it.commercialTruth!.competitionSources.length > 0 ? (
                     <div className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1">
                       Comparables:{' '}
-                      {it.commercialTruth.competitionSources
+                      {it.commercialTruth!.competitionSources
                         .map((s) => COMPETITION_SOURCE_LABELS[s] || s)
                         .join(' · ')}
                     </div>
                   ) : null}
-                  {it.estimationNotes?.length ? (
+                  {Array.isArray(it.estimationNotes) && it.estimationNotes.length > 0 ? (
                     <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 space-y-0.5">
                       {it.estimationNotes.map((note, noteIdx) => (
-                        <div key={noteIdx}>* {note}</div>
+                        <div key={noteIdx}>* {typeof note === 'string' ? note : String(note)}</div>
                       ))}
                     </div>
                   ) : null}
@@ -1386,9 +1416,9 @@ export default function Opportunities() {
                         </>
                       )}
                     </button>
-                    {it.publishingDecision && !it.publishingDecision.canPublish && (
+                    {it.publishingDecision && !it.publishingDecision.canPublish && Array.isArray(it.publishingDecision.reasons) && it.publishingDecision.reasons.length > 0 && (
                       <p className="text-[10px] text-slate-400 max-w-[140px] text-center leading-tight">
-                        {it.publishingDecision.reasons[0]}
+                        {typeof it.publishingDecision.reasons[0] === 'string' ? it.publishingDecision.reasons[0] : null}
                       </p>
                     )}
                   </div>

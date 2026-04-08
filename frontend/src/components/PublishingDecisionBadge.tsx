@@ -42,10 +42,12 @@ const PUBLISHING_DECISION_COLORS: Record<PublishingDecision, string> = {
 export default function PublishingDecisionBadge({ result }: { result: PublishingDecisionResult }) {
   const label = PUBLISHING_DECISION_LABELS[result.decision] ?? result.decision;
   const colors = PUBLISHING_DECISION_COLORS[result.decision] ?? 'bg-gray-100 text-gray-700 border-gray-300';
+  // Guard: reasons may be absent when backend returns a partial publishingDecision
+  const reasonsText = Array.isArray(result.reasons) ? result.reasons.join('\n') : '';
   return (
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-semibold ${colors}`}
-      title={result.reasons.join('\n')}
+      title={reasonsText}
     >
       {result.canPublish ? '✓' : '○'} {label}
     </span>
