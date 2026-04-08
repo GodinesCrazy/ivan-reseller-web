@@ -606,6 +606,87 @@ export default function Products() {
         }
       />
 
+      {/* ── OPERATIVE MODE BANNER ─────────────────────────────────────────────
+           Visible inmediatamente al cargar la página. Hace inequívoco que la
+           vista está filtrada a productos operativos, no al catálogo completo. */}
+      {!setupRequired && (
+        <div className={`rounded-xl border px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 transition-colors ${
+          filters.status === 'OPERABLE'
+            ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30'
+            : filters.status === 'LEGACY_UNVERIFIED'
+            ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30'
+            : filters.status === 'ALL'
+            ? 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50'
+            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+        }`}>
+          <div className="flex flex-wrap items-center gap-2">
+            {filters.status === 'OPERABLE' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-600 text-white text-[11px] font-bold tracking-wide shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-200 animate-pulse" />
+                VISTA OPERATIVA
+              </span>
+            )}
+            {filters.status === 'ALL' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-600 text-white text-[11px] font-bold tracking-wide shrink-0">
+                CATÁLOGO COMPLETO
+              </span>
+            )}
+            {filters.status === 'LEGACY_UNVERIFIED' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500 text-white text-[11px] font-bold tracking-wide shrink-0">
+                LEGACY
+              </span>
+            )}
+            {filters.status === 'VALIDATED_READY' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-600 text-white text-[11px] font-bold tracking-wide shrink-0">
+                VALIDADOS
+              </span>
+            )}
+            {filters.status === 'PUBLISHED' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-600 text-white text-[11px] font-bold tracking-wide shrink-0">
+                PUBLICADOS
+              </span>
+            )}
+            {filters.status === 'PENDING' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500 text-white text-[11px] font-bold tracking-wide shrink-0">
+                PENDIENTES
+              </span>
+            )}
+            <span className={`text-xs ${
+              filters.status === 'OPERABLE' ? 'text-blue-700 dark:text-blue-300'
+              : filters.status === 'LEGACY_UNVERIFIED' ? 'text-amber-700 dark:text-amber-300'
+              : 'text-slate-600 dark:text-slate-400'
+            }`}>
+              {filters.status === 'OPERABLE' && 'Solo productos en ciclo activo — PENDING, VALIDATED, PUBLISHED (sin legacy congelado)'}
+              {filters.status === 'ALL' && 'Mostrando todos los productos incluyendo legacy congelado'}
+              {filters.status === 'LEGACY_UNVERIFIED' && 'Productos sin valor operativo directo — importados pero sin verificar'}
+              {filters.status === 'VALIDATED_READY' && 'Productos validados y listos para publicar'}
+              {filters.status === 'PUBLISHED' && 'Productos con listing activo en al menos un marketplace'}
+              {filters.status === 'PENDING' && 'Productos que esperan aprobación antes de publicar'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {filters.status !== 'OPERABLE' && (
+              <button
+                type="button"
+                onClick={() => updateFilter('status', 'OPERABLE')}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                ← Vista operativa
+              </button>
+            )}
+            {filters.status === 'OPERABLE' && (
+              <button
+                type="button"
+                onClick={() => updateFilter('status', 'ALL')}
+                className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:underline"
+              >
+                Ver catálogo completo →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {setupRequired && (
         <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
           <CardContent className="pt-6">

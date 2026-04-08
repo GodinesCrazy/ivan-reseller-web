@@ -648,6 +648,34 @@ export default function IntelligentPublisher() {
         </p>
       </div>
 
+      {/* Direct-nav guide — shown when NOT coming from a product CTA */}
+      {!highlightProductId && (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-4 py-3 flex items-start gap-3">
+          <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0 text-xs font-bold mt-0.5">→</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+              Flujo recomendado: publika producto a producto
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Ve a{' '}
+              <button type="button" onClick={() => navigate('/products')} className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                Productos
+              </button>
+              {' '}→ elige un producto VALIDATED_READY → haz clic en{' '}
+              <strong className="text-slate-600 dark:text-slate-300">«Ir al Publisher»</strong>{' '}
+              para llegar directo a su fila resaltada aquí. La cola masiva está abajo si la necesitás.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/products')}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shrink-0"
+          >
+            Ir a Productos
+          </button>
+        </div>
+      )}
+
       {/* Arrival banner — shown when coming from ProductPreview */}
       {highlightProductId && (() => {
         const product = pending.find((p: any) => String(p.id) === highlightProductId);
@@ -907,7 +935,9 @@ export default function IntelligentPublisher() {
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-3 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm text-slate-700 dark:text-slate-300">
-            Aprobaciones pendientes: <span className="font-semibold text-slate-900 dark:text-slate-100">{pending.length}</span>
+            <span className="font-semibold text-slate-900 dark:text-slate-100">Cola de publicación individual</span>
+            <span className="ml-2 text-slate-500">·</span>
+            <span className="ml-2">{pending.length} producto{pending.length !== 1 ? 's' : ''} listos para revisar</span>
             {pending.length > 0 && (
               <span className="ml-2 text-[11px] text-slate-500">
                 ({pending.filter((p: any) => p.source === 'autopilot').length} del Autopilot)
