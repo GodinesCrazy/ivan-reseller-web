@@ -66,8 +66,8 @@ export default async function handler(
       method: 'GET',
       headers: {
         'User-Agent': 'Vercel-Serverless-Function/1.0',
-        'X-Forwarded-For': req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || 'unknown',
-        'X-Forwarded-Proto': req.headers['x-forwarded-proto'] || 'https',
+        'X-Forwarded-For': (Array.isArray(req.headers['x-forwarded-for']) ? req.headers['x-forwarded-for'][0] : req.headers['x-forwarded-for']) || (Array.isArray(req.headers['x-real-ip']) ? req.headers['x-real-ip'][0] : req.headers['x-real-ip']) || 'unknown',
+        'X-Forwarded-Proto': (Array.isArray(req.headers['x-forwarded-proto']) ? req.headers['x-forwarded-proto'][0] : req.headers['x-forwarded-proto']) || 'https',
         'X-Original-Host': req.headers.host || 'unknown',
       },
       signal: controller.signal
