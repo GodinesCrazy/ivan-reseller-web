@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useLiveData } from '@/hooks/useLiveData';
@@ -66,6 +66,7 @@ export default function IntelligentPublisher() {
     const v = params.get('highlight');
     return v && !isNaN(Number(v)) ? String(v) : null;
   }, [location.search]);
+  const highlightRowRef = useRef<HTMLDivElement | null>(null);
   const [pending, setPending] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
   const [url, setUrl] = useState('');
@@ -160,6 +161,17 @@ export default function IntelligentPublisher() {
   useEffect(() => {
     void loadPublisherData();
   }, [loadPublisherData, location.pathname]);
+
+  // Autoscroll to highlighted product row after data loads
+  useEffect(() => {
+    if (!highlightProductId || pending.length === 0) return;
+    const timer = setTimeout(() => {
+      if (highlightRowRef.current) {
+        highlightRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [highlightProductId, pending]);
 
   useLiveData({
     fetchFn: () => void loadPublisherData({ silent: true }),
@@ -945,6 +957,7 @@ export default function IntelligentPublisher() {
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card overflow-hidden">
         {displayedPending.map((p: any) => {
           const truth = operationsTruthByProduct.get(Number(p.id)) ?? null;
+          const isHighlighted = String(p.id) === highlightProductId;
           return (
             <PendingProductCard
               key={`pending-${String(p.id)}`}
@@ -958,6 +971,8 @@ export default function IntelligentPublisher() {
               onReject={() => rejectPendingOne(String(p.id))}
               onRemove={() => removePendingOne(String(p.id))}
               rowBusy={pendingRowBusy[String(p.id)]}
+              highlighted={isHighlighted}
+              highlightRef={isHighlighted ? highlightRowRef : undefined}
             />
           );
         })}
@@ -1126,6 +1141,8 @@ function PendingProductCard({
   onReject,
   onRemove,
   rowBusy,
+  highlighted,
+  highlightRef,
 }: {
   product: any;
   productId: string;
@@ -1137,6 +1154,8 @@ function PendingProductCard({
   onReject: () => void;
   onRemove: () => void;
   rowBusy?: 'reject' | 'remove';
+  highlighted?: boolean;
+  highlightRef?: React.Ref<HTMLDivElement>;
 }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -1191,9 +1210,10 @@ function PendingProductCard({
 
   return (
     <div
+      ref={highlightRef}
       className={`px-3 py-3 border-b border-slate-100 dark:border-slate-800 last:border-b-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-colors ${
         rowBlockedVisual && !truthLoading ? 'bg-red-50/40 dark:bg-red-950/20 border-l-4 border-l-red-500 pl-2.5' : ''
-      } ${truthLoading ? 'opacity-90' : ''}`}
+      } ${truthLoading ? 'opacity-90' : ''} ${highlighted ? 'ring-2 ring-inset ring-blue-500 bg-blue-50/60 dark:bg-blue-950/30' : ''}`}
     >
       <div className="flex items-start gap-3 flex-1 w-full">
         <input type="checkbox" className="mt-1 flex-shrink-0 accent-primary-600" checked={selected} disabled={!!rowBusy} onChange={(e) => onSelectChange(e.target.checked)} />
