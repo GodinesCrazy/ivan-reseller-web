@@ -15,6 +15,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import PageHeader from '@/components/ui/PageHeader';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { formatCurrencySimple } from '../utils/currency';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
@@ -133,6 +134,7 @@ export default function PendingPurchases() {
       <PageHeader
         icon={ShoppingCart}
         title="Compras Pendientes"
+        below={<CycleStepsBreadcrumb currentStep={5} />}
         subtitle="Ventas que requieren compra en proveedor · proof ladder en Control Center"
         badge={
           pendingSales.length > 0 ? (

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info, Calculator, Trash2, Plus, MoveUp, MoveDown, Award, RefreshCw, ShieldAlert } from 'lucide-react';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
@@ -730,6 +731,9 @@ export default function ProductPreview() {
             </Link>
             — los datos financieros aquí son estimaciones pre-publicación.
           </p>
+          <div className="mt-2">
+            <CycleStepsBreadcrumb currentStep={3} />
+          </div>
         </div>
 
         {/* Canonical lifecycle truth — P56 */}

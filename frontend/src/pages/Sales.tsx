@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import KpiCard from '@/components/ui/KpiCard';
 import PageHeader from '@/components/ui/PageHeader';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { formatCurrencySimple } from '../utils/currency';
 import WorkflowStatusIndicator from '@/components/WorkflowStatusIndicator';
 import {
@@ -255,6 +256,7 @@ export default function Sales() {
       <PageHeader
         icon={DollarSign}
         title="Ventas"
+        below={<CycleStepsBreadcrumb currentStep={4} />}
         subtitle={
           lastSyncAt
             ? `Ventas registradas · sincronizado hace ${Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000)} min`

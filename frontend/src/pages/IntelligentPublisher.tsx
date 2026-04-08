@@ -4,7 +4,8 @@ import { api } from '../services/api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { API_BASE_URL } from '@/config/runtime';
-import { Check, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp, Wrench, Trash2, AlertTriangle } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp, Wrench, Trash2, AlertTriangle, ArrowRight as ArrowRightIcon } from 'lucide-react';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -646,6 +647,9 @@ export default function IntelligentPublisher() {
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
           Prepara, aprueba y publica anuncios con verdad canónica de listing, blocker y next action. Las estimaciones comerciales son secundarias y no equivalen a proof comercial.
         </p>
+        <div className="mt-2">
+          <CycleStepsBreadcrumb currentStep={3} />
+        </div>
       </div>
 
       {/* Direct-nav guide — shown when NOT coming from a product CTA */}
@@ -1157,6 +1161,28 @@ export default function IntelligentPublisher() {
           ))}
           {listings.length===0 && <div className="p-4 text-xs text-slate-500">Aún no hay anuncios publicados.</div>}
         </div>
+        {/* Next step hint when listings are active */}
+        {listings.some((l: any) => l.status === 'active') && (
+          <div className="mt-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 text-xs font-bold">4</div>
+              <div>
+                <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">Listings activos — siguiente etapa: monitorear órdenes</p>
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
+                  Cuando llegue una compra del cliente, aparecerá en <strong>Órdenes</strong> y deberás activar la compra al proveedor.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/orders')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shrink-0 inline-flex items-center gap-1.5"
+            >
+              Ir a Órdenes
+              <ArrowRightIcon className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         {listingsTotalPages > 1 && (
           <div className="flex items-center justify-center gap-3 mt-3 py-2.5 border-t border-slate-200 dark:border-slate-800 text-xs">
             <button

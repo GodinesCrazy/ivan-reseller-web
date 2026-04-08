@@ -7,6 +7,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X, Download, ClipboardCopy, ShoppingCart, Receipt } from 'lucide-react';
 import api from '@/services/api';
 import PageHeader from '@/components/ui/PageHeader';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -357,6 +358,7 @@ export default function Orders() {
       <PageHeader
         icon={Receipt}
         title="Ordenes / Envios"
+        below={<CycleStepsBreadcrumb currentStep={6} />}
         subtitle={[
           'Compras al proveedor y seguimiento de envios',
           orders.length > 0 ? `trazabilidad: ${tracedOrders}/${orders.length}${truthLoading ? ' ...' : ''}` : null,
