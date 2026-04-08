@@ -572,7 +572,12 @@ export class ProductService {
     const where: any = { ...baseWhere };
 
     if (filters?.status) {
-      where.status = filters.status;
+      if (filters.status === 'OPERABLE') {
+        // OPERABLE = productos en ciclo real; excluye LEGACY_UNVERIFIED y REJECTED
+        where.status = { in: ['PENDING', 'APPROVED', 'VALIDATED_READY', 'PUBLISHED'] };
+      } else {
+        where.status = filters.status;
+      }
     }
 
     if (filters?.search) {

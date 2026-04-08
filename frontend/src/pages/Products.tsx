@@ -121,7 +121,7 @@ interface ProductFilters {
 
 const DEFAULT_FILTERS: ProductFilters = {
   search: '',
-  status: 'ALL',
+  status: 'OPERABLE',
   marketplace: 'ALL',
   category: 'ALL',
   dateFrom: '',
@@ -378,7 +378,7 @@ export default function Products() {
 
   // Active filter chips
   const activeFilters: { key: keyof ProductFilters; label: string; value: string }[] = [];
-  if (filters.status !== 'ALL') activeFilters.push({ key: 'status', label: 'Status', value: filters.status });
+  if (filters.status !== 'ALL' && filters.status !== 'OPERABLE') activeFilters.push({ key: 'status', label: 'Status', value: filters.status });
   if (filters.marketplace !== 'ALL') activeFilters.push({ key: 'marketplace', label: 'Marketplace', value: filters.marketplace });
   if (filters.category !== 'ALL') activeFilters.push({ key: 'category', label: 'Categoria', value: filters.category });
   if (filters.dateFrom) activeFilters.push({ key: 'dateFrom', label: 'Desde', value: filters.dateFrom });
@@ -840,6 +840,40 @@ export default function Products() {
         </Card>
       </div>
 
+      {/* Quick-view filter strip — priorixa productos operables vs legacy */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1">Vista rápida:</span>
+        {([
+          { value: 'OPERABLE', label: 'Operables', color: 'bg-blue-600 text-white border-blue-600', inactive: 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30' },
+          { value: 'VALIDATED_READY', label: 'Validados', color: 'bg-green-600 text-white border-green-600', inactive: 'bg-white dark:bg-slate-900 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-950/30' },
+          { value: 'PUBLISHED', label: 'Publicados', color: 'bg-purple-600 text-white border-purple-600', inactive: 'bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30' },
+          { value: 'PENDING', label: 'Pendientes', color: 'bg-amber-500 text-white border-amber-500', inactive: 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30' },
+          { value: 'LEGACY_UNVERIFIED', label: 'Legacy', color: 'bg-slate-500 text-white border-slate-500', inactive: 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800' },
+          { value: 'ALL', label: 'Todos', color: 'bg-slate-700 text-white border-slate-700', inactive: 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800' },
+        ] as const).map(({ value, label, color, inactive }) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => { updateFilter('status', value); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+              filters.status === value ? color : inactive
+            }`}
+          >
+            {label}
+            {value === 'OPERABLE' && filters.status !== 'OPERABLE' && stats.total > 0 && (
+              <span className="ml-1.5 opacity-70 font-normal">
+                {(stats.validatedReady + stats.published + stats.pending).toLocaleString()}
+              </span>
+            )}
+          </button>
+        ))}
+        {filters.status === 'LEGACY_UNVERIFIED' && (
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2 py-1 rounded-lg">
+            Productos legacy — sin valor operativo directo. Usa «Operables» para trabajar.
+          </span>
+        )}
+      </div>
+
       {/* Filters */}
       <Card className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-card">
         <CardHeader className="px-5 py-3">
@@ -882,6 +916,7 @@ export default function Products() {
               onChange={(e) => updateFilter('status', e.target.value)}
               className={selectClass}
             >
+              <option value="OPERABLE">Operables (sin legacy/rechazados)</option>
               <option value="ALL">Todos los estados</option>
               <option value="PENDING">Pendiente</option>
               <option value="APPROVED">Aprobado</option>

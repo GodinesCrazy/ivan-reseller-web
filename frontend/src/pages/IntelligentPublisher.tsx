@@ -61,6 +61,7 @@ export default function IntelligentPublisher() {
   const location = useLocation();
   const { environment } = useEnvironment();
   const navigate = useNavigate();
+  const [showBulkToolbar, setShowBulkToolbar] = useState(false);
   const highlightProductId = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const v = params.get('highlight');
@@ -704,92 +705,112 @@ export default function IntelligentPublisher() {
         );
       })()}
 
-      {/* Bulk publish toolbar */}
+      {/* Bulk publish toolbar — colapsado por defecto para no tapar el flujo unitario */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-3 flex flex-col gap-2">
-        <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">Publicación masiva seleccionada (encolar trabajos)</div>
-        <p className="text-[11px] text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-2 py-1.5">
-          Por seguridad de canario ML: <strong>ningún marketplace viene preseleccionado</strong>. Solo se encolan productos{' '}
-          <strong>sin bloqueo canónico</strong> (p. ej. missingSku queda fuera). Elegí Mercado Libre explícitamente antes de encolar.
-        </p>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="text-[11px] text-slate-500 dark:text-slate-400">Marketplaces para cola:</span>
-          <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.ebay} onChange={(e)=>setBulkMk(v=>({...v, ebay: e.target.checked}))}/> eBay</label>
-          <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.mercadolibre} onChange={(e)=>setBulkMk(v=>({...v, mercadolibre: e.target.checked}))}/> ML</label>
-          <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.amazon} onChange={(e)=>setBulkMk(v=>({...v, amazon: e.target.checked}))}/> Amazon</label>
-          <button
-            type="button"
-            disabled={bulkPendingBusy || bulkStatus.running}
-            onClick={() => setBulkMk({ ebay: false, mercadolibre: true, amazon: false })}
-            className="px-2 py-0.5 text-[11px] border rounded-md border-primary-300 text-primary-800 dark:text-primary-200 hover:bg-primary-50 dark:hover:bg-primary-950/20"
-          >
-            Preset: solo ML
-          </button>
-          <button
-            type="button"
-            disabled={bulkPendingBusy || bulkStatus.running}
-            onClick={() => setBulkMk({ ebay: false, mercadolibre: false, amazon: false })}
-            className="px-2 py-0.5 text-[11px] border rounded-md border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-          >
-            Limpiar marketplaces
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
-            const productIds = Object.entries(selected).filter(([,v])=>v).map(([k])=>k);
-            const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
-            if (productIds.length===0 || marketplaces.length===0) { toast.error('Selecciona al menos un producto y al menos un marketplace'); return; }
-            const allowed = filterPublishableProductIds(productIds);
-            if (allowed.length < productIds.length) {
-              toast.error(`Omitidos ${productIds.length - allowed.length} producto(s) con bloqueos; no se encolan.`);
-            }
-            if (allowed.length === 0) { toast.error('Ningún seleccionado está publicable sin bloqueos.'); return; }
-            setBulkStatus({ total: allowed.length, queued: 0, done: 0, errors: 0, running: true });
-            for (const pid of allowed) {
-              try {
-                await api.post('/api/jobs/publishing', { productId: Number(pid), marketplaces });
-                setBulkStatus(s=>({ ...s, queued: s.queued + 1 }));
-              } catch {
-                setBulkStatus(s=>({ ...s, queued: s.queued + 1, errors: s.errors + 1 }));
-              }
-              await new Promise(r=>setTimeout(r, 300));
-            }
-            setBulkStatus(s=>({ ...s, running: false }));
-            toast.success('Trabajos de publicación encolados (solo filas sin bloqueo).');
-          }} className="px-2.5 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors">Encolar trabajos</button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=>{ const all: Record<string, boolean> = {}; pending.forEach((p:any)=> all[String(p.id)]=true); setSelected(all); }} className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md text-xs disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800">Seleccionar todo</button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={selectBlockedPendingOnly} className="px-2.5 py-1.5 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-200 rounded-md text-xs disabled:opacity-50 hover:bg-red-50 dark:hover:bg-red-950/20" title="Selecciona filas con bloqueo canónico para rechazar o eliminar en bloque">
-            Solo bloqueados
-          </button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=> setSelected({}) } className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md text-xs disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800">Limpiar</button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingReject} className="px-2.5 py-1.5 border border-amber-600 text-amber-800 dark:text-amber-200 rounded-md text-xs hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">Rechazar sel.</button>
-          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingRemove} className="px-2.5 py-1.5 border border-red-600 text-red-700 dark:text-red-300 rounded-md text-xs hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-50 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Eliminar sel.</button>
-          <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
-            const allIds = pending.map((p:any)=> String(p.id));
-            const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
-            if (allIds.length===0 || marketplaces.length===0) { toast.error('No hay productos pendientes o no elegiste marketplaces'); return; }
-            const allowed = filterPublishableProductIds(allIds);
-            if (allowed.length < allIds.length) {
-              toast.error(`Omitidos ${allIds.length - allowed.length} pendiente(s) bloqueado(s). Solo se encolan ${allowed.length} sin bloqueo.`);
-            }
-            if (allowed.length === 0) { toast.error('Ningún pendiente está publicable sin bloqueos.'); return; }
-            setBulkStatus({ total: allowed.length, queued: 0, done: 0, errors: 0, running: true });
-            for (const pid of allowed) {
-              try {
-                await api.post('/api/jobs/publishing', { productId: Number(pid), marketplaces });
-                setBulkStatus(s=>({ ...s, queued: s.queued + 1 }));
-              } catch {
-                setBulkStatus(s=>({ ...s, queued: s.queued + 1, errors: s.errors + 1 }));
-              }
-              await new Promise(r=>setTimeout(r, 300));
-            }
-            setBulkStatus(s=>({ ...s, running: false }));
-            toast.success('Encolados solo pendientes sin bloqueo canónico');
-          }} className="px-2.5 py-1.5 bg-green-600 text-white rounded-md text-xs font-medium disabled:opacity-50 hover:bg-green-700 transition-colors">Publicar todo (sin bloqueados)</button>
-        </div>
-        <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-          <div className="h-full bg-primary-500 rounded-full transition-all duration-300" style={{ width: `${bulkProgress}%` }} />
-        </div>
-        <div className="text-[11px] text-slate-500 dark:text-slate-400">En cola: {bulkStatus.queued}/{bulkStatus.total} · Errores: {bulkStatus.errors}</div>
+        <button
+          type="button"
+          onClick={() => setShowBulkToolbar((v) => !v)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+            Publicación masiva (encolar trabajos en bloque)
+          </span>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 ml-2">
+            {showBulkToolbar ? '▲ Ocultar' : '▼ Expandir'}
+          </span>
+        </button>
+        {!showBulkToolbar && (
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Para publicar un producto individual: usa «Ir al Publisher» desde Productos o ProductPreview. La cola masiva está disponible aquí si la necesitas.
+          </p>
+        )}
+        {showBulkToolbar && (
+          <>
+            <p className="text-[11px] text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-2 py-1.5">
+              Por seguridad de canario ML: <strong>ningún marketplace viene preseleccionado</strong>. Solo se encolan productos{' '}
+              <strong>sin bloqueo canónico</strong> (p. ej. missingSku queda fuera). Elegí Mercado Libre explícitamente antes de encolar.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">Marketplaces para cola:</span>
+              <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.ebay} onChange={(e)=>setBulkMk(v=>({...v, ebay: e.target.checked}))}/> eBay</label>
+              <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.mercadolibre} onChange={(e)=>setBulkMk(v=>({...v, mercadolibre: e.target.checked}))}/> ML</label>
+              <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.amazon} onChange={(e)=>setBulkMk(v=>({...v, amazon: e.target.checked}))}/> Amazon</label>
+              <button
+                type="button"
+                disabled={bulkPendingBusy || bulkStatus.running}
+                onClick={() => setBulkMk({ ebay: false, mercadolibre: true, amazon: false })}
+                className="px-2 py-0.5 text-[11px] border rounded-md border-primary-300 text-primary-800 dark:text-primary-200 hover:bg-primary-50 dark:hover:bg-primary-950/20"
+              >
+                Preset: solo ML
+              </button>
+              <button
+                type="button"
+                disabled={bulkPendingBusy || bulkStatus.running}
+                onClick={() => setBulkMk({ ebay: false, mercadolibre: false, amazon: false })}
+                className="px-2 py-0.5 text-[11px] border rounded-md border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                Limpiar marketplaces
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
+                const productIds = Object.entries(selected).filter(([,v])=>v).map(([k])=>k);
+                const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
+                if (productIds.length===0 || marketplaces.length===0) { toast.error('Selecciona al menos un producto y al menos un marketplace'); return; }
+                const allowed = filterPublishableProductIds(productIds);
+                if (allowed.length < productIds.length) {
+                  toast.error(`Omitidos ${productIds.length - allowed.length} producto(s) con bloqueos; no se encolan.`);
+                }
+                if (allowed.length === 0) { toast.error('Ningún seleccionado está publicable sin bloqueos.'); return; }
+                setBulkStatus({ total: allowed.length, queued: 0, done: 0, errors: 0, running: true });
+                for (const pid of allowed) {
+                  try {
+                    await api.post('/api/jobs/publishing', { productId: Number(pid), marketplaces });
+                    setBulkStatus(s=>({ ...s, queued: s.queued + 1 }));
+                  } catch {
+                    setBulkStatus(s=>({ ...s, queued: s.queued + 1, errors: s.errors + 1 }));
+                  }
+                  await new Promise(r=>setTimeout(r, 300));
+                }
+                setBulkStatus(s=>({ ...s, running: false }));
+                toast.success('Trabajos de publicación encolados (solo filas sin bloqueo).');
+              }} className="px-2.5 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium disabled:opacity-50 hover:bg-blue-700 transition-colors">Encolar trabajos</button>
+              <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=>{ const all: Record<string, boolean> = {}; pending.forEach((p:any)=> all[String(p.id)]=true); setSelected(all); }} className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md text-xs disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800">Seleccionar todo</button>
+              <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={selectBlockedPendingOnly} className="px-2.5 py-1.5 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-200 rounded-md text-xs disabled:opacity-50 hover:bg-red-50 dark:hover:bg-red-950/20" title="Selecciona filas con bloqueo canónico para rechazar o eliminar en bloque">
+                Solo bloqueados
+              </button>
+              <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=> setSelected({}) } className="px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-md text-xs disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-800">Limpiar</button>
+              <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingReject} className="px-2.5 py-1.5 border border-amber-600 text-amber-800 dark:text-amber-200 rounded-md text-xs hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">Rechazar sel.</button>
+              <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingRemove} className="px-2.5 py-1.5 border border-red-600 text-red-700 dark:text-red-300 rounded-md text-xs hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-50 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" /> Eliminar sel.</button>
+              <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
+                const allIds = pending.map((p:any)=> String(p.id));
+                const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
+                if (allIds.length===0 || marketplaces.length===0) { toast.error('No hay productos pendientes o no elegiste marketplaces'); return; }
+                const allowed = filterPublishableProductIds(allIds);
+                if (allowed.length < allIds.length) {
+                  toast.error(`Omitidos ${allIds.length - allowed.length} pendiente(s) bloqueado(s). Solo se encolan ${allowed.length} sin bloqueo.`);
+                }
+                if (allowed.length === 0) { toast.error('Ningún pendiente está publicable sin bloqueos.'); return; }
+                setBulkStatus({ total: allowed.length, queued: 0, done: 0, errors: 0, running: true });
+                for (const pid of allowed) {
+                  try {
+                    await api.post('/api/jobs/publishing', { productId: Number(pid), marketplaces });
+                    setBulkStatus(s=>({ ...s, queued: s.queued + 1 }));
+                  } catch {
+                    setBulkStatus(s=>({ ...s, queued: s.queued + 1, errors: s.errors + 1 }));
+                  }
+                  await new Promise(r=>setTimeout(r, 300));
+                }
+                setBulkStatus(s=>({ ...s, running: false }));
+                toast.success('Encolados solo pendientes sin bloqueo canónico');
+              }} className="px-2.5 py-1.5 bg-green-600 text-white rounded-md text-xs font-medium disabled:opacity-50 hover:bg-green-700 transition-colors">Publicar todo (sin bloqueados)</button>
+            </div>
+            <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-primary-500 rounded-full transition-all duration-300" style={{ width: `${bulkProgress}%` }} />
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">En cola: {bulkStatus.queued}/{bulkStatus.total} · Errores: {bulkStatus.errors}</div>
+          </>
+        )}
       </div>
 
       {/* Add product for approval */}
