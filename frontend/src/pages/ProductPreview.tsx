@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info, Calculator, Trash2, Plus, MoveUp, MoveDown, Award, RefreshCw, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info, Calculator, Trash2, Plus, MoveUp, MoveDown, Award, RefreshCw, ShieldAlert } from 'lucide-react';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -395,7 +395,7 @@ export default function ProductPreview() {
 
       if (response.data?.success) {
         toast.success('Producto enviado a Intelligent Publisher para aprobación');
-        navigate('/publisher');
+        navigate(`/publisher?highlight=${id}`);
       } else {
         throw new Error(response.data?.error || 'Error al enviar producto');
       }
@@ -715,9 +715,16 @@ export default function ProductPreview() {
             <ArrowLeft className="w-4 h-4" />
             Volver
           </button>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Vista Previa del Listing</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+              Revisión y decisión de publicación
+            </h1>
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+              {preview.marketplace === 'mercadolibre' ? 'Mercado Libre' : preview.marketplace === 'ebay' ? 'eBay' : preview.marketplace}
+            </span>
+          </div>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Revisa cómo se verá tu producto en {preview.marketplace}. La verdad operativa (listing, blocker, proof) está en{' '}
+            Paso 2: revisa el producto, verifica el preflight y decide GO/NO-GO antes de enviarlo al Publisher. La verdad operativa está en{' '}
             <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
               Control Center
             </Link>
@@ -801,6 +808,33 @@ export default function ProductPreview() {
 
           {/* Sidebar - Right Column (1/3) */}
           <div className="space-y-6">
+            {/* Marketplace switcher */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-4">
+              <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                Marketplace destino
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {(['mercadolibre', 'ebay', 'amazon'] as const).map((mp) => (
+                  <button
+                    key={mp}
+                    type="button"
+                    onClick={() => {
+                      const params = new URLSearchParams(searchParams);
+                      params.set('marketplace', mp);
+                      navigate(`/products/${id}/preview?${params.toString()}`, { replace: true });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
+                      marketplace === mp
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-blue-400'
+                    }`}
+                  >
+                    {mp === 'mercadolibre' ? 'Mercado Libre' : mp === 'ebay' ? 'eBay' : 'Amazon'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Price Card */}
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6">
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -1172,6 +1206,84 @@ export default function ProductPreview() {
               </div>
             )}
 
+            {/* Publication Decision Panel */}
+            {(() => {
+              const isMl = preview.marketplace === 'mercadolibre';
+              const isBlocked = isMl && preflight != null && preflight.publishAllowed === false;
+              const isReady = !isBlocked && !(isMl && preflightLoading);
+              const steps = [
+                { label: 'Revisión', done: true },
+                { label: 'Preflight', done: isMl ? (!preflightLoading && preflight != null) : true },
+                { label: 'GO/NO-GO', done: isMl ? (!preflightLoading && isReady) : true, current: isMl && !preflightLoading },
+                { label: 'Publisher', done: false },
+                { label: 'Publicado', done: false },
+              ];
+              return (
+                <div className={`rounded-xl border p-4 space-y-3 ${
+                  isBlocked
+                    ? 'border-red-300 dark:border-red-700 bg-red-50/60 dark:bg-red-950/30'
+                    : preflightLoading
+                    ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'
+                    : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/30'
+                }`}>
+                  {/* Step indicator */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                    {steps.map((step, i) => (
+                      <div key={step.label} className="flex items-center gap-1 flex-shrink-0">
+                        <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${
+                          step.done && !step.current
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                            : step.current && isBlocked
+                            ? 'bg-red-200 text-red-700 dark:bg-red-900/50 dark:text-red-300'
+                            : step.current
+                            ? 'bg-blue-200 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                            : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                        }`}>
+                          {step.done && !step.current ? <CheckCircle className="w-3 h-3" /> : null}
+                          {step.label}
+                        </div>
+                        {i < steps.length - 1 && (
+                          <ArrowRight className="w-3 h-3 text-slate-300 dark:text-slate-600 flex-shrink-0" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {/* GO / NO-GO */}
+                  {preflightLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                      Verificando readiness para publicación…
+                    </div>
+                  ) : isBlocked ? (
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-bold text-red-700 dark:text-red-300 flex items-center gap-1.5">
+                        <XCircle className="w-4 h-4" />
+                        NO-GO — Este producto no puede publicarse aún
+                      </p>
+                      {preflight?.blockers && preflight.blockers.length > 0 && (
+                        <ul className="list-disc pl-4 text-xs text-red-700 dark:text-red-300 space-y-0.5">
+                          {preflight.blockers.map((b, i) => <li key={i}>{b}</li>)}
+                        </ul>
+                      )}
+                      <p className="text-xs text-red-600 dark:text-red-400">Resuelve los blockers en el Cockpit ML antes de enviar al Publisher.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                        <CheckCircle className="w-4 h-4" />
+                        GO — Listo para enviar al Publisher
+                      </p>
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                        {isMl
+                          ? 'Preflight OK. Confirma modo e intento de publicación en el Cockpit ML, luego envía.'
+                          : 'El producto está listo. Envíalo al Publisher para continuar.'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Actions Card */}
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-card p-6 space-y-3">
               <button
@@ -1187,18 +1299,23 @@ export default function ProductPreview() {
                 {publishing ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Enviando...
+                    Enviando al Publisher…
+                  </>
+                ) : preview.marketplace === 'mercadolibre' && preflight != null && preflight.publishAllowed === false ? (
+                  <>
+                    <XCircle className="w-5 h-5" />
+                    No publicable (bloqueado)
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="w-5 h-5" />
-                    Enviar a aprobación
+                    <ArrowRight className="w-5 h-5" />
+                    Enviar al Publisher
                   </>
                 )}
               </button>
               {preview.marketplace === 'mercadolibre' && (
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Se envía a Intelligent Publisher. El intento real (production/pilot/dry_run) se aplica en la aprobación canónica.
+                  El modo e intento (production/pilot/dry_run) se confirman en la aprobación del Publisher.
                 </p>
               )}
               
@@ -1222,9 +1339,10 @@ export default function ProductPreview() {
 
               <button
                 onClick={handleCancel}
-                className="w-full text-slate-600 dark:text-slate-400 py-2 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm"
+                className="w-full text-slate-600 dark:text-slate-400 py-2 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm flex items-center justify-center gap-1.5"
               >
-                Cancelar
+                <ArrowLeft className="w-4 h-4" />
+                Volver a Productos
               </button>
             </div>
           </div>

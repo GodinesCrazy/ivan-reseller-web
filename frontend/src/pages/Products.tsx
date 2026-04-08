@@ -24,7 +24,8 @@ import {
   DollarSign,
   Tag,
   AlertCircle,
-  Settings
+  Settings,
+  ArrowRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -454,7 +455,7 @@ export default function Products() {
     }
   };
 
-  const handlePublish = async (productId: string) => {
+  const _handlePublish = async (productId: string) => {
     try {
       const response = await api.post(`/api/publisher/approve/${productId}`, { marketplaces: ['ebay'] });
       const data = response.data;
@@ -1235,42 +1236,87 @@ export default function Products() {
                           ) : null}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button onClick={() => navigate(`/products/${product.id}/preview`)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors" title="Preview">
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => navigate(`/products/${product.id}/preview?showFinancial=true`)} className="p-1.5 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors" title="Info financiera">
-                              <Calculator className="w-4 h-4" />
-                            </button>
+                          <div className="flex flex-col items-end gap-1.5">
+                            {/* Primary CTA — semantic por estado */}
                             {product.status === 'PENDING' && (
-                              <>
-                                <button onClick={() => handleApprove(product.id)} className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg" title="Aprobar">
-                                  <CheckCircle className="w-4 h-4" />
-                                </button>
-                                <button onClick={() => handleReject(product.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg" title="Rechazar">
-                                  <XCircle className="w-4 h-4" />
-                                </button>
-                              </>
+                              <button
+                                onClick={() => navigate(`/products/${product.id}/preview`)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                Revisar
+                                <ArrowRight className="w-3 h-3" />
+                              </button>
                             )}
-                            {product.status === 'VALIDATED_READY' && (
-                              <button onClick={() => handlePublish(product.id)} className="p-1.5 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg" title="Publicar validado">
-                                <Upload className="w-4 h-4" />
+                            {(product.status === 'APPROVED' || product.status === 'VALIDATED_READY') && !opsTruth?.blockerCode && (
+                              <button
+                                onClick={() => navigate(`/products/${product.id}/preview?marketplace=mercadolibre`)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+                              >
+                                <Upload className="w-3.5 h-3.5" />
+                                Preparar publicación
+                                <ArrowRight className="w-3 h-3" />
+                              </button>
+                            )}
+                            {(product.status === 'APPROVED' || product.status === 'VALIDATED_READY') && opsTruth?.blockerCode && (
+                              <button
+                                onClick={() => navigate(`/products/${product.id}/preview`)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-950/40 dark:hover:bg-red-900/60 dark:text-red-300 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+                                title={`Blocker: ${opsTruth.blockerCode}`}
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                Ver bloqueo
                               </button>
                             )}
                             {product.status === 'PUBLISHED' && (
-                              <button onClick={() => handleUnpublish(product.id)} className="p-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg" title="Despublicar">
-                                <Archive className="w-4 h-4" />
+                              <button
+                                onClick={() => navigate('/listings')}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-800 dark:bg-green-950/40 dark:hover:bg-green-900/60 dark:text-green-300 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Ver listing
+                                <ArrowRight className="w-3 h-3" />
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(product)}
-                              disabled={deleteLoading}
-                              className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg disabled:opacity-50"
-                              title={isAdminUser ? 'Eliminar producto (admin / dueño)' : 'Eliminar producto (solo si no tiene ventas)'}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {product.status === 'REJECTED' && (
+                              <button
+                                onClick={() => navigate(`/products/${product.id}/preview`)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium transition-colors whitespace-nowrap"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                Ver detalle
+                              </button>
+                            )}
+                            {/* Secondary actions */}
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => navigate(`/products/${product.id}/preview?showFinancial=true`)} className="p-1.5 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors" title="Info financiera">
+                                <Calculator className="w-3.5 h-3.5" />
+                              </button>
+                              {product.status === 'PENDING' && (
+                                <>
+                                  <button onClick={() => handleApprove(product.id)} className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors" title="Aprobar pendiente">
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => handleReject(product.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors" title="Rechazar">
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                              {product.status === 'PUBLISHED' && (
+                                <button onClick={() => handleUnpublish(product.id)} className="p-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors" title="Despublicar">
+                                  <Archive className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(product)}
+                                disabled={deleteLoading}
+                                className="p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg disabled:opacity-50 transition-colors"
+                                title={isAdminUser ? 'Eliminar producto (admin)' : 'Eliminar producto'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -1528,19 +1574,52 @@ export default function Products() {
                 </div>
               )}
             </div>
-            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-end">
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-3 justify-between items-center">
               <Button variant="outline" onClick={() => setShowModal(false)}>
                 Cerrar
               </Button>
-              {selectedProduct.status === 'PUBLISHED' && selectedProduct.marketplaceUrl && (
-                <Button
-                  className="flex items-center gap-2"
-                  onClick={() => window.open(selectedProduct.marketplaceUrl!, '_blank', 'noopener,noreferrer')}
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  Ver en Marketplace
-                </Button>
-              )}
+              <div className="flex gap-2 flex-wrap">
+                {selectedProduct.status === 'PUBLISHED' && selectedProduct.marketplaceUrl && (
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-2"
+                    onClick={() => window.open(selectedProduct.marketplaceUrl!, '_blank', 'noopener,noreferrer')}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Ver en Marketplace
+                  </Button>
+                )}
+                {selectedProduct.status === 'PUBLISHED' && (
+                  <Button
+                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                    onClick={() => { setShowModal(false); navigate('/listings'); }}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Ver listing activo
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                )}
+                {(selectedProduct.status === 'PENDING') && (
+                  <Button
+                    className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600"
+                    onClick={() => { setShowModal(false); navigate(`/products/${selectedProduct.id}/preview`); }}
+                  >
+                    <Eye className="w-4 h-4" />
+                    Revisar producto
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                )}
+                {(selectedProduct.status === 'APPROVED' || selectedProduct.status === 'VALIDATED_READY') && (
+                  <Button
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+                    onClick={() => { setShowModal(false); navigate(`/products/${selectedProduct.id}/preview?marketplace=mercadolibre`); }}
+                  >
+                    <Upload className="w-4 h-4" />
+                    Preparar publicación
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>

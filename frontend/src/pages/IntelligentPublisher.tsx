@@ -61,6 +61,11 @@ export default function IntelligentPublisher() {
   const location = useLocation();
   const { environment } = useEnvironment();
   const navigate = useNavigate();
+  const highlightProductId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const v = params.get('highlight');
+    return v && !isNaN(Number(v)) ? String(v) : null;
+  }, [location.search]);
   const [pending, setPending] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
   const [url, setUrl] = useState('');
@@ -630,6 +635,37 @@ export default function IntelligentPublisher() {
         </p>
       </div>
 
+      {/* Arrival banner — shown when coming from ProductPreview */}
+      {highlightProductId && (() => {
+        const product = pending.find((p: any) => String(p.id) === highlightProductId);
+        if (!product) return null;
+        return (
+          <div className="rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 p-4 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">3</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                Paso 3 — Aprobar y publicar
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5 truncate">
+                Producto <strong>#{highlightProductId}</strong> enviado al publicador.
+                {product.title ? ` · ${String(product.title).slice(0, 60)}${product.title.length > 60 ? '…' : ''}` : ''}
+              </p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1.5">
+                Busca la fila resaltada abajo → elige <strong>ML</strong> como marketplace → haz clic en <strong>Aprobar y publicar</strong>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/publisher', { replace: true })}
+              className="text-blue-400 hover:text-blue-600 p-1 rounded"
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Blocker summary — compact signal for this publish queue */}
       {operationsTruth && (() => {
         const totalBlockers = (operationsTruth.summary.blockerCounts ?? []).reduce((s, b) => s + Number(b.count || 0), 0);
@@ -1104,9 +1140,15 @@ function PendingProductCard({
 }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
+  // Auto-preselect mercadolibre when the product has ML data or has ML in its marketplace field
+  const hasMlData = !!(
+    (p.estimatedProfitByMarketplace && (p.estimatedProfitByMarketplace as Record<string, unknown>)['mercadolibre'] != null) ||
+    String(p.marketplace || '').toLowerCase().includes('mercadolibre') ||
+    String(p.marketplace || '').toLowerCase() === 'ml'
+  );
   const [marketplaces, setMarketplaces] = useState<Record<string, boolean>>({
     ebay: false,
-    mercadolibre: false,
+    mercadolibre: hasMlData,
     amazon: false,
   });
   const [publishMode, setPublishMode] = useState<'local' | 'international'>('local');
@@ -1248,11 +1290,16 @@ function PendingProductCard({
         </div>
       </div>
       <div className="flex flex-col items-stretch sm:items-end gap-2 flex-shrink-0 min-w-[200px]">
+        {/* Marketplace selector header */}
         <div className="flex flex-wrap items-center gap-2 justify-end">
-          <span className="text-[10px] text-slate-500 w-full text-right sm:w-auto">Marketplaces (sin preselección)</span>
+          <span className="text-[10px] text-slate-500 w-full text-right sm:w-auto">
+            {marketplaces.mercadolibre || marketplaces.ebay || marketplaces.amazon
+              ? 'Marketplace seleccionado'
+              : <span className="text-amber-600 dark:text-amber-400 font-medium">Elige marketplace para publicar</span>}
+          </span>
         </div>
         <div className={`flex flex-wrap items-center gap-3 justify-end ${strictBlock ? 'opacity-60' : ''}`}>
-          <label className="text-xs text-slate-700 dark:text-slate-300">
+          <label className="text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
             <input
               type="checkbox"
               checked={marketplaces.ebay}
@@ -1262,7 +1309,7 @@ function PendingProductCard({
             />{' '}
             eBay
           </label>
-          <label className="text-xs text-slate-700 dark:text-slate-300">
+          <label className={`text-xs cursor-pointer font-medium ${marketplaces.mercadolibre ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'}`}>
             <input
               type="checkbox"
               checked={marketplaces.mercadolibre}
@@ -1272,7 +1319,7 @@ function PendingProductCard({
             />{' '}
             ML
           </label>
-          <label className="text-xs text-slate-700 dark:text-slate-300">
+          <label className="text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
             <input
               type="checkbox"
               checked={marketplaces.amazon}
@@ -1282,14 +1329,26 @@ function PendingProductCard({
             />{' '}
             Amazon
           </label>
-          <button
-            type="button"
-            disabled={!!rowBusy || strictBlock}
-            onClick={applySoloMl}
-            className="px-2 py-0.5 text-[11px] border rounded-md border-primary-400 text-primary-800 dark:text-primary-200 hover:bg-primary-50 dark:hover:bg-primary-950/20 transition-colors"
-          >
-            Solo ML
-          </button>
+          {/* Solo ML — prominent when nothing selected */}
+          {!marketplaces.mercadolibre && !marketplaces.ebay && !marketplaces.amazon && !strictBlock ? (
+            <button
+              type="button"
+              disabled={!!rowBusy}
+              onClick={applySoloMl}
+              className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              Solo ML →
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!!rowBusy || strictBlock}
+              onClick={applySoloMl}
+              className="px-2 py-0.5 text-[11px] border rounded-md border-primary-400 text-primary-800 dark:text-primary-200 hover:bg-primary-50 dark:hover:bg-primary-950/20 transition-colors"
+            >
+              Solo ML
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto sm:min-w-[320px]">
           <label className="text-[11px] text-slate-600 dark:text-slate-300">
