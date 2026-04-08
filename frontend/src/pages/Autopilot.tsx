@@ -988,7 +988,7 @@ export default function Autopilot() {
         icon={Zap}
         title="Autopilot"
         subtitle={autopilotRunning
-          ? `Ciclo activo · ${autopilotStatus?.config?.targetMarketplaces?.map(mp => mp === 'mercadolibre' ? 'Mercado Libre' : mp).join(', ') || 'marketplace no configurado'}`
+          ? `Ciclo activo · ${(autopilotStatus?.config?.targetMarketplaces ?? []).map(mp => mp === 'mercadolibre' ? 'Mercado Libre' : mp).join(', ') || 'marketplace no configurado'}`
           : 'Detenido · telemetría de ejecución — verdad canónica en Control Center'}
         badge={
           autopilotRunning ? (
