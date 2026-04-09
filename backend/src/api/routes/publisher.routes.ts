@@ -320,7 +320,8 @@ router.get('/pending', async (req: Request, res: Response) => {
     });
     
     // Admin puede ver todos los productos pendientes, usuarios solo los suyos
-    const items = await productService.getProducts(isAdmin ? undefined : userId, { status: 'PENDING' });
+    // Ordenar por updatedAt DESC: productos enviados recientemente al Publisher aparecen primero
+    const items = await productService.getProducts(isAdmin ? undefined : userId, { status: 'PENDING', sortBy: 'updatedAt', sortDir: 'desc', limit: 100 });
     // ✅ FIX: items puede ser { products: [], pagination: {} }
     const products = (items as any).products || (Array.isArray(items) ? items : []);
     
@@ -358,14 +359,20 @@ router.get('/pending', async (req: Request, res: Response) => {
       const totalCostNum = toNumber(item.totalCost);
       const effectiveCost = totalCostNum > 0 ? totalCostNum : costNum + shippingNum + importTaxNum;
       const effectivePrice = marketplaceService.getEffectiveListingPrice(item);
-      if (effectivePrice <= 0 || effectivePrice <= effectiveCost) continue;
+      // ✅ FIX: No filtrar productos por precio — mostrar TODOS los PENDING en la cola.
+      // Antes: `if (effectivePrice <= 0 || effectivePrice <= effectiveCost) continue;`
+      // Causa raíz del bug: productos con suggestedPrice insuficiente vs costo+envío eran
+      // silenciosamente excluidos, haciéndolos invisibles para el usuario.
+      // Ahora: incluir todos, marcar pricingOk=false para que el Publisher los distinga.
+      const pricingOk = effectivePrice > 0 && effectivePrice > effectiveCost;
       try {
         const productData = item.productData ? JSON.parse(item.productData as string) : {};
         const { images: imagesArr, imageUrl } = parseImages(item.images);
-        const profit = effectivePrice - effectiveCost;
-        const roi = effectiveCost > 0 ? (profit / effectiveCost) * 100 : 0;
+        const profit = pricingOk ? effectivePrice - effectiveCost : 0;
+        const roi = pricingOk && effectiveCost > 0 ? (profit / effectiveCost) * 100 : 0;
         const deliveryDays = (productData as any).estimatedDeliveryDays ?? (productData as any).shipping?.estimatedDays ?? (productData as any).deliveryDays ?? null;
         const calcFor = (mk: 'ebay' | 'amazon' | 'mercadolibre') => {
+          if (!pricingOk) return 0;
           const { netProfit } = costCalculator.calculate(mk, effectivePrice, costNum, { shippingCost: shippingNum, importTax: importTaxNum });
           return Math.round(netProfit * 100) / 100;
         };
@@ -375,14 +382,15 @@ router.get('/pending', async (req: Request, res: Response) => {
           imageUrl: imageUrl || undefined,
           description: item.description || (productData as any).description || '',
           source: (productData as any).source || 'manual',
-          queuedAt: (productData as any).queuedAt || item.createdAt,
+          queuedAt: item.updatedAt || (productData as any).queuedAt || item.createdAt,
           queuedBy: (productData as any).queuedBy || 'user',
           estimatedCost: costNum,
           shippingCost: shippingNum > 0 ? shippingNum : undefined,
           totalCost: effectiveCost,
-          suggestedPrice: effectivePrice,
+          suggestedPrice: effectivePrice > 0 ? effectivePrice : toNumber(item.suggestedPrice),
           estimatedProfit: profit,
           estimatedROI: roi,
+          pricingOk,
           deliveryDays: typeof deliveryDays === 'number' ? deliveryDays : null,
           category: item.category || undefined,
           currency: item.currency || 'USD',
@@ -392,8 +400,8 @@ router.get('/pending', async (req: Request, res: Response) => {
       } catch (parseError) {
         logger.warn('[PUBLISHER] Failed to parse productData', { productId: item.id, error: parseError });
         const { images: imagesArr, imageUrl } = parseImages(item.images);
-        const profit = effectivePrice - effectiveCost;
-        const roi = effectiveCost > 0 ? (profit / effectiveCost) * 100 : 0;
+        const profit = pricingOk ? effectivePrice - effectiveCost : 0;
+        const roi = pricingOk && effectiveCost > 0 ? (profit / effectiveCost) * 100 : 0;
         const calcFor = (mk: 'ebay' | 'amazon' | 'mercadolibre') => {
           const { netProfit } = costCalculator.calculate(mk, effectivePrice, costNum, { shippingCost: shippingNum, importTax: importTaxNum });
           return Math.round(netProfit * 100) / 100;
@@ -404,13 +412,14 @@ router.get('/pending', async (req: Request, res: Response) => {
           imageUrl: imageUrl || undefined,
           description: item.description || '',
           source: 'manual',
-          queuedAt: item.createdAt,
+          queuedAt: item.updatedAt || item.createdAt,
           estimatedCost: costNum,
           shippingCost: shippingNum > 0 ? shippingNum : undefined,
           totalCost: effectiveCost,
-          suggestedPrice: effectivePrice,
+          suggestedPrice: effectivePrice > 0 ? effectivePrice : toNumber(item.suggestedPrice),
           estimatedProfit: profit,
           estimatedROI: roi,
+          pricingOk,
           deliveryDays: null,
           category: item.category || undefined,
           currency: item.currency || 'USD',

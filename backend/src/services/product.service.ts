@@ -654,6 +654,7 @@ export class ProductService {
           productData: true,
           images: true,
           createdAt: true,
+          updatedAt: true,
           winnerDetectedAt: true,
           marketplaceListings: {
             select: { id: true, marketplace: true, listingId: true, listingUrl: true, publishedAt: true },

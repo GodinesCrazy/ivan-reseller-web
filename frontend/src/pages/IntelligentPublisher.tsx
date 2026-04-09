@@ -235,12 +235,19 @@ export default function IntelligentPublisher() {
     }
 
     const mlMargin = (p: any) => Number(p?.estimatedProfitByMarketplace?.mercadolibre ?? NaN);
+    // ✅ FIX: el producto recién enviado al Publisher siempre aparece primero.
+    // queuedAt = updatedAt del producto (cuándo fue enviado al Publisher más reciente vez).
+    const queuedAt = (p: any) => new Date(p.queuedAt || p.createdAt || 0).getTime();
 
     rows.sort((a, b) => {
       const ta = getTruth(a);
       const tb = getTruth(b);
       const ba = isPendingRowPublishBlocked(ta, rowTruthLoading) ? 1 : 0;
       const bb = isPendingRowPublishBlocked(tb, rowTruthLoading) ? 1 : 0;
+      // Producto resaltado (recién enviado) siempre primero
+      const aIsHighlight = highlightProductId && String(a.id) === highlightProductId ? 1 : 0;
+      const bIsHighlight = highlightProductId && String(b.id) === highlightProductId ? 1 : 0;
+      if (aIsHighlight !== bIsHighlight) return bIsHighlight - aIsHighlight;
       if (pendingSort === 'smart' && ba !== bb) return ba - bb;
       if (pendingSort === 'ml_margin_desc') {
         const da = mlMargin(a);
@@ -256,14 +263,18 @@ export default function IntelligentPublisher() {
         if (ba !== bb) return ba - bb;
         return String(a.title || '').localeCompare(String(b.title || ''));
       }
+      // smart sort: desempate por queuedAt desc (más recientemente enviado = primero)
       if (ba !== bb) return ba - bb;
+      const qa = queuedAt(a);
+      const qb = queuedAt(b);
+      if (qb !== qa) return qb - qa;
       const da = mlMargin(a);
       const db = mlMargin(b);
       if (Number.isFinite(db) && Number.isFinite(da) && db !== da) return db - da;
       return String(a.title || '').localeCompare(String(b.title || ''));
     });
     return rows;
-  }, [pending, operationsTruthByProduct, pendingViewFilter, pendingSort, rowTruthLoading]);
+  }, [pending, operationsTruthByProduct, pendingViewFilter, pendingSort, rowTruthLoading, highlightProductId]);
 
   const pendingTotalPages = Math.max(1, Math.ceil(pendingFilteredSorted.length / PENDING_PER_PAGE));
 
@@ -1350,6 +1361,12 @@ function PendingProductCard({
                 )}
                 {' → '}Sugerido: {formatCurrencySimple(p.suggestedPrice ?? 0, p.currency || 'USD')}
               </div>
+              {p.pricingOk === false && (
+                <div className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-700 px-2 py-1 text-[11px] text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                  Precio sugerido no cubre costo+envío — actualiza el precio antes de publicar
+                </div>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <span>Margen bruto estimado: <span className="font-semibold text-slate-700 dark:text-slate-200">{formatCurrencySimple(p.estimatedProfit ?? 0, p.currency || 'USD')}</span></span>
                 <span>ROI estimado: <span className="font-semibold text-slate-700 dark:text-slate-200">{Number(p.estimatedROI ?? 0).toFixed(1)}%</span></span>
