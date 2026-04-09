@@ -79,7 +79,9 @@ export async function getFreeWorkingCapital(): Promise<WorkingCapitalSnapshot> {
 
 /**
  * Verifica si hay capital libre suficiente para un coste de compra.
- * Si el saldo real no se puede obtener, la compra se bloquea hasta revisión manual.
+ * Si ALLOW_PURCHASE_WHEN_LOW_BALANCE=true y el saldo no está disponible (API PayPal sin permiso
+ * wallet:read), permite la compra en modo degradado — PayPal usará tarjeta asociada como respaldo.
+ * Si ALLOW_PURCHASE_WHEN_LOW_BALANCE=false (default-safe), bloquea hasta revisión manual.
  */
 export async function hasSufficientFreeCapital(orderCost: number): Promise<{
   sufficient: boolean;
@@ -91,6 +93,16 @@ export async function hasSufficientFreeCapital(orderCost: number): Promise<{
   const snapshot = await getFreeWorkingCapital();
   const balanceUnavailable = snapshot.realAvailableBalance === 0 && snapshot.source === undefined;
   if (balanceUnavailable) {
+    const allowWhenUnavailable = env.ALLOW_PURCHASE_WHEN_LOW_BALANCE === true;
+    if (allowWhenUnavailable) {
+      logger.warn('[WORKING-CAPITAL] Real balance unavailable; ALLOW_PURCHASE_WHEN_LOW_BALANCE=true — allowing purchase in degraded mode');
+      return {
+        sufficient: true,
+        freeWorkingCapital: 0,
+        required: orderCost,
+        snapshot,
+      };
+    }
     logger.warn('[WORKING-CAPITAL] Real balance unavailable; blocking purchase until operator review');
     return {
       sufficient: false,
