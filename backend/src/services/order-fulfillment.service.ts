@@ -287,19 +287,28 @@ export class OrderFulfillmentService {
     if (purchaseCost > 0) {
       const capitalCheck = await hasSufficientFreeCapital(purchaseCost);
       if (!capitalCheck.sufficient) {
-        const errMsg = `FAILED_INSUFFICIENT_FUNDS: ${capitalCheck.error || 'Insufficient free working capital'}`;
-        await this.markFailed(orderId, errMsg, order.userId ?? undefined);
-        logger.warn('[ORDER-FULFILLMENT] Purchase blocked: insufficient free working capital', {
+        const errMsg = `FAILED_INSUFFICIENT_FUNDS: Capital libre insuficiente. Requerido: $${capitalCheck.required.toFixed(2)} — disponible: $${capitalCheck.freeWorkingCapital.toFixed(2)} (saldo real: $${capitalCheck.snapshot.realAvailableBalance.toFixed(2)}, comprometido: $${capitalCheck.snapshot.committedCapital.toFixed(2)}). Recarga PayPal o reduce compras pendientes, luego usa "Reintentar auto" en Órdenes.`;
+        logger.warn('[ORDER-FULFILLMENT] Purchase blocked: insufficient free working capital → MANUAL_ACTION_REQUIRED', {
           orderId,
           required: capitalCheck.required,
           freeWorkingCapital: capitalCheck.freeWorkingCapital,
           realBalance: capitalCheck.snapshot.realAvailableBalance,
           committedCapital: capitalCheck.snapshot.committedCapital,
         });
+        // Escalar directamente a cola manual — el usuario debe recargar fondos y reintentar
+        const { activateManualFulfillmentQueue } = await import('./manual-fulfillment.service');
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { status: 'FAILED', errorMessage: errMsg, lastAttemptAt: new Date() },
+        });
+        await activateManualFulfillmentQueue(orderId, {
+          failureReason: errMsg,
+          userId: order.userId ?? undefined,
+        });
         return {
           success: false,
           orderId,
-          status: 'FAILED',
+          status: 'MANUAL_ACTION_REQUIRED',
           error: errMsg,
         };
       }

@@ -650,11 +650,12 @@ export default function Orders() {
       {manualQueueOrders.length > 0 && (
         <Card className="border-amber-400 dark:border-amber-600 bg-amber-50/80 dark:bg-amber-950/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg text-amber-900 dark:text-amber-100">
-              Pedidos para cumplir manualmente (AliExpress)
+            <CardTitle className="text-lg text-amber-900 dark:text-amber-100 flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5" />
+              Compras pendientes — acción manual requerida ({manualQueueOrders.length})
             </CardTitle>
             <p className="text-sm text-amber-800 dark:text-amber-200">
-              La API no pudo comprar automáticamente (p. ej. SKU_NOT_EXIST). Completa la compra en AliExpress y marca el estado.
+              Estas órdenes no pudieron completarse automáticamente. Causas posibles: fondos insuficientes, producto sin stock en AliExpress (SKU_NOT_EXIST), o error de API. Completa la compra manualmente en AliExpress y pulsa <strong>Marcar comprado</strong> o usa <strong>Reintentar auto</strong> si ya recargaste saldo.
             </p>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -665,7 +666,7 @@ export default function Orders() {
                   <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Marketplace</th>
                   <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Comprador / dirección</th>
                   <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Importe</th>
-                  <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Proveedor</th>
+                  <th className="py-2 pr-3 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Motivo / Proveedor</th>
                   <th className="py-2 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Acciones</th>
                 </tr>
               </thead>
@@ -705,18 +706,38 @@ export default function Orders() {
                         <div className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap mt-1">{formatOrderAddress(order)}</div>
                       </td>
                       <td className="py-2 pr-3 align-top whitespace-nowrap text-slate-700 dark:text-slate-300">{formatCurrencySimple(order.price, order.currency)}</td>
-                      <td className="py-2 pr-3 align-top">
+                      <td className="py-2 pr-3 align-top max-w-[200px]">
+                        {/* Motivo del fallo */}
+                        {(order.errorMessage || order.failureReason) && (() => {
+                          const msg = order.errorMessage || order.failureReason || '';
+                          const isInsufficientFunds = msg.includes('FAILED_INSUFFICIENT_FUNDS');
+                          const isSkuError = msg.includes('SKU_NOT_EXIST') || msg.includes('PRODUCT_NOT_EXIST');
+                          const label = isInsufficientFunds
+                            ? '💰 Fondos insuficientes'
+                            : isSkuError
+                            ? '⚠ SKU no disponible'
+                            : '⚠ Error de compra';
+                          const badgeCls = isInsufficientFunds
+                            ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+                          return (
+                            <span title={msg} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold mb-1.5 ${badgeCls}`}>
+                              {label}
+                            </span>
+                          );
+                        })()}
+                        {/* Enlace proveedor */}
                         {(order.productUrl || '').trim() ? (
                           <a
                             href={order.productUrl!.trim()}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center gap-1"
+                            className="text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center gap-1 text-xs mt-0.5"
                           >
-                            AliExpress <ExternalLink className="w-3 h-3" />
+                            Abrir AliExpress <ExternalLink className="w-3 h-3" />
                           </a>
                         ) : (
-                          <span className="text-xs text-amber-700 dark:text-amber-400">Sin URL</span>
+                          <span className="text-xs text-amber-700 dark:text-amber-400">Sin URL proveedor</span>
                         )}
                       </td>
                       <td className="py-2 align-top">
