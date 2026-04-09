@@ -308,18 +308,31 @@ export default function FinanceDashboard() {
     try {
       const { data } = await api.get(`/api/finance/export/${format}`, {
         params: { range: dateRange, environment },
-        responseType: 'blob'
+        responseType: 'blob',
       });
 
+      if (format === 'pdf') {
+        const url = window.URL.createObjectURL(new Blob([data], { type: 'text/html' }));
+        const tab = window.open(url, '_blank');
+        if (!tab) {
+          toast.error('Permite ventanas emergentes para ver el reporte');
+        } else {
+          toast.success('Reporte abierto · usa Imprimir (Ctrl+P) → Guardar como PDF');
+        }
+        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+        return;
+      }
+
+      const extension = format === 'excel' ? 'xlsx' : 'csv';
       const url = window.URL.createObjectURL(new Blob([data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `financial-report-${dateRange}.${format}`);
+      link.setAttribute('download', `financial-report-${dateRange}.${extension}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      
-      toast.success(`Reporte exportado como ${format.toUpperCase()}`);
+      window.URL.revokeObjectURL(url);
+      toast.success(`Reporte exportado como ${format === 'excel' ? 'Excel (.xlsx)' : 'CSV'}`);
     } catch (error: any) {
       toast.error('Error al exportar reporte');
     }
@@ -384,21 +397,30 @@ export default function FinanceDashboard() {
                 className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 text-slate-900 dark:text-slate-100 transition-colors"
               >
                 <Download className="w-3.5 h-3.5 text-slate-400" />
-                Exportar como PDF
+                <span>
+                  Ver PDF (imprimir)
+                  <span className="block text-[10px] text-slate-400">Abre en nueva pestaña</span>
+                </span>
               </button>
               <button
                 onClick={() => exportReport('excel')}
                 className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 text-slate-900 dark:text-slate-100 transition-colors border-t border-slate-100 dark:border-slate-800"
               >
                 <Download className="w-3.5 h-3.5 text-slate-400" />
-                Exportar como Excel
+                <span>
+                  Exportar Excel
+                  <span className="block text-[10px] text-slate-400">2 hojas: Resumen + Ventas</span>
+                </span>
               </button>
               <button
                 onClick={() => exportReport('csv')}
                 className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 text-slate-900 dark:text-slate-100 transition-colors border-t border-slate-100 dark:border-slate-800"
               >
                 <Download className="w-3.5 h-3.5 text-slate-400" />
-                Exportar como CSV
+                <span>
+                  Exportar CSV
+                  <span className="block text-[10px] text-slate-400">Detalle por venta + resumen</span>
+                </span>
               </button>
             </div>
           </div>
