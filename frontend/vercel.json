@@ -11,12 +11,7 @@
       "continue": true
     },
     {
-      "src": "/api/health",
-      "dest": "/api/health"
-    },
-    {
-      "src": "/api/scraping/mercadolibre/search",
-      "dest": "/api/scraping/mercadolibre/search"
+      "handle": "filesystem"
     },
     {
       "src": "/api/(.*)",
