@@ -123,7 +123,8 @@ export class CompetitorAnalyzerService {
     userId: number,
     productTitle: string,
     targetMarketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'>,
-    region: string
+    region: string,
+    environment?: 'sandbox' | 'production'
   ): Promise<Record<string, MarketAnalysis>> {
     const results: Record<string, MarketAnalysis> = {};
     const searchQ = shortenForMarketplaceSearch(productTitle);
@@ -135,7 +136,7 @@ export class CompetitorAnalyzerService {
       try {
         if (mp === 'ebay') {
           const marketplace = new MarketplaceService();
-          const creds = await marketplace.getCredentials(userId, 'ebay');
+          const creds = await marketplace.getCredentials(userId, 'ebay', environment);
           const raw = { ...(creds?.credentials || {}) } as Record<string, unknown>;
           const { appId, certId } = resolveEbayAppKeys(raw);
           if (!appId || !certId) {
@@ -216,10 +217,12 @@ export class CompetitorAnalyzerService {
         } else if (mp === 'mercadolibre') {
           // Comparable prices: OAuth /sites/{id}/search first (evita 403 de IP en ruta pública en hosting); luego catálogo público.
           const marketplace = new MarketplaceService();
-          const rec = await marketplace.getCredentials(userId, 'mercadolibre');
+          const rec = await marketplace.getCredentials(userId, 'mercadolibre', environment);
+          // Region always wins — credential siteId is a default, not a region override.
+          // This ensures region='cl' always maps to MLC, not to whatever site the account was registered for.
           let siteId =
-            (rec?.credentials as any)?.siteId ||
             REGION_TO_ML_SITE[region] ||
+            (rec?.credentials as any)?.siteId ||
             (process.env.MERCADOLIBRE_SITE_ID || 'MLM').trim();
           if (!siteId) siteId = 'MLM';
 
@@ -728,7 +731,7 @@ export class CompetitorAnalyzerService {
         } else if (mp === 'amazon') {
           const config = AmazonService.getMarketplaceConfig(region.toUpperCase() === 'UK' ? 'UK' : (region.toUpperCase() === 'DE' ? 'DE' : 'US'));
           const marketplace = new MarketplaceService();
-          const rec = await marketplace.getCredentials(userId, 'amazon');
+          const rec = await marketplace.getCredentials(userId, 'amazon', environment);
           if (!rec || !rec.isActive || !rec.credentials) {
             logger.warn('Skipping Amazon analysis - credentials missing or inactive', { userId });
             results[`${mp}_${region}`] = emptyAnalysis('amazon', region, 'USD', {

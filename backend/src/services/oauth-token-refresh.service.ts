@@ -56,11 +56,18 @@ async function refreshMercadoLibreTokens(): Promise<TokenRefreshResult[]> {
         continue;
       }
 
-      // Check expiry
+      // Check expiry — if expiresAt is unknown (e.g. just renewed via UI which didn't store it),
+      // treat the token as valid and skip refresh to avoid invalidating a freshly issued token.
       const expiresAt = creds.expiresAt ? new Date(creds.expiresAt).getTime() : null;
       const timeLeft = expiresAt ? expiresAt - Date.now() : null;
 
-      if (timeLeft !== null && timeLeft > ML_REFRESH_THRESHOLD_MS) {
+      if (timeLeft === null) {
+        // expiresAt not stored → token may be fresh (UI renewal). Skip to be safe.
+        results.push({ platform: tag, refreshed: false, reason: 'expiry_unknown_assuming_valid' });
+        continue;
+      }
+
+      if (timeLeft > ML_REFRESH_THRESHOLD_MS) {
         results.push({
           platform: tag,
           refreshed: false,
@@ -164,11 +171,17 @@ async function refreshEbayTokens(): Promise<TokenRefreshResult[]> {
       }
 
       // Check expiry — eBay stores tokenExpiry as ISO or undefined
-      const expiresAt = creds.tokenExpiry || creds.expiresAt || creds.accessTokenExpiresAt;
-      const expiresMs = expiresAt ? new Date(String(expiresAt)).getTime() : null;
+      const expiresAtRaw = creds.tokenExpiry || creds.expiresAt || creds.accessTokenExpiresAt;
+      const expiresMs = expiresAtRaw ? new Date(String(expiresAtRaw)).getTime() : null;
       const timeLeft = expiresMs ? expiresMs - Date.now() : null;
 
-      if (timeLeft !== null && timeLeft > EBAY_REFRESH_THRESHOLD_MS) {
+      if (timeLeft === null) {
+        // expiresAt not stored → treat as fresh, skip refresh
+        results.push({ platform: tag, refreshed: false, reason: 'expiry_unknown_assuming_valid' });
+        continue;
+      }
+
+      if (timeLeft > EBAY_REFRESH_THRESHOLD_MS) {
         results.push({
           platform: tag,
           refreshed: false,

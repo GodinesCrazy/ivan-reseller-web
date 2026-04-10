@@ -1462,7 +1462,8 @@ class OpportunityFinderService {
           userId,
           product.title,
           marketplaces as ('ebay' | 'amazon' | 'mercadolibre')[],
-          region
+          region,
+          environment
         );
       } catch (err: any) {
         logger.warn('Competition analysis failed, using heuristic fallback', {

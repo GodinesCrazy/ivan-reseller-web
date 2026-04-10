@@ -416,6 +416,7 @@ async function handleMercadoLibreCallback(req: Request, res: Response, code: str
       hasRefreshToken: !!tokens.refreshToken,
     });
 
+    const mlExpiresIn = tokens.expiresIn || 21600; // ML default: 6 hours
     const newCreds = {
       ...(cred?.credentials || {}),
       clientId,
@@ -425,6 +426,7 @@ async function handleMercadoLibreCallback(req: Request, res: Response, code: str
       userId: tokens.userId,
       siteId: siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
       sandbox: environment === 'sandbox',
+      expiresAt: new Date(Date.now() + mlExpiresIn * 1000).toISOString(),
     };
 
     await marketplaceService.saveCredentials(userId, 'mercadolibre', newCreds, environment);
