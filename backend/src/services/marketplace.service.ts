@@ -1651,7 +1651,7 @@ export class MarketplaceService {
         throw new AppError('Product must have a valid category before publishing. Please specify a category.', 400);
       }
 
-      const priceUsd = this.resolveListingPrice(product, mergedCustomData?.price);
+      let priceUsd = this.resolveListingPrice(product, mergedCustomData?.price);
       if (priceUsd <= 0) {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
       }
@@ -1665,10 +1665,20 @@ export class MarketplaceService {
         if (pp?.marketplace === 'mercadolibre' && typeof pp.listingSalePriceUsd === 'number') {
           const snapshotUsd = pp.listingSalePriceUsd as number;
           if (Math.abs(priceUsd - snapshotUsd) > 0.02) {
-            throw new AppError(
-              `Listing price (${priceUsd}) does not match validated preflight snapshot (${snapshotUsd}). Re-run preventive validation before publish.`,
-              400
-            );
+            if (priceUsd < snapshotUsd) {
+              logger.warn('[ML Publish] Listing price below validated snapshot; uplifting to snapshot', {
+                productId: product.id,
+                requestedPriceUsd: priceUsd,
+                snapshotUsd,
+              });
+              priceUsd = snapshotUsd;
+            } else {
+              logger.info('[ML Publish] Listing price above validated snapshot; keeping higher price', {
+                productId: product.id,
+                requestedPriceUsd: priceUsd,
+                snapshotUsd,
+              });
+            }
           }
         }
       } catch (e) {
