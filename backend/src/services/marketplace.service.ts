@@ -1638,8 +1638,10 @@ export class MarketplaceService {
           images = mlCompliantInputs.slice(0, this.getMarketplaceImageLimit('mercadolibre'));
           logger.info('[ML Publish] Using pre-publish ML-compliant image inputs', { count: images.length });
         } else {
-          images = this.prepareImagesForMarketplace(product.images, 'mercadolibre', mergedCustomData);
-          logger.info('[ML Publish] No compliant pack found — using raw product images', { count: images.length });
+          throw new AppError(
+            'Mercado Libre publish blocked — compliant image pack missing. Run ML remediation pipeline to generate white-background cover assets before publish.',
+            400
+          );
         }
       }
       if (!images || images.length === 0) {

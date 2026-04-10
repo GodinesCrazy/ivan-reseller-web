@@ -211,6 +211,14 @@ function parseImageUrls(images: unknown): string[] {
   return [];
 }
 
+function envFlagEnabled(raw: string | undefined, defaultValue: boolean): boolean {
+  if (raw == null || raw === '') return defaultValue;
+  const normalized = String(raw).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return defaultValue;
+}
+
 function resolveWorkspaceRoot(): string {
   const cwd = process.cwd();
   if (fs.existsSync(path.join(cwd, 'backend')) && fs.existsSync(path.join(cwd, 'docs'))) {
@@ -1178,6 +1186,11 @@ export async function runMercadoLibreImageRemediationPipeline(
   const blockingReasons = [...decision.reasons];
   let complianceStatus: MlImagePolicyStatus = 'ml_image_manual_review_required';
   let assetSource: string | null = null;
+  const enforceWhiteCoverMain = envFlagEnabled(process.env.ML_ENFORCE_WHITE_COVER_MAIN, true);
+  const includeRawGalleryWithApprovedPack = envFlagEnabled(
+    process.env.ML_INCLUDE_RAW_GALLERY_WITH_APPROVED_PACK,
+    false
+  );
 
   const isRejectHard =
     decision.decision === 'reject_hard' || decision.remediationPathSelected === 'reject_hard';
@@ -1203,15 +1216,21 @@ export async function runMercadoLibreImageRemediationPipeline(
     assetSource = 'raw_images_publish_safe';
   } else if (mayUseApprovedDiskPack) {
     publishSafe = true;
-    const approvedDiskPaths = assetPack.assets
+    const approvedDiskAssets = assetPack.assets
       .filter((asset) => asset.approvalState === 'approved' && asset.localPath)
-      .map((asset) => asset.localPath!);
-    // Phase D fix: supplement approved disk pack with raw source images as gallery slots.
-    // ML allows up to 10 images. The approved pack (cover_main + detail) provides the
-    // compliant cover; remaining raw AliExpress images fill the gallery.
-    // Raw images not already represented in the approved pack paths are appended.
-    const rawGalleryUrls = imageUrls.filter((u) => !approvedDiskPaths.includes(u));
-    publishableImageInputs = [...approvedDiskPaths, ...rawGalleryUrls].slice(0, 10);
+      .map((asset) => ({ assetKey: asset.assetKey, localPath: asset.localPath! }));
+    const coverPath =
+      approvedDiskAssets.find((asset) => asset.assetKey === 'cover_main')?.localPath || null;
+    const nonCoverPaths = approvedDiskAssets
+      .filter((asset) => asset.assetKey !== 'cover_main')
+      .map((asset) => asset.localPath);
+    const orderedApprovedPaths = coverPath
+      ? [coverPath, ...nonCoverPaths]
+      : approvedDiskAssets.map((asset) => asset.localPath);
+    const rawGalleryUrls = includeRawGalleryWithApprovedPack
+      ? imageUrls.filter((u) => !orderedApprovedPaths.includes(u))
+      : [];
+    publishableImageInputs = [...orderedApprovedPaths, ...rawGalleryUrls].slice(0, 10);
     reviewedProofState = 'files_ready_pending_manual_upload';
     complianceStatus = 'ml_image_policy_pass';
     assetSource = assetPack.assets.find((asset) => asset.assetKey === 'cover_main')?.assetSource ?? 'internal_generated';
@@ -1235,6 +1254,57 @@ export async function runMercadoLibreImageRemediationPipeline(
     }
     complianceStatus =
       decision.decision === 'reject_hard' ? 'ml_image_policy_fail' : 'ml_image_manual_review_required';
+  }
+
+  if (publishSafe && enforceWhiteCoverMain) {
+    if (!assetPack.packApproved && imageUrls.length > 0) {
+      const generated = await autoGenerateSimpleProcessedPack({
+        productId: params.productId,
+        title: params.title,
+        imageUrls,
+        rootDir: assetPackDir,
+        listingId: params.listingId,
+      });
+      if (generated) {
+        assetPack = await inspectMercadoLibreAssetPack({
+          productId: params.productId,
+          listingId: params.listingId,
+        });
+      }
+    }
+
+    if (assetPack.packApproved) {
+      const approvedDiskAssets = assetPack.assets
+        .filter((asset) => asset.approvalState === 'approved' && asset.localPath)
+        .map((asset) => ({ assetKey: asset.assetKey, localPath: asset.localPath! }));
+      const coverPath =
+        approvedDiskAssets.find((asset) => asset.assetKey === 'cover_main')?.localPath || null;
+      const nonCoverPaths = approvedDiskAssets
+        .filter((asset) => asset.assetKey !== 'cover_main')
+        .map((asset) => asset.localPath);
+      const orderedApprovedPaths = coverPath
+        ? [coverPath, ...nonCoverPaths]
+        : approvedDiskAssets.map((asset) => asset.localPath);
+      const rawGalleryUrls = includeRawGalleryWithApprovedPack
+        ? imageUrls.filter((u) => !orderedApprovedPaths.includes(u))
+        : [];
+      publishableImageInputs = [...orderedApprovedPaths, ...rawGalleryUrls].slice(0, 10);
+      reviewedProofState = 'files_ready_pending_manual_upload';
+      complianceStatus = 'ml_image_policy_pass';
+      assetSource =
+        assetPack.assets.find((asset) => asset.assetKey === 'cover_main')?.assetSource ??
+        'internal_generated';
+      logger.info('[ML-IMAGE-REMEDIATION] white cover enforcement active', {
+        productId: params.productId,
+        includeRawGalleryWithApprovedPack,
+        approvedImages: orderedApprovedPaths.length,
+      });
+    } else {
+      publishSafe = false;
+      publishableImageInputs = [];
+      complianceStatus = 'ml_image_manual_review_required';
+      blockingReasons.push('white_cover_enforcement_failed_no_approved_pack');
+    }
   }
 
   let integrationLayerOutcome:

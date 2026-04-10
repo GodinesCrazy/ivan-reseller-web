@@ -156,6 +156,8 @@ async function createApprovedPack(productId: number): Promise<string> {
 describe('mercadolibre-image-remediation.service', () => {
   beforeEach(() => {
     process.env.ML_P103_HERO_REBUILD = 'false';
+    process.env.ML_ENFORCE_WHITE_COVER_MAIN = 'true';
+    process.env.ML_INCLUDE_RAW_GALLERY_WITH_APPROVED_PACK = 'false';
     mockedRunCanonical.mockResolvedValue(null);
     jest.spyOn(mlPortadaVisualCompliance, 'evaluateMlPortadaStrictAndNaturalGateFromBuffer').mockResolvedValue({
       pass: true,
@@ -269,10 +271,12 @@ describe('mercadolibre-image-remediation.service', () => {
         integrationLayerOutcome: 'legacy_approved_pack',
       });
       expect(result.publishableImageInputs.length).toBeGreaterThan(0);
+      expect(result.publishableImageInputs.every((input) => !input.startsWith('https://example.com'))).toBe(true);
       expect(result.metadataPatch.mlChileCanonicalPipeline).toBeDefined();
     });
 
-    it('uses raw_ordered URLs when canonical passes both gates on a direct candidate', async () => {
+    it('uses raw_ordered URLs when canonical passes both gates and white-cover enforcement is disabled', async () => {
+      process.env.ML_ENFORCE_WHITE_COVER_MAIN = 'false';
       const u1 = 'https://example.com/cover.jpg';
       const u2 = 'https://example.com/detail.jpg';
       mockedRunCanonical.mockResolvedValue({
@@ -302,4 +306,3 @@ describe('mercadolibre-image-remediation.service', () => {
     });
   });
 });
-
