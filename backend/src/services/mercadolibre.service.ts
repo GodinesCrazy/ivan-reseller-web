@@ -560,11 +560,6 @@ export class MercadoLibreService {
           result.push({ id: attr.id, value_id: String(match.id) });
           continue;
         }
-        const first = catAttr.values[0];
-        if (first?.id) {
-          result.push({ id: attr.id, value_id: String(first.id) });
-          continue;
-        }
       }
       result.push({ id: attr.id, value_name: String(attr.value) });
     }

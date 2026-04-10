@@ -161,6 +161,12 @@ export interface PublishResult {
   assessment?: unknown;
 }
 
+type MlAttributeInput = {
+  id: string;
+  value: string | number;
+  value_id?: string;
+};
+
 /** Map required ML catalog attributes from real Product package fields (no fabricated defaults). */
 function mlPackageAttributeValueFromProduct(attrId: string, product: any): string | null {
   const id = String(attrId).toUpperCase();
@@ -175,6 +181,136 @@ function mlPackageAttributeValueFromProduct(attrId: string, product: any): strin
   if (id === 'HEIGHT' || id === 'DEPTH' || id.endsWith('_HEIGHT') || id.endsWith('_DEPTH'))
     return H != null ? `${H} cm` : null;
   return null;
+}
+
+function parseProductDataObject(product: any): Record<string, unknown> {
+  const raw = product?.productData;
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, unknown>;
+  if (typeof raw !== 'string') return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeGtinCandidate(raw: unknown): string | null {
+  if (raw == null) return null;
+  const normalized = String(raw).trim().replace(/[\s-]/g, '');
+  if (!/^\d{8,14}$/.test(normalized)) return null;
+  return normalized;
+}
+
+function extractGtinFromProduct(product: any): string | null {
+  const directCandidates: unknown[] = [product?.gtin, product?.ean, product?.upc, product?.barcode];
+  for (const candidate of directCandidates) {
+    const normalized = normalizeGtinCandidate(candidate);
+    if (normalized) return normalized;
+  }
+
+  const meta = parseProductDataObject(product);
+  const metaCandidates: unknown[] = [
+    meta.gtin,
+    meta.ean,
+    meta.upc,
+    meta.barcode,
+    (meta as any).codigoBarras,
+    (meta as any).codigo_universal,
+    (meta as any).universalProductCode,
+  ];
+  for (const candidate of metaCandidates) {
+    const normalized = normalizeGtinCandidate(candidate);
+    if (normalized) return normalized;
+  }
+
+  const attrs = Array.isArray((meta as any).attributes) ? ((meta as any).attributes as Array<Record<string, unknown>>) : [];
+  for (const attr of attrs) {
+    const id = String(attr.id ?? attr.name ?? '').trim().toUpperCase();
+    if (id !== 'GTIN' && id !== 'EAN' && id !== 'UPC') continue;
+    const normalized = normalizeGtinCandidate(attr.value ?? attr.value_name ?? attr.name);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+function pickEmptyGtinReason(categoryAttributes: any[]): { id?: string; name: string } {
+  const emptyReasonAttr = categoryAttributes.find((attr: any) => String(attr?.id || '').toUpperCase() === 'EMPTY_GTIN_REASON');
+  const values = Array.isArray(emptyReasonAttr?.values) ? emptyReasonAttr.values : [];
+  const preferred =
+    values.find((v: any) => /no tiene c[oó]digo|no tiene codigo|not registered/i.test(String(v?.name || ''))) ||
+    values.find((v: any) => /otra raz[oó]n|otra razon|other reason/i.test(String(v?.name || ''))) ||
+    values[0];
+  if (preferred?.id != null) {
+    return {
+      id: String(preferred.id),
+      name: String(preferred.name || 'El producto no tiene código registrado'),
+    };
+  }
+  return { name: 'El producto no tiene código registrado' };
+}
+
+function ensureMlGtinComplianceAttributes(
+  attributes: MlAttributeInput[],
+  categoryAttributes: any[],
+  product: any
+): { attributes: MlAttributeInput[]; appendedIds: string[]; removedInvalidGtin: boolean } {
+  const gtinCategoryAttr = categoryAttributes.find((attr: any) => String(attr?.id || '').toUpperCase() === 'GTIN');
+  const gtinCanBeRequired =
+    Boolean(gtinCategoryAttr) &&
+    (gtinCategoryAttr?.tags?.required ||
+      gtinCategoryAttr?.tags?.catalog_required ||
+      gtinCategoryAttr?.tags?.conditional_required ||
+      gtinCategoryAttr?.tags?.validate);
+  if (!gtinCanBeRequired) {
+    return { attributes, appendedIds: [], removedInvalidGtin: false };
+  }
+
+  const normalizedAttrs: MlAttributeInput[] = [];
+  let hasValidGtin = false;
+  let hasEmptyReason = false;
+  let removedInvalidGtin = false;
+
+  for (const attr of attributes) {
+    const id = String(attr?.id || '').trim().toUpperCase();
+    if (id === 'GTIN') {
+      const normalizedGtin = normalizeGtinCandidate((attr as any).value ?? (attr as any).value_name);
+      if (normalizedGtin) {
+        normalizedAttrs.push({ id: 'GTIN', value: normalizedGtin });
+        hasValidGtin = true;
+      } else {
+        removedInvalidGtin = true;
+      }
+      continue;
+    }
+    if (id === 'EMPTY_GTIN_REASON') {
+      hasEmptyReason = true;
+    }
+    normalizedAttrs.push(attr);
+  }
+
+  const appendedIds: string[] = [];
+  if (!hasValidGtin) {
+    const gtinFromProduct = extractGtinFromProduct(product);
+    if (gtinFromProduct) {
+      normalizedAttrs.push({ id: 'GTIN', value: gtinFromProduct });
+      hasValidGtin = true;
+      appendedIds.push('GTIN');
+    }
+  }
+
+  if (!hasValidGtin && !hasEmptyReason) {
+    const reason = pickEmptyGtinReason(categoryAttributes);
+    normalizedAttrs.push(
+      reason.id
+        ? { id: 'EMPTY_GTIN_REASON', value: reason.name, value_id: reason.id }
+        : { id: 'EMPTY_GTIN_REASON', value: reason.name }
+    );
+    appendedIds.push('EMPTY_GTIN_REASON');
+  }
+
+  return { attributes: normalizedAttrs, appendedIds, removedInvalidGtin };
 }
 
 function buildMlShippingDimensionsString(product: any): string {
@@ -1828,15 +1964,16 @@ export class MarketplaceService {
         finalTitle = await this.ensureUniqueMlTitle(userId, product, finalTitle);
       }
 
-      let attributes = mergedCustomData?.attributes;
+      let attributes: MlAttributeInput[] | undefined = (mergedCustomData?.attributes as MlAttributeInput[] | undefined);
+      let categoryAttributes: any[] | null = null;
       if (!attributes || attributes.length === 0) {
         try {
-          const catAttrs = await mlService.getCategoryAttributes(categoryId);
-          const requiredAttrs = catAttrs.filter((a: any) =>
+          categoryAttributes = await mlService.getCategoryAttributes(categoryId);
+          const requiredAttrs = categoryAttributes.filter((a: any) =>
             a.tags?.required || a.tags?.catalog_required
           );
           const optionalImportant = ['COLOR', 'MATERIAL'];
-          const attrIds = new Set(attributes?.map((a: any) => a.id) || []);
+          const attrIds = new Set<string>();
           attributes = [];
           for (const attr of requiredAttrs) {
             if (attr.id === 'BRAND') {
@@ -1865,7 +2002,7 @@ export class MarketplaceService {
           }
           for (const optId of optionalImportant) {
             if (attrIds.has(optId)) continue;
-            const catAttr = catAttrs.find((a: any) => a.id === optId);
+            const catAttr = categoryAttributes.find((a: any) => a.id === optId);
             if (!catAttr) continue;
             const val = optId === 'COLOR' ? extractFromTitle(finalTitle, COLOR_WORDS)
               : optId === 'MATERIAL' ? extractFromTitle(finalTitle, MATERIAL_WORDS) : null;
@@ -1885,6 +2022,28 @@ export class MarketplaceService {
             { id: 'BRAND', value: 'Genérico' },
             { id: 'MODEL', value: 'Standard' },
           ];
+        }
+      }
+
+      if (attributes && attributes.length > 0) {
+        try {
+          if (!categoryAttributes) {
+            categoryAttributes = await mlService.getCategoryAttributes(categoryId);
+          }
+          const gtinPatch = ensureMlGtinComplianceAttributes(attributes, categoryAttributes, product);
+          attributes = gtinPatch.attributes;
+          if (gtinPatch.appendedIds.length > 0 || gtinPatch.removedInvalidGtin) {
+            logger.info('[ML Publish] Applied GTIN compliance fallback', {
+              categoryId,
+              appended: gtinPatch.appendedIds.join(','),
+              removedInvalidGtin: gtinPatch.removedInvalidGtin,
+            });
+          }
+        } catch (e: any) {
+          logger.warn('[ML Publish] Could not apply GTIN compliance fallback', {
+            categoryId,
+            error: e?.message || String(e),
+          });
         }
       }
 
@@ -2160,7 +2319,7 @@ export class MarketplaceService {
           categoryId = await mlService.predictCategory(product.title, product.description);
         }
 
-        let attributes: Array<{ id: string; value: string | number }> = [];
+        let attributes: MlAttributeInput[] = [];
         try {
           const catAttrs = await mlService.getCategoryAttributes(categoryId);
           const requiredAttrs = catAttrs.filter((a: any) =>
@@ -2181,6 +2340,16 @@ export class MarketplaceService {
                 attributes.push({ id: attr.id, value: attr.values[0].name });
               }
             }
+          }
+          const gtinPatch = ensureMlGtinComplianceAttributes(attributes, catAttrs, product);
+          attributes = gtinPatch.attributes;
+          if (gtinPatch.appendedIds.length > 0 || gtinPatch.removedInvalidGtin) {
+            logger.info('[ML Repair] Applied GTIN compliance fallback', {
+              listingId: listing.listingId,
+              categoryId,
+              appended: gtinPatch.appendedIds.join(','),
+              removedInvalidGtin: gtinPatch.removedInvalidGtin,
+            });
           }
         } catch (e: any) {
           logger.warn('[ML Repair] Failed to get category attributes', { listingId: listing.listingId, error: e.message });
