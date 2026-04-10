@@ -1455,6 +1455,49 @@ class OpportunityFinderService {
     let skippedLowSalesRatio = 0; // ✅ Spec: sales_competition_ratio = estimated_sales / listing_count >= MIN_SALES_COMPETITION_RATIO
     let processedCount = 0;
 
+    // ─── Pre-fetch competitor analyses in parallel batches ────────────────────
+    // Previously each product's analysis ran sequentially (20 products × 3 marketplaces
+    // × ~2-30s = 60-1800s total). Running in parallel batches of 5 reduces that to
+    // ceil(N/5) rounds, delivering results ~5× faster and well within the 90s frontend timeout.
+    const ANALYSIS_BATCH_SIZE = 5;
+    const productAnalysisCache = new Map<(typeof products)[number], Record<string, any>>();
+    const validProductsForAnalysis = products.filter(p => p.title && p.price && p.price > 0);
+    logger.info('[OPPORTUNITY-FINDER] Pre-fetching competitor analyses in parallel', {
+      total: validProductsForAnalysis.length,
+      batchSize: ANALYSIS_BATCH_SIZE,
+      batches: Math.ceil(validProductsForAnalysis.length / ANALYSIS_BATCH_SIZE),
+    });
+    for (let batchStart = 0; batchStart < validProductsForAnalysis.length; batchStart += ANALYSIS_BATCH_SIZE) {
+      const batch = validProductsForAnalysis.slice(batchStart, batchStart + ANALYSIS_BATCH_SIZE);
+      await Promise.all(
+        batch.map(async (product) => {
+          try {
+            const a = await competitorAnalyzer.analyzeCompetition(
+              userId,
+              product.title,
+              marketplaces as ('ebay' | 'amazon' | 'mercadolibre')[],
+              region,
+              environment
+            );
+            productAnalysisCache.set(product, a);
+          } catch (err: any) {
+            logger.warn('[OPPORTUNITY-FINDER] Competition analysis failed (pre-fetch), using heuristic fallback', {
+              service: 'opportunity-finder',
+              error: err?.message || String(err),
+              title: product.title?.substring(0, 50),
+            });
+            productAnalysisCache.set(product, {});
+          }
+        })
+      );
+      logger.debug('[OPPORTUNITY-FINDER] Analysis batch done', {
+        batchStart,
+        batchEnd: batchStart + batch.length,
+        total: validProductsForAnalysis.length,
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     for (const product of products) {
       if (!product.title || !product.price || product.price <= 0) {
         skippedInvalid++;
@@ -1473,23 +1516,8 @@ class OpportunityFinderService {
         currency: product.currency
       });
 
-      let analysis: Record<string, any> = {};
-      try {
-        analysis = await competitorAnalyzer.analyzeCompetition(
-          userId,
-          product.title,
-          marketplaces as ('ebay' | 'amazon' | 'mercadolibre')[],
-          region,
-          environment
-        );
-      } catch (err: any) {
-        logger.warn('Competition analysis failed, using heuristic fallback', {
-          service: 'opportunity-finder',
-          userId,
-          error: err?.message || String(err)
-        });
-        analysis = {};
-      }
+      // Use pre-fetched analysis result (populated above in parallel batches).
+      const analysis: Record<string, any> = productAnalysisCache.get(product) ?? {};
 
       const competitionDiagnostics = Object.values(analysis || {}).map((a: any) => ({
         marketplace: String(a?.marketplace || ''),

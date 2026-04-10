@@ -354,7 +354,7 @@ export default function Opportunities() {
       if (axios.isCancel(e)) {
         if (timedOut) {
           // Timeout-initiated abort: surface a clear error and reset loading
-          setError('La búsqueda tardó demasiado (>2 min). Intentá de nuevo o reducí los filtros.');
+          setError('La búsqueda tardó demasiado (>90s). Intentá de nuevo o reducí los filtros.');
           setItems([]);
           setPaginationMeta(null);
         } else {
