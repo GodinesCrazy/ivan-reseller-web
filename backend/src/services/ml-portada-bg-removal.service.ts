@@ -112,6 +112,137 @@ async function trimTransparentBorder(pngBuffer: Buffer): Promise<Buffer> {
 }
 
 /**
+ * Keep the dominant alpha component and nearby substantial components.
+ * This removes detached promo stickers/logos that often survive AI background removal.
+ */
+async function keepMainSubjectComponents(pngBuffer: Buffer): Promise<Buffer> {
+  try {
+    const { data, info } = await sharp(pngBuffer).raw().toBuffer({ resolveWithObject: true });
+    const w = info.width;
+    const h = info.height;
+    const ch = info.channels as number;
+    if (ch < 4) return pngBuffer;
+
+    const ALPHA_THRESHOLD = 10;
+    const visited = new Uint8Array(w * h);
+    const labels = new Int32Array(w * h);
+    labels.fill(-1);
+
+    type Component = {
+      id: number;
+      area: number;
+      minX: number;
+      minY: number;
+      maxX: number;
+      maxY: number;
+      sumX: number;
+      sumY: number;
+    };
+    const components: Component[] = [];
+
+    let compId = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = y * w + x;
+        if (visited[idx]) continue;
+        visited[idx] = 1;
+        const alpha = data[idx * ch + 3]!;
+        if (alpha <= ALPHA_THRESHOLD) continue;
+
+        const qx: number[] = [x];
+        const qy: number[] = [y];
+        let qi = 0;
+        const comp: Component = {
+          id: compId,
+          area: 0,
+          minX: x,
+          minY: y,
+          maxX: x,
+          maxY: y,
+          sumX: 0,
+          sumY: 0,
+        };
+
+        while (qi < qx.length) {
+          const cx = qx[qi]!;
+          const cy = qy[qi]!;
+          qi += 1;
+          const cidx = cy * w + cx;
+          labels[cidx] = compId;
+          comp.area += 1;
+          comp.sumX += cx;
+          comp.sumY += cy;
+          if (cx < comp.minX) comp.minX = cx;
+          if (cy < comp.minY) comp.minY = cy;
+          if (cx > comp.maxX) comp.maxX = cx;
+          if (cy > comp.maxY) comp.maxY = cy;
+
+          const neighbors = [
+            [cx - 1, cy],
+            [cx + 1, cy],
+            [cx, cy - 1],
+            [cx, cy + 1],
+          ];
+          for (const [nx, ny] of neighbors) {
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            const nidx = ny * w + nx;
+            if (visited[nidx]) continue;
+            visited[nidx] = 1;
+            const na = data[nidx * ch + 3]!;
+            if (na > ALPHA_THRESHOLD) {
+              qx.push(nx);
+              qy.push(ny);
+            }
+          }
+        }
+
+        components.push(comp);
+        compId += 1;
+      }
+    }
+
+    if (components.length <= 1) return pngBuffer;
+    const largest = components.reduce((best, c) => (c.area > best.area ? c : best));
+    const largestCx = largest.sumX / largest.area;
+    const largestCy = largest.sumY / largest.area;
+    const distLimit = Math.max(w, h) * 0.35;
+
+    const keepIds = new Set<number>([largest.id]);
+    for (const c of components) {
+      if (c.id === largest.id) continue;
+      const cx = c.sumX / c.area;
+      const cy = c.sumY / c.area;
+      const d = Math.hypot(cx - largestCx, cy - largestCy);
+      const keepByArea = c.area >= largest.area * 0.12;
+      const keepByDistance = d <= distLimit;
+      if (keepByArea && keepByDistance) {
+        keepIds.add(c.id);
+      }
+    }
+
+    const out = Buffer.from(data);
+    for (let i = 0; i < w * h; i++) {
+      const lid = labels[i]!;
+      if (lid < 0 || !keepIds.has(lid)) {
+        out[i * ch + 3] = 0;
+      }
+    }
+
+    logger.info('[BG-REMOVAL] Alpha component filter applied', {
+      componentsFound: components.length,
+      keptComponents: keepIds.size,
+      largestArea: largest.area,
+    });
+
+    return await sharp(out, { raw: { width: w, height: h, channels: ch as 1 | 2 | 3 | 4 } })
+      .png()
+      .toBuffer();
+  } catch {
+    return pngBuffer;
+  }
+}
+
+/**
  * Compose a cropped RGBA PNG onto a 1200×1200 pure white canvas, centered with FILL_RATIO.
  * Returns a JPEG buffer.
  */
@@ -200,8 +331,9 @@ export async function generateWhiteBgPortada(
       }
       logger.info(`[BG-REMOVAL] Background removed (${pngWithAlpha.length} bytes PNG)`, { label, srcIdx: i });
 
-      // 3. Tight crop
-      const cropped = await trimTransparentBorder(pngWithAlpha);
+      // 3. Remove detached promo/logo components and tight crop the remaining subject.
+      const filtered = await keepMainSubjectComponents(pngWithAlpha);
+      const cropped = await trimTransparentBorder(filtered);
       logger.info(`[BG-REMOVAL] Trimmed to product bounds`, { label, srcIdx: i });
 
       // 4. Compose on white 1200×1200
