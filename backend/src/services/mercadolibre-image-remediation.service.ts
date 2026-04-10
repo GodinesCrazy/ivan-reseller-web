@@ -19,9 +19,7 @@ import {
   runMlChileCanonicalPipeline,
   type CanonicalPackBuffers,
 } from './marketplace-image-pipeline/ml-chile-canonical-pipeline.service';
-import {
-  evaluateMlPortadaStrictAndNaturalGateFromBuffer,
-} from './ml-portada-visual-compliance.service';
+import { evaluateMlPortadaStrictGateFromBuffer } from './ml-portada-visual-compliance.service';
 import { buildPortadaAutomationReadinessFromP103 } from './ml-image-readiness.service';
 import {
   attemptMercadoLibreP103HeroPortadaFromUrls,
@@ -476,10 +474,10 @@ async function inspectAsset(rootDir: string, assetKey: MlAssetKey, required: boo
   let notesOut = manifestAsset?.notes ?? null;
   if (assetKey === 'cover_main' && dimensionsValid && !manifestAsset?.portadaGateBypass) {
     const buf = await fsp.readFile(localPath);
-    const gate = await evaluateMlPortadaStrictAndNaturalGateFromBuffer(buf);
+    const gate = await evaluateMlPortadaStrictGateFromBuffer(buf);
     if (!gate.pass) {
       approvalState = 'invalid';
-      const gateNote = `P103_portada_strict_natural_gate_fail:${gate.signals.join(';')}`;
+      const gateNote = `P103_portada_strict_gate_fail:${gate.signals.join(';')}`;
       notesOut = notesOut ? `${notesOut} | ${gateNote}` : gateNote;
     }
   }
@@ -619,10 +617,9 @@ export async function autoGenerateSimpleProcessedPack(params: {
 
   await fsp.mkdir(params.rootDir, { recursive: true });
   // Create cover with 80% content fit (10% margin on each side):
-  // - 120px white margins → corner patch (144px) and border band checks bypassed via portadaGateBypass ✅
-  // - Product fills 80% of the frame → ML thumbnail quality scanner accepts (not "too small") ✅
-  // - NO neutral crush → natural product transitions preserved ✅
-  // - portadaGateBypass: true in manifest handles our internal harsh-silhouette gate ✅
+  // - 120px white margins.
+  // - Product fills 80% of the frame.
+  // - Preserve product color tones (avoid aggressive neutral "lift" that can wash subject edges).
   // ── Quality-gate helpers ────────────────────────────────────────────────
   // Reject compositions that are >95% white (product invisible on white canvas).
   // Also reject compositions with >5% warm-gray pollution — stray background pixels
@@ -658,8 +655,24 @@ export async function autoGenerateSimpleProcessedPack(params: {
     return true;
   }
 
+  async function passesPortadaStrictGate(
+    candidate: Buffer,
+    logLabel: { phase: string; srcIdx?: number; variant?: string }
+  ): Promise<boolean> {
+    const gate = await evaluateMlPortadaStrictGateFromBuffer(candidate);
+    if (!gate.pass) {
+      logger.warn('[autoGenerateSimpleProcessedPack] candidate failed strict gate — trying next', {
+        ...logLabel,
+        signals: gate.signals.slice(0, 8),
+      });
+      return false;
+    }
+    logger.info('[autoGenerateSimpleProcessedPack] candidate passed strict gate', logLabel);
+    return true;
+  }
+
   let coverPhaseLabel = 'phase0_ai_bg_removal';
-  const coverBuffer = await (async (): Promise<Buffer> => {
+  const coverBuffer = await (async (): Promise<Buffer | null> => {
     // Phase 0 — AI background removal (highest quality, runs first).
     // Uses @imgly/background-removal-node (ONNX local model, no API cost).
     // Correctly isolates the product even when background color is similar to the subject.
@@ -670,13 +683,19 @@ export async function autoGenerateSimpleProcessedPack(params: {
         logLabel: `product-${params.productId}-bootstrap`,
       });
       if (aiResult.success && aiResult.jpegBuffer) {
-        logger.info('[autoGenerateSimpleProcessedPack] Phase 0 AI bg removal succeeded', {
+        logger.info('[autoGenerateSimpleProcessedPack] Phase 0 AI bg removal candidate', {
           productId: params.productId,
           whitePct: aiResult.whitePct != null ? (aiResult.whitePct * 100).toFixed(1) : 'n/a',
           bytes: aiResult.jpegBuffer.length,
+          source: aiResult.source,
         });
-        coverPhaseLabel = 'phase0_ai_bg_removal';
-        return aiResult.jpegBuffer;
+        if (await passesPortadaStrictGate(aiResult.jpegBuffer, { phase: 'phase0_ai_bg_removal' })) {
+          coverPhaseLabel = 'phase0_ai_bg_removal';
+          return aiResult.jpegBuffer;
+        }
+        logger.warn('[autoGenerateSimpleProcessedPack] Phase 0 AI bg removal rejected by strict gate — falling back to Phase 1', {
+          productId: params.productId,
+        });
       }
       logger.warn('[autoGenerateSimpleProcessedPack] Phase 0 AI bg removal failed — falling back to Phase 1', { productId: params.productId });
     } catch (aiErr: any) {
@@ -698,7 +717,14 @@ export async function autoGenerateSimpleProcessedPack(params: {
           if (!composed) continue;
           const jpegBuf = await sharp(composed).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
           const { data: raw, info } = await sharp(jpegBuf).raw().toBuffer({ resolveWithObject: true });
-          if (compositionPassesQualityGate(raw, info.width * info.height, info.channels as number, { srcIdx, variant })) {
+          if (
+            compositionPassesQualityGate(raw, info.width * info.height, info.channels as number, { srcIdx, variant }) &&
+            await passesPortadaStrictGate(jpegBuf, {
+              phase: 'phase1_isolation_white_bg',
+              srcIdx,
+              variant,
+            })
+          ) {
             coverPhaseLabel = `phase1_isolation_white_bg_src${srcIdx}_${variant}`;
             return jpegBuf;
           }
@@ -725,7 +751,6 @@ export async function autoGenerateSimpleProcessedPack(params: {
     const innerSide = Math.round(outerSide * 0.80);
     const margin = Math.floor((outerSide - innerSide) / 2);
     const closeThresh = 30;
-    const farThresh = 80;
     const whiteBg = { r: SOFT_WHITE, g: SOFT_WHITE, b: SOFT_WHITE };
 
     // Helper: detect background colour from a raw buffer using top-row sampling
@@ -773,11 +798,6 @@ export async function autoGenerateSimpleProcessedPack(params: {
           const d = Math.sqrt((pr - bgR) ** 2 + (pg - bgG) ** 2 + (pb - bgB) ** 2);
           if (d <= closeThresh) {
             pixels[i] = SOFT_WHITE; pixels[i + 1] = SOFT_WHITE; pixels[i + 2] = SOFT_WHITE;
-          } else if (d < farThresh) {
-            const t = 1 - (d - closeThresh) / (farThresh - closeThresh);
-            pixels[i] = Math.round(t * SOFT_WHITE + (1 - t) * pr);
-            pixels[i + 1] = Math.round(t * SOFT_WHITE + (1 - t) * pg);
-            pixels[i + 2] = Math.round(t * SOFT_WHITE + (1 - t) * pb);
           }
         }
 
@@ -795,16 +815,24 @@ export async function autoGenerateSimpleProcessedPack(params: {
         if (nearWhitePct > 0.95) {
           logger.warn('[autoGenerateSimpleProcessedPack] soft-white candidate >95% near-white — product invisible, skipping', { srcIdx, nearWhitePct: (nearWhitePct * 100).toFixed(1) });
         } else if (visibilityScore > bestVisibilityScore) {
-          bestVisibilityScore = visibilityScore;
           // Phase B fix: ensure output is exactly outerSide×outerSide (1200×1200).
           // contain+extend can leave non-square images if rch/rw/rh produce fractional margins.
           // Add a final resize to guarantee exact dimensions.
-          bestSoftResult = await sharp(pixels, { raw: { width: rw, height: rh, channels: rch as 1 | 2 | 3 | 4 } })
+          const softCandidate = await sharp(pixels, { raw: { width: rw, height: rh, channels: rch as 1 | 2 | 3 | 4 } })
             .resize(innerSide, innerSide, { fit: 'contain', background: whiteBg })
             .extend({ top: margin, bottom: outerSide - innerSide - margin, left: margin, right: outerSide - innerSide - margin, background: whiteBg })
             .resize(outerSide, outerSide, { fit: 'fill' })
             .jpeg({ quality: 92, mozjpeg: true })
             .toBuffer();
+          if (
+            await passesPortadaStrictGate(softCandidate, {
+              phase: 'phase2_soft_bg_neutralization_white',
+              srcIdx,
+            })
+          ) {
+            bestVisibilityScore = visibilityScore;
+            bestSoftResult = softCandidate;
+          }
         }
       } catch (srcErr: any) {
         logger.warn('[autoGenerateSimpleProcessedPack] soft neutralization source error', { srcIdx, error: srcErr?.message });
@@ -819,8 +847,9 @@ export async function autoGenerateSimpleProcessedPack(params: {
     logger.warn('[autoGenerateSimpleProcessedPack] soft neutralization failed for all sources — absolute fallback');
     coverPhaseLabel = 'phase3_flatten_extend_white_fallback';
 
-    // Absolute fallback: original flatten+extend (last resort) — guaranteed 1200×1200
-    return sharp(cover.buffer)
+    // Absolute fallback: original flatten+extend (last resort) — guaranteed 1200×1200.
+    // Even this fallback must pass strict gate; otherwise fail-closed.
+    const absoluteFallback = await sharp(cover.buffer)
       .rotate()
       .flatten({ background: '#ffffff' })
       .resize(innerSide, innerSide, { fit: 'contain', background: '#ffffff' })
@@ -828,7 +857,15 @@ export async function autoGenerateSimpleProcessedPack(params: {
       .resize(outerSide, outerSide, { fit: 'fill' })
       .jpeg({ quality: 92, mozjpeg: true })
       .toBuffer();
+    if (await passesPortadaStrictGate(absoluteFallback, { phase: 'phase3_flatten_extend_white_fallback', srcIdx: 0 })) {
+      return absoluteFallback;
+    }
+    logger.warn('[autoGenerateSimpleProcessedPack] absolute fallback failed strict gate — failing closed');
+    return null;
   })();
+  if (!coverBuffer) {
+    return false;
+  }
   const detailBuffer = await squareFitToJpeg(detail.buffer);
   // Remove any stale cover_main.png so findAssetFile picks up .jpg
   const staleCoverPng = path.join(params.rootDir, 'cover_main.png');
@@ -853,8 +890,7 @@ export async function autoGenerateSimpleProcessedPack(params: {
         promptFilename: null,
         approvalState: 'approved',
         assetSource: 'internal_processed',
-        notes: `generated by internal 80pct-fit white-bg remediation | phase=${coverPhaseLabel} | bg=white_255 | ml_white_background_compliant`,
-        portadaGateBypass: true,
+        notes: `generated by internal 80pct-fit white-bg remediation | phase=${coverPhaseLabel} | bg=white_255 | strict_gate=pass | ml_white_background_compliant`,
       },
       {
         assetKey: 'detail_mount_interface',
