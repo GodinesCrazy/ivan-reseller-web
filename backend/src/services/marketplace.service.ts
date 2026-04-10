@@ -185,6 +185,61 @@ function buildMlShippingDimensionsString(product: any): string {
   return `${L}x${W}x${H},${G}`;
 }
 
+const ML_PACKAGE_FAIL_OPEN_DEFAULTS = {
+  packageWeightGrams: 500,
+  packageLengthCm: 18,
+  packageWidthCm: 12,
+  packageHeightCm: 6,
+  maxUnitsPerOrder: 1,
+} as const;
+
+function toPositiveIntOrDefault(value: unknown, fallback: number): number {
+  const n = Math.floor(Number(value));
+  if (Number.isFinite(n) && n > 0) return n;
+  return fallback;
+}
+
+function buildMlPhysicalPackageFailOpenPatch(product: any): {
+  applied: boolean;
+  patch: {
+    packageWeightGrams: number;
+    packageLengthCm: number;
+    packageWidthCm: number;
+    packageHeightCm: number;
+    maxUnitsPerOrder: number;
+  };
+} {
+  const patch = {
+    packageWeightGrams: toPositiveIntOrDefault(
+      product?.packageWeightGrams,
+      ML_PACKAGE_FAIL_OPEN_DEFAULTS.packageWeightGrams
+    ),
+    packageLengthCm: toPositiveIntOrDefault(
+      product?.packageLengthCm,
+      ML_PACKAGE_FAIL_OPEN_DEFAULTS.packageLengthCm
+    ),
+    packageWidthCm: toPositiveIntOrDefault(
+      product?.packageWidthCm,
+      ML_PACKAGE_FAIL_OPEN_DEFAULTS.packageWidthCm
+    ),
+    packageHeightCm: toPositiveIntOrDefault(
+      product?.packageHeightCm,
+      ML_PACKAGE_FAIL_OPEN_DEFAULTS.packageHeightCm
+    ),
+    maxUnitsPerOrder: toPositiveIntOrDefault(
+      product?.maxUnitsPerOrder,
+      ML_PACKAGE_FAIL_OPEN_DEFAULTS.maxUnitsPerOrder
+    ),
+  };
+  const applied =
+    Number(product?.packageWeightGrams) !== patch.packageWeightGrams ||
+    Number(product?.packageLengthCm) !== patch.packageLengthCm ||
+    Number(product?.packageWidthCm) !== patch.packageWidthCm ||
+    Number(product?.packageHeightCm) !== patch.packageHeightCm ||
+    Math.max(1, Number(product?.maxUnitsPerOrder ?? 1)) !== patch.maxUnitsPerOrder;
+  return { applied, patch };
+}
+
 function toMercadoLibreRequestedMode(value: unknown): 'local' | 'international' {
   return String(value || '').toLowerCase() === 'international' ? 'international' : 'local';
 }
@@ -979,6 +1034,34 @@ export class MarketplaceService {
       }
 
       if (request.marketplace === 'mercadolibre') {
+        const pkgBefore = getMlPhysicalPackageBlockers(product);
+        if (pkgBefore.length > 0) {
+          const failOpenPatch = buildMlPhysicalPackageFailOpenPatch(product);
+          if (failOpenPatch.applied) {
+            const persisted = await prisma.product.update({
+              where: { id: product.id },
+              data: failOpenPatch.patch,
+            });
+            product = {
+              ...product,
+              ...failOpenPatch.patch,
+              ...(persisted ? {
+                packageWeightGrams: persisted.packageWeightGrams,
+                packageLengthCm: persisted.packageLengthCm,
+                packageWidthCm: persisted.packageWidthCm,
+                packageHeightCm: persisted.packageHeightCm,
+                maxUnitsPerOrder: persisted.maxUnitsPerOrder,
+              } : {}),
+            };
+            logger.warn('[ML Publish] Applied fail-open physical package defaults', {
+              productId: product.id,
+              userId,
+              blockersBefore: pkgBefore,
+              patch: failOpenPatch.patch,
+            });
+          }
+        }
+
         let pilotApprovalId: string | null = null;
         const pkgBlockers = getMlPhysicalPackageBlockers(product);
         if (pkgBlockers.length > 0) {
