@@ -48,10 +48,10 @@ function listingsToCompetitionLevel(n: number): 'low' | 'medium' | 'high' | 'unk
 /**
  * Automatic publishability decision model.
  * Evaluates an opportunity against hard criteria and returns a structured decision.
- * Decision is 'PUBLICABLE' only when ALL criteria are met:
+ * Decision is 'PUBLICABLE' when hard safety criteria are met:
  *   - feesConsidered populated (canonical pricing computed)
  *   - profitMargin >= minMarginPct
- *   - comparablesCount >= 3 (real competitor data)
+ *   - comparables evidence OR (fallback mode enabled + structural marketplace block)
  *   - product has images and URL
  * Returns a result with canPublish = true ONLY for PUBLICABLE.
  */
@@ -66,6 +66,13 @@ function computePublishingDecision(params: {
   const reasons: string[] = [];
   const realMarginPct = opp.profitMargin * 100;
   const minimumViablePriceUsd = opp.feesConsidered?.totalCost ?? 0;
+  const ipBlocked = probeCodes.some((c) => c.includes('IP_BLOCKED'));
+  const structuralBlock = ipBlocked || probeCodes.some(
+    (c) => c.includes('FORBIDDEN') || c.includes('UNAUTHORIZED') || c.includes('NETWORK') || c.includes('TIMEOUT')
+  );
+  const allowCostBasedPublishWithoutComparables = !['0', 'false', 'no', 'off'].includes(
+    String(process.env.ALLOW_COST_BASED_PUBLISH_WITHOUT_COMPARABLES ?? 'true').trim().toLowerCase()
+  );
   const base = {
     checkedAt: new Date().toISOString(),
     comparablesCount,
@@ -101,11 +108,25 @@ function computePublishingDecision(params: {
 
   // Gate 4 — competitor evidence
   if (comparablesCount === 0) {
-    const ipBlocked = probeCodes.some((c) => c.includes('IP_BLOCKED'));
-    const structuralBlock = ipBlocked || probeCodes.some(
-      (c) => c.includes('FORBIDDEN') || c.includes('UNAUTHORIZED') || c.includes('NETWORK') || c.includes('TIMEOUT')
-    );
     if (structuralBlock) {
+      if (allowCostBasedPublishWithoutComparables) {
+        reasons.push(
+          'Publicación habilitada en modo fallback por costos: no hay comparables por bloqueo estructural de marketplace.'
+        );
+        if (ipBlocked) {
+          reasons.push(
+            'ML OAuth activo pero búsquedas bloqueadas por IP (GET /sites/MLC/search → 403 con/sin token).'
+          );
+        }
+        reasons.push(
+          `Precio sugerido $${opp.suggestedPriceUsd.toFixed(2)} calculado con motor canónico (costos + fees + margen mínimo).`
+        );
+        reasons.push(
+          'Recomendación: publicar y monitorear señal real de mercado para reajustar precio en la primera iteración.'
+        );
+        probeCodes.filter(Boolean).forEach((code) => reasons.push(`Probe: ${code}`));
+        return { ...base, decision: 'PUBLICABLE', reasons, canPublish: true };
+      }
       if (ipBlocked) {
         reasons.push('ML OAuth activo pero búsquedas bloqueadas por IP desde Railway (GET /sites/MLC/search → 403 con y sin token)');
         reasons.push('testConnection() pasa (/users/{id} no bloqueado), pero search endpoint sí lo está');
@@ -125,6 +146,17 @@ function computePublishingDecision(params: {
 
   // Gate 5 — insufficient comparables (< 3 = weak evidence)
   if (comparablesCount < 3) {
+    if (structuralBlock && allowCostBasedPublishWithoutComparables) {
+      reasons.push(
+        `Solo ${comparablesCount} comparable(s), pero se habilita fallback por bloqueo estructural en proveedores de mercado.`
+      );
+      reasons.push(
+        `Precio sugerido $${opp.suggestedPriceUsd.toFixed(2)} validado por costos + fees + margen mínimo.`
+      );
+      reasons.push('Recomendación: ejecutar ajuste dinámico de precio tras primeras señales de conversión.');
+      probeCodes.filter(Boolean).forEach((code) => reasons.push(`Probe: ${code}`));
+      return { ...base, decision: 'PUBLICABLE', reasons, canPublish: true };
+    }
     reasons.push(`Solo ${comparablesCount} comparable(s) encontrado(s) — se requieren ≥ 3 para decisión confiable`);
     reasons.push(`Fuente parcial: ${dataSource ?? 'desconocida'}`);
     return { ...base, decision: 'NEEDS_MARKET_DATA', reasons, canPublish: false };
