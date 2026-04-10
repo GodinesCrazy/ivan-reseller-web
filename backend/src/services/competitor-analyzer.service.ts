@@ -561,24 +561,63 @@ export class CompetitorAnalyzerService {
                 }
               }
 
-              if (proxyKey && proxyKey !== 'REPLACE_ME' && proxyKey.length > 8) {
-                const scraperUrl = `http://api.scraperapi.com/?api_key=${proxyKey}&url=${encodeURIComponent(mlSearchUrl)}&render=false`;
-                const scraperResp = await axiosDefault.get(scraperUrl, { timeout: 15000 });
-                const scraperItems = (scraperResp.data?.results || []) as any[];
-                if (scraperItems.length > 0) {
-                  res = scraperItems.map((r: any) => ({
-                    id: String(r.id || ''),
-                    title: String(r.title || ''),
-                    price: Number(r.price) || 0,
-                    currency_id: String(r.currency_id || 'CLP'),
-                    permalink: String(r.permalink || ''),
-                  })).filter((r: any) => r.price > 0);
-                  if (res.length > 0) {
-                    dataSource = 'mercadolibre_scraper_bridge';
-                    publicError = null;
-                    logger.info('[competitor-analyzer] ScraperAPI ML proxy succeeded', { userId, siteId, count: res.length });
-                    if (mlDebug) mlDebug.finalDecision = 'scraperapi_proxy_ml_comparables_used';
+              const extractProxyResults = (payload: any): any[] => {
+                if (!payload) return [];
+                if (Array.isArray(payload?.results)) return payload.results;
+                if (Array.isArray(payload?.data?.results)) return payload.data.results;
+                if (typeof payload === 'string') {
+                  const trimmed = payload.trim();
+                  if (!trimmed) return [];
+                  try {
+                    const parsed = JSON.parse(trimmed);
+                    if (Array.isArray(parsed?.results)) return parsed.results;
+                    if (Array.isArray(parsed?.data?.results)) return parsed.data.results;
+                  } catch {
+                    return [];
                   }
+                }
+                return [];
+              };
+
+              if (proxyKey && proxyKey !== 'REPLACE_ME' && proxyKey.length > 8) {
+                try {
+                  const scraperUrl =
+                    `https://api.scraperapi.com/?api_key=${proxyKey}` +
+                    `&url=${encodeURIComponent(mlSearchUrl)}&render=false&keep_headers=true&country_code=cl`;
+                  const scraperResp = await axiosDefault.get(scraperUrl, {
+                    timeout: 25000,
+                    responseType: 'text',
+                    headers: { Accept: 'application/json' },
+                  });
+                  const scraperItems = extractProxyResults(scraperResp.data);
+                  if (scraperItems.length > 0) {
+                    res = scraperItems.map((r: any) => ({
+                      id: String(r.id || ''),
+                      title: String(r.title || ''),
+                      price: Number(r.price) || 0,
+                      currency_id: String(r.currency_id || 'CLP'),
+                      permalink: String(r.permalink || ''),
+                    })).filter((r: any) => r.price > 0);
+                    if (res.length > 0) {
+                      dataSource = 'mercadolibre_scraper_bridge';
+                      publicError = null;
+                      logger.info('[competitor-analyzer] ScraperAPI ML proxy succeeded', { userId, siteId, count: res.length });
+                      if (mlDebug) mlDebug.finalDecision = 'scraperapi_proxy_ml_comparables_used';
+                    }
+                  } else {
+                    logger.warn('[competitor-analyzer] ScraperAPI returned no ML results payload', {
+                      userId,
+                      siteId,
+                      payloadType: typeof scraperResp.data,
+                    });
+                  }
+                } catch (scraperErr: any) {
+                  logger.warn('[competitor-analyzer] ScraperAPI ML proxy request failed', {
+                    userId,
+                    siteId,
+                    error: scraperErr?.message,
+                    httpStatus: scraperErr?.response?.status,
+                  });
                 }
               }
 
@@ -606,23 +645,42 @@ export class CompetitorAnalyzerService {
                 }
 
                 if (zenKey && zenKey !== 'REPLACE_ME' && zenKey.length > 8) {
-                  const zenUrl = `https://api.zenrows.com/v1/?apikey=${zenKey}&url=${encodeURIComponent(mlSearchUrl)}&premium_proxy=true`;
-                  const zenResp = await axiosDefault.get(zenUrl, { timeout: 15000 });
-                  const zenItems = (zenResp.data?.results || []) as any[];
-                  if (zenItems.length > 0) {
-                    res = zenItems.map((r: any) => ({
-                      id: String(r.id || ''),
-                      title: String(r.title || ''),
-                      price: Number(r.price) || 0,
-                      currency_id: String(r.currency_id || 'CLP'),
-                      permalink: String(r.permalink || ''),
-                    })).filter((r: any) => r.price > 0);
-                    if (res.length > 0) {
-                      dataSource = 'mercadolibre_scraper_bridge';
-                      publicError = null;
-                      logger.info('[competitor-analyzer] ZenRows ML proxy succeeded', { userId, siteId, count: res.length });
-                      if (mlDebug) mlDebug.finalDecision = 'zenrows_proxy_ml_comparables_used';
+                  try {
+                    const zenUrl = `https://api.zenrows.com/v1/?apikey=${zenKey}&url=${encodeURIComponent(mlSearchUrl)}&premium_proxy=true`;
+                    const zenResp = await axiosDefault.get(zenUrl, {
+                      timeout: 25000,
+                      responseType: 'text',
+                      headers: { Accept: 'application/json' },
+                    });
+                    const zenItems = extractProxyResults(zenResp.data);
+                    if (zenItems.length > 0) {
+                      res = zenItems.map((r: any) => ({
+                        id: String(r.id || ''),
+                        title: String(r.title || ''),
+                        price: Number(r.price) || 0,
+                        currency_id: String(r.currency_id || 'CLP'),
+                        permalink: String(r.permalink || ''),
+                      })).filter((r: any) => r.price > 0);
+                      if (res.length > 0) {
+                        dataSource = 'mercadolibre_scraper_bridge';
+                        publicError = null;
+                        logger.info('[competitor-analyzer] ZenRows ML proxy succeeded', { userId, siteId, count: res.length });
+                        if (mlDebug) mlDebug.finalDecision = 'zenrows_proxy_ml_comparables_used';
+                      }
+                    } else {
+                      logger.warn('[competitor-analyzer] ZenRows returned no ML results payload', {
+                        userId,
+                        siteId,
+                        payloadType: typeof zenResp.data,
+                      });
                     }
+                  } catch (zenErr: any) {
+                    logger.warn('[competitor-analyzer] ZenRows ML proxy request failed', {
+                      userId,
+                      siteId,
+                      error: zenErr?.message,
+                      httpStatus: zenErr?.response?.status,
+                    });
                   }
                 }
               }
@@ -663,9 +721,8 @@ export class CompetitorAnalyzerService {
                   detail:
                     'OAuth ML activo (token válido) pero MercadoLibre bloquea búsquedas (GET /sites/MLC/search) desde IPs de Railway ' +
                     'incluso con token autenticado. testConnection() pasa (/users/{id} no bloqueado), search sí bloqueado. ' +
-                    'Opciones de fix: (1) SCRAPER_BRIDGE_ENABLED=true + SCRAPER_BRIDGE_URL, ' +
-                    '(2) SCRAPERAPI_KEY configurado en Railway (proxy automático a ML API), ' +
-                    '(3) ZENROWS_API_KEY configurado en Railway.',
+                    'Bridge y proxies ya fueron intentados; si sigue en cero, el bloqueo pendiente es del proveedor externo ' +
+                    '(necesita proxy residencial/premium activo o proveedor scraping operativo).',
                 };
                 if (mlDebug) {
                   mlDebug.finalDecision = 'estimated_due_to_ip_block_search_endpoint_auth_and_public';
@@ -675,7 +732,7 @@ export class CompetitorAnalyzerService {
                   code: 'ML_PUBLIC_CATALOG_HTTP_FORBIDDEN',
                   detail:
                     'Se intentó OAuth ML + catálogo público, pero Mercado Libre rechazó (403/401) desde esta IP de Railway. ' +
-                    'Activá SCRAPER_BRIDGE_ENABLED=true con SCRAPER_BRIDGE_URL para desbloquear competencia ML.',
+                    'Con bridge ya activo, este estado indica bloqueo externo pendiente (proxy premium/residencial requerido).',
                 };
                 if (mlDebug) {
                   mlDebug.finalDecision = 'estimated_due_to_public_403_after_auth_zero';
