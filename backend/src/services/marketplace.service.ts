@@ -849,9 +849,12 @@ export class MarketplaceService {
         throw new AppError('Cannot publish an inactive product. Please reactivate it first.', 400);
       }
 
-      // ✅ CORREGIDO: Validar que el producto esté en estado APPROVED antes de publicar
-      // PENDING solo se permite si está en flujo automático de aprobación
-      if (product.status === 'PENDING') {
+      const isDuplicateListing = Boolean(request.duplicateListing);
+      const currentStatus = String(product.status || '').toUpperCase();
+      let needsValidatedReadyTransition = false;
+
+      // PENDING solo se permite si publish stage está en automatic.
+      if (currentStatus === 'PENDING') {
         // Verificar si está en flujo automático
         try {
           const { workflowConfigService } = await import('./workflow-config.service');
@@ -859,7 +862,7 @@ export class MarketplaceService {
           if (publishMode !== 'automatic') {
             throw new AppError('Cannot publish a product in PENDING status. Please approve it first.', 400);
           }
-          // Si es automático, permitir continuar
+          needsValidatedReadyTransition = true;
         } catch (error) {
           // Si no se puede verificar o no es automático, no permitir publicar productos PENDING
           if (error instanceof AppError) {
@@ -867,16 +870,23 @@ export class MarketplaceService {
           }
           throw new AppError('Cannot publish a product in PENDING status. Please approve it first.', 400);
         }
-      } else if (product.status !== 'VALIDATED_READY') {
-        // P0: APPROVED ya no es suficiente para publicar de forma segura.
+      } else if (currentStatus === 'APPROVED') {
+        needsValidatedReadyTransition = true;
+      } else if (currentStatus === 'VALIDATED_READY') {
+        // Estado esperado para publicar de forma segura.
+      } else if (currentStatus === 'PUBLISHED') {
+        if (!isDuplicateListing) {
+          throw new AppError('Product is already published. Use updateListing to modify it.', 400);
+        }
+      } else {
         throw new AppError(
-          `Cannot publish a product with status: ${product.status}. Product must be VALIDATED_READY under the preventive engine.`,
+          `Cannot publish a product with status: ${product.status}. Allowed statuses: APPROVED, VALIDATED_READY, or PENDING in automatic mode.`,
           400
         );
       }
 
       // ✅ Verificar si el producto ya está publicado (permitir duplicateListing para ganadores)
-      if (!request.duplicateListing && (product.isPublished || product.status === 'PUBLISHED')) {
+      if (!isDuplicateListing && (product.isPublished || currentStatus === 'PUBLISHED')) {
         throw new AppError('Product is already published. Use updateListing to modify it.', 400);
       }
 
@@ -910,6 +920,53 @@ export class MarketplaceService {
       }
 
       let publishCustomData: any = request.customData;
+      let preventivePrepared = false;
+
+      const requestedPublishIntent =
+        request.marketplace === 'mercadolibre'
+          ? toMercadoLibrePublishIntent(publishCustomData?.publishIntent)
+          : 'production';
+      const requestedPublishMode =
+        request.marketplace === 'mercadolibre'
+          ? toMercadoLibreRequestedMode(publishCustomData?.publishMode)
+          : 'local';
+      const isMercadoLibreDryRun =
+        request.marketplace === 'mercadolibre' && requestedPublishIntent === 'dry_run';
+
+      // For Mercado Libre, preflight requires product state semantics that can block APPROVED/PENDING.
+      // Run preventive preparation first (except dry-run) so we can safely transition to VALIDATED_READY.
+      if (request.marketplace === 'mercadolibre' && needsValidatedReadyTransition && !isMercadoLibreDryRun) {
+        const {
+          prepareProductForSafePublishing,
+          persistPreventivePublishPreparation,
+        } = await import('./pre-publish-validator.service');
+        const { productService } = await import('./product.service');
+        const listingSalePrice = this.getEffectiveListingPrice(product, publishCustomData?.price);
+        try {
+          const preparation = await prepareProductForSafePublishing({
+            userId,
+            product,
+            marketplace: request.marketplace,
+            credentials: credentials.credentials as Record<string, unknown> | undefined,
+            listingSalePrice,
+          });
+          product = await persistPreventivePublishPreparation({
+            productId: product.id,
+            preparation,
+          });
+          product = await productService.updateProductStatusSafely(
+            product.id,
+            'VALIDATED_READY',
+            false,
+            userId
+          );
+          preventivePrepared = true;
+        } catch (err: unknown) {
+          if (err instanceof AppError) throw err;
+          const msg = err instanceof Error ? err.message : String(err);
+          throw new AppError(`Product not valid for publishing: ${msg}`, 400);
+        }
+      }
 
       if (request.marketplace === 'mercadolibre' && env.ML_WEB_PUBLISH_REQUIRE_ML_WEBHOOK_SECRET) {
         const { getWebhookStatus } = await import('./webhook-readiness.service');
@@ -922,10 +979,6 @@ export class MarketplaceService {
       }
 
       if (request.marketplace === 'mercadolibre') {
-        const requestedPublishIntent = toMercadoLibrePublishIntent(
-          publishCustomData?.publishIntent
-        );
-        const requestedPublishMode = toMercadoLibreRequestedMode(publishCustomData?.publishMode);
         let pilotApprovalId: string | null = null;
         const pkgBlockers = getMlPhysicalPackageBlockers(product);
         if (pkgBlockers.length > 0) {
@@ -997,11 +1050,12 @@ export class MarketplaceService {
       }
 
       // Phase 53 / Phase 7: mandatory preventive validation with real supplier fallback selection.
-      {
+      if (!preventivePrepared) {
         const {
           prepareProductForSafePublishing,
           persistPreventivePublishPreparation,
         } = await import('./pre-publish-validator.service');
+        const { productService } = await import('./product.service');
         const listingSalePrice = this.getEffectiveListingPrice(product, publishCustomData?.price);
         try {
           const preparation = await prepareProductForSafePublishing({
@@ -1015,6 +1069,14 @@ export class MarketplaceService {
             productId: product.id,
             preparation,
           });
+          if (needsValidatedReadyTransition) {
+            product = await productService.updateProductStatusSafely(
+              product.id,
+              'VALIDATED_READY',
+              false,
+              userId
+            );
+          }
         } catch (err: unknown) {
           if (err instanceof AppError) throw err;
           const msg = err instanceof Error ? err.message : String(err);
