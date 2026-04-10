@@ -884,15 +884,32 @@ class OpportunityFinderService {
           for (let step = 0; step < affiliateProviderPagesPerUi && merged.length < maxItems; step++) {
             const pn = providerStart + step;
             if (pn > OPPORTUNITY_MAX_PAGE) break;
-            const affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
+
+            // Try with country filter first; if 0 results, retry globally (many AliExpress sellers
+            // don't list CL/other LatAm countries even though they ship worldwide).
+            let affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
               keywords: query,
               pageNo: pn,
               pageSize: 20,
               targetCurrency: baseCurrency || 'USD',
               shipToCountry: countryCode,
             });
-            const rawProducts = affiliateResult?.products;
-            const apiProducts = Array.isArray(rawProducts) ? rawProducts : [];
+            let rawProducts = affiliateResult?.products;
+            let apiProducts = Array.isArray(rawProducts) ? rawProducts : [];
+
+            if (apiProducts.length === 0 && countryCode && countryCode !== 'US') {
+              logger.info('[OPPORTUNITY-FINDER] Affiliate 0 results for shipToCountry — retrying without country filter', { countryCode, query, pn });
+              affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
+                keywords: query,
+                pageNo: pn,
+                pageSize: 20,
+                targetCurrency: baseCurrency || 'USD',
+                // No shipToCountry — global results
+              });
+              rawProducts = affiliateResult?.products;
+              apiProducts = Array.isArray(rawProducts) ? rawProducts : [];
+            }
+
             if (apiProducts.length === 0) break;
             console.log('[AUTOPILOT] Affiliate batch', { providerPage: pn, count: apiProducts.length });
             const mapped = apiProducts.map(mapAffiliateRow).filter(filterMapped);
@@ -2166,6 +2183,14 @@ class OpportunityFinderService {
       afterSupplierFilters: afterSupplierFilters.length,
       duplicatesRemoved: opportunities.length - uniqueOpportunities.length
     });
+
+    // Attach diagnostics for the route layer (used for empty-state messaging)
+    (afterSupplierFilters as any)._searchStats = {
+      productsFound: products.length,
+      skippedLowMargin,
+      skippedInvalid,
+      processedCount,
+    };
 
     return afterSupplierFilters;
   }

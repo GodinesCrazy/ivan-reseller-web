@@ -242,21 +242,35 @@ router.get('/', async (req, res) => {
     // Debug info para cuando no se encuentran productos
     const debugInfo: any = {};
     if (opportunities.length === 0) {
-      debugInfo.message = 'No se encontraron productos en AliExpress. Posibles causas:';
-      debugInfo.possibleCauses = [
-        'El scraping puede estar fallando (Puppeteer no inició correctamente en Railway)',
-        'AliExpress puede estar bloqueando el scraping (CAPTCHA o rate limiting)',
-        'El término de búsqueda puede no tener resultados disponibles',
-        'El bridge Python puede no estar disponible o configurado',
-        '⚠️ NOTA: Las cookies NO son requeridas - el sistema funciona en modo público'
-      ];
-      debugInfo.suggestions = [
-        'El sistema funciona en modo público sin cookies. Si ves CAPTCHA, entonces sí necesitarás cookies',
-        'Intenta con un término de búsqueda más específico',
-        'Espera unos minutos y vuelve a intentar (puede ser rate limiting)',
-        'Revisa los logs del servidor para más detalles'
-      ];
-      logger.warn('No se encontraron oportunidades para query', { query, debugInfo, userId, environment });
+      const stats = (opportunities as any)._searchStats;
+      const productsFound = stats?.productsFound ?? 0;
+      const skippedMargin = stats?.skippedLowMargin ?? 0;
+
+      if (productsFound === 0) {
+        debugInfo.cause = 'no_products_from_aliexpress';
+        debugInfo.message = 'AliExpress Affiliate API no devolvió productos para esta búsqueda.';
+        debugInfo.suggestions = [
+          'Prueba el término en inglés (ej: "ipad stand" en lugar de "soporte ipad")',
+          'Prueba con un término más genérico (ej: "tablet holder")',
+          'Verifica que las credenciales de AliExpress Affiliate API estén configuradas en API Settings',
+        ];
+      } else if (skippedMargin > 0) {
+        debugInfo.cause = 'margin_filter';
+        debugInfo.message = `AliExpress encontró ${productsFound} productos pero todos fueron descartados por margen insuficiente para ${region.toUpperCase()}.`;
+        debugInfo.suggestions = [
+          'Chile/LatAm tienen IVA 19% + arancel 6% que reducen el margen neto significativamente',
+          'Prueba con productos de menor precio en AliExpress (mayor margen relativo)',
+          'Considera buscar en región US donde los impuestos son menores',
+        ];
+      } else {
+        debugInfo.cause = 'unknown';
+        debugInfo.message = 'La búsqueda no encontró oportunidades con los criterios actuales.';
+        debugInfo.suggestions = [
+          'Prueba otro término de búsqueda',
+          'Cambia la región o los marketplaces seleccionados',
+        ];
+      }
+      logger.warn('No se encontraron oportunidades para query', { query, debugInfo, userId, environment, productsFound, skippedMargin });
     }
 
     // Notify completion
