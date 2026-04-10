@@ -41,10 +41,14 @@ export class ScraperBridgeService {
   private _client: AxiosInstance | null = null;
   private readonly baseURL: string;
   private readonly enabled: boolean;
+  /** Shared secret sent as x-bridge-secret header (optional but recommended). */
+  private readonly secret: string;
 
   constructor(baseURL?: string) {
     this.enabled = process.env.SCRAPER_BRIDGE_ENABLED === 'true';
-    this.baseURL = baseURL || process.env.SCRAPER_BRIDGE_URL || 'http://127.0.0.1:8077';
+    this.baseURL = (baseURL || process.env.SCRAPER_BRIDGE_URL || 'http://127.0.0.1:8077').replace(/\/$/, '');
+    // Support both SCRAPER_BRIDGE_SECRET and ML_BRIDGE_SECRET for backward compat
+    this.secret = (process.env.SCRAPER_BRIDGE_SECRET || process.env.ML_BRIDGE_SECRET || '').trim();
   }
 
   private getClient(): AxiosInstance {
@@ -52,10 +56,15 @@ export class ScraperBridgeService {
     if (!this.baseURL) {
       throw new Error('Scraper bridge disabled or URL missing');
     }
+    const headers: Record<string, string> = {};
+    if (this.secret) {
+      headers['x-bridge-secret'] = this.secret;
+    }
     this._client = axios.create({
       baseURL: this.baseURL,
       timeout: 120000,
       validateStatus: (status) => status < 500,
+      headers,
     });
     return this._client;
   }
@@ -93,7 +102,8 @@ export class ScraperBridgeService {
             setTimeout(() => reject(new Error('Health check timeout')), 5000)
           ),
         ]);
-        return (data as any).data;
+        // Support both { status } and { data: { status } } response shapes
+        return ((data as any).data ?? data) as { status: string; details?: any };
       },
       {
         maxAttempts: 2, // ✅ FASE 2: Reducir reintentos para health check
