@@ -956,7 +956,7 @@ export class ProductService {
 
     let normalizedStatus = status;
 
-    if (status === 'APPROVED' || status === 'PUBLISHED') {
+    if (status === 'PUBLISHED') {
       const reconciled = reconcileProductTruth({
         ...currentProduct,
         status,
