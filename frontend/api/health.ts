@@ -10,6 +10,10 @@ export const config = {
   maxDuration: 10,
 };
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
 export default function handler(req: any, res: any): void {
   res.status(200).json({
     status: 'ok',

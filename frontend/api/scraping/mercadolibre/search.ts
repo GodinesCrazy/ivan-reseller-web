@@ -16,10 +16,72 @@ export const config = {
   maxDuration: 20,
 };
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
 const VALID_SITE_IDS = new Set([
   'MLA', 'MLB', 'MLC', 'MLM', 'MLU', 'MLE', 'MCO', 'MPE',
   'MLV', 'MBO', 'MPY', 'MEC', 'MGT', 'MRD', 'MLN',
 ]);
+
+type BridgeFetchResult = {
+  ok: boolean;
+  status: number;
+  data: any;
+  text: string;
+};
+
+function toBoolean(v: string | undefined, defaultValue: boolean): boolean {
+  if (v == null || v === '') return defaultValue;
+  const n = String(v).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(n)) return true;
+  if (['0', 'false', 'no', 'off'].includes(n)) return false;
+  return defaultValue;
+}
+
+function tryParseJson(raw: string): any {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<BridgeFetchResult> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const text = await response.text().catch(() => '');
+    const parsed = text ? tryParseJson(text) : null;
+    return {
+      ok: response.ok,
+      status: response.status,
+      data: parsed,
+      text,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function normalizeMlPayload(payload: any): any {
+  if (!payload) return null;
+  if (Array.isArray(payload?.results)) return payload;
+  if (Array.isArray(payload?.data?.results)) return payload.data;
+  if (Array.isArray(payload?.items)) {
+    return {
+      results: payload.items,
+      paging: payload.paging || { total: payload.items.length, offset: 0, limit: payload.items.length },
+    };
+  }
+  return null;
+}
+
+function fallbackEnabledForStatus(status: number): boolean {
+  return status === 401 || status === 403 || status === 429 || (status >= 500 && status <= 599);
+}
 
 export default async function handler(req: any, res: any): Promise<void> {
   // ── Auth check (optional) ──────────────────────────────────────────────────
@@ -58,11 +120,13 @@ export default async function handler(req: any, res: any): Promise<void> {
   const mlUrl =
     `https://api.mercadolibre.com/sites/${siteId}/search` +
     `?q=${encodeURIComponent(query)}&limit=${limit}`;
+  const timeoutMs = Math.max(5000, Math.min(25000, Number(process.env.ML_BRIDGE_TIMEOUT_MS || '15000') || 15000));
+  const useScraperApi = toBoolean(process.env.ML_BRIDGE_USE_SCRAPERAPI, true);
+  const useZenRows = toBoolean(process.env.ML_BRIDGE_USE_ZENROWS, true);
+  const scraperApiKey = String(process.env.SCRAPER_API_KEY || process.env.SCRAPERAPI_KEY || '').trim();
+  const zenRowsKey = String(process.env.ZENROWS_API_KEY || '').trim();
 
   try {
-    const controller = new AbortController();
-    const timeoutId  = setTimeout(() => controller.abort(), 15_000);
-
     const headers: Record<string, string> = {
       Accept: 'application/json',
       'User-Agent': 'Mozilla/5.0 (compatible; IvanReseller/1.0)',
@@ -71,27 +135,74 @@ export default async function handler(req: any, res: any): Promise<void> {
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    const mlRes = await fetch(mlUrl, { headers, signal: controller.signal });
+    const direct = await fetchWithTimeout(mlUrl, { headers }, timeoutMs);
+    const directPayload = normalizeMlPayload(direct.data);
+    if (direct.ok && directPayload) {
+      res.status(200).json(directPayload);
+      return;
+    }
 
-    clearTimeout(timeoutId);
-
-    if (!mlRes.ok) {
-      // Forward the ML error so caller knows why (403, 429, etc.)
-      const errText = await mlRes.text().catch(() => '');
-      res.status(mlRes.status).json({
-        error: `ML API returned ${mlRes.status}`,
-        detail: errText.slice(0, 500),
+    if (!fallbackEnabledForStatus(direct.status)) {
+      res.status(direct.status || 502).json({
+        error: `ML API returned ${direct.status || 502}`,
+        detail: String(direct.text || '').slice(0, 500),
       });
       return;
     }
 
-    const data = await mlRes.json() as { results?: any[]; paging?: any };
-    // Return exactly what ML returns so scraper-bridge.service parses it correctly
-    res.status(200).json(data);
+    // 1) ScraperAPI fallback (premium rotating proxies)
+    if (useScraperApi && scraperApiKey) {
+      try {
+        const scraperUrl =
+          `https://api.scraperapi.com/?api_key=${encodeURIComponent(scraperApiKey)}` +
+          `&url=${encodeURIComponent(mlUrl)}&render=false&keep_headers=true&country_code=cl`;
+        const scraperRes = await fetchWithTimeout(scraperUrl, {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; IvanReseller/1.0)',
+          },
+        }, timeoutMs);
+        const scraperPayload = normalizeMlPayload(scraperRes.data);
+        if (scraperRes.ok && scraperPayload) {
+          res.status(200).json(scraperPayload);
+          return;
+        }
+      } catch {
+        // Continue to next fallback.
+      }
+    }
+
+    // 2) ZenRows fallback (premium proxy)
+    if (useZenRows && zenRowsKey) {
+      try {
+        const zenUrl =
+          `https://api.zenrows.com/v1/?apikey=${encodeURIComponent(zenRowsKey)}` +
+          `&url=${encodeURIComponent(mlUrl)}&premium_proxy=true&js_render=false`;
+        const zenRes = await fetchWithTimeout(zenUrl, {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; IvanReseller/1.0)',
+          },
+        }, timeoutMs);
+        const zenPayload = normalizeMlPayload(zenRes.data);
+        if (zenRes.ok && zenPayload) {
+          res.status(200).json(zenPayload);
+          return;
+        }
+      } catch {
+        // Fall through to direct error.
+      }
+    }
+
+    // Fallbacks exhausted; forward original ML error.
+    res.status(direct.status || 502).json({
+      error: `ML API returned ${direct.status || 502}`,
+      detail: String(direct.text || '').slice(0, 500),
+    });
   } catch (err: any) {
     const isTimeout = err?.name === 'AbortError' || err?.code === 'ABORT_ERR';
     res.status(504).json({
-      error: isTimeout ? 'ML API request timed out (15s)' : (err?.message || 'Bridge error'),
+      error: isTimeout ? 'ML API request timed out' : (err?.message || 'Bridge error'),
     });
   }
 }
