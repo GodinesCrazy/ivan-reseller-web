@@ -122,6 +122,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       imageUrls: images,
       category: opp.category,
       currency: 'USD',
+      targetCountry: marketplace === 'mercadolibre' ? 'CL' : undefined,
     });
 
     await productService.updateProductStatusSafely(product.id, 'APPROVED', userId, 'Test: aprobacion para publicacion');

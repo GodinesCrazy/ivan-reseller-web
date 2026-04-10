@@ -32,6 +32,15 @@ type BridgeFetchResult = {
   text: string;
 };
 
+type BridgeAttemptResult = {
+  source: 'ml_direct' | 'scraperapi' | 'zenrows';
+  enabled: boolean;
+  ok: boolean;
+  status: number;
+  payload: any | null;
+  detail: string;
+};
+
 function toBoolean(v: string | undefined, defaultValue: boolean): boolean {
   if (v == null || v === '') return defaultValue;
   const n = String(v).trim().toLowerCase();
@@ -83,6 +92,83 @@ function fallbackEnabledForStatus(status: number): boolean {
   return status === 401 || status === 403 || status === 429 || (status >= 500 && status <= 599);
 }
 
+function clampDetail(detail: string, maxLen: number = 300): string {
+  return String(detail || '').replace(/\s+/g, ' ').trim().slice(0, maxLen);
+}
+
+function emptyResultsPayload(limit: number, warning?: string, sources?: string[]) {
+  return {
+    results: [],
+    paging: { total: 0, offset: 0, limit },
+    ...(warning ? { bridgeWarning: warning } : {}),
+    ...(sources && sources.length > 0 ? { bridgeSourcesTried: sources } : {}),
+  };
+}
+
+function looksLikeProviderQuotaIssue(detail: string): boolean {
+  const d = clampDetail(detail, 500).toLowerCase();
+  if (!d) return false;
+  return (
+    d.includes('exhausted') ||
+    d.includes('credits available') ||
+    d.includes('reached its validity period') ||
+    d.includes('purchase a new subscription') ||
+    d.includes('auth005') ||
+    d.includes('billing')
+  );
+}
+
+function shouldFailOpen(attempts: BridgeAttemptResult[]): boolean {
+  const executed = attempts.filter((a) => a.enabled);
+  if (executed.length === 0) return false;
+  const allBlockedOrUnavailable = executed.every((a) => {
+    if (a.ok && a.payload) return false;
+    if (a.status === 0) return true;
+    return a.status === 401 || a.status === 402 || a.status === 403 || a.status === 429 || a.status >= 500;
+  });
+  if (!allBlockedOrUnavailable) return false;
+  return executed.some((a) => looksLikeProviderQuotaIssue(a.detail) || a.status === 401 || a.status === 402 || a.status === 403 || a.status === 429);
+}
+
+async function runAttempt(params: {
+  source: BridgeAttemptResult['source'];
+  enabled: boolean;
+  url: string;
+  headers: Record<string, string>;
+  timeoutMs: number;
+}): Promise<BridgeAttemptResult> {
+  if (!params.enabled) {
+    return {
+      source: params.source,
+      enabled: false,
+      ok: false,
+      status: 0,
+      payload: null,
+      detail: 'source_disabled',
+    };
+  }
+  try {
+    const result = await fetchWithTimeout(params.url, { headers: params.headers }, params.timeoutMs);
+    return {
+      source: params.source,
+      enabled: true,
+      ok: result.ok,
+      status: result.status,
+      payload: normalizeMlPayload(result.data),
+      detail: clampDetail(result.text),
+    };
+  } catch (error: any) {
+    return {
+      source: params.source,
+      enabled: true,
+      ok: false,
+      status: 0,
+      payload: null,
+      detail: clampDetail(error?.message || 'request_failed'),
+    };
+  }
+}
+
 export default async function handler(req: any, res: any): Promise<void> {
   // ── Auth check (optional) ──────────────────────────────────────────────────
   const secret = (process.env.ML_BRIDGE_SECRET || '').trim();
@@ -127,81 +213,100 @@ export default async function handler(req: any, res: any): Promise<void> {
   const zenRowsKey = String(process.env.ZENROWS_API_KEY || '').trim();
   const scraperApiPremium = toBoolean(process.env.ML_BRIDGE_SCRAPERAPI_PREMIUM, true);
   const scraperApiUltraPremium = toBoolean(process.env.ML_BRIDGE_SCRAPERAPI_ULTRA_PREMIUM, false);
+  const preferProxyFirst = toBoolean(process.env.ML_BRIDGE_PROXY_FIRST, siteId === 'MLC');
+  const failOpenOnProviderIssues = toBoolean(process.env.ML_BRIDGE_FAIL_OPEN_EMPTY, true);
 
   try {
-    const headers: Record<string, string> = {
+    const directHeaders: Record<string, string> = {
       Accept: 'application/json',
       'User-Agent': 'Mozilla/5.0 (compatible; IvanReseller/1.0)',
     };
     if (accessToken) {
-      headers.Authorization = `Bearer ${accessToken}`;
+      directHeaders.Authorization = `Bearer ${accessToken}`;
     }
 
-    const direct = await fetchWithTimeout(mlUrl, { headers }, timeoutMs);
-    const directPayload = normalizeMlPayload(direct.data);
-    if (direct.ok && directPayload) {
-      res.status(200).json(directPayload);
-      return;
-    }
+    const scraperUrl =
+      `https://api.scraperapi.com/?api_key=${encodeURIComponent(scraperApiKey)}` +
+      `&url=${encodeURIComponent(mlUrl)}&render=false&keep_headers=true&country_code=cl` +
+      `${scraperApiPremium ? '&premium=true' : ''}` +
+      `${scraperApiUltraPremium ? '&ultra_premium=true' : ''}`;
+    const zenUrl =
+      `https://api.zenrows.com/v1/?apikey=${encodeURIComponent(zenRowsKey)}` +
+      `&url=${encodeURIComponent(mlUrl)}&premium_proxy=true&js_render=false`;
+    const proxyHeaders: Record<string, string> = {
+      Accept: 'application/json',
+      'User-Agent': 'Mozilla/5.0 (compatible; IvanReseller/1.0)',
+    };
 
-    if (!fallbackEnabledForStatus(direct.status)) {
-      res.status(direct.status || 502).json({
-        error: `ML API returned ${direct.status || 502}`,
-        detail: String(direct.text || '').slice(0, 500),
+    const orderedAttempts: Array<() => Promise<BridgeAttemptResult>> = [];
+    const makeDirect = () =>
+      runAttempt({
+        source: 'ml_direct',
+        enabled: true,
+        url: mlUrl,
+        headers: directHeaders,
+        timeoutMs,
       });
+    const makeScraper = () =>
+      runAttempt({
+        source: 'scraperapi',
+        enabled: useScraperApi && scraperApiKey.length > 0,
+        url: scraperUrl,
+        headers: proxyHeaders,
+        timeoutMs,
+      });
+    const makeZen = () =>
+      runAttempt({
+        source: 'zenrows',
+        enabled: useZenRows && zenRowsKey.length > 0,
+        url: zenUrl,
+        headers: proxyHeaders,
+        timeoutMs,
+      });
+
+    if (preferProxyFirst) {
+      orderedAttempts.push(makeScraper, makeZen, makeDirect);
+    } else {
+      orderedAttempts.push(makeDirect, makeScraper, makeZen);
+    }
+
+    const attempts: BridgeAttemptResult[] = [];
+    for (const pending of orderedAttempts) {
+      const attempt = await pending();
+      attempts.push(attempt);
+
+      if (attempt.ok && attempt.payload) {
+        res.setHeader('x-ml-bridge-source', attempt.source);
+        res.status(200).json(attempt.payload);
+        return;
+      }
+
+      if (attempt.source === 'ml_direct' && attempt.status > 0 && !fallbackEnabledForStatus(attempt.status)) {
+        res.status(attempt.status || 502).json({
+          error: `ML API returned ${attempt.status || 502}`,
+          detail: attempt.detail,
+        });
+        return;
+      }
+    }
+
+    if (failOpenOnProviderIssues && shouldFailOpen(attempts)) {
+      res.setHeader('x-ml-bridge-source', 'degraded_empty');
+      res.setHeader('x-ml-bridge-degraded', '1');
+      res.status(200).json(
+        emptyResultsPayload(
+          limit,
+          'ML search temporarily blocked or provider quota unavailable; using safe empty fallback',
+          attempts.filter((a) => a.enabled).map((a) => a.source)
+        )
+      );
       return;
     }
 
-    // 1) ScraperAPI fallback (premium rotating proxies)
-    if (useScraperApi && scraperApiKey) {
-      try {
-        const scraperUrl =
-          `https://api.scraperapi.com/?api_key=${encodeURIComponent(scraperApiKey)}` +
-          `&url=${encodeURIComponent(mlUrl)}&render=false&keep_headers=true&country_code=cl` +
-          `${scraperApiPremium ? '&premium=true' : ''}` +
-          `${scraperApiUltraPremium ? '&ultra_premium=true' : ''}`;
-        const scraperRes = await fetchWithTimeout(scraperUrl, {
-          headers: {
-            Accept: 'application/json',
-            'User-Agent': 'Mozilla/5.0 (compatible; IvanReseller/1.0)',
-          },
-        }, timeoutMs);
-        const scraperPayload = normalizeMlPayload(scraperRes.data);
-        if (scraperRes.ok && scraperPayload) {
-          res.status(200).json(scraperPayload);
-          return;
-        }
-      } catch {
-        // Continue to next fallback.
-      }
-    }
-
-    // 2) ZenRows fallback (premium proxy)
-    if (useZenRows && zenRowsKey) {
-      try {
-        const zenUrl =
-          `https://api.zenrows.com/v1/?apikey=${encodeURIComponent(zenRowsKey)}` +
-          `&url=${encodeURIComponent(mlUrl)}&premium_proxy=true&js_render=false`;
-        const zenRes = await fetchWithTimeout(zenUrl, {
-          headers: {
-            Accept: 'application/json',
-            'User-Agent': 'Mozilla/5.0 (compatible; IvanReseller/1.0)',
-          },
-        }, timeoutMs);
-        const zenPayload = normalizeMlPayload(zenRes.data);
-        if (zenRes.ok && zenPayload) {
-          res.status(200).json(zenPayload);
-          return;
-        }
-      } catch {
-        // Fall through to direct error.
-      }
-    }
-
-    // Fallbacks exhausted; forward original ML error.
-    res.status(direct.status || 502).json({
-      error: `ML API returned ${direct.status || 502}`,
-      detail: String(direct.text || '').slice(0, 500),
+    const firstFailure = attempts.find((a) => a.enabled && a.status > 0);
+    res.status(firstFailure?.status || 502).json({
+      error: `ML API returned ${firstFailure?.status || 502}`,
+      detail: firstFailure?.detail || 'Bridge fallbacks exhausted',
     });
   } catch (err: any) {
     const isTimeout = err?.name === 'AbortError' || err?.code === 'ABORT_ERR';
