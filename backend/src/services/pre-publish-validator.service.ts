@@ -1151,6 +1151,86 @@ export async function runPreventiveEconomicsCore(
     }
   }
 
+  if (
+    marketplace === 'mercadolibre' &&
+    shipCountry === 'CL' &&
+    !persistedMlChileFreightTruth?.ok &&
+    env.PRE_PUBLISH_SHIPPING_FALLBACK
+  ) {
+    const fallbackShippingUsd = getEffectiveShippingCost(
+      product as import('../utils/shipping.utils').ProductWithShippingCost
+    );
+    if (Number.isFinite(fallbackShippingUsd) && fallbackShippingUsd > 0) {
+      const checkedAt = new Date().toISOString();
+      const sendGoodsCountryCode =
+        String(product.originCountry || 'CN').trim().toUpperCase() || 'CN';
+      const landed = calculateMlChileLandedCost({
+        productCost: Math.max(
+          0,
+          toNumber((product.aliexpressPrice ?? 0) as Parameters<typeof toNumber>[0])
+        ),
+        shippingCost: fallbackShippingUsd,
+        currency: 'USD',
+      });
+      const currentMeta = parseProductMetadata(product.productData);
+      const nextMeta = {
+        ...currentMeta,
+        mlChileFreight: {
+          freightSummaryCode: 'freight_quote_found_for_cl',
+          checkedAt,
+          targetCountry: 'CL',
+          sendGoodsCountryCode,
+          freightOptionsCount: 0,
+          rawOptionNodeCount: 0,
+          rawTopKeys: [],
+          selectedServiceName: 'fallback_shipping_cost',
+          selectedFreightAmount: fallbackShippingUsd,
+          selectedFreightCurrency: 'USD',
+          selectedEstimatedDeliveryTime: null,
+          selectionReason: 'fail_open_shipping_fallback',
+        },
+        mlChileLandedCost: {
+          costCurrency: landed.costCurrency,
+          importTaxMethod: landed.importTaxMethod,
+          importTaxAmount: landed.importTaxAmount,
+          totalCost: landed.totalCost,
+          landedCostCompleteness: landed.landedCostCompleteness,
+          checkedAt,
+        },
+      };
+      await prisma.product.update({
+        where: { id: product.id },
+        data: {
+          targetCountry: 'CL',
+          shippingCost: fallbackShippingUsd,
+          importTax: landed.importTaxAmount,
+          totalCost: landed.totalCost,
+          productData: JSON.stringify(nextMeta),
+        },
+      });
+      persistedMlChileFreightTruth = {
+        status: 'freight_truth_ready_for_publish',
+        ok: true,
+        truth: {
+          targetCountry: 'CL',
+          freightSummaryCode: 'freight_quote_found_for_cl',
+          selectedServiceName: 'fallback_shipping_cost',
+          selectedFreightAmount: fallbackShippingUsd,
+          selectedFreightCurrency: 'USD',
+          shippingUsd: fallbackShippingUsd,
+          checkedAt,
+          ageHours: 0,
+        },
+      };
+      logger.warn('[PRE-PUBLISH] Using fail-open ML Chile freight fallback from persisted product shipping', {
+        userId,
+        productId: product.id,
+        aeProductId,
+        fallbackShippingUsd,
+      });
+    }
+  }
+
   if (marketplace === 'mercadolibre' && shipCountry === 'CL' && !persistedMlChileFreightTruth?.ok) {
     return {
       ok: false,
