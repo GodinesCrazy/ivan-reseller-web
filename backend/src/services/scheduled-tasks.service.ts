@@ -2463,32 +2463,217 @@ export class ScheduledTasksService {
   /**
    * ✅ Evolution: Run dynamic pricing for published products
    */
-  private async runDynamicPricing(): Promise<{ processed: number; errors: number }> {
+  private async runDynamicPricing(): Promise<{
+    processed: number;
+    errors: number;
+    supplierUpdated: number;
+    repriced: number;
+    priceSynced: number;
+    inventoryPaused: number;
+    riskScanned: number;
+    riskDangerous: number;
+  }> {
     const { dynamicPricingService } = await import('./dynamic-pricing.service');
+    const MarketplaceService = (await import('./marketplace.service')).default;
+    const { aliExpressSupplierAdapter } = await import('./adapters/aliexpress-supplier.adapter');
+    const { runActiveListingsRiskScan } = await import('./active-listings-risk-scan.service');
+    const batchSize = Math.max(10, Math.min(500, Number(process.env.DYNAMIC_PRICING_BATCH_SIZE || '120') || 120));
+    const shouldSyncMarketplacePrice = !['0', 'false', 'no', 'off'].includes(
+      String(process.env.DYNAMIC_PRICING_SYNC_MARKETPLACE_PRICE || 'true').trim().toLowerCase()
+    );
+    const shouldRunRiskScan = !['0', 'false', 'no', 'off'].includes(
+      String(process.env.RUN_ACTIVE_LISTINGS_RISK_SCAN_ON_REPRICE || 'true').trim().toLowerCase()
+    );
+    const autoUnpublishUnprofitable = !['0', 'false', 'no', 'off'].includes(
+      String(process.env.AUTO_UNPUBLISH_UNPROFITABLE_ON_RISK_SCAN || 'true').trim().toLowerCase()
+    );
+    const autoUnpublishUnshippable = !['0', 'false', 'no', 'off'].includes(
+      String(process.env.AUTO_UNPUBLISH_UNSHIPPABLE_ON_RISK_SCAN || 'true').trim().toLowerCase()
+    );
+
+    const marketplaceService = new MarketplaceService();
     const products = await prisma.product.findMany({
       where: { isPublished: true, status: { in: ['PUBLISHED', 'APPROVED'] } },
-      select: { id: true, userId: true, aliexpressPrice: true, totalCost: true },
-      take: 50,
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        isPublished: true,
+        aliexpressUrl: true,
+        aliexpressPrice: true,
+        totalCost: true,
+        shippingCost: true,
+        importTax: true,
+        currency: true,
+        marketplaceListings: {
+          where: { publishedAt: { not: null } },
+          select: { marketplace: true },
+        },
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: batchSize,
     });
+
     let processed = 0;
     let errors = 0;
+    let supplierUpdated = 0;
+    let repriced = 0;
+    let priceSynced = 0;
+    let inventoryPaused = 0;
+
     for (const p of products) {
       try {
-        const supplierPrice = Number(p.totalCost ?? p.aliexpressPrice ?? 0);
-        if (supplierPrice <= 0) continue;
+        let supplierUnitPriceUsd = toNumber(p.aliexpressPrice ?? 0);
+
+        // 1) Refresh supplier stock + supplier unit cost from AliExpress when URL is available.
+        if (p.aliexpressUrl) {
+          const supplierProductId = aliExpressSupplierAdapter.getProductIdFromUrl(p.aliexpressUrl);
+          if (supplierProductId) {
+            try {
+              const supplierInfo = await aliExpressSupplierAdapter.getProductInfo(supplierProductId, { userId: p.userId });
+              const infoCurrency = String(supplierInfo.currency || p.currency || 'USD').toUpperCase();
+              let latestSupplierUnitPriceUsd = Number(supplierInfo.price || 0);
+              if (latestSupplierUnitPriceUsd > 0 && infoCurrency !== 'USD') {
+                try {
+                  latestSupplierUnitPriceUsd = fxService.convert(latestSupplierUnitPriceUsd, infoCurrency, 'USD');
+                } catch (fxErr: any) {
+                  logger.warn('Scheduled Tasks: FX conversion failed for supplier price, keeping USD fallback', {
+                    productId: p.id,
+                    fromCurrency: infoCurrency,
+                    error: fxErr?.message,
+                  });
+                }
+              }
+              if (latestSupplierUnitPriceUsd > 0) {
+                supplierUnitPriceUsd = latestSupplierUnitPriceUsd;
+              }
+
+              const shippingUsd = Math.max(0, toNumber(p.shippingCost ?? 0));
+              const importTaxUsd = Math.max(0, toNumber(p.importTax ?? 0));
+              const totalCostUsd = supplierUnitPriceUsd > 0
+                ? Number((supplierUnitPriceUsd + shippingUsd + importTaxUsd).toFixed(2))
+                : null;
+
+              await prisma.product.update({
+                where: { id: p.id },
+                data: {
+                  aliexpressPrice: supplierUnitPriceUsd > 0 ? supplierUnitPriceUsd : toNumber(p.aliexpressPrice ?? 0),
+                  totalCost: totalCostUsd,
+                  supplierStock: Number(supplierInfo.stock || 0),
+                  supplierStockCheckedAt: new Date(),
+                },
+              });
+              supplierUpdated++;
+
+              // 2) Inventory risk mitigation: if stock is zero, sync quantity=0 to marketplaces and skip repricing.
+              if (Number(supplierInfo.stock || 0) <= 0) {
+                try {
+                  await marketplaceService.syncInventory(p.userId, p.id, 0, 'production');
+                  inventoryPaused++;
+                } catch (inventoryErr: any) {
+                  logger.warn('Scheduled Tasks: inventory sync (pause) failed during dynamic pricing', {
+                    productId: p.id,
+                    error: inventoryErr?.message,
+                  });
+                  errors++;
+                }
+                processed++;
+                continue;
+              }
+            } catch (supplierErr: any) {
+              logger.warn('Scheduled Tasks: supplier refresh failed in dynamic pricing run', {
+                productId: p.id,
+                userId: p.userId,
+                error: supplierErr?.message,
+              });
+            }
+          }
+        }
+
+        if (supplierUnitPriceUsd <= 0) continue;
+        const listingMarketplaces = Array.isArray((p as any).marketplaceListings)
+          ? ((p as any).marketplaceListings as Array<{ marketplace: string }>)
+          : [];
+        const preferredMarketplaceRaw = String(listingMarketplaces[0]?.marketplace || 'mercadolibre').toLowerCase();
+        const preferredMarketplace = (['ebay', 'amazon', 'mercadolibre'].includes(preferredMarketplaceRaw)
+          ? preferredMarketplaceRaw
+          : 'mercadolibre') as 'ebay' | 'amazon' | 'mercadolibre';
+
         const result = await dynamicPricingService.repriceByProduct(
           p.id,
-          supplierPrice,
-          'ebay',
+          supplierUnitPriceUsd,
+          preferredMarketplace,
           p.userId
         );
-        if (result.success) processed++;
-        else errors++;
+        if (!result.success || result.newSuggestedPriceUsd == null || result.newSuggestedPriceUsd <= 0) {
+          errors++;
+          continue;
+        }
+
+        const newPrice = Number(result.newSuggestedPriceUsd);
+        await prisma.product.update({
+          where: { id: p.id },
+          data: {
+            suggestedPrice: newPrice,
+            finalPrice: newPrice,
+          },
+        });
+        repriced++;
+        processed++;
+
+        // 3) Cost-change risk mitigation: push new safe price to already published listings.
+        if (shouldSyncMarketplacePrice && p.isPublished && String(p.status).toUpperCase() === 'PUBLISHED') {
+          try {
+            const syncResult = await marketplaceService.syncProductPrice(p.userId, p.id, newPrice, 'production');
+            priceSynced += syncResult.updated || 0;
+            if (!syncResult.success) {
+              errors += (syncResult.errors?.length || 1);
+            }
+          } catch (syncErr: any) {
+            logger.warn('Scheduled Tasks: marketplace price sync failed after repricing', {
+              productId: p.id,
+              userId: p.userId,
+              error: syncErr?.message,
+            });
+            errors++;
+          }
+        }
       } catch (e) {
         errors++;
       }
     }
-    return { processed, errors };
+
+    // 4) Full active-listing risk scan to auto-unpublish unsafe listings (inventory/profitability).
+    let riskScanned = 0;
+    let riskDangerous = 0;
+    if (shouldRunRiskScan) {
+      try {
+        const riskResult = await runActiveListingsRiskScan({
+          dryRun: false,
+          autoUnpublishUnshippable,
+          autoUnpublishUnprofitable,
+          writeFlags: true,
+        });
+        riskScanned = riskResult.scanned;
+        riskDangerous = riskResult.dangerous.length;
+      } catch (riskErr: any) {
+        logger.warn('Scheduled Tasks: active listings risk scan failed after dynamic pricing', {
+          error: riskErr?.message,
+        });
+        errors++;
+      }
+    }
+
+    return {
+      processed,
+      errors,
+      supplierUpdated,
+      repriced,
+      priceSynced,
+      inventoryPaused,
+      riskScanned,
+      riskDangerous,
+    };
   }
 
   /**
