@@ -125,6 +125,8 @@ export default async function handler(req: any, res: any): Promise<void> {
   const useZenRows = toBoolean(process.env.ML_BRIDGE_USE_ZENROWS, true);
   const scraperApiKey = String(process.env.SCRAPER_API_KEY || process.env.SCRAPERAPI_KEY || '').trim();
   const zenRowsKey = String(process.env.ZENROWS_API_KEY || '').trim();
+  const scraperApiPremium = toBoolean(process.env.ML_BRIDGE_SCRAPERAPI_PREMIUM, true);
+  const scraperApiUltraPremium = toBoolean(process.env.ML_BRIDGE_SCRAPERAPI_ULTRA_PREMIUM, false);
 
   try {
     const headers: Record<string, string> = {
@@ -155,7 +157,9 @@ export default async function handler(req: any, res: any): Promise<void> {
       try {
         const scraperUrl =
           `https://api.scraperapi.com/?api_key=${encodeURIComponent(scraperApiKey)}` +
-          `&url=${encodeURIComponent(mlUrl)}&render=false&keep_headers=true&country_code=cl`;
+          `&url=${encodeURIComponent(mlUrl)}&render=false&keep_headers=true&country_code=cl` +
+          `${scraperApiPremium ? '&premium=true' : ''}` +
+          `${scraperApiUltraPremium ? '&ultra_premium=true' : ''}`;
         const scraperRes = await fetchWithTimeout(scraperUrl, {
           headers: {
             Accept: 'application/json',
