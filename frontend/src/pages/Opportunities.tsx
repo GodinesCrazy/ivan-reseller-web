@@ -205,6 +205,8 @@ export default function Opportunities() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<OpportunityItem[]>([]);
+  /** Tracks whether the user has run at least one explicit search in this session. */
+  const [hasSearched, setHasSearched] = useState(false);
   const [publishing, setPublishing] = useState<Record<number, boolean>>({});
   const authStatuses = useAuthStatusStore((state) => state.statuses);
   const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
@@ -219,6 +221,8 @@ export default function Opportunities() {
   const [showAliExpressModal, setShowAliExpressModal] = useState(false);
   const [pendingSearchUrl, setPendingSearchUrl] = useState<string | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
+  /** Ref to the most recent successfully-executed query, used by pagination to avoid stale closure. */
+  const lastExecutedQueryRef = useRef<string>('');
   type ComparableHealth = {
     mercadolibre: string;
     ebay: string;
@@ -270,13 +274,14 @@ export default function Opportunities() {
     searchAbortRef.current = controller;
     setLoading(true);
     setError(null);
+    setHasSearched(true);
     let requestCanceled = false;
     let timedOut = false;
-    // Hard cap: if backend never responds, unblock the UI after 120s
+    // Hard cap: if backend never responds, unblock the UI after 90s
     const searchTimeoutId = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, 120_000);
+    }, 90_000);
     try {
       const params: Record<string, string | number> = {
         query: effectiveQuery,
@@ -326,6 +331,7 @@ export default function Opportunities() {
               mayHaveMore: nextItems.length >= maxItems,
             }
       );
+      lastExecutedQueryRef.current = effectiveQuery;
       try {
         localStorage.setItem(STORAGE_KEY, effectiveQuery);
       } catch {
@@ -524,9 +530,10 @@ export default function Opportunities() {
           void fetchOpportunitiesPage(1, keywordParam.trim());
         }, 100);
       }
-    } else if (query.trim()) {
-      void fetchOpportunitiesPage(getInitialPage());
     }
+    // NOTE: We intentionally do NOT auto-search on page load, even if there is
+    // a pre-filled query from URL params or localStorage. The user must always
+    // click "Buscar" explicitly to trigger a search (Bug #1 fix).
     return () => {
       if (autoSearchTimer !== undefined) clearTimeout(autoSearchTimer);
       if (searchAbortRef.current) {
@@ -970,6 +977,16 @@ export default function Opportunities() {
         </div>
       </div>
 
+      {/* ML Chile notice: shown when region=cl and mercadolibre is selected */}
+      {region === 'cl' && marketplaces.includes('mercadolibre') && (
+        <div className="px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200 text-sm space-y-1">
+          <div className="font-semibold text-xs">Región: Chile (MLC) + Mercado Libre seleccionados</div>
+          <p className="text-[11px] opacity-90">
+            La búsqueda de productos AliExpress funcionará normalmente. Los <strong>precios de referencia comparables</strong> de Mercado Libre Chile pueden no estar disponibles desde el servidor (bloqueo de IP de Railway en GET /sites/MLC/search). Si los comparables fallan, los precios sugeridos se calcularán por estimación. Tu cuenta, OAuth y publicaciones <strong>no están afectadas</strong>.
+          </p>
+        </div>
+      )}
+
       {/* Comparable Health Banner */}
       {comparableHealth &&
         (comparableHealth.mercadolibre === 'degraded' ||
@@ -1141,7 +1158,7 @@ export default function Opportunities() {
             <button
               type="button"
               disabled={page <= 1 || loading}
-              onClick={() => void fetchOpportunitiesPage(page - 1)}
+              onClick={() => void fetchOpportunitiesPage(page - 1, lastExecutedQueryRef.current || undefined)}
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-400 disabled:opacity-40 hover:bg-white dark:hover:bg-slate-800 transition"
             >
               Anterior
@@ -1154,7 +1171,7 @@ export default function Opportunities() {
                   ? !paginationMeta.mayHaveMore
                   : items.length < maxItems)
               }
-              onClick={() => void fetchOpportunitiesPage(page + 1)}
+              onClick={() => void fetchOpportunitiesPage(page + 1, lastExecutedQueryRef.current || undefined)}
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-400 disabled:opacity-40 hover:bg-white dark:hover:bg-slate-800 transition"
             >
               Siguiente
@@ -1432,9 +1449,19 @@ export default function Opportunities() {
                       <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                         <Package className="w-6 h-6 text-slate-400" />
                       </div>
-                      <p className="font-medium text-sm text-slate-700 dark:text-slate-300 mb-1">Sin oportunidades</p>
-                      <p className="text-xs text-slate-500 mb-2">Aún no hay productos candidatos. Realiza una búsqueda con un término o URL de AliExpress.</p>
-                      <p className="text-[11px] text-slate-400">Verifica que tengas la API de búsqueda configurada (AliExpress Affiliate, ScraperAPI o ZenRows) en Configuración.</p>
+                      {hasSearched ? (
+                        <>
+                          <p className="font-medium text-sm text-slate-700 dark:text-slate-300 mb-1">Sin resultados</p>
+                          <p className="text-xs text-slate-500 mb-2">La búsqueda no encontró productos candidatos. Prueba con otro término, reduce filtros o cambia de región.</p>
+                          <p className="text-[11px] text-slate-400">Verifica que tengas la API de búsqueda configurada (AliExpress Affiliate, ScraperAPI o ZenRows) en Configuración.</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-sm text-slate-700 dark:text-slate-300 mb-1">Listo para buscar</p>
+                          <p className="text-xs text-slate-500 mb-2">Escribe un término de búsqueda (ej: "auriculares", "luces LED") y haz clic en <strong>Buscar</strong>.</p>
+                          <p className="text-[11px] text-slate-400">Puedes filtrar por región y marketplace antes de buscar.</p>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
