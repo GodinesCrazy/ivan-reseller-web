@@ -329,6 +329,18 @@ router.post('/reset-password', async (req: Request, res: Response, next: NextFun
   }
 });
 
+// POST /api/auth/refresh-all — Proactively refresh ML + eBay OAuth tokens (silent, fire-and-forget safe)
+router.post('/refresh-all', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { runOAuthProactiveRefresh } = await import('../../services/oauth-token-refresh.service');
+    const summary = await runOAuthProactiveRefresh();
+    return res.json({ success: true, data: summary });
+  } catch (err: any) {
+    logger.warn('[AUTH] refresh-all failed (non-critical)', { error: err?.message });
+    return res.json({ success: false, error: err?.message || 'refresh failed' });
+  }
+});
+
 // POST /api/auth/logout - No auth required; clear cookie only so browser logout never returns 401
 router.post('/logout', async (req: Request, res: Response) => {
   const opts = { httpOnly: true, secure: true, sameSite: 'none' as const, path: '/' };

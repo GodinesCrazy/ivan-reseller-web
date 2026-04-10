@@ -60,6 +60,7 @@ export class ScheduledTasksService {
     private autonomousRevenueMonitorQueue: Queue | null = null;
     private salesAccelerationQueue: Queue | null = null;
     private phase31SalesGenerationQueue: Queue | null = null;
+    private oauthTokenRefreshQueue: Queue | null = null;
     private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
@@ -94,6 +95,7 @@ export class ScheduledTasksService {
     private autonomousRevenueMonitorWorker: Worker | null = null;
     private salesAccelerationWorker: Worker | null = null;
     private phase31SalesGenerationWorker: Worker | null = null;
+    private oauthTokenRefreshWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -282,6 +284,11 @@ export class ScheduledTasksService {
 
     // Phase 32: Phase 31 Sales Generation — every 4–6 hours (default 5)
     this.phase31SalesGenerationQueue = new Queue('phase31-sales-generation', {
+      connection: this.bullMQRedis as any
+    });
+
+    // OAuth proactive token refresh (ML + eBay): every 30 minutes
+    this.oauthTokenRefreshQueue = new Queue('oauth-token-refresh', {
       connection: this.bullMQRedis as any
     });
   }
@@ -478,6 +485,28 @@ export class ScheduledTasksService {
           concurrency: 1,
         }
       );
+    }
+
+    // OAuth proactive refresh worker (ML + eBay tokens refreshed before expiry)
+    if (this.oauthTokenRefreshQueue) {
+      this.oauthTokenRefreshWorker = new Worker(
+        'oauth-token-refresh',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running OAuth proactive token refresh', { jobId: job.id });
+          const { runOAuthProactiveRefresh } = await import('./oauth-token-refresh.service');
+          return await runOAuthProactiveRefresh();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.oauthTokenRefreshWorker.on('completed', (job) => {
+        logger.info('Scheduled Tasks: OAuth proactive refresh completed', { jobId: job.id });
+      });
+      this.oauthTokenRefreshWorker.on('failed', (job, err) => {
+        logger.warn('Scheduled Tasks: OAuth proactive refresh failed', { jobId: job?.id, error: err?.message });
+      });
     }
 
     // Retry failed orders (insufficient funds) worker — every 30 min, max 3 retries
@@ -1235,6 +1264,21 @@ export class ScheduledTasksService {
         {
           repeat: {
             pattern: '0 * * * *' // Cada hora en el minuto 0
+          },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // OAuth proactive refresh (ML + eBay): every 30 minutes
+    if (this.oauthTokenRefreshQueue) {
+      this.oauthTokenRefreshQueue.add(
+        'oauth-token-refresh-job',
+        {},
+        {
+          repeat: {
+            pattern: '*/30 * * * *' // Every 30 minutes
           },
           removeOnComplete: 5,
           removeOnFail: 5,

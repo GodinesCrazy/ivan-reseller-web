@@ -380,6 +380,17 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       // Non-critical: token refresh job will load from DB when needed
     }
 
+    // Proactive OAuth token refresh at startup (ML + eBay) — fire-and-forget, non-blocking
+    setImmediate(async () => {
+      try {
+        const { runOAuthProactiveRefresh } = await import('../services/oauth-token-refresh.service');
+        const summary = await runOAuthProactiveRefresh();
+        console.log(`[BOOT] ✅ OAuth startup refresh: ${summary.refreshedCount} refreshed, ${summary.skippedCount} skipped, ${summary.errorCount} errors`);
+      } catch (oauthErr: any) {
+        console.warn('[BOOT] ⚠️  OAuth startup refresh failed (non-critical):', oauthErr?.message);
+      }
+    });
+
     // Initialize scheduled reports
     try {
       logMilestone('Initializing scheduled reports');

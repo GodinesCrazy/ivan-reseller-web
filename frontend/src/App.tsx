@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
 import { log } from '@/utils/logger';
 import { useTheme } from '@/hooks/useTheme';
+import { api } from '@/services/api';
 const Login = lazy(() => import('@pages/Login'));
 const Dashboard = lazy(() => import('@pages/Dashboard'));
 const Opportunities = lazy(() => import('@pages/Opportunities'));
@@ -63,9 +64,32 @@ function AppContent() {
   const location = useLocation();
   const { isAuthenticated, isCheckingAuth, checkAuth, setCheckingAuth, token, user } = useAuthStore();
   const [isInitialized, setIsInitialized] = useState(false);
-  
+  const [aliExpressWarning, setAliExpressWarning] = useState<string | null>(null);
+
   // ✅ CORRECCIÓN TEMA: Inicializar tema al cargar la app
   useTheme();
+
+  // Silent OAuth proactive refresh when user is authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    api.post('/api/auth/refresh-all').then((res) => {
+      const results: Array<{ platform: string; reason: string; expiresAt?: string; error?: string }> =
+        res.data?.data?.results ?? [];
+      const ali = results.find((r) => r.platform === 'AliExpress Dropshipping');
+      if (ali?.reason === 'token_expired') {
+        setAliExpressWarning('Tu sesión de AliExpress ha expirado. Ve a Configuración → APIs para reconectar.');
+      } else if (ali?.reason === 'expiring_soon') {
+        const days = ali.expiresAt
+          ? Math.ceil((new Date(ali.expiresAt).getTime() - Date.now()) / 86400000)
+          : null;
+        setAliExpressWarning(
+          `Tu sesión de AliExpress expira en ${days != null ? `${days} día${days !== 1 ? 's' : ''}` : 'poco tiempo'}. Ve a Configuración → APIs para renovarla.`
+        );
+      } else if (ali?.reason === 'no_token_in_store') {
+        setAliExpressWarning('AliExpress no está conectado. Ve a Configuración → APIs para autenticarte.');
+      }
+    }).catch(() => { /* non-critical, ignore */ });
+  }, [isAuthenticated]);
 
   // Validar token al iniciar la app (solo si hay token)
   useEffect(() => {
@@ -177,6 +201,19 @@ function AppContent() {
 
   return (
     <Suspense fallback={Fallback}>
+      {aliExpressWarning && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white text-sm px-4 py-2 flex items-center justify-between shadow-md">
+          <span>⚠ {aliExpressWarning}</span>
+          <button
+            onClick={() => setAliExpressWarning(null)}
+            type="button"
+            className="ml-4 font-bold hover:opacity-75"
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <Routes>
       {/* /help SIEMPRE accesible (primera ruta, nunca bloqueada por auth) */}
       <Route path="/help" element={<HelpCenterSafe />} />
