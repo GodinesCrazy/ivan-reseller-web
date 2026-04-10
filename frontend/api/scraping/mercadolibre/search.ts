@@ -43,6 +43,7 @@ export default async function handler(req: any, res: any): Promise<void> {
   const siteId = String(body.site_id || '').trim().toUpperCase();
   const query  = String(body.query  || '').trim().slice(0, 200);
   const limit  = Math.min(Math.max(Number(body.limit) || 20, 1), 20);
+  const accessToken = String(body.access_token || '').trim();
 
   if (!siteId || !VALID_SITE_IDS.has(siteId)) {
     res.status(400).json({ error: `Invalid site_id. Valid: ${[...VALID_SITE_IDS].join(', ')}` });
@@ -62,13 +63,15 @@ export default async function handler(req: any, res: any): Promise<void> {
     const controller = new AbortController();
     const timeoutId  = setTimeout(() => controller.abort(), 15_000);
 
-    const mlRes = await fetch(mlUrl, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'Mozilla/5.0 (compatible; IvanReseller/1.0)',
-      },
-      signal: controller.signal,
-    });
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'User-Agent': 'Mozilla/5.0 (compatible; IvanReseller/1.0)',
+    };
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+
+    const mlRes = await fetch(mlUrl, { headers, signal: controller.signal });
 
     clearTimeout(timeoutId);
 

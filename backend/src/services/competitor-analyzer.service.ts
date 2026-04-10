@@ -497,6 +497,7 @@ export class CompetitorAnalyzerService {
                   siteId,
                   q: searchQ,
                   limit: 20,
+                  accessToken: accessTok || undefined,
                 });
                 if (bridgeResults.length > 0) {
                   res = bridgeResults;

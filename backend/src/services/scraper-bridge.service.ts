@@ -185,6 +185,7 @@ export class ScraperBridgeService {
     siteId: string;
     q: string;
     limit?: number;
+    accessToken?: string;
   }): Promise<Array<{
     id: string;
     title: string;
@@ -202,6 +203,7 @@ export class ScraperBridgeService {
         site_id: params.siteId,
         query: params.q,
         limit: Math.min(Math.max(params.limit ?? 20, 1), 20),
+        access_token: params.accessToken ? String(params.accessToken).trim() : undefined,
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('ML scraper bridge search timeout after 30s')), 30000)
