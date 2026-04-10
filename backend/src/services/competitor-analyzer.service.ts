@@ -562,7 +562,7 @@ export class CompetitorAnalyzerService {
 
               if (proxyKey && proxyKey !== 'REPLACE_ME' && proxyKey.length > 8) {
                 const scraperUrl = `http://api.scraperapi.com/?api_key=${proxyKey}&url=${encodeURIComponent(mlSearchUrl)}&render=false`;
-                const scraperResp = await axiosDefault.get(scraperUrl, { timeout: 20000 });
+                const scraperResp = await axiosDefault.get(scraperUrl, { timeout: 4000 });
                 const scraperItems = (scraperResp.data?.results || []) as any[];
                 if (scraperItems.length > 0) {
                   res = scraperItems.map((r: any) => ({
@@ -606,7 +606,7 @@ export class CompetitorAnalyzerService {
 
                 if (zenKey && zenKey !== 'REPLACE_ME' && zenKey.length > 8) {
                   const zenUrl = `https://api.zenrows.com/v1/?apikey=${zenKey}&url=${encodeURIComponent(mlSearchUrl)}&premium_proxy=true`;
-                  const zenResp = await axiosDefault.get(zenUrl, { timeout: 20000 });
+                  const zenResp = await axiosDefault.get(zenUrl, { timeout: 4000 });
                   const zenItems = (zenResp.data?.results || []) as any[];
                   if (zenItems.length > 0) {
                     res = zenItems.map((r: any) => ({

@@ -1677,7 +1677,7 @@ class OpportunityFinderService {
           warnings: canonicalFallback.warnings,
         });
 
-        if (fallbackMargin < effectiveMinMargin || fallbackPriceBase <= 0) {
+        if (fallbackMargin < effectiveMinMargin - 0.001 || fallbackPriceBase <= 0) {
           skippedLowMargin++;
           logger.info('Producto descartado por margen canónico insuficiente (sin competitor data)', {
             service: 'opportunity-finder',
