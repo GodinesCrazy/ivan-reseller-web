@@ -3,18 +3,21 @@
   "installCommand": "cd frontend && npm install",
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "https://ivan-reseller-backend-production.up.railway.app/api/:path*"
+      "handle": "filesystem"
     },
     {
-      "source": "/aliexpress/callback",
-      "destination": "https://ivan-reseller-backend-production.up.railway.app/aliexpress/callback"
+      "src": "/api/(.*)",
+      "dest": "https://ivan-reseller-backend-production.up.railway.app/api/$1"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/aliexpress/callback",
+      "dest": "https://ivan-reseller-backend-production.up.railway.app/aliexpress/callback"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
