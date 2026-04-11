@@ -594,7 +594,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"], // Necesario para algunos estilos inline
-      scriptSrc: ["'self'"], // Solo scripts del mismo origen
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Permitido para inline scripts de OAuth callback
       imgSrc: ["'self'", "data:", "https:"], // Permitir imágenes de cualquier HTTPS
       connectSrc: ["'self'", "https://api.ebay.com", "https://api.sandbox.ebay.com", "https://api.mercadolibre.com", "https://sellingpartnerapi-na.amazon.com"], // APIs de marketplaces
       fontSrc: ["'self'", "data:"],
