@@ -35,7 +35,7 @@ Se publicó el bloque CJ completo implementado en pasadas previas y consolidado 
 ## 3) Branch y commit final
 
 - **Branch:** `main`
-- **Commit final:** `b839e61aec91450d8b3055c40212616098fec78d`
+- **Commit final:** `cdc3015bb58c9de5716018b59b3725edf272c77e`
 - **Mensaje:** `feat(cj-ebay): ship operator-ready CJ pipeline and secure web credentials`
 - **Merge/Rebase/Cherry-pick en esta pasada:** no se usaron.
 
@@ -176,7 +176,7 @@ Condicional por ejecución pendiente de migración vía ruta operativa válida y
 
 ## Resumen corto final
 
-- **Commit final:** `b839e61aec91450d8b3055c40212616098fec78d`
+- **Commit final:** `cdc3015bb58c9de5716018b59b3725edf272c77e`
 - **Frontend:** `https://www.ivanreseller.com`
 - **Backend:** `https://ivan-reseller-backend-production.up.railway.app`
 - **Qué probar ahora en web:** `/api-settings` (guardar/test CJ key), `/cj-ebay/listings`, Opportunities y Product Research con flujo CJ.
