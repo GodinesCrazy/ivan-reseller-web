@@ -129,15 +129,31 @@ export function buildListingFeeLedger(params: {
   let marketplaceFeeState: FeeEstimateState = 'missing';
   let marketplaceFeeSource = 'unmodeled';
   let marketplaceFeeReason = `marketplace_fee_unmodeled:${marketplace}:${country}`;
+  let marketplaceFeeAmount = params.marketplaceFeeEstimate;
 
   if (marketplace === 'ebay' && country === 'US') {
-    if (hasExplicitEnv('EBAY_FVF_PCT')) {
-      marketplaceFeeState = 'estimated';
-      marketplaceFeeSource = 'configured_ebay_us_fee_schedule';
-      marketplaceFeeReason = '';
-    } else {
-      marketplaceFeeReason = 'ebay_us_fee_schedule_missing_config';
+    const fvfPct = hasExplicitEnv('EBAY_FVF_PCT')
+      ? getNumberFromEnv('EBAY_FVF_PCT', 13.5)
+      : 13.5;
+    marketplaceFeeModel = hasExplicitEnv('EBAY_FVF_PCT')
+      ? 'configured_ebay_us_fee_schedule'
+      : 'default_ebay_us_fee_schedule';
+    marketplaceFeeInputs = {
+      marketplace,
+      country,
+      listingCurrency,
+      revenueEstimate: params.revenueEstimate,
+      fvfPct,
+      usedConfiguredFvfPct: hasExplicitEnv('EBAY_FVF_PCT'),
+    };
+    if (!(marketplaceFeeAmount > 0) && params.revenueEstimate > 0) {
+      marketplaceFeeAmount = (params.revenueEstimate * fvfPct) / 100;
     }
+    marketplaceFeeState = marketplaceFeeAmount > 0 ? 'estimated' : 'missing';
+    marketplaceFeeSource = hasExplicitEnv('EBAY_FVF_PCT')
+      ? 'configured_ebay_us_fee_schedule'
+      : 'default_ebay_us_fee_schedule';
+    marketplaceFeeReason = marketplaceFeeAmount > 0 ? '' : 'ebay_us_fee_estimate_unavailable';
   } else if (marketplace === 'mercadolibre' && country === 'CL') {
     const commissionPct = getNumberFromEnv('ML_COMMISSION_PCT', 12);
     const lowTierMax = getNumberFromEnv('ML_CL_FIXED_FEE_LOW_TIER_MAX_CLP', 9990);
@@ -182,7 +198,7 @@ export function buildListingFeeLedger(params: {
   }
 
   const marketplaceFeeEstimate = buildLine({
-    amount: params.marketplaceFeeEstimate,
+    amount: marketplaceFeeAmount,
     currency: listingCurrency,
     state: marketplaceFeeState,
     source: marketplaceFeeSource,
@@ -214,15 +230,20 @@ export function buildListingFeeLedger(params: {
   let listingFeeState: FeeEstimateState = 'missing';
   let listingFeeSource = 'unmodeled';
   let listingFeeReason = `listing_fee_unmodeled:${marketplace}:${country}`;
+  let listingFeeAmount = params.listingFeeEstimate;
 
   if (marketplace === 'ebay' && country === 'US') {
-    if (hasExplicitEnv('EBAY_INSERTION_FEE_USD')) {
-      listingFeeState = 'estimated';
-      listingFeeSource = 'configured_ebay_us_insertion_fee';
-      listingFeeReason = '';
-    } else {
-      listingFeeReason = 'ebay_us_insertion_fee_missing_config';
+    const insertionFee = hasExplicitEnv('EBAY_INSERTION_FEE_USD')
+      ? getNumberFromEnv('EBAY_INSERTION_FEE_USD', 0.4)
+      : 0.4;
+    if (!(listingFeeAmount > 0) && insertionFee > 0) {
+      listingFeeAmount = insertionFee;
     }
+    listingFeeState = listingFeeAmount >= 0 ? 'estimated' : 'missing';
+    listingFeeSource = hasExplicitEnv('EBAY_INSERTION_FEE_USD')
+      ? 'configured_ebay_us_insertion_fee'
+      : 'default_ebay_us_insertion_fee';
+    listingFeeReason = listingFeeAmount >= 0 ? '' : 'ebay_us_insertion_fee_unavailable';
   } else if (marketplace === 'mercadolibre' && country === 'CL') {
     listingFeeState = 'exact';
     listingFeeSource = 'mercadolibre_no_listing_fee';
@@ -230,7 +251,7 @@ export function buildListingFeeLedger(params: {
   }
 
   const listingFeeEstimate = buildLine({
-    amount: params.listingFeeEstimate,
+    amount: listingFeeAmount,
     currency: listingCurrency,
     state: listingFeeState,
     source: listingFeeSource,

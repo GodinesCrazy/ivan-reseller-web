@@ -983,6 +983,16 @@ export default function Autopilot() {
         </div>
       )}
 
+      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 text-xs text-slate-700 dark:text-slate-300">
+        <span className="font-semibold">Ciclo eBay manual (búsqueda → catálogo → publicación):</span>{' '}
+        <Link to="/opportunities" className="text-primary-600 underline font-medium">
+          Ir a Oportunidades
+        </Link>{' '}
+        y usá la tarjeta <strong>Ciclo completo eBay</strong> (API{' '}
+        <code className="text-[10px] bg-slate-200/80 dark:bg-slate-700 px-1 rounded">POST /api/opportunities/full-cycle-ebay</code>
+        , sesión requerida).
+      </div>
+
       {/* Header */}
       <PageHeader
         icon={Zap}

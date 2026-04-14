@@ -33,16 +33,54 @@ import type {
   PublishingDecision,
   PublishingDecisionResult,
 } from './opportunity-finder.types';
-import { normalizeOpportunityPagination, OPPORTUNITY_MAX_PAGE } from '../utils/opportunity-search-pagination';
+import { normalizeOpportunityPagination } from '../utils/opportunity-search-pagination';
 import { computeMinimumViablePrice } from './canonical-cost-engine.service';
+import { getEffectiveShippingCostForPublish } from '../utils/shipping.utils';
+import { filterDiscoveryProductsByPackageTier } from '../utils/opportunity-package-tier.utils';
+import {
+  aliexpressAffiliateAPIService,
+  parseAffiliateDeliveryDaysMax,
+  type AffiliateProduct,
+} from './aliexpress-affiliate-api.service';
+import { mapAffiliateProductToDiscoveryRow } from './opportunity-affiliate-mapping';
+import { env } from '../config/env';
+import { supplyQuoteService } from './supply-quote.service';
+import type { SupplyDiscoveryDiagnostics } from './supply-quote.types';
+import { buildOpportunityEconomicSupplyQuote } from './opportunity-economic-quote.mapper';
 
-export type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
+export type {
+  OpportunityFilters,
+  OpportunityItem,
+  OpportunitySupplyDiagnostics,
+  OpportunityEconomicSupplyQuote,
+  PipelineDiagnostics,
+} from './opportunity-finder.types';
 
 function listingsToCompetitionLevel(n: number): 'low' | 'medium' | 'high' | 'unknown' {
   if (!Number.isFinite(n) || n <= 0) return 'unknown';
   if (n < 6) return 'low';
   if (n < 15) return 'medium';
   return 'high';
+}
+
+/** FX convert for opportunity pipeline; logs and returns raw amount only if same currency or convert throws. */
+function opportunityFxConvert(amount: number, from: string, to: string, context: string): number {
+  const f = String(from || 'USD').toUpperCase();
+  const t = String(to || 'USD').toUpperCase();
+  if (!Number.isFinite(amount)) return amount;
+  if (f === t) return amount;
+  try {
+    return fxService.convert(amount, f, t);
+  } catch (e: any) {
+    logger.warn('[OPPORTUNITY-FINDER] FX conversion failed', {
+      context,
+      from: f,
+      to: t,
+      amount,
+      error: e?.message || String(e),
+    });
+    return amount;
+  }
 }
 
 /**
@@ -805,209 +843,136 @@ class OpportunityFinderService {
       productId?: string;
       images?: string[];
       shippingCost?: number;
+      supplierSource?: 'cj';
+      supplyMeta?: import('./supply-quote.types').SupplyRowMeta;
     }> = [];
+    let supplyPipelineDiagnostics: SupplyDiscoveryDiagnostics | undefined;
     let manualAuthPending = false;
     let manualAuthError: ManualAuthRequiredError | null = null;
     let nativeErrorForLogs: any = null;
 
     const userSettingsService = (await import('./user-settings.service')).default;
     const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
+    const oppCommerce = await userSettingsService.getOpportunityCommerceSettings(userId);
     logger.info('[OPPORTUNITY-FINDER] Using user base currency', { userId, baseCurrency });
+    logger.info('[OPPORTUNITY-FINDER] Package tier commerce settings', {
+      userId,
+      allowedTiers: [...oppCommerce.allowedTiers],
+      smallMaxUsd: oppCommerce.smallMaxPriceUsd,
+      mediumMaxUsd: oppCommerce.mediumMaxPriceUsd,
+      defaultShippingUsd: oppCommerce.defaultShippingUsd,
+    });
 
     const sourcesTried: string[] = [];
 
-    // ✅ AFFILIATE API FIRST, then fallback (eBay, ScraperAPI/ZenRows, Cache, AI, Static) when no products
+    const runDiscoveryFallback = async (): Promise<void> => {
+      sourcesTried.push('fallback');
+      const fallbackProducts = await this.findProductsUsingFallbackEngine(query, userId, {
+        minProfitUsd: 1,
+        minRoiPct: 15,
+        maxItems,
+        baseCurrency: baseCurrency || 'USD',
+        environment,
+        marketplaces,
+        region,
+      });
+      console.log('[AUTOPILOT] Legacy fallback restored:', fallbackProducts.length);
+      products = fallbackProducts;
+    };
+
+    // ✅ Phase B: unified supply-quote (Affiliate + CJ per preference / OPPORTUNITY_CJ_SUPPLY_MODE), then legacy fallback
     if (useAffiliateOnly) {
-      console.log('[AUTOPILOT] Discovery: AliExpress Affiliate API + fallback engine');
+      console.log('[AUTOPILOT] Discovery: supply-quote (AliExpress Affiliate + optional CJ)');
       try {
-        const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
-        const { CredentialsManager } = await import('./credentials-manager.service');
-        const appKey = (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim();
-        const appSecret = (process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim();
-        let affiliateCreds = appKey && appSecret
-          ? { appKey, appSecret, trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(), sandbox: false } as any
-          : await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
-        if (affiliateCreds) {
-          aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
-          const countryCode = regionToCountryCode(region);
-          const affiliateProviderPagesPerUi = Math.max(
-            1,
-            Math.min(3, parseInt(process.env.OPPORTUNITY_AFFILIATE_PROVIDER_PAGES_PER_UI || '2', 10) || 2)
-          );
-          const mapAffiliateRow = (p: any) => {
-            const sourceCurrency = String(p.currency || 'USD').toUpperCase();
-            const sourcePrice = Number(p.salePrice || p.originalPrice) || 0;
-            let priceInBase = sourcePrice;
-            try {
-              priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
-            } catch {
-              priceInBase = sourcePrice;
-            }
-            const imgs = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(
-              (x: any) => x && typeof x === 'string' && x.startsWith('http')
-            );
-            const deliveryDays = p.shipping_info?.delivery_days;
-            const shippingDaysMax =
-              deliveryDays != null
-                ? typeof deliveryDays === 'string' && deliveryDays.includes('-')
-                  ? Math.max(...deliveryDays.split('-').map((d: string) => parseInt(d.trim(), 10) || 0))
-                  : parseInt(String(deliveryDays), 10)
-                : undefined;
-            return {
-              title: p.productTitle,
-              price: priceInBase,
-              priceMin: priceInBase,
-              priceMax: priceInBase,
-              priceMinSource: sourcePrice,
-              priceMaxSource: sourcePrice,
-              priceRangeSourceCurrency: sourceCurrency,
-              currency: baseCurrency,
-              sourcePrice,
-              sourceCurrency,
-              productUrl: p.productDetailUrl || p.promotionLink || '',
-              imageUrl: imgs[0],
-              images: imgs,
-              productId: p.productId,
-              supplierOrdersCount: p.volume != null ? Number(p.volume) : undefined,
-              supplierRating: p.evaluate_score != null ? Number(p.evaluate_score) : undefined,
-              supplierReviewsCount: p.volume != null ? Number(p.volume) : undefined,
-              shippingDaysMax: Number.isFinite(shippingDaysMax) ? shippingDaysMax : undefined,
-              supplierScorePct:
-                p.evaluate_rate != null
-                  ? Number(p.evaluate_rate) <= 1
-                    ? Number(p.evaluate_rate) * 100
-                    : Number(p.evaluate_rate)
-                  : undefined,
-            };
-          };
-          const filterMapped = (p: any) =>
-            p.title &&
-            (p.price || 0) > 0 &&
-            p.productUrl &&
-            p.productUrl.length > 10 &&
-            p.images &&
-            p.images.length > 0;
-
-          const providerStart = 1 + (pageNo - 1) * affiliateProviderPagesPerUi;
-          const seenKeys = new Set<string>();
-          const merged: Array<{
-            title: string;
-            price: number;
-            priceMin?: number;
-            priceMax?: number;
-            priceMinSource?: number;
-            priceMaxSource?: number;
-            priceRangeSourceCurrency?: string;
-            currency: string;
-            sourcePrice?: number;
-            sourceCurrency?: string;
-            productUrl: string;
-            imageUrl?: string;
-            images?: string[];
-            productId?: string;
-            shippingCost?: number;
-            supplierOrdersCount?: number;
-            supplierRating?: number;
-            supplierReviewsCount?: number;
-            shippingDaysMax?: number;
-            supplierScorePct?: number;
-          }> = [];
-
-          for (let step = 0; step < affiliateProviderPagesPerUi && merged.length < maxItems; step++) {
-            const pn = providerStart + step;
-            if (pn > OPPORTUNITY_MAX_PAGE) break;
-
-            // Try with country filter first; if 0 results, retry globally (many AliExpress sellers
-            // don't list CL/other LatAm countries even though they ship worldwide).
-            let affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
-              keywords: query,
-              pageNo: pn,
-              pageSize: 20,
-              targetCurrency: baseCurrency || 'USD',
-              shipToCountry: countryCode,
-            });
-            let rawProducts = affiliateResult?.products;
-            let apiProducts = Array.isArray(rawProducts) ? rawProducts : [];
-
-            if (apiProducts.length === 0 && countryCode && countryCode !== 'US') {
-              logger.info('[OPPORTUNITY-FINDER] Affiliate 0 results for shipToCountry — retrying without country filter', { countryCode, query, pn });
-              affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
-                keywords: query,
-                pageNo: pn,
-                pageSize: 20,
-                targetCurrency: baseCurrency || 'USD',
-                // No shipToCountry — global results
-              });
-              rawProducts = affiliateResult?.products;
-              apiProducts = Array.isArray(rawProducts) ? rawProducts : [];
-            }
-
-            if (apiProducts.length === 0) break;
-            console.log('[AUTOPILOT] Affiliate batch', { providerPage: pn, count: apiProducts.length });
-            const mapped = apiProducts.map(mapAffiliateRow).filter(filterMapped);
-            for (const row of mapped) {
-              const key = String(row.productId || row.productUrl || '').trim();
-              if (!key || seenKeys.has(key)) continue;
-              seenKeys.add(key);
-              merged.push(row);
-              if (merged.length >= maxItems) break;
-            }
-            if (apiProducts.length < 20) break;
-          }
-
-          products = merged.slice(0, maxItems);
-          if (products.length > 0) {
-            logger.info('[OPPORTUNITY-FINDER] Affiliate API merged products', {
-              count: products.length,
-              uiPage: pageNo,
-              providerStart,
-              steps: affiliateProviderPagesPerUi,
-            });
-          } else {
-            console.log('[AUTOPILOT] Affiliate empty — activating fallback (eBay, Scraper, Cache, AI, Static)');
-            sourcesTried.push('fallback');
-            const fallbackProducts = await this.findProductsUsingFallbackEngine(query, userId, {
-              minProfitUsd: 1,
-              minRoiPct: 15,
-              maxItems,
-              baseCurrency: baseCurrency || 'USD',
-              environment,
-              marketplaces,
-              region,
-            });
-            console.log('[AUTOPILOT] Fallback restored:', fallbackProducts.length);
-            products = fallbackProducts;
-          }
-        } else {
-          logger.warn('[OPPORTUNITY-FINDER] Affiliate creds missing — activating fallback (eBay, ScraperAPI/ZenRows, Cache, AI, Static)');
-          sourcesTried.push('fallback');
-          const fallbackProducts = await this.findProductsUsingFallbackEngine(query, userId, {
-            minProfitUsd: 1,
-            minRoiPct: 15,
-            maxItems,
-            baseCurrency: baseCurrency || 'USD',
-            environment,
-            marketplaces,
-            region,
-          });
-          products = fallbackProducts;
+        const sq = await supplyQuoteService.discoverForOpportunities({
+          userId,
+          query,
+          maxItems,
+          pageNo,
+          baseCurrency: baseCurrency || 'USD',
+          region,
+          environment,
+          defaultShippingUsd: oppCommerce.defaultShippingUsd,
+        });
+        products = sq.rows as typeof products;
+        supplyPipelineDiagnostics = sq.diagnostics;
+        for (const s of sq.diagnostics.sourcesTried) {
+          if (!sourcesTried.includes(s)) sourcesTried.push(s);
         }
-      } catch (affiliateErr: any) {
-        logger.warn('[OPPORTUNITY-FINDER] Affiliate API failed, activating fallback', { error: affiliateErr?.message, query });
-        sourcesTried.push('fallback');
-        try {
-          const fallbackProducts = await this.findProductsUsingFallbackEngine(query, userId, {
-            minProfitUsd: 1,
-            minRoiPct: 15,
-            maxItems,
-            baseCurrency: baseCurrency || 'USD',
-            environment,
-            marketplaces,
-            region,
+        if (sq.diagnostics.notes.length > 0) {
+          logger.info('[OPPORTUNITY-FINDER] Supply pipeline notes', {
+            userId,
+            notes: sq.diagnostics.notes,
+            degradedPartial: sq.diagnostics.degradedPartial,
           });
-          products = fallbackProducts;
+        }
+        if (products.length > 0) {
+          const hasCjRow = products.some((p) => p.supplierSource === 'cj');
+          if (hasCjRow && supplyPipelineDiagnostics) {
+            try {
+              const { applySelectiveCjDeepFreightQuotes } = await import('./cj-opportunity-deep-quote.service');
+              const deepDiag = await applySelectiveCjDeepFreightQuotes({
+                userId,
+                rows: products,
+                defaultShippingUsd: oppCommerce.defaultShippingUsd,
+              });
+              supplyPipelineDiagnostics = { ...supplyPipelineDiagnostics, deepQuote: deepDiag };
+              if (deepDiag.degraded || deepDiag.rateLimited) {
+                logger.info('[OPPORTUNITY-FINDER] CJ deep quote degraded', {
+                  userId,
+                  rateLimited: deepDiag.rateLimited,
+                  succeeded: deepDiag.succeeded,
+                  failed: deepDiag.failed,
+                  notes: deepDiag.notes,
+                });
+              }
+            } catch (deepErr: unknown) {
+              logger.warn('[OPPORTUNITY-FINDER] CJ deep quote failed (non-fatal)', {
+                userId,
+                message: deepErr instanceof Error ? deepErr.message : String(deepErr),
+              });
+              supplyPipelineDiagnostics = {
+                ...supplyPipelineDiagnostics,
+                deepQuote: {
+                  enabled: true,
+                  maxCandidates: env.OPPORTUNITY_CJ_DEEP_QUOTE_MAX,
+                  minSpacingMs: env.OPPORTUNITY_CJ_DEEP_QUOTE_MIN_SPACING_MS,
+                  quantity: 1,
+                  attempted: 0,
+                  succeeded: 0,
+                  servedFromCache: 0,
+                  skippedMultiVariant: 0,
+                  skippedNoProductId: 0,
+                  failed: 0,
+                  rateLimited: false,
+                  degraded: true,
+                  notes: ['deep_quote_exception'],
+                },
+              };
+            }
+          }
+          logger.info('[OPPORTUNITY-FINDER] Supply-quote products', {
+            count: products.length,
+            preference: sq.diagnostics.preference,
+            cjSupplyMode: sq.diagnostics.cjSupplyMode,
+          });
+        } else {
+          console.log('[AUTOPILOT] Supply-quote empty — legacy fallback (eBay, Scraper, Cache, AI)');
+          try {
+            await runDiscoveryFallback();
+          } catch (fbErr: any) {
+            logger.error('[OPPORTUNITY-FINDER] Legacy fallback failed', { error: fbErr?.message });
+          }
+        }
+      } catch (supplyErr: any) {
+        logger.warn('[OPPORTUNITY-FINDER] Supply-quote failed, legacy fallback', {
+          error: supplyErr?.message,
+          query,
+        });
+        try {
+          await runDiscoveryFallback();
         } catch (fbErr: any) {
-          logger.error('[OPPORTUNITY-FINDER] Fallback also failed', { error: fbErr?.message });
+          logger.error('[OPPORTUNITY-FINDER] Legacy fallback also failed', { error: fbErr?.message });
         }
       }
     }
@@ -1018,7 +983,6 @@ class OpportunityFinderService {
         sourcesTried.push('affiliate');
         logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { query });
         const { CredentialsManager } = await import('./credentials-manager.service');
-        const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
         let affiliateCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
         if (!affiliateCreds && (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY) && (process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET)) {
           affiliateCreds = {
@@ -1042,34 +1006,14 @@ class OpportunityFinderService {
           const rawProductsB = affiliateResultB?.products;
           const apiProducts = Array.isArray(rawProductsB) ? rawProductsB : [];
           if (apiProducts.length > 0) {
+            const enrichShipToB =
+              countryCode && String(countryCode).trim().length >= 2 ? String(countryCode).toUpperCase() : 'US';
+            await aliexpressAffiliateAPIService.enrichProductsWithDetailShipping(apiProducts, {
+              shipToCountry: enrichShipToB,
+              targetCurrency: baseCurrency || 'USD',
+            });
             const mapped = apiProducts
-              .map((p: any) => {
-                const sourceCurrency = String(p.currency || 'USD').toUpperCase();
-                const sourcePrice = Number(p.salePrice || p.originalPrice) || 0;
-                let priceInBase = sourcePrice;
-                try {
-                  priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
-                } catch { priceInBase = sourcePrice; }
-                const imgs = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(
-                  (x: any) => x && typeof x === 'string' && x.startsWith('http')
-                );
-                return {
-                  title: p.productTitle,
-                  price: priceInBase,
-                  priceMin: priceInBase,
-                  priceMax: priceInBase,
-                  priceMinSource: sourcePrice,
-                  priceMaxSource: sourcePrice,
-                  priceRangeSourceCurrency: sourceCurrency,
-                  currency: baseCurrency,
-                  sourcePrice,
-                  sourceCurrency,
-                  productUrl: p.productDetailUrl || p.promotionLink || '',
-                  imageUrl: imgs[0],
-                  images: imgs,
-                  productId: p.productId,
-                };
-              })
+              .map((p) => mapAffiliateProductToDiscoveryRow(p, baseCurrency))
               .filter(
                 (p: any) =>
                   p.title &&
@@ -1448,6 +1392,22 @@ class OpportunityFinderService {
       }
     }
 
+    const beforePackageTierFilter = products.length;
+    products = filterDiscoveryProductsByPackageTier(products as any[], oppCommerce, (amt, from) => {
+      try {
+        return fxService.convert(amt, from, 'USD');
+      } catch {
+        return amt;
+      }
+    });
+    if (beforePackageTierFilter !== products.length) {
+      logger.info('[OPPORTUNITY-FINDER] Package tier filter applied', {
+        before: beforePackageTierFilter,
+        after: products.length,
+        allowed: [...oppCommerce.allowedTiers],
+      });
+    }
+
     if (!products || products.length === 0) {
       logger.warn('[OPPORTUNITY-FINDER] All sources failed - NO_REAL_PRODUCTS', {
         service: 'opportunity-finder',
@@ -1471,6 +1431,9 @@ class OpportunityFinderService {
       diag.sourcesTried = sourcesTried;
       diag.discovered = discoveredCount;
       diag.normalized = discoveredCount;
+      if (supplyPipelineDiagnostics) {
+        diag.supplyQuotePhaseB = supplyPipelineDiagnostics;
+      }
     }
     logger.info('[PIPELINE][NORMALIZED]', { count: products.length });
     // 2) Analizar competencia real (placeholder hasta integrar servicios específicos)
@@ -1625,8 +1588,16 @@ class OpportunityFinderService {
          countryCode === 'SPAIN' || countryCode === 'ES' ? 'ES' : 'US');
 
       // ✅ MEJORADO: Obtener shipping cost del producto
-      const productShippingCost = product.shippingCost || 0;
-      
+      const productShippingCost = getEffectiveShippingCostForPublish(
+        { shippingCost: product.shippingCost ?? null },
+        undefined,
+        { defaultUsd: oppCommerce.defaultShippingUsd }
+      );
+      /** Moneda real del precio proveedor (AliExpress); no usar baseCurrency del usuario aquí. */
+      const supplierCostCurrency = String(
+        product.sourceCurrency || product.currency || 'USD'
+      ).toUpperCase();
+
       // ✅ MEJORADO: Calcular impuestos de importación
       let importTax = 0;
       if (productShippingCost > 0 || product.price > 0) {
@@ -1648,32 +1619,50 @@ class OpportunityFinderService {
         // 3) Calcular costos con el marketplace más favorable (max margen)
         for (const a of analyses) {
           if (!a || a.listingsFound <= 0 || a.competitivePrice <= 0) continue;
+          const saleCurrency = String(a.currency || 'USD').toUpperCase();
+          const shippingInSale = opportunityFxConvert(
+            productShippingCost,
+            supplierCostCurrency,
+            saleCurrency,
+            'opportunity-shipping-to-sale-currency'
+          );
+          const importTaxInSale = opportunityFxConvert(
+            importTax,
+            supplierCostCurrency,
+            saleCurrency,
+            'opportunity-import-tax-to-sale-currency'
+          );
           const { breakdown, margin } = costCalculator.calculateAdvanced(
             a.marketplace as any,
             region,
             a.competitivePrice,
             product.price,
-            a.currency || 'USD',
-            baseCurrency,
-            { 
-              shippingCost: productShippingCost, // ✅ MEJORADO: Incluir shipping
-              importTax: importTax, // ✅ MEJORADO: Incluir impuestos
-              taxesPct: 0, 
-              otherCosts: 0 
+            saleCurrency,
+            supplierCostCurrency,
+            {
+              shippingCost: shippingInSale,
+              importTax: importTaxInSale,
+              taxesPct: 0,
+              otherCosts: 0,
             }
           );
           if (margin > best.margin) {
-            // ✅ Verificar si competitivePrice ya está en baseCurrency para evitar conversión doble
-            const competitivePriceInBase = (a.currency || 'USD').toUpperCase() === baseCurrency.toUpperCase()
-              ? a.competitivePrice // Ya está en moneda base
-              : fxService.convert(a.competitivePrice, a.currency || 'USD', baseCurrency); // Convertir solo si es necesario
+            const competitivePriceInBase =
+              saleCurrency === baseCurrency.toUpperCase()
+                ? a.competitivePrice
+                : opportunityFxConvert(
+                    a.competitivePrice,
+                    saleCurrency,
+                    baseCurrency,
+                    'opportunity-competitive-to-base-currency'
+                  );
 
             best = {
               margin,
               price: a.competitivePrice,
               priceBase: competitivePriceInBase,
               mp: a.marketplace,
-              currency: a.currency || 'USD',
+              currency: saleCurrency,
             };
             bestBreakdown = breakdown as any;
           }
@@ -1708,7 +1697,7 @@ class OpportunityFinderService {
         const fallbackMp = (marketplaces[0] || 'mercadolibre') as 'ebay' | 'amazon' | 'mercadolibre';
         const canonicalFallback = computeMinimumViablePrice({
           supplierPriceRaw: product.price,
-          supplierCurrency: baseCurrency,
+          supplierCurrency: supplierCostCurrency,
           saleCurrency: baseCurrency,
           shippingToCustomerRaw: productShippingCost,
           marketplace: fallbackMp,
@@ -1863,9 +1852,19 @@ class OpportunityFinderService {
 
       // ✅ NUEVO: Calcular tiempo hasta primera venta y break-even
       // Nota: totalCost se calcula más adelante, usamos variables locales aquí
-      const productShippingCostCalc = product.shippingCost || 0;
+      const productShippingCostCalc = getEffectiveShippingCostForPublish(
+        { shippingCost: product.shippingCost ?? null },
+        undefined,
+        { defaultUsd: oppCommerce.defaultShippingUsd }
+      );
       const importTaxCalc = importTax; // Ya calculado arriba
-      const totalCostCalc = product.price + productShippingCostCalc + importTaxCalc;
+      const totalCostSupplierCalc = product.price + productShippingCostCalc + importTaxCalc;
+      const totalCostBaseCalc = opportunityFxConvert(
+        totalCostSupplierCalc,
+        supplierCostCurrency,
+        baseCurrency,
+        'opportunity-total-cost-to-base-for-break-even'
+      );
       const competitorCount = valid ? (valid.listingsFound || 0) : 0;
       const estimatedTimeToFirstSale = this.estimateTimeToFirstSale(
         trendsValidation?.searchVolume || 0,
@@ -1874,7 +1873,7 @@ class OpportunityFinderService {
       );
       
       // Calcular ganancia por unidad para break-even
-      const profitPerUnit = best.priceBase - totalCostCalc;
+      const profitPerUnit = best.priceBase - totalCostBaseCalc;
       const breakEvenTime = this.calculateBreakEvenTime(
         profitPerUnit,
         trendsValidation?.searchVolume || 0,
@@ -2035,18 +2034,37 @@ class OpportunityFinderService {
         allImages.push(imageUrl);
       }
 
-      // ✅ MEJORADO: Calcular costo total y recalcular margen/ROI con costos completos
+      // ✅ MEJORADO: Calcular costo total (proveedor) y en moneda base para comparar con precio sugerido
       const totalCost = product.price + productShippingCost + importTax;
-      
-      // Recalcular margen y ROI usando costo total si está disponible
+      const costInBaseCurrency = opportunityFxConvert(
+        product.price,
+        supplierCostCurrency,
+        baseCurrency,
+        'opportunity-unit-cost-to-base'
+      );
+      const totalCostInBaseCurrency =
+        totalCost > product.price
+          ? opportunityFxConvert(
+              totalCost,
+              supplierCostCurrency,
+              baseCurrency,
+              'opportunity-total-cost-to-base'
+            )
+          : costInBaseCurrency;
+
+      // Recalcular margen y ROI usando costo total en la misma moneda que best.priceBase
       let finalMargin = best.margin;
       let finalROI = Math.round(best.margin * 100);
-      
-      if (totalCost > 0 && best.priceBase > 0) {
-        // Recalcular margen basado en costo total
-        const netProfit = best.priceBase - totalCost;
+
+      const totalCostForMargin =
+        totalCost > product.price ? totalCostInBaseCurrency : costInBaseCurrency;
+      let netProfitInBaseCurrency: number | undefined;
+      if (totalCostForMargin > 0 && best.priceBase > 0) {
+        const netProfit = best.priceBase - totalCostForMargin;
+        netProfitInBaseCurrency = netProfit;
         finalMargin = best.priceBase > 0 ? Math.round((netProfit / best.priceBase) * 10000) / 10000 : 0;
-        finalROI = totalCost > 0 ? Math.round((netProfit / totalCost) * 100) : 0;
+        finalROI =
+          totalCostForMargin > 0 ? Math.round((netProfit / totalCostForMargin) * 100) : 0;
       }
 
       // ✅ LOGGING: Verificar qué imágenes tenemos antes de construir el objeto
@@ -2063,7 +2081,7 @@ class OpportunityFinderService {
       const opp: OpportunityItem = {
         productId: product.productId,
         title: product.title,
-        sourceMarketplace: 'aliexpress',
+        sourceMarketplace: product.supplierSource === 'cj' ? 'cjdropshipping' : 'aliexpress',
         aliexpressUrl: product.productUrl || '', // Asegurar que siempre haya una URL
         productUrl: product.productUrl || '', // ✅ Alias para compatibilidad con deduplicación
         image: imageUrl, // ✅ TAREA 1: URL de imagen validada y normalizada (primera imagen)
@@ -2079,9 +2097,18 @@ class OpportunityFinderService {
         costCurrency: product.priceRangeSourceCurrency || product.sourceCurrency || baseCurrency,
         baseCurrency,
         // ✅ MEJORADO: Costos adicionales
-        shippingCost: productShippingCost > 0 ? productShippingCost : undefined,
+        shippingCost: productShippingCost,
         importTax: importTax > 0 ? importTax : undefined,
-        totalCost: totalCost > product.price ? totalCost : undefined, // Solo incluir si hay costos adicionales
+        totalCost: totalCost > product.price ? totalCost : undefined, // Solo incluir si hay costos adicionales (moneda proveedor)
+        costInBaseCurrency:
+          supplierCostCurrency !== baseCurrency.toUpperCase() ? costInBaseCurrency : undefined,
+        totalCostInBaseCurrency:
+          totalCost > product.price && supplierCostCurrency !== baseCurrency.toUpperCase()
+            ? totalCostInBaseCurrency
+            : supplierCostCurrency !== baseCurrency.toUpperCase()
+              ? costInBaseCurrency
+              : undefined,
+        netProfitInBaseCurrency,
         targetCountry: targetCountry,
         suggestedPriceUsd: best.priceBase || (() => {
             try {
@@ -2128,6 +2155,7 @@ class OpportunityFinderService {
         supplierRating: (product as any).supplierRating,
         supplierReviewsCount: (product as any).supplierReviewsCount,
         shippingDaysMax: (product as any).shippingDaysMax,
+        estimatedDeliveryDays: (product as any).estimatedDeliveryDays ?? (product as any).shippingDaysMax,
         supplierScorePct: (product as any).supplierScorePct,
         publishingDecision: computePublishingDecision({
           opp: {
@@ -2142,6 +2170,45 @@ class OpportunityFinderService {
           dataSource: valid?.dataSource,
           probeCodes: competitionDiagnostics.map((d) => d.probeCode || '').filter(Boolean),
           minMarginPct: effectiveMinMargin * 100,
+        }),
+        supplyDiagnostics: supplyPipelineDiagnostics
+          ? {
+              pipelinePreference: supplyPipelineDiagnostics.preference,
+              cjSupplyMode: supplyPipelineDiagnostics.cjSupplyMode,
+              sourcesTried: supplyPipelineDiagnostics.sourcesTried,
+              degradedPartial: supplyPipelineDiagnostics.degradedPartial,
+              notes: supplyPipelineDiagnostics.notes,
+              deepQuote: supplyPipelineDiagnostics.deepQuote
+                ? { ...supplyPipelineDiagnostics.deepQuote }
+                : undefined,
+              rowMeta: product.supplyMeta
+                ? {
+                    supplier: product.supplyMeta.supplier,
+                    quoteConfidence: product.supplyMeta.quoteConfidence,
+                    preferredSupplierSatisfied: product.supplyMeta.preferredSupplierSatisfied,
+                    fallbackUsed: product.supplyMeta.fallbackUsed,
+                    unitCostTruth: product.supplyMeta.unitCostTruth,
+                    shippingTruth: product.supplyMeta.shippingTruth,
+                    shippingEstimateStatus: product.supplyMeta.shippingEstimateStatus,
+                    shippingSource: product.supplyMeta.shippingSource,
+                    deepQuotePerformed: product.supplyMeta.deepQuotePerformed,
+                    deepQuoteAt: product.supplyMeta.deepQuoteAt,
+                    freightQuoteCachedAt: product.supplyMeta.freightQuoteCachedAt,
+                    quoteFreshness: product.supplyMeta.quoteFreshness,
+                    cjFreightMethod: product.supplyMeta.cjFreightMethod,
+                    deepQuoteFailureReason: product.supplyMeta.deepQuoteFailureReason,
+                    costSemantics: product.supplyMeta.costSemantics,
+                  }
+                : undefined,
+            }
+          : undefined,
+        economicSupplyQuote: buildOpportunityEconomicSupplyQuote({
+          price: product.price,
+          currency: product.currency,
+          shippingCost: product.shippingCost,
+          shippingDaysMax: (product as { shippingDaysMax?: number }).shippingDaysMax,
+          estimatedDeliveryDays: (product as { estimatedDeliveryDays?: number }).estimatedDeliveryDays,
+          supplyMeta: product.supplyMeta,
         }),
       };
 

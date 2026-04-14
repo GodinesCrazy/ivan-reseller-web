@@ -25,11 +25,11 @@ describe('MarketplaceService - Multi-Image Publishing', () => {
       expect(result).toEqual(images);
     });
 
-    test('should limit images to eBay maximum (12)', () => {
-      const images = Array.from({ length: 15 }, (_, i) => `https://example.com/image${i + 1}.jpg`);
+    test('should limit images to eBay maximum (24)', () => {
+      const images = Array.from({ length: 30 }, (_, i) => `https://example.com/image${i + 1}.jpg`);
       const result = prepareImages(images, 'ebay');
-      expect(result).toHaveLength(12);
-      expect(result).toEqual(images.slice(0, 12));
+      expect(result).toHaveLength(24);
+      expect(result).toEqual(images.slice(0, 24));
     });
 
     test('should limit images to MercadoLibre maximum (10)', () => {

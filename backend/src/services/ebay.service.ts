@@ -7,6 +7,8 @@ import { URLSearchParams } from 'url';
 import { retryMarketplaceOperation } from '../utils/retry.util';
 import { acquireMarketplaceRateLimit } from './marketplace-rate-limit.service';
 import logger from '../config/logger';
+import { env } from '../config/env';
+import { pickMerchantLocationKey } from '../utils/ebay-inventory-location.util';
 
 export interface EbayCredentials {
   appId: string;
@@ -27,6 +29,8 @@ export interface EbayProduct {
   quantity: number;
   condition: string;
   images: string[];
+  /** Item specifics merged into inventory item (optional) */
+  aspects?: Record<string, string[]>;
   shippingCost?: number;
   handlingTime?: number;
   returnPolicy?: string;
@@ -136,8 +140,9 @@ export class EbayService {
     });
     // Add request interceptor for authentication
     this.apiClient.interceptors.request.use((config) => {
-      if (this.credentials?.token) {
-        config.headers['Authorization'] = `Bearer ${this.credentials.token}`;
+      const currentToken = this.credentials?.token || (this.credentials as any)?.accessToken;
+      if (currentToken) {
+        config.headers['Authorization'] = `Bearer ${currentToken}`;
       }
       return config;
     });
@@ -165,7 +170,9 @@ export class EbayService {
       throw new AppError('eBay credentials not configured', 400);
     }
 
-    if (!force && this.credentials.token) {
+    const currentToken = this.credentials.token || (this.credentials as any).accessToken;
+
+    if (!force && currentToken) {
       const expiry = this.tokenExpiry || (this.credentials as any).expiresAt;
       if (expiry) {
         const expiresMs = new Date(expiry).getTime();
@@ -187,7 +194,7 @@ export class EbayService {
       return;
     }
 
-    if (!this.credentials.token) {
+    if (!currentToken) {
       throw new AppError('Falta token OAuth de eBay. Reautoriza en Settings → API Settings → eBay.', 400);
     }
   }
@@ -454,6 +461,10 @@ export class EbayService {
   async createInventoryItem(sku: string, product: EbayProduct): Promise<any> {
     try {
       return await this.withAuthRetry(async () => {
+        const aspectSeed =
+          product.aspects && Object.keys(product.aspects).length > 0
+            ? product.aspects
+            : { Brand: ['Generic'], Type: ['Product'] };
         const inventoryData = {
           availability: {
             shipToLocationAvailability: {
@@ -465,10 +476,7 @@ export class EbayService {
             title: product.title,
             description: product.description,
             imageUrls: product.images,
-            aspects: {
-              Brand: ['Generic'],
-              Type: ['Product'],
-            },
+            aspects: aspectSeed,
           },
         };
 
@@ -485,7 +493,80 @@ export class EbayService {
   }
 
   /**
-   * Obtener políticas y ubicación del vendedor (requerido para createOffer)
+   * Create a China WAREHOUSE inventory location (ship-from CN) for offers.
+   *
+   * Dropship multi-supplier: real suppliers sit in different Chinese cities; eBay still needs one
+   * inventory location per offer. A single CN warehouse with country CN is the standard pattern:
+   * it tells buyers and eBay "ships from China" without claiming a false US origin. City/postal are
+   * representative (configurable); they must stay truthful to your operational model per eBay item location policy.
+   */
+  private async createChinaInventoryLocation(invHeaders: Record<string, string>): Promise<boolean> {
+    const key = env.EBAY_CN_MERCHANT_LOCATION_KEY;
+    const pathKey = encodeURIComponent(key);
+    const body: Record<string, unknown> = {
+      name: env.EBAY_CN_LOCATION_NAME,
+      merchantLocationStatus: 'ENABLED' as const,
+      locationTypes: ['WAREHOUSE' as const],
+      location: {
+        address: {
+          country: 'CN',
+          city: env.EBAY_CN_LOCATION_CITY,
+          stateOrProvince: env.EBAY_CN_LOCATION_STATE,
+          postalCode: env.EBAY_CN_LOCATION_POSTAL_CODE,
+        },
+      },
+    };
+    if (!env.EBAY_CN_SKIP_LOCATION_ADDITIONAL_INFO) {
+      body.locationAdditionalInformation = env.EBAY_CN_LOCATION_ADDITIONAL_INFO;
+    }
+    try {
+      await this.apiClient.post(`/sell/inventory/v1/location/${pathKey}`, body, { headers: invHeaders });
+      logger.info('[EbayService] Created China inventory location for ship-from CN', { merchantLocationKey: key });
+      return true;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const msg = String(err?.response?.data?.errors?.[0]?.message || err?.message || '');
+      if (status === 409 || /already exist|duplicate|location.*exist/i.test(msg)) {
+        logger.info('[EbayService] China inventory location already exists', { merchantLocationKey: key });
+        return true;
+      }
+      logger.warn('[EbayService] Could not create China inventory location', {
+        merchantLocationKey: key,
+        status,
+        message: msg.slice(0, 200),
+      });
+      return false;
+    }
+  }
+
+  private async createUsDefaultInventoryLocation(invHeaders: Record<string, string>): Promise<boolean> {
+    try {
+      await this.apiClient.post(
+        '/sell/inventory/v1/location/default_location',
+        {
+          merchantLocationStatus: 'ENABLED',
+          locationTypes: ['WAREHOUSE'],
+          name: 'Default Warehouse',
+          location: {
+            address: {
+              postalCode: '33101',
+              country: 'US',
+            },
+          },
+        },
+        { headers: invHeaders }
+      );
+      logger.info('[EbayService] Created default US eBay inventory location');
+      return true;
+    } catch (createLocErr: any) {
+      logger.warn('[EbayService] Could not create default US location', { error: (createLocErr as Error).message });
+      return false;
+    }
+  }
+
+  /**
+   * Obtener políticas y ubicación del vendedor (requerido para createOffer).
+   * Por defecto CN: comprador y eBay ven origen China; plazos oficiales siguen dependiendo de la fulfillment policy de la cuenta.
    */
   private async getListingDefaults(): Promise<{
     merchantLocationKey: string;
@@ -500,40 +581,71 @@ export class EbayService {
     let paymentPolicyId = 'default_payment';
     let returnPolicyId = 'default_return';
 
+    let locations: any[] = [];
     try {
-      const locRes = await this.apiClient.get('/sell/inventory/v1/location?limit=5', { headers: invHeaders });
-      const locations = locRes.data?.locations;
-      if (locations?.length > 0) {
-        const preferred =
-          locations.find((loc: any) => String(loc?.location?.address?.country || '').toUpperCase() === 'CL') ||
-          locations[0];
-        merchantLocationKey = preferred?.merchantLocationKey || merchantLocationKey;
-      } else {
-        try {
-          await this.apiClient.post(
-            '/sell/inventory/v1/location/default_location',
-            {
-              merchantLocationStatus: 'ENABLED',
-              locationTypes: ['WAREHOUSE'],
-              name: 'Default Warehouse',
-              location: {
-                address: {
-                  postalCode: '33101',
-                  country: 'US',
-                },
-              },
-            },
-            { headers: invHeaders }
-          );
+      const locRes = await this.apiClient.get('/sell/inventory/v1/location?limit=50', { headers: invHeaders });
+      locations = locRes.data?.locations || [];
+    } catch (e) {
+      logger.warn('[EbayService] Could not fetch inventory locations', { error: (e as Error).message });
+    }
+
+    const explicitKey = env.EBAY_MERCHANT_LOCATION_KEY;
+    if (explicitKey) {
+      const exists = locations.some((loc: any) => String(loc?.merchantLocationKey || '') === explicitKey);
+      merchantLocationKey = explicitKey;
+      if (!exists) {
+        logger.warn(
+          '[EbayService] EBAY_MERCHANT_LOCATION_KEY is not in the current location list; publish may fail if the key is invalid',
+          { explicitKey },
+        );
+      }
+    } else {
+      const mode = env.EBAY_INVENTORY_SHIP_FROM;
+      const picked = pickMerchantLocationKey(locations, mode);
+      if (picked) {
+        merchantLocationKey = picked;
+      } else if (mode === 'CN') {
+        let resolvedCn = false;
+        if (env.EBAY_AUTO_CREATE_CN_INVENTORY_LOCATION) {
+          resolvedCn = await this.createChinaInventoryLocation(invHeaders);
+          if (resolvedCn) {
+            merchantLocationKey = env.EBAY_CN_MERCHANT_LOCATION_KEY;
+          }
+        }
+        if (!resolvedCn) {
+          if (locations[0]?.merchantLocationKey) {
+            merchantLocationKey = String(locations[0].merchantLocationKey);
+            logger.warn('[EbayService] No CN inventory location; using first existing warehouse', {
+              merchantLocationKey,
+            });
+          } else if (await this.createUsDefaultInventoryLocation(invHeaders)) {
+            merchantLocationKey = 'default_location';
+            logger.warn(
+              '[EbayService] Could not use China ship-from; created US default_location as last resort (configure CN in Seller Hub)',
+            );
+          }
+        }
+      } else if (mode === 'US') {
+        if (await this.createUsDefaultInventoryLocation(invHeaders)) {
           merchantLocationKey = 'default_location';
-          logger.info('Created default eBay inventory location');
-        } catch (createLocErr: any) {
-          logger.warn('Could not create default location', { error: (createLocErr as Error).message });
+        } else if (locations[0]?.merchantLocationKey) {
+          merchantLocationKey = String(locations[0].merchantLocationKey);
+        }
+      } else {
+        const legacyPicked = pickMerchantLocationKey(locations, 'LEGACY');
+        if (legacyPicked) {
+          merchantLocationKey = legacyPicked;
+        } else if (await this.createUsDefaultInventoryLocation(invHeaders)) {
+          merchantLocationKey = 'default_location';
         }
       }
-    } catch (e) {
-      logger.warn('Could not fetch inventory locations', { error: (e as Error).message });
     }
+
+    logger.info('[EbayService] Resolved merchant location for offer', {
+      merchantLocationKey,
+      explicitKey: Boolean(explicitKey),
+      shipFromMode: explicitKey ? 'EXPLICIT' : env.EBAY_INVENTORY_SHIP_FROM,
+    });
 
     try {
       const [fulfillRes, payRes, returnRes] = await Promise.all([
@@ -560,11 +672,60 @@ export class EbayService {
     return { merchantLocationKey, fulfillmentPolicyId, paymentPolicyId, returnPolicyId };
   }
 
+  /** Human-readable eBay REST error array (Inventory / Account APIs). */
+  private formatEbayRestErrors(err: any): string {
+    const list = err?.response?.data?.errors;
+    if (Array.isArray(list) && list.length > 0) {
+      return list
+        .map(
+          (e: any) =>
+            `[${e?.errorId ?? '?'}] ${e?.message ?? e?.longMessage ?? 'unknown'}${e?.domain ? ` (${e.domain})` : ''}`,
+        )
+        .join('; ');
+    }
+    return err?.message || String(err);
+  }
+
+  /**
+   * Remove draft (unpublished) offers for this SKU so a failed publish can be retried safely.
+   */
+  private async cleanupUnpublishedOffersForSku(sku: string): Promise<void> {
+    const invHeaders = { 'Content-Language': 'en-US' };
+    try {
+      const res = await this.apiClient.get(`/sell/inventory/v1/offer`, {
+        headers: invHeaders,
+        params: { sku },
+      });
+      const offers = res.data?.offers || [];
+      for (const o of offers) {
+        const offerId = o?.offerId != null ? String(o.offerId).trim() : '';
+        const listingId = o?.listingId;
+        if (!offerId) continue;
+        if (listingId) continue;
+        try {
+          await this.apiClient.delete(`/sell/inventory/v1/offer/${offerId}`, { headers: invHeaders });
+          logger.info('[EbayService] Deleted unpublished offer before (re)publish', { sku, offerId });
+        } catch (delErr: any) {
+          logger.warn('[EbayService] Could not delete draft offer', {
+            sku,
+            offerId,
+            message: delErr?.message,
+          });
+        }
+      }
+    } catch (e: any) {
+      const st = e?.response?.status;
+      if (st !== 404) {
+        logger.debug('[EbayService] getOffers cleanup skipped', { sku, status: st, message: e?.message });
+      }
+    }
+  }
+
   /**
    * When eBay returns 25002 "Offer entity already exists", publish the existing offer or get listingId if already published.
    * Retries GET offer / POST publish with delay on 500 to handle eBay server-side delays.
    */
-  private async handleOfferAlreadyExists(error: any): Promise<EbayListingResponse> {
+  private async handleOfferAlreadyExists(error: any, sku?: string): Promise<EbayListingResponse> {
     const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
     const data = error?.response?.data;
     const errors = data?.errors;
@@ -580,6 +741,8 @@ export class EbayService {
       throw error;
     }
 
+    const invHeaders = { 'Content-Language': 'en-US' };
+
     let offerId: string | null = null;
     const params = firstError?.parameters;
     if (Array.isArray(params)) {
@@ -593,12 +756,32 @@ export class EbayService {
       offerId = (offerMatch?.[1] ?? valueMatch?.[1] ?? simpleMatch?.[1]) ?? null;
     }
 
-    if (!offerId) {
-      logger.warn('eBay 25002: could not extract offerId from response', { hasData: !!data, messageLength: message?.length });
-      throw error;
+    if (!offerId && sku) {
+      try {
+        const res = await this.apiClient.get(`/sell/inventory/v1/offer`, {
+          headers: invHeaders,
+          params: { sku },
+        });
+        const offers = res.data?.offers || [];
+        const first = offers[0];
+        if (first?.offerId != null) {
+          offerId = String(first.offerId).trim();
+          logger.info('[EbayService] Resolved offerId via getOffers after 25002', { sku, offerId });
+        }
+      } catch (lookupErr: any) {
+        logger.warn('[EbayService] getOffers after 25002 failed', { sku, message: lookupErr?.message });
+      }
     }
 
-    const invHeaders = { 'Content-Language': 'en-US' };
+    if (!offerId) {
+      logger.warn('eBay 25002: could not extract offerId from response', {
+        hasData: !!data,
+        messageLength: message?.length,
+        sku,
+        errorsPreview: this.formatEbayRestErrors(error).slice(0, 500),
+      });
+      throw error;
+    }
 
     const successResponse = (listingId: string) => ({
       success: true as const,
@@ -741,21 +924,56 @@ export class EbayService {
         };
 
         const invHeaders = { 'Content-Language': 'en-US' };
+        if (
+          defaults.fulfillmentPolicyId === 'default_fulfillment' ||
+          defaults.paymentPolicyId === 'default_payment' ||
+          defaults.returnPolicyId === 'default_return'
+        ) {
+          logger.warn(
+            '[EbayService] Listing defaults may be placeholders — eBay often returns 400 if business policies are missing',
+            {
+              fulfillmentPolicyId: defaults.fulfillmentPolicyId,
+              paymentPolicyId: defaults.paymentPolicyId,
+              returnPolicyId: defaults.returnPolicyId,
+            },
+          );
+        }
+
         const result = await retryMarketplaceOperation(
           async () => {
-            const response = await this.apiClient.post(
-              `/sell/inventory/v1/offer`,
-              listingData,
-              { headers: invHeaders }
-            );
-            const offerId = response.data?.offerId;
-            if (!offerId) throw new Error('No offerId in createOffer response');
-            const publishResponse = await this.apiClient.post(
-              `/sell/inventory/v1/offer/${offerId}/publish`,
-              {},
-              { headers: invHeaders }
-            );
-            return { publishResponse };
+            await this.cleanupUnpublishedOffersForSku(sku);
+            let offerId: string;
+            try {
+              const response = await this.apiClient.post(`/sell/inventory/v1/offer`, listingData, {
+                headers: invHeaders,
+              });
+              const rawId = response.data?.offerId;
+              offerId = rawId != null ? String(rawId).trim() : '';
+              if (!offerId) throw new Error('No offerId in createOffer response');
+            } catch (offerErr: any) {
+              logger.error('[EbayService] createOffer failed', {
+                sku,
+                status: offerErr?.response?.status,
+                ebayErrors: this.formatEbayRestErrors(offerErr),
+              });
+              throw offerErr;
+            }
+            try {
+              const publishResponse = await this.apiClient.post(
+                `/sell/inventory/v1/offer/${offerId}/publish`,
+                {},
+                { headers: invHeaders },
+              );
+              return { publishResponse };
+            } catch (pubErr: any) {
+              logger.error('[EbayService] publish failed after createOffer', {
+                sku,
+                offerId,
+                status: pubErr?.response?.status,
+                ebayErrors: this.formatEbayRestErrors(pubErr),
+              });
+              throw pubErr;
+            }
           },
           'ebay',
           {
@@ -764,10 +982,11 @@ export class EbayService {
               logger.warn(`Retrying createListing for eBay (attempt ${attempt})`, {
                 sku,
                 error: error.message,
+                ebayErrors: this.formatEbayRestErrors(error),
                 delay,
               });
             },
-          }
+          },
         );
 
         if (!result.success || !result.data) {
@@ -779,7 +998,7 @@ export class EbayService {
             /Offer entity already exist[s]?|already exist[s]?/i.test(String(firstErr?.message || err?.message || ''));
           if (isOfferAlreadyExists) {
             try {
-              return await this.handleOfferAlreadyExists(err);
+              return await this.handleOfferAlreadyExists(err, sku);
             } catch (handledError: any) {
               /* Propagate AppError from handleOfferAlreadyExists (e.g. clear message with offerId) */
               throw handledError;
@@ -789,12 +1008,10 @@ export class EbayService {
           const hint = status === 404
             ? ' Crea ubicación y políticas en eBay: Seller Hub → Account → Business Policies; y en Inventory → Locations.'
             : '';
-          logger.error('eBay createListing failed', { status, body, defaults });
-          const bodyPreview = body ? ` response=${JSON.stringify(body).slice(0, 800)}` : '';
-          throw new AppError(
-            `Failed to create eBay listing: ${err?.message || 'Unknown'}${hint}${bodyPreview}`,
-            400
-          );
+          logger.error('eBay createListing failed', { status, body, defaults, sku, ebayErrors: this.formatEbayRestErrors(err) });
+          const detail = this.formatEbayRestErrors(err);
+          const bodyPreview = body ? ` ${JSON.stringify(body).slice(0, 800)}` : '';
+          throw new AppError(`Failed to create eBay listing: ${detail || err?.message || 'Unknown'}${hint}${bodyPreview}`, 400);
         }
 
         const { publishResponse } = result.data;
@@ -811,7 +1028,7 @@ export class EbayService {
       });
     } catch (error: any) {
       try {
-        return await this.handleOfferAlreadyExists(error);
+        return await this.handleOfferAlreadyExists(error, sku);
       } catch (handledError: any) {
         /* If handleOfferAlreadyExists threw an AppError with clear message, use it */
         if (handledError?.message && typeof handledError.message === 'string') {
@@ -820,9 +1037,10 @@ export class EbayService {
         }
         const firstErr = error?.response?.data?.errors?.[0];
         const is25002 = firstErr?.errorId === 25002 || /25002|Offer entity already exist[s]?/i.test(String(error?.message || ''));
+        const detail = this.formatEbayRestErrors(error);
         const msg = is25002
           ? 'No se pudo recuperar el listing existente en eBay. Revisa en Seller Hub si el producto ya está publicado.'
-          : (firstErr?.message || error?.message || 'Unknown error');
+          : detail || firstErr?.message || error?.message || 'Unknown error';
         throw new AppError(`eBay listing creation error: ${msg}`, 400);
       }
     }
@@ -980,6 +1198,30 @@ export class EbayService {
     } catch (error: any) {
       throw new AppError(`eBay inventory update error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
     }
+  }
+
+  /**
+   * First Inventory API offer row for a SKU (e.g. resolve offerId after publish).
+   */
+  async getInventoryOfferBySku(sku: string): Promise<{
+    offerId: string | null;
+    listingId: string | null;
+    status: string | null;
+  }> {
+    return await this.withAuthRetry(async () => {
+      const invHeaders = { 'Content-Language': 'en-US' };
+      const res = await this.apiClient.get('/sell/inventory/v1/offer', {
+        headers: invHeaders,
+        params: { sku, limit: 20 },
+      });
+      const offers = res.data?.offers || [];
+      const first = offers[0];
+      return {
+        offerId: first?.offerId != null ? String(first.offerId) : null,
+        listingId: first?.listingId != null ? String(first.listingId) : null,
+        status: first?.status != null ? String(first.status) : null,
+      };
+    });
   }
 
   /**

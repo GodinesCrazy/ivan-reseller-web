@@ -34,6 +34,28 @@ export interface FeeIntelligenceResult {
   };
 }
 
+export interface EbayPriceCalculationInput {
+  aliexpressCostUsd: number;
+  shippingCostUsd: number;
+  targetMarginMultiplier?: number; // e.g. 1.20 = 20%
+  importTaxRate?: number; // Section 122 surcharge (default 10%)
+  fvfPercent?: number; // eBay Final Value Fee %
+  fixedFeeUsd?: number; // eBay per-order fixed fee
+}
+
+export interface EbayPriceCalculationResult {
+  suggestedPriceUsd: number;
+  breakdown: {
+    aliexpressCostUsd: number;
+    shippingCostUsd: number;
+    importTaxUsd: number;
+    feePercentApplied: number;
+    fixedFeeUsd: number;
+    targetMarginMultiplier: number;
+    preRoundedPriceUsd: number;
+  };
+}
+
 // 8% default for early-stage; override with MIN_ALLOWED_MARGIN in production (e.g. 5 when scaling)
 const MIN_ALLOWED_MARGIN = Number(process.env.MIN_ALLOWED_MARGIN) || 8;
 
@@ -92,7 +114,7 @@ function calculateEbayUS(input: FeeIntelligenceInput): FeeIntelligenceResult {
   const shippingCostToCustomer = input.shippingCostToCustomer ?? 0;
 
   const insertionFee = Number(process.env.EBAY_INSERTION_FEE_USD) || 0.35;
-  const fvfPct = Number(process.env.EBAY_FVF_PCT) || 13.25;
+  const fvfPct = Number(process.env.EBAY_FVF_PCT) || 13.5;
   const fvfPerOrder = Number(process.env.EBAY_FVF_PER_ORDER_USD) || 0.4;
   const finalValueFee = (listingPrice * fvfPct) / 100 + fvfPerOrder;
   const paymentProcessingFee = 0; // managed payments included in FVF
@@ -114,6 +136,64 @@ function calculateEbayUS(input: FeeIntelligenceInput): FeeIntelligenceResult {
       shippingSubsidyOrCost: shippingCostToCustomer,
       supplierCost,
       taxesOrOther: 0,
+    },
+  };
+}
+
+function roundUpToUsd99(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0.99;
+  const ceilDollar = Math.ceil(value);
+  let candidate = ceilDollar - 0.01;
+  if (candidate + Number.EPSILON < value) {
+    candidate = ceilDollar + 0.99;
+  }
+  return Math.max(0.99, Number(candidate.toFixed(2)));
+}
+
+/**
+ * eBay USA pricing formula for AliExpress→eBay flow.
+ * price = ((cost + shipping + importTax + fixedFee) * marginMultiplier) / (1 - fvf%)
+ * final output is rounded up to *.99 USD.
+ */
+export function calculateEbayPrice(input: EbayPriceCalculationInput): EbayPriceCalculationResult {
+  const aliexpressCostUsd = Math.max(0, Number(input.aliexpressCostUsd) || 0);
+  const shippingCostUsd = Math.max(0, Number(input.shippingCostUsd) || 0);
+  const importTaxRate =
+    Math.max(0, Number(input.importTaxRate)) ||
+    Math.max(0, Number(process.env.EBAY_US_IMPORT_TAX_RATE)) ||
+    0.10;
+  const feePercent =
+    Math.max(0, Number(input.fvfPercent)) ||
+    Math.max(0, Number(process.env.EBAY_FVF_PCT)) ||
+    13.5;
+  const fixedFeeUsd =
+    Math.max(0, Number(input.fixedFeeUsd)) ||
+    Math.max(0, Number(process.env.EBAY_FVF_PER_ORDER_USD)) ||
+    0.4;
+  const targetMarginMultiplier = Math.max(
+    1.01,
+    Number(input.targetMarginMultiplier) ||
+      Number(process.env.EBAY_TARGET_MARGIN_MULTIPLIER) ||
+      1.2
+  );
+
+  const landedBeforeFees = aliexpressCostUsd + shippingCostUsd;
+  const importTaxUsd = landedBeforeFees * importTaxRate;
+  const numerator = (landedBeforeFees + importTaxUsd + fixedFeeUsd) * targetMarginMultiplier;
+  const denominator = Math.max(0.01, 1 - feePercent / 100);
+  const preRoundedPriceUsd = numerator / denominator;
+  const suggestedPriceUsd = roundUpToUsd99(preRoundedPriceUsd);
+
+  return {
+    suggestedPriceUsd,
+    breakdown: {
+      aliexpressCostUsd,
+      shippingCostUsd,
+      importTaxUsd: Number(importTaxUsd.toFixed(2)),
+      feePercentApplied: feePercent,
+      fixedFeeUsd,
+      targetMarginMultiplier,
+      preRoundedPriceUsd: Number(preRoundedPriceUsd.toFixed(4)),
     },
   };
 }

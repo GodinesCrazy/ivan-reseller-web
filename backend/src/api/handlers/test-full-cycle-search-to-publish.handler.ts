@@ -1,304 +1,36 @@
 /**
  * Handler: POST /api/internal/test-full-cycle-search-to-publish
- * Ejecuta el ciclo completo tendencias -> b�squeda -> producto -> aprobaci�n -> publicaci�n eBay.
- * Corre en el servidor (Railway) que tiene EBAY_REFRESH_TOKEN en env.
+ * Ejecuta el ciclo completo tendencias → búsqueda → producto → aprobación → publicación eBay/ML.
+ * Delega en opportunity-full-cycle-ebay.service (misma lógica que el endpoint autenticado).
  */
 import { Request, Response } from 'express';
-import { prisma } from '../../config/database';
-import { trendsService } from '../../services/trends.service';
-import opportunityFinder from '../../services/opportunity-finder.service';
-import { ProductService } from '../../services/product.service';
-import MarketplaceService, { type PublishProductRequest } from '../../services/marketplace.service';
-import { workflowConfigService } from '../../services/workflow-config.service';
+import { runOpportunityFullCycleToEbay } from '../../services/opportunity-full-cycle-ebay.service';
 import { logger } from '../../config/logger';
 
-const EBAY_MIN_IMAGE = 500;
-const FALLBACK_IMAGE = `https://placehold.co/${EBAY_MIN_IMAGE}x${EBAY_MIN_IMAGE}.png`;
-
-/** Convierte URLs de miniaturas a 500x500+ (eBay mínimo). AliCDN acepta _500x500, _800x800. */
-function enlargeImageUrl(url: string): string {
-  if (!url || typeof url !== 'string') return url;
-  let u = url.trim();
-  u = u.replace(/placehold\.co\/(\d+)x(\d+)/i, (_, w, h) => {
-    const s = Math.max(EBAY_MIN_IMAGE, parseInt(w, 10) || EBAY_MIN_IMAGE, parseInt(h, 10) || EBAY_MIN_IMAGE);
-    return `placehold.co/${s}x${s}`;
-  });
-  // AliExpress/AliCDN: reemplazar _220x220, _225x225 etc por _500x500 (CDN sirve ese tamaño)
-  u = u.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, `_${EBAY_MIN_IMAGE}x${EBAY_MIN_IMAGE}.$1`);
-  // Doble extensión: .jpg_220x220.jpg -> _500x500.jpg
-  u = u.replace(/\.(jpg|jpeg|png|webp|gif)_[0-9]+x[0-9]+\.\1$/i, `_${EBAY_MIN_IMAGE}x${EBAY_MIN_IMAGE}.$1`);
-  return u;
-}
-
 export async function runTestFullCycleSearchToPublish(req: Request, res: Response): Promise<void> {
-  const startTime = Date.now();
-  const keywordOverride = (req.body?.keyword as string) || process.env.keyword;
-  const dryRun = req.body?.dryRun === true || process.env.DRY_RUN === '1';
   const requestedUserId = Number(req.body?.userId);
-  const maxPriceUsdRaw = Number(req.body?.maxPriceUsd);
-  // Default max $12 for economical test cycles (user preference: artículos económicos ≤$12)
-  const maxPriceUsd = Number.isFinite(maxPriceUsdRaw) && maxPriceUsdRaw > 0 ? maxPriceUsdRaw : 12;
-  const marketplace: 'ebay' | 'mercadolibre' =
-    String(req.body?.marketplace || 'ebay').toLowerCase() === 'mercadolibre' ? 'mercadolibre' : 'ebay';
+  const hasBodyUser = Number.isFinite(requestedUserId) && requestedUserId > 0;
 
   try {
-    const user = Number.isFinite(requestedUserId) && requestedUserId > 0
-      ? await prisma.user.findUnique({
-          where: { id: requestedUserId },
-          select: { id: true, username: true, isActive: true },
-        })
-      : await prisma.user.findFirst({
-          where: { isActive: true },
-          select: { id: true, username: true, isActive: true },
-        });
-    if (!user) {
-      res.status(400).json({ success: false, error: 'No hay usuario activo. Ejecuta seed.' });
-      return;
-    }
-    if (!user.isActive) {
-      res.status(400).json({ success: false, error: `El userId=${user.id} no está activo.` });
-      return;
-    }
-    const userId = user.id;
-
-    let keyword: string;
-    if (keywordOverride) {
-      keyword = keywordOverride;
-    } else {
-      const trendKeywords = await trendsService.getTrendingKeywords({
-        region: 'US',
-        maxKeywords: 10,
-        userId,
-      });
-      // Default keyword for cheap items (≤$12 test cycles)
-      keyword = trendKeywords.length > 0 ? trendKeywords[0].keyword : 'phone case';
-    }
-
-    const result = await opportunityFinder.findOpportunitiesWithDiagnostics(userId, {
-      query: keyword,
+    const result = await runOpportunityFullCycleToEbay({
+      userId: hasBodyUser ? requestedUserId : undefined,
+      internalRunner: !hasBodyUser,
+      keyword: (req.body?.keyword as string) || process.env.keyword,
+      dryRun: req.body?.dryRun === true || process.env.DRY_RUN === '1',
+      maxPriceUsd: Number(req.body?.maxPriceUsd),
+      marketplace:
+        String(req.body?.marketplace || 'ebay').toLowerCase() === 'mercadolibre' ? 'mercadolibre' : 'ebay',
+      credentialEnvironment: req.body?.credentialEnvironment,
+      allowFallbackProduct: true,
+      region: 'us',
       maxItems: 5,
-      skipTrendsValidation: true, // Railway: evitar dependencia SerpAPI para b�squeda
     });
-    let opportunities = result.opportunities;
-
-    // Fallback: si no hay oportunidades (ej. AliExpress en Railway), usar producto m�nimo para probar publish
-    if (opportunities.length === 0) {
-      logger.warn('[INTERNAL] No opportunities found, using fallback product for publish test');
-      const fallbackPrice = Math.min(11.99, maxPriceUsd);
-      const fallbackCost = Math.min(7.99, fallbackPrice / 1.5);
-      opportunities = [{
-        title: `Test Product ${keyword} - ${Date.now()}`,
-        description: 'Test product for full cycle',
-        aliexpressUrl: 'https://www.aliexpress.com/item/1005001234567890.html',
-        productUrl: 'https://www.aliexpress.com/item/1005001234567890.html',
-        costUsd: fallbackCost,
-        suggestedPriceUsd: fallbackPrice,
-        category: 'Electronics',
-        images: ['https://placehold.co/400x400?text=Test+Product'],
-      } as any];
-    }
-
-    const maxCostForCap = maxPriceUsd ? (maxPriceUsd / 1.5) : null;
-    const opp = maxCostForCap
-      ? (opportunities.find((o: any) => Number(o?.costUsd || 0) > 0 && Number(o.costUsd) <= maxCostForCap) || opportunities[0])
-      : opportunities[0];
-    const rawImages = Array.isArray((opp as any).images)
-      ? (opp as any).images
-      : ((opp as any).image ? [(opp as any).image] : []);
-    const filtered = Array.isArray(rawImages) && rawImages.length > 0
-      ? rawImages.filter((u: unknown): u is string => typeof u === 'string' && u.startsWith('http'))
-      : [];
-    const enlarged = filtered.map(enlargeImageUrl);
-    const uniqueImages = Array.from(new Set(enlarged)).slice(0, 12);
-    const images = uniqueImages.length > 0 ? uniqueImages : [FALLBACK_IMAGE];
-
-    const productService = new ProductService();
-    const product = await productService.createProduct(userId, {
-      title: opp.title,
-      description: (opp as any).description || '',
-      aliexpressUrl: opp.aliexpressUrl || opp.productUrl || 'https://www.aliexpress.com/item/0.html',
-      aliexpressPrice: opp.costUsd,
-      suggestedPrice: opp.suggestedPriceUsd || opp.costUsd * 1.5,
-      imageUrls: images,
-      category: opp.category,
-      currency: 'USD',
-      targetCountry: marketplace === 'mercadolibre' ? 'CL' : undefined,
-    });
-
-    await productService.updateProductStatusSafely(product.id, 'APPROVED', userId, 'Test: aprobacion para publicacion');
-
-    const updated = await prisma.product.findUnique({
-      where: { id: product.id },
-      select: { status: true, title: true, aliexpressPrice: true, suggestedPrice: true },
-    });
-
-    let env: 'sandbox' | 'production' = await workflowConfigService.getUserEnvironment(userId);
-    const credEnvBody = String(req.body?.credentialEnvironment ?? '').toLowerCase();
-    if (credEnvBody === 'production' || credEnvBody === 'sandbox') {
-      env = credEnvBody;
-    }
-
-    if (dryRun) {
-      res.status(200).json({
-        success: true,
-        dryRun: true,
-        userId,
-        productId: product.id,
-        keyword,
-        marketplace,
-        stages: { trends: true, search: true, product: true, approved: true, publish: 'skipped' },
-        credentialEnvironment: env,
-        durationMs: Date.now() - startTime,
-      });
-      return;
-    }
-
-    const marketplaceService = new MarketplaceService();
-
-    let publishResult: { success: boolean; error?: string; listingId?: string; listingUrl?: string };
-    try {
-      const baseTitle = String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim();
-      // ML title max 60 chars (see marketplace.service TITLE_MAX_BY_MARKETPLACE)
-      let uniqueTitle = `${baseTitle.slice(0, marketplace === 'mercadolibre' ? 48 : 70)} P${product.id}`.replace(/\s+/g, ' ').trim();
-      if (marketplace === 'mercadolibre' && uniqueTitle.length > 60) {
-        uniqueTitle = uniqueTitle.slice(0, 60).trim();
-      }
-      const basePrice = Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5;
-      const finalPrice = maxPriceUsd ? Math.min(basePrice, maxPriceUsd) : basePrice;
-      const customData: Record<string, unknown> = {
-        title: uniqueTitle,
-        price: finalPrice,
-        quantity: 1,
-      };
-      if (marketplace === 'ebay') {
-        customData.categoryId = '20349';
-      }
-      publishResult = await marketplaceService.publishProduct(
-        userId,
-        {
-          productId: product.id,
-          marketplace,
-          customData: customData as PublishProductRequest['customData'],
-        },
-        env
-      );
-
-      // No automatic sandbox fallback here: we need strict production diagnostics.
-    } catch (publishErr: any) {
-      const errMsg = publishErr?.message || String(publishErr);
-      publishResult = { success: false, error: errMsg };
-    }
-
-    if (publishResult.success) {
-      await productService.updateProductStatusSafely(product.id, 'PUBLISHED', true, userId);
-      const verified = await prisma.product.findUnique({
-        where: { id: product.id },
-        select: { status: true, isPublished: true, publishedAt: true },
-      });
-      logger.info('[INTERNAL] Full cycle search-to-publish OK', {
-        userId,
-        marketplace,
-        productId: product.id,
-        listingId: publishResult.listingId,
-        status: verified?.status,
-        isPublished: verified?.isPublished,
-        durationMs: Date.now() - startTime,
-      });
-      res.status(200).json({
-        success: true,
-        userId,
-        productId: product.id,
-        listingId: publishResult.listingId,
-        listingUrl: publishResult.listingUrl,
-        keyword,
-        marketplace,
-        maxPriceUsdApplied: maxPriceUsd,
-        stages: { trends: true, search: true, product: true, approved: true, publish: true },
-        verified: verified ? { status: verified.status, isPublished: verified.isPublished } : undefined,
-        credentialEnvironment: env,
-        durationMs: Date.now() - startTime,
-      });
-      return;
-    }
-
-    // Degradación: si falla por token eBay, retornar éxito con producto creado/aprobado (pendiente OAuth)
-    const ebayErrLower = String(publishResult.error || '').toLowerCase();
-    const ebayConfigMsg = /credentials not found|inactive for|falta token oauth|completa la autorizaci/i.test(ebayErrLower);
-    const tokenErr =
-      marketplace === 'ebay' &&
-      publishResult.error &&
-      !ebayConfigMsg &&
-      /invalid_grant|unauthorized|401\b|403\b|expired|refresh.?token|access.?token|oauth.?error/i.test(ebayErrLower);
-    if (tokenErr) {
-      logger.warn('[INTERNAL] eBay publish failed (token). Returning success with product ready.', { productId: product.id });
-      res.status(200).json({
-        success: true,
-        userId,
-        productId: product.id,
-        keyword,
-        marketplace,
-        stages: { trends: true, search: true, product: true, approved: true, publish: 'pending_oauth' },
-        ebayPendingOAuth: true,
-        publishError: publishResult.error,
-        message: 'Producto creado y aprobado. Completa OAuth de eBay para publicar: npm run ebay:oauth-url',
-        durationMs: Date.now() - startTime,
-      });
-      return;
-    }
-
-    const mlErrLower = String(publishResult.error || '').toLowerCase();
-    // No usar la palabra suelta "oauth": mensajes de configuración la incluyen y generaban falso pending_oauth.
-    const mlConfigMsg =
-      /credentials not found|inactive for \w+ environment|faltan mercadolibre|complet[ae] oauth en la app|base de datos/i.test(
-        mlErrLower
-      );
-    const mlTokenErr =
-      marketplace === 'mercadolibre' &&
-      publishResult.error &&
-      !mlConfigMsg &&
-      /invalid_grant|invalid_token|unauthorized|401\b|403\b|token expired|access token|refresh.?token|revoked/i.test(mlErrLower);
-    if (mlTokenErr) {
-      logger.warn('[INTERNAL] ML publish failed (token). Returning success with product ready.', {
-        productId: product.id,
-      });
-      res.status(200).json({
-        success: true,
-        userId,
-        productId: product.id,
-        keyword,
-        marketplace,
-        stages: { trends: true, search: true, product: true, approved: true, publish: 'pending_oauth' },
-        mercadolibrePendingOAuth: true,
-        publishError: publishResult.error,
-        message: 'Producto creado y aprobado. Renueva token Mercado Libre en Configuración / credenciales.',
-        durationMs: Date.now() - startTime,
-      });
-      return;
-    }
-
-    const dsHint =
-      publishResult.error &&
-      String(publishResult.error).includes('AliExpress Dropshipping API is not connected')
-        ? 'Las credenciales DS son por usuario: pasa body.userId o MLC_USER_ID igual al usuario que conectó AliExpress Dropshipping.'
-        : undefined;
-
-    res.status(500).json({
-      success: false,
-      error: publishResult.error,
-      userId,
-      productId: product.id,
-      marketplace,
-      credentialEnvironment: env,
-      hint: dsHint,
-      stages: { trends: true, search: true, product: true, approved: true, publish: false },
-      durationMs: Date.now() - startTime,
-    });
+    res.status(result.httpStatus).json(result.body);
   } catch (e: any) {
     logger.error('[INTERNAL] test-full-cycle-search-to-publish failed', { error: e?.message });
     res.status(500).json({
       success: false,
       error: e?.message || String(e),
-      durationMs: Date.now() - startTime,
     });
   }
 }

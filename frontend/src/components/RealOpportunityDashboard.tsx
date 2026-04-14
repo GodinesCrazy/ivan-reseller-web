@@ -68,7 +68,10 @@ export default function RealOpportunityDashboard() {
       const mapped: RealOpportunity[] = (Array.isArray(items) ? items : []).map((o: any, i: number) => {
         const costUsd = Number(o.costUsd ?? o.estimatedCost ?? 0);
         const suggestedPriceUsd = Number(o.suggestedPriceUsd ?? o.suggestedPrice ?? 0);
-        const profit = suggestedPriceUsd - costUsd;
+        const profitFromApi = Number((o as any).netProfitInBaseCurrency);
+        const profit = Number.isFinite(profitFromApi)
+          ? profitFromApi
+          : suggestedPriceUsd - costUsd;
         const profitMarginPct = typeof o.profitMargin === 'number' ? o.profitMargin * 100 : (typeof o.roiPercentage === 'number' ? o.roiPercentage : 0);
         return {
           id: o.productId ?? o.id ?? String(i),

@@ -2,7 +2,11 @@
  * Fase 3 — Tests for shipping cost helper (getEffectiveShippingCost, getDefaultShippingCost).
  */
 
-import { getEffectiveShippingCost, getDefaultShippingCost } from '../shipping.utils';
+import {
+  getEffectiveShippingCost,
+  getEffectiveShippingCostForPublish,
+  getDefaultShippingCost,
+} from '../shipping.utils';
 
 describe('shipping.utils', () => {
   describe('getEffectiveShippingCost', () => {
@@ -42,6 +46,36 @@ describe('shipping.utils', () => {
     it('rejects NaN and falls back to default', () => {
       const result = getEffectiveShippingCost({ shippingCost: NaN }, undefined, { defaultIfMissing: 4 });
       expect(result).toBe(4);
+    });
+
+    it('defaultWhenZeroOrMissing uses default instead of 0', () => {
+      expect(
+        getEffectiveShippingCost({ shippingCost: 0 }, undefined, {
+          defaultWhenZeroOrMissing: true,
+          defaultIfMissing: 5.99,
+        })
+      ).toBe(5.99);
+      expect(
+        getEffectiveShippingCost({}, undefined, { defaultWhenZeroOrMissing: true, defaultIfMissing: 6 })
+      ).toBe(6);
+    });
+  });
+
+  describe('getEffectiveShippingCostForPublish', () => {
+    it('uses default when shipping is 0 or absent (small-parcel standard)', () => {
+      const d = getEffectiveShippingCostForPublish({}, undefined);
+      expect(typeof d).toBe('number');
+      expect(d).toBeGreaterThan(0);
+      expect(getEffectiveShippingCostForPublish({ shippingCost: 0 })).toBe(d);
+    });
+
+    it('keeps positive shipping from product', () => {
+      expect(getEffectiveShippingCostForPublish({ shippingCost: 3.25 })).toBe(3.25);
+    });
+
+    it('uses custom defaultUsd when shipping is missing', () => {
+      expect(getEffectiveShippingCostForPublish({}, undefined, { defaultUsd: 8.5 })).toBe(8.5);
+      expect(getEffectiveShippingCostForPublish({ shippingCost: 0 }, undefined, { defaultUsd: 7 })).toBe(7);
     });
   });
 

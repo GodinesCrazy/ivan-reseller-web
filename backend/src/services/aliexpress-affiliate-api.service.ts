@@ -38,6 +38,154 @@ export interface AffiliateProduct {
   commissionRate?: number;
   /** Estimated profit (e.g. salePrice * commissionRate/100). */
   estimatedProfit?: number;
+  /** Desde product.query / productdetail.get (envío real hacia ship_to_country). */
+  shippingInfo?: {
+    shipToCountry?: string;
+    /** Días máximos si la API manda rango "7-15". */
+    deliveryDaysMax?: number;
+    shippingCost?: number;
+    shippingCostCurrency?: string;
+  };
+}
+
+/**
+ * Días máximos desde shipping_info (número, "12", "7-15", "7–15", "12-20 days", textos con dígitos).
+ * Toma el máximo de los números encontrados cuando hay varios (p. ej. rangos o "10 to 15").
+ */
+export function parseAffiliateDeliveryDaysMax(raw: unknown): number | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const r = Math.round(raw);
+    return r > 0 ? r : undefined;
+  }
+  const s = String(raw).trim();
+  if (!s) return undefined;
+  // Rango explícito: 7-15, 7–15 (en-dash), 7~15
+  const rangeMatch = s.match(/(\d+)\s*[-–~]\s*(\d+)/);
+  if (rangeMatch) {
+    const a = parseInt(rangeMatch[1], 10);
+    const b = parseInt(rangeMatch[2], 10);
+    if (Number.isFinite(a) && Number.isFinite(b)) return Math.max(a, b);
+  }
+  const nums = s.match(/\d+/g);
+  if (nums?.length) {
+    const vals = nums.map((x) => parseInt(x, 10)).filter((n) => Number.isFinite(n) && n > 0);
+    if (vals.length === 0) return undefined;
+    // Cap razonable (evita años tipo 2025 en fechas mal parseadas)
+    const capped = vals.map((n) => (n > 365 ? undefined : n)).filter((n): n is number => n != null);
+    if (capped.length === 0) return undefined;
+    return Math.max(...capped);
+  }
+  return undefined;
+}
+
+/** AliExpress a veces envuelve nodos como `{ string: "..." }` o `{ string: [ {...} ] }`. */
+function unwrapAliExpressNode(raw: unknown): unknown {
+  if (raw == null) return raw;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'object' && raw !== null && 'string' in raw) {
+    const inner = (raw as { string?: unknown }).string;
+    if (Array.isArray(inner)) {
+      if (inner.length === 1) return inner[0];
+      return inner;
+    }
+    return inner ?? raw;
+  }
+  return raw;
+}
+
+type RawShippingRecord = Record<string, unknown>;
+
+function pickShippingFromRecord(si: RawShippingRecord | null | undefined, productCurrency: string) {
+  if (!si || typeof si !== 'object') return undefined;
+
+  const shipTo =
+    si.ship_to_country != null
+      ? String(si.ship_to_country)
+      : si.ship_to_country_code != null
+        ? String(si.ship_to_country_code)
+        : undefined;
+
+  const deliveryRaw =
+    si.delivery_days ??
+    si.delivery_day ??
+    si.estimated_delivery_days ??
+    si.delivery_time ??
+    si.delivery_time_desc ??
+    si.delivery_desc ??
+    si.max_delivery_days ??
+    (si.min_delivery_days != null && si.max_delivery_days != null
+      ? `${si.min_delivery_days}-${si.max_delivery_days}`
+      : undefined);
+
+  let deliveryMax = parseAffiliateDeliveryDaysMax(deliveryRaw);
+  if ((deliveryMax == null || deliveryMax <= 0) && si.max_delivery_days != null) {
+    deliveryMax = parseAffiliateDeliveryDaysMax(si.max_delivery_days);
+  }
+  if ((deliveryMax == null || deliveryMax <= 0) && si.min_delivery_days != null && si.max_delivery_days != null) {
+    const a = Number(si.min_delivery_days);
+    const b = Number(si.max_delivery_days);
+    if (Number.isFinite(a) && Number.isFinite(b) && b > 0) deliveryMax = Math.max(a, b);
+  }
+
+  const scRaw = si.shipping_cost ?? si.delivery_cost ?? si.freight_cost ?? si.postage_fee;
+  const sc = scRaw != null ? parseFloat(String(scRaw)) : NaN;
+  const shipCostCur = String(
+    si.shipping_cost_currency ?? si.shipping_currency ?? si.currency ?? productCurrency ?? 'USD'
+  ).toUpperCase();
+
+  const hasUseful =
+    (deliveryMax != null && deliveryMax > 0) ||
+    (Number.isFinite(sc) && sc > 0) ||
+    (shipTo != null && shipTo.length > 0);
+
+  if (!hasUseful) return undefined;
+
+  return {
+    shipToCountry: shipTo,
+    deliveryDaysMax: deliveryMax != null && deliveryMax > 0 ? deliveryMax : undefined,
+    shippingCost: Number.isFinite(sc) && sc > 0 ? sc : undefined,
+    shippingCostCurrency: shipCostCur || String(productCurrency || 'USD').toUpperCase(),
+  } satisfies NonNullable<AffiliateProduct['shippingInfo']>;
+}
+
+/**
+ * Normaliza `shipping_info` de product.query / productdetail.get (objeto, array de métodos, o nodo `{ string: ... }`).
+ */
+export function normalizeAffiliateApiShippingInfo(
+  raw: unknown,
+  productCurrency: string
+): AffiliateProduct['shippingInfo'] | undefined {
+  const node = unwrapAliExpressNode(raw);
+  if (node == null) return undefined;
+
+  if (Array.isArray(node)) {
+    let merged: AffiliateProduct['shippingInfo'] | undefined;
+    for (const item of node) {
+      const rec =
+        typeof item === 'object' && item != null ? (item as RawShippingRecord) : null;
+      const one = pickShippingFromRecord(rec, productCurrency);
+      if (!one) continue;
+      if (!merged) {
+        merged = { ...one };
+        continue;
+      }
+      if (one.deliveryDaysMax != null) {
+        merged.deliveryDaysMax = Math.max(merged.deliveryDaysMax ?? 0, one.deliveryDaysMax);
+      }
+      if (one.shippingCost != null && one.shippingCost > 0 && !(merged.shippingCost != null && merged.shippingCost > 0)) {
+        merged.shippingCost = one.shippingCost;
+        merged.shippingCostCurrency = one.shippingCostCurrency;
+      }
+      if (!merged.shipToCountry && one.shipToCountry) merged.shipToCountry = one.shipToCountry;
+    }
+    return merged;
+  }
+
+  if (typeof node === 'object') {
+    return pickShippingFromRecord(node as RawShippingRecord, productCurrency);
+  }
+  return undefined;
 }
 
 export interface AffiliateProductDetail extends AffiliateProduct {
@@ -46,8 +194,11 @@ export interface AffiliateProductDetail extends AffiliateProduct {
   categoryName?: string;
   shippingInfo?: {
     shipToCountry?: string;
+    /** @deprecated usar deliveryDaysMax; se mantiene por compat. */
     deliveryDays?: number;
+    deliveryDaysMax?: number;
     shippingCost?: number;
+    shippingCostCurrency?: string;
   };
   skus?: AffiliateSKU[];
 }
@@ -387,7 +538,7 @@ export class AliExpressAffiliateAPIService {
         target_language: 'EN',
         ship_to_country: 'US',
         fields:
-          'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,target_sale_price,target_sale_price_currency,product_detail_url,promotion_link,commission_rate,currency,evaluate_score,evaluate_rate,volume',
+          'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,target_sale_price,target_sale_price_currency,product_detail_url,promotion_link,commission_rate,currency,evaluate_score,evaluate_rate,volume,shipping_info',
       };
       if (params.targetCurrency) requestParams.target_currency = params.targetCurrency;
       if (params.targetLanguage) requestParams.target_language = params.targetLanguage;
@@ -431,6 +582,7 @@ export class AliExpressAffiliateAPIService {
         const currency = p.target_sale_price_currency || p.currency || 'USD';
         const commissionRate = parseFloat(p.commission_rate || '0');
         const estimatedProfit = AliExpressAffiliateAPIService.calculateProfit(p);
+        const shippingInfo = normalizeAffiliateApiShippingInfo(p.shipping_info, currency);
         return {
           productId: String(p.product_id || ''),
           productTitle: p.product_title || '',
@@ -439,14 +591,21 @@ export class AliExpressAffiliateAPIService {
           salePrice: price,
           originalPrice: parseFloat(p.original_price || '0'),
           discount: parseFloat(p.discount || '0'),
-          evaluateScore: p.evaluate_score != null ? parseFloat(String(p.evaluate_score)) : undefined,
-          evaluateRate: p.evaluate_rate != null ? parseFloat(String(p.evaluate_rate)) : undefined,
+          evaluateScore:
+            p.evaluate_score != null && String(p.evaluate_score).trim() !== ''
+              ? parseFloat(String(p.evaluate_score).replace(/%/g, ''))
+              : undefined,
+          evaluateRate:
+            p.evaluate_rate != null && String(p.evaluate_rate).trim() !== ''
+              ? parseFloat(String(p.evaluate_rate).replace(/%/g, ''))
+              : undefined,
           volume: p.volume != null ? parseInt(String(p.volume), 10) : undefined,
           productDetailUrl: p.product_detail_url,
           promotionLink: p.promotion_link,
           currency,
           commissionRate: Number.isFinite(commissionRate) ? commissionRate : undefined,
           estimatedProfit,
+          shippingInfo,
         };
       });
       console.log('[AUTOPILOT] Affiliate SUCCESS:', mapped.length);
@@ -504,9 +663,21 @@ export class AliExpressAffiliateAPIService {
         salePrice: parseFloat(p.sale_price || '0'),
         originalPrice: parseFloat(p.original_price || '0'),
         discount: parseFloat(p.discount || '0'),
-        evaluateScore: p.evaluate_score ? parseFloat(p.evaluate_score) : undefined,
-        evaluateRate: p.evaluate_rate ? parseFloat(p.evaluate_rate) : undefined,
-        volume: p.volume ? parseInt(p.volume, 10) : undefined,
+        evaluateScore: (() => {
+          if (p.evaluate_score == null || String(p.evaluate_score).trim() === '') return undefined;
+          const n = parseFloat(String(p.evaluate_score).replace(/%/g, ''));
+          return Number.isFinite(n) ? n : undefined;
+        })(),
+        evaluateRate: (() => {
+          if (p.evaluate_rate == null || String(p.evaluate_rate).trim() === '') return undefined;
+          const n = parseFloat(String(p.evaluate_rate).replace(/%/g, ''));
+          return Number.isFinite(n) ? n : undefined;
+        })(),
+        volume: (() => {
+          if (p.volume == null || String(p.volume).trim() === '') return undefined;
+          const n = parseInt(String(p.volume), 10);
+          return Number.isFinite(n) ? n : undefined;
+        })(),
         storeName: p.store_name,
         storeUrl: p.store_url,
         productDetailUrl: p.product_detail_url,
@@ -516,11 +687,17 @@ export class AliExpressAffiliateAPIService {
         description: p.description,
         categoryId: p.category_id,
         categoryName: p.category_name,
-        shippingInfo: p.shipping_info ? {
-          shipToCountry: p.shipping_info.ship_to_country,
-          deliveryDays: p.shipping_info.delivery_days ? parseInt(p.shipping_info.delivery_days, 10) : undefined,
-          shippingCost: p.shipping_info.shipping_cost ? parseFloat(p.shipping_info.shipping_cost) : undefined,
-        } : undefined,
+        shippingInfo: (() => {
+          const sh = normalizeAffiliateApiShippingInfo(p.shipping_info, p.currency || 'USD');
+          if (!sh) return undefined;
+          return {
+            shipToCountry: sh.shipToCountry,
+            deliveryDays: sh.deliveryDaysMax,
+            deliveryDaysMax: sh.deliveryDaysMax,
+            shippingCost: sh.shippingCost,
+            shippingCostCurrency: sh.shippingCostCurrency,
+          };
+        })(),
       }));
     } catch (error: any) {
       logger.error('[ALIEXPRESS-AFFILIATE-API] Get product details failed', {
@@ -528,6 +705,125 @@ export class AliExpressAffiliateAPIService {
         params,
       });
       throw error;
+    }
+  }
+
+  /**
+   * Si product.query no trae shipping_info completo, rellena con productdetail.get (coste y plazo reales hacia ship_to).
+   */
+  async enrichProductsWithDetailShipping(
+    products: AffiliateProduct[],
+    opts?: { shipToCountry?: string; targetCurrency?: string; targetLanguage?: string }
+  ): Promise<void> {
+    if (!products?.length) return;
+    const shipTo = String(opts?.shipToCountry || 'US').trim().toUpperCase() || 'US';
+    const needsDeliveryDays = (p: AffiliateProduct) => {
+      const d = p.shippingInfo?.deliveryDaysMax;
+      return d == null || !Number.isFinite(Number(d)) || Number(d) <= 0;
+    };
+    const needsShippingCost = (p: AffiliateProduct) => !(Number(p.shippingInfo?.shippingCost) > 0);
+    const needsSupplierMetrics = (p: AffiliateProduct) => {
+      const sc = p.evaluateScore != null ? Number(p.evaluateScore) : NaN;
+      const rt = p.evaluateRate != null ? Number(p.evaluateRate) : NaN;
+      const hasScore = Number.isFinite(sc) && sc > 0;
+      const hasRate = Number.isFinite(rt) && rt > 0;
+      return !hasScore && !hasRate;
+    };
+
+    const mergeDetailBatch = (
+      chunk: AffiliateProduct[],
+      details: AffiliateProductDetail[],
+      effectiveShipTo: string,
+      updateCost: boolean
+    ) => {
+      const byId = new Map(details.map((d) => [d.productId, d]));
+      for (const p of chunk) {
+        const d = byId.get(p.productId);
+        if (d) {
+          if (
+            (p.evaluateScore == null || !Number.isFinite(Number(p.evaluateScore))) &&
+            d.evaluateScore != null &&
+            Number.isFinite(Number(d.evaluateScore))
+          ) {
+            p.evaluateScore = d.evaluateScore;
+          }
+          if (
+            (p.evaluateRate == null || !Number.isFinite(Number(p.evaluateRate))) &&
+            d.evaluateRate != null &&
+            Number.isFinite(Number(d.evaluateRate))
+          ) {
+            p.evaluateRate = d.evaluateRate;
+          }
+          if (
+            (p.volume == null || !Number.isFinite(Number(p.volume)) || Number(p.volume) < 0) &&
+            d.volume != null &&
+            Number.isFinite(Number(d.volume))
+          ) {
+            p.volume = d.volume;
+          }
+        }
+        const dsi = d?.shippingInfo;
+        if (!dsi) continue;
+        const dMax = dsi.deliveryDaysMax ?? dsi.deliveryDays;
+        const sc = dsi.shippingCost != null ? Number(dsi.shippingCost) : NaN;
+        const nextCost =
+          updateCost && Number.isFinite(sc) && sc > 0 ? sc : p.shippingInfo?.shippingCost;
+        const nextCostCur =
+          updateCost && Number.isFinite(sc) && sc > 0
+            ? dsi.shippingCostCurrency || d.currency || p.shippingInfo?.shippingCostCurrency || p.currency || 'USD'
+            : p.shippingInfo?.shippingCostCurrency || p.currency || 'USD';
+        p.shippingInfo = {
+          ...p.shippingInfo,
+          shipToCountry: dsi.shipToCountry || p.shippingInfo?.shipToCountry || effectiveShipTo,
+          deliveryDaysMax:
+            dMax != null && Number.isFinite(dMax) && dMax > 0 ? dMax : p.shippingInfo?.deliveryDaysMax,
+          shippingCost: nextCost,
+          shippingCostCurrency: nextCostCur,
+        };
+      }
+    };
+
+    const runEnrichBatches = async (list: AffiliateProduct[], effectiveShipTo: string, updateCost: boolean) => {
+      const chunkSize = 10;
+      for (let i = 0; i < list.length; i += chunkSize) {
+        const chunk = list.slice(i, i + chunkSize);
+        const ids = chunk.map((p) => p.productId).filter(Boolean).join(',');
+        if (!ids) continue;
+        try {
+          const details = await this.getProductDetails({
+            productIds: ids,
+            shipToCountry: effectiveShipTo,
+            targetCurrency: opts?.targetCurrency,
+            targetLanguage: opts?.targetLanguage,
+          });
+          mergeDetailBatch(chunk, details, effectiveShipTo, updateCost);
+        } catch (e: any) {
+          logger.warn('[ALIEXPRESS-AFFILIATE-API] enrichProductsWithDetailShipping failed', {
+            error: e?.message || String(e),
+            batchSize: chunk.length,
+            shipTo: effectiveShipTo,
+          });
+        }
+      }
+    };
+
+    const need = products.filter(
+      (p) =>
+        p.productId &&
+        (needsShippingCost(p) || needsDeliveryDays(p) || needsSupplierMetrics(p))
+    );
+    if (need.length === 0) return;
+
+    await runEnrichBatches(need, shipTo, true);
+
+    // Muchos listados solo devuelven plazo al cotizar hacia US; no pisar coste ya resuelto para otro país.
+    const stillNoDays = products.filter((p) => p.productId && needsDeliveryDays(p));
+    if (stillNoDays.length > 0 && shipTo !== 'US') {
+      logger.info('[ALIEXPRESS-AFFILIATE-API] enrich: retry productdetail.get with ship_to US for delivery days', {
+        count: stillNoDays.length,
+        originalShipTo: shipTo,
+      });
+      await runEnrichBatches(stillNoDays, 'US', false);
     }
   }
 
@@ -609,7 +905,7 @@ export class AliExpressAffiliateAPIService {
       category: p.categoryName,
       shipping: p.shippingInfo ? {
         cost: p.shippingInfo.shippingCost,
-        estimatedDays: p.shippingInfo.deliveryDays,
+        estimatedDays: p.shippingInfo.deliveryDaysMax ?? p.shippingInfo.deliveryDays,
       } : undefined,
       rating: p.evaluateScore,
       reviews: p.volume,

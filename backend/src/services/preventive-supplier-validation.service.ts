@@ -5,11 +5,14 @@
  */
 
 import logger from '../config/logger';
+import { env } from '../config/env';
 import type { AffiliateProduct, AffiliateProductDetail } from './aliexpress-affiliate-api.service';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
 import { CredentialsManager } from './credentials-manager.service';
 import { aliexpressDropshippingAPIService } from './aliexpress-dropshipping-api.service';
 import {
+  hasValidInternationalTrackingMethod,
+  isPreferredEbayUsShippingMethod,
   selectPurchasableSkuSoft,
   minShippingCostFromApi,
   toUsd,
@@ -24,7 +27,8 @@ import {
 
 const SEARCH_PAGE_SIZE = 30;
 const TITLE_SIMILARITY_MIN = 0.6;
-const MIN_RATING_FIVE = 4.5;
+const MIN_RATING_FIVE_DEFAULT = 4.5;
+const MIN_RATING_FIVE_EBAY_US = 4.75; // >95% positive feedback
 const MIN_ORDER_VOLUME = 10;
 const PRICE_BUFFER_RATIO = 1.3;
 const MAX_DS_VALIDATE = 15;
@@ -107,8 +111,11 @@ export interface PreventiveSupplierAuditParams {
   originalProductUrl: string;
   originalSupplierPriceUsd: number;
   shipToCountry: string;
+  marketplace?: 'ebay' | 'mercadolibre' | 'amazon';
   preferredSkuId?: string | null;
   persistedMlChileFreightTruth?: CanonicalMlChileFreightTruth;
+  seedOriginalRatingFive?: number;
+  seedOriginalOrderCount?: number;
   skipAlternativeSearch?: boolean;
 }
 
@@ -139,13 +146,22 @@ function passesKeywordGate(candidateTitle: string, required: string[]): boolean 
   return required.every((k) => c.includes(k.toLowerCase()));
 }
 
-function toRatingFiveStar(evaluateScore?: number, evaluateRate?: number): number | null {
-  const s = evaluateScore;
+function parseRatingNumber(raw: unknown): number | null {
+  if (raw == null) return null;
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) ? raw : null;
+  }
+  const parsed = Number.parseFloat(String(raw).replace(',', '.').replace('%', '').trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function toRatingFiveStar(evaluateScore?: unknown, evaluateRate?: unknown): number | null {
+  const s = parseRatingNumber(evaluateScore);
   if (s != null && Number.isFinite(s)) {
     if (s <= 5) return s;
     if (s <= 100) return s / 20;
   }
-  const r = evaluateRate;
+  const r = parseRatingNumber(evaluateRate);
   if (r != null && Number.isFinite(r)) {
     if (r <= 5) return r;
     if (r <= 100) return r / 20;
@@ -153,9 +169,12 @@ function toRatingFiveStar(evaluateScore?: number, evaluateRate?: number): number
   return null;
 }
 
-function passesAffiliateQuality(p: AffiliateProduct & Partial<AffiliateProductDetail>): boolean {
+function passesAffiliateQuality(
+  p: AffiliateProduct & Partial<AffiliateProductDetail>,
+  minimumRatingFive: number
+): boolean {
   const rating = toRatingFiveStar(p.evaluateScore, p.evaluateRate);
-  if (rating == null || rating < MIN_RATING_FIVE) return false;
+  if (rating == null || rating < minimumRatingFive) return false;
   const vol = p.volume;
   if (vol == null || vol < MIN_ORDER_VOLUME) return false;
   return true;
@@ -228,6 +247,7 @@ async function validateCandidate(params: {
   productUrl: string;
   productTitle: string;
   shipToCountry: string;
+  marketplace?: 'ebay' | 'mercadolibre' | 'amazon';
   source: 'original' | 'alternative';
   fallbackPriceUsd?: number;
   affiliateUrl?: string;
@@ -235,14 +255,56 @@ async function validateCandidate(params: {
   orderCount?: number;
   imageUrl?: string;
   preferredSkuId?: string | null;
+  minimumRatingFive?: number;
+  requireRatingEvidence?: boolean;
+  enforceEbayUsShippingPolicy?: boolean;
   persistedMlChileFreightTruth?: CanonicalMlChileFreightTruth;
 }): Promise<{ ok: true; supplier: PreventiveValidatedSupplier } | { ok: false; rejected: PreventiveRejectedSupplier }> {
   try {
+    const minimumRatingFive = Math.max(
+      0,
+      params.minimumRatingFive ?? MIN_RATING_FIVE_DEFAULT
+    );
+
     const ds = await loadDropshippingService(params.userId);
     const info = await ds.getProductInfo(params.productId, {
       localCountry: params.shipToCountry,
       localLanguage: params.shipToCountry === 'CL' ? 'es' : 'en',
     });
+
+    const seedRating = Number.isFinite(params.rating as number) && Number(params.rating) > 0 ? Number(params.rating) : null;
+    const dsRating =
+      info.sellerRatingFive != null && Number.isFinite(info.sellerRatingFive) && info.sellerRatingFive > 0
+        ? info.sellerRatingFive
+        : null;
+    const rating = seedRating ?? dsRating;
+
+    if (params.requireRatingEvidence && (rating == null || rating <= 0)) {
+      return {
+        ok: false,
+        rejected: {
+          source: params.source,
+          productId: params.productId,
+          productUrl: params.productUrl,
+          productTitle: params.productTitle,
+          reason: 'supplier rating evidence missing (requires >95% positive feedback for eBay US)',
+          reasonCode: 'supplier_data_incomplete',
+        },
+      };
+    }
+    if (rating != null && rating < minimumRatingFive) {
+      return {
+        ok: false,
+        rejected: {
+          source: params.source,
+          productId: params.productId,
+          productUrl: params.productUrl,
+          productTitle: params.productTitle,
+          reason: `supplier rating ${rating.toFixed(2)} below minimum ${minimumRatingFive.toFixed(2)} (5-star scale)`,
+          reasonCode: 'supplier_data_incomplete',
+        },
+      };
+    }
 
     const skuPick = selectPurchasableSkuSoft(info, params.preferredSkuId);
     if (skuPick.ok === false) {
@@ -266,7 +328,130 @@ async function validateCandidate(params: {
         ? params.persistedMlChileFreightTruth
         : null;
 
-    const shippingUsd = persistedFreightTruth?.shippingUsd ?? minShippingCostFromApi(info);
+    const shippingMethods = info.shippingInfo?.availableShippingMethods ?? [];
+    const enforceEbayUsShippingPolicy = Boolean(
+      params.enforceEbayUsShippingPolicy &&
+      params.marketplace === 'ebay' &&
+      params.shipToCountry === 'US'
+    );
+    const approvedTrackableServices = shippingMethods.filter((method) => {
+      const methodName = String(method?.methodName || '').trim();
+      return (
+        isPreferredEbayUsShippingMethod(methodName) &&
+        hasValidInternationalTrackingMethod(methodName)
+      );
+    });
+
+    // Some AliExpress DS responses only expose destination-level delivery_time without method/cost lines.
+    // In that case, fallback to buyer freight quote endpoint to recover real service + cost for strict eBay US gating.
+    const approvedFreightFallbackOptions: Array<{
+      serviceName: string;
+      shippingUsd: number;
+      estimatedDeliveryTime: number | null;
+    }> = [];
+
+    if (enforceEbayUsShippingPolicy && approvedTrackableServices.length === 0) {
+      try {
+        const freightQuote = await ds.calculateBuyerFreight({
+          countryCode: params.shipToCountry,
+          productId: params.productId,
+          productNum: 1,
+          sendGoodsCountryCode: 'CN',
+          skuId: skuPick.skuId || undefined,
+          price: String(
+            Math.max(
+              0.01,
+              Number.isFinite(skuPick.unitPrice)
+                ? skuPick.unitPrice
+                : Number(params.fallbackPriceUsd || 0.01)
+            )
+          ),
+          priceCurrency: String(info.currency || 'USD').toUpperCase(),
+        });
+
+        for (const option of freightQuote.options || []) {
+          const serviceName = String(option.serviceName || '').trim();
+          if (
+            !serviceName ||
+            !isPreferredEbayUsShippingMethod(serviceName) ||
+            !hasValidInternationalTrackingMethod(serviceName)
+          ) {
+            continue;
+          }
+
+          const shippingUsd = toUsd(
+            Number(option.freightAmount || 0),
+            String(option.freightCurrency || 'USD').toUpperCase()
+          );
+          if (!Number.isFinite(shippingUsd) || shippingUsd < 0) continue;
+
+          approvedFreightFallbackOptions.push({
+            serviceName,
+            shippingUsd,
+            estimatedDeliveryTime:
+              option.estimatedDeliveryTime != null &&
+              Number.isFinite(Number(option.estimatedDeliveryTime))
+                ? Number(option.estimatedDeliveryTime)
+                : null,
+          });
+        }
+
+        approvedFreightFallbackOptions.sort((a, b) => a.shippingUsd - b.shippingUsd);
+      } catch (error: any) {
+        logger.warn('[PREVENTIVE-SUPPLIER] buyer freight fallback failed for strict eBay US policy', {
+          productId: params.productId,
+          shipToCountry: params.shipToCountry,
+          error: error?.message || String(error),
+        });
+      }
+    }
+
+    if (
+      enforceEbayUsShippingPolicy &&
+      approvedTrackableServices.length === 0 &&
+      approvedFreightFallbackOptions.length === 0 &&
+      !env.PRE_PUBLISH_SHIPPING_FALLBACK
+    ) {
+      return {
+        ok: false,
+        rejected: {
+          source: params.source,
+          productId: params.productId,
+          productUrl: params.productUrl,
+          productTitle: params.productTitle,
+          reason:
+            'supplier must offer AliExpress Standard Shipping or SpeedPAK with valid international tracking for eBay US',
+          reasonCode: 'no_shipping_for_destination',
+        },
+      };
+    }
+
+    const shippingUsdFromProductInfo = minShippingCostFromApi(info, {
+      enforceEbayUsApprovedServices: enforceEbayUsShippingPolicy,
+      requireInternationalTracking: enforceEbayUsShippingPolicy,
+    });
+    const shippingUsdFromFreightFallback =
+      approvedFreightFallbackOptions.length > 0
+        ? approvedFreightFallbackOptions[0]!.shippingUsd
+        : null;
+    const usingFreightFallback =
+      !persistedFreightTruth &&
+      enforceEbayUsShippingPolicy &&
+      (shippingUsdFromProductInfo == null || !Number.isFinite(shippingUsdFromProductInfo)) &&
+      shippingUsdFromFreightFallback != null;
+    let shippingUsd =
+      persistedFreightTruth?.shippingUsd ??
+      shippingUsdFromProductInfo ??
+      shippingUsdFromFreightFallback;
+
+    if ((shippingUsd == null || !Number.isFinite(shippingUsd) || shippingUsd < 0) && env.PRE_PUBLISH_SHIPPING_FALLBACK) {
+      shippingUsd = env.DEFAULT_SHIPPING_COST_USD;
+      logger.info('[PREVENTIVE-SUPPLIER] Using default shipping cost fallback', {
+        productId: params.productId,
+        shippingUsd,
+      });
+    }
+
     if (shippingUsd == null || !Number.isFinite(shippingUsd) || shippingUsd < 0) {
       return {
         ok: false,
@@ -303,9 +488,21 @@ async function validateCandidate(params: {
     }
 
     const stock = info.skus?.reduce((sum, sku) => sum + Math.max(0, sku.stock ?? 0), 0) ?? Math.max(0, info.stock ?? 0);
-    const shippingMethodsCount = persistedFreightTruth ? 1 : info.shippingInfo?.availableShippingMethods?.length ?? 0;
+    const shippingMethodsCount = persistedFreightTruth
+      ? 1
+      : usingFreightFallback
+        ? approvedFreightFallbackOptions.length
+        : info.shippingInfo?.availableShippingMethods?.length ?? 0;
     const shippingSummary = persistedFreightTruth
       ? `${persistedFreightTruth.selectedServiceName} (persisted ML Chile freight truth)`
+      : usingFreightFallback
+        ? (() => {
+            const selected = approvedFreightFallbackOptions[0];
+            if (!selected) return 'Buyer freight fallback (strict eBay US)';
+            return selected.estimatedDeliveryTime != null
+              ? `${selected.serviceName} ~${selected.estimatedDeliveryTime}d (buyer freight fallback)`
+              : `${selected.serviceName} (buyer freight fallback)`;
+          })()
       : shippingSummaryFromDs(info);
 
     if (persistedFreightTruth) {
@@ -332,7 +529,7 @@ async function validateCandidate(params: {
       salePriceUsd,
       shippingUsd,
       totalSupplierCostUsd: salePriceUsd + shippingUsd,
-      rating: params.rating ?? 0,
+      rating: rating ?? 0,
       orderCount: params.orderCount ?? 0,
       shippingSummary,
       skuId: skuPick.skuId || undefined,
@@ -371,6 +568,11 @@ export async function runPreventiveSupplierAudit(
   params: PreventiveSupplierAuditParams
 ): Promise<PreventiveSupplierAuditResult> {
   const shipTo = (params.shipToCountry || 'US').trim().toUpperCase() || 'US';
+  const marketplace = params.marketplace || 'mercadolibre';
+  const strictEbayUsPolicy = marketplace === 'ebay' && shipTo === 'US';
+  const minimumRatingFive = strictEbayUsPolicy
+    ? MIN_RATING_FIVE_EBAY_US
+    : MIN_RATING_FIVE_DEFAULT;
   const originalProductUrl = (params.originalProductUrl || '').trim();
   const originalProductIdMatch = originalProductUrl.match(/\/item\/(\d+)(?:\.[a-z]+)?(?:\?|$|\/)/i);
   const originalProductId = originalProductIdMatch?.[1]?.trim() || '';
@@ -382,14 +584,61 @@ export async function runPreventiveSupplierAudit(
   const rejectedSuppliers: PreventiveRejectedSupplier[] = [];
 
   if (originalProductId) {
+    let originalRating: number | undefined =
+      Number.isFinite(params.seedOriginalRatingFive as number) && Number(params.seedOriginalRatingFive) > 0
+        ? Number(params.seedOriginalRatingFive)
+        : undefined;
+    let originalOrderCount: number | undefined =
+      Number.isFinite(params.seedOriginalOrderCount as number) && Number(params.seedOriginalOrderCount) >= 0
+        ? Number(params.seedOriginalOrderCount)
+        : undefined;
+    try {
+      const affiliate = await loadAffiliateService(params.userId);
+      const detail = await affiliate.getProductDetails({
+        productIds: originalProductId,
+        shipToCountry: shipTo,
+        targetCurrency: 'USD',
+        targetLanguage: shipTo === 'CL' ? 'ES' : 'EN',
+      });
+      const first = detail?.[0];
+      const affiliateRating =
+        first != null
+          ? toRatingFiveStar(first.evaluateScore, first.evaluateRate) ?? undefined
+          : undefined;
+      const affiliateOrderCount =
+        first?.volume != null && Number.isFinite(Number(first.volume))
+          ? Number(first.volume)
+          : undefined;
+
+      if (affiliateRating != null && affiliateRating > 0) {
+        originalRating = affiliateRating;
+      }
+      if (affiliateOrderCount != null && affiliateOrderCount >= 0) {
+        originalOrderCount = affiliateOrderCount;
+      }
+    } catch (error: any) {
+      logger.warn('[PREVENTIVE-SUPPLIER] Could not fetch affiliate detail for original supplier', {
+        productId: originalProductId,
+        shipTo,
+        marketplace,
+        error: error?.message || String(error),
+      });
+    }
+
     const originalValidation = await validateCandidate({
       userId: params.userId,
       productId: originalProductId,
       productUrl: originalProductUrl,
       productTitle: params.orderTitle,
       shipToCountry: shipTo,
+      marketplace,
       source: 'original',
       fallbackPriceUsd: params.originalSupplierPriceUsd,
+      rating: originalRating,
+      orderCount: originalOrderCount,
+      minimumRatingFive,
+      requireRatingEvidence: strictEbayUsPolicy,
+      enforceEbayUsShippingPolicy: strictEbayUsPolicy,
       preferredSkuId: params.preferredSkuId,
       persistedMlChileFreightTruth: params.persistedMlChileFreightTruth,
     });
@@ -490,7 +739,7 @@ export async function runPreventiveSupplierAudit(
       if (!Number.isFinite(price) || price <= 0 || price > maxPriceUsd) return false;
       if (titleSimilarityRatio(params.orderTitle, p.productTitle) < TITLE_SIMILARITY_MIN) return false;
       if (!passesKeywordGate(p.productTitle, requiredKw)) return false;
-      if (!passesAffiliateQuality(p)) return false;
+      if (!passesAffiliateQuality(p, minimumRatingFive)) return false;
       if (p.shippingInfo?.shipToCountry && p.shippingInfo.shipToCountry.toUpperCase() !== shipTo) return false;
       return true;
     });
@@ -513,11 +762,15 @@ export async function runPreventiveSupplierAudit(
         productUrl: `https://www.aliexpress.com/item/${candidate.productId}.html`,
         productTitle: candidate.productTitle,
         shipToCountry: shipTo,
+        marketplace,
         source: 'alternative',
         fallbackPriceUsd: candidate.salePrice,
         affiliateUrl: (candidate.promotionLink || candidate.productDetailUrl || '').trim() || undefined,
         rating: toRatingFiveStar(candidate.evaluateScore, candidate.evaluateRate) ?? 0,
         orderCount: candidate.volume ?? 0,
+        minimumRatingFive,
+        requireRatingEvidence: strictEbayUsPolicy,
+        enforceEbayUsShippingPolicy: strictEbayUsPolicy,
         imageUrl: candidate.productMainImageUrl,
       });
       if (validation.ok === true) {

@@ -12,6 +12,7 @@ import {
   type ValidationResult,
 } from './marketplace.types';
 import { isStrictPublishReady } from '../../utils/strict-publish-readiness';
+import { getEffectiveShippingCostForPublish } from '../../utils/shipping.utils';
 
 export type MarketplaceName = 'mercadolibre' | 'ebay' | 'amazon';
 
@@ -100,6 +101,9 @@ export class MarketplacePublishService {
     const effectiveLimit = mode === PublishMode.STAGING_REAL ? 1 : limit;
     const products = await this.getPublishableProducts(request.userId, effectiveLimit, request.productIds);
 
+    const { default: userSettingsService } = await import('../../services/user-settings.service');
+    const defaultChinaUsShippingUsd = await userSettingsService.getDefaultChinaUsShippingUsd(request.userId);
+
     const publishableProducts =
       marketplace === 'mercadolibre'
         ? products.map((product) => ({
@@ -130,15 +134,22 @@ export class MarketplacePublishService {
           where: { id: product.id },
           select: { totalCost: true, aliexpressPrice: true, shippingCost: true },
         });
+        const shippingForFees = getEffectiveShippingCostForPublish(
+          {
+            shippingCost: productRow?.shippingCost ?? null,
+          },
+          undefined,
+          { defaultUsd: defaultChinaUsShippingUsd }
+        );
         const supplierCost = productRow?.totalCost
           ? Number(productRow.totalCost)
-          : Number(productRow?.aliexpressPrice || 0) + Number(productRow?.shippingCost || 0);
+          : Number(productRow?.aliexpressPrice || 0) + shippingForFees;
         const { allowed } = await runFeeIntelligenceAndFlag(
           product.id,
           marketplace as 'mercadolibre' | 'ebay',
           Number(listPrice),
           supplierCost,
-          productRow?.shippingCost ? Number(productRow.shippingCost) : undefined
+          shippingForFees
         );
         if (!allowed) {
           results.push({

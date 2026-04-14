@@ -94,12 +94,16 @@ import { prisma } from '../config/database';
 import { retryMarketplaceOperation } from '../utils/retry.util';
 import logger from '../config/logger';
 import { env } from '../config/env';
+import {
+  appendEbayUsDropshipShippingNotice,
+  buildEbayUsDropshipDeliveryRange,
+} from '../utils/ebay-us-delivery-estimate';
 import { getMlPhysicalPackageBlockers } from '../utils/ml-physical-package-guard';
 import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
 import { toNumber } from '../utils/decimal.utils';
 import { isAliExpressVideoOrNonStillImageUrl } from '../utils/aliexpress-listing-still-image-url';
-import { getEffectiveShippingCost } from '../utils/shipping.utils';
+import { getEffectiveShippingCostForPublish } from '../utils/shipping.utils';
 import { fastHttpClient } from '../config/http-client'; // ✅ PRODUCTION READY: Usar cliente HTTP configurado
 import { resolveDestination } from './destination.service';
 import { getMercadoLibreRedirectUri } from '../utils/oauth-redirect-uris';
@@ -112,6 +116,7 @@ import {
   sanitizeDescriptionForMarketplace,
   checkMarketplaceCompliance,
 } from '../utils/compliance';
+import { calculateEbayPrice } from './marketplace-fee-intelligence.service';
 
 // ✅ BAJA PRIORIDAD: Tipo union estricto para marketplace
 export type MarketplaceName = 'ebay' | 'mercadolibre' | 'amazon';
@@ -147,7 +152,9 @@ export interface PublishProductRequest {
     quantity?: number;
     title?: string;
     description?: string;
+    attributes?: Record<string, unknown>;
     primaryImageIndex?: number;
+    targetMarginMultiplier?: number;
   };
 }
 
@@ -194,6 +201,57 @@ function parseProductDataObject(product: any): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function normalizeEbayAspectRecord(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, string[]> = {};
+  const entries = Object.entries(raw as Record<string, unknown>);
+  for (const [rawKey, rawValue] of entries) {
+    const key = String(rawKey || '').trim();
+    if (!key) continue;
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+    const normalizedValues = values
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    if (normalizedValues.length > 0) {
+      out[key] = normalizedValues;
+    }
+  }
+  return out;
+}
+
+function buildEbayAspectSeed(product: any, customData?: any): Record<string, string[]> {
+  const fromCustom = normalizeEbayAspectRecord(customData?.attributes);
+  if (Object.keys(fromCustom).length > 0) return fromCustom;
+
+  const meta = parseProductDataObject(product);
+  const metaRaw = (meta as Record<string, unknown>)?.attributes;
+  if (Array.isArray(metaRaw)) {
+    const fromArray = normalizeEbayAspectRecord(
+      Object.fromEntries(
+        metaRaw
+          .map((item) => {
+            const rec = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
+            const key = String(rec?.name || rec?.id || '').trim();
+            const value = rec?.value ?? rec?.value_name ?? rec?.valueId;
+            return key ? [key, value] : null;
+          })
+          .filter((entry): entry is [string, unknown] => Array.isArray(entry))
+      )
+    );
+    if (Object.keys(fromArray).length > 0) return fromArray;
+  }
+
+  const fromMetaObject = normalizeEbayAspectRecord(metaRaw);
+  if (Object.keys(fromMetaObject).length > 0) return fromMetaObject;
+
+  const fallbackBrand = inferBrandFromTitle(String(product?.title || '').trim()) || 'Generic';
+  return {
+    Brand: [fallbackBrand],
+    Type: ['General Product'],
+  };
 }
 
 function normalizeGtinCandidate(raw: unknown): string | null {
@@ -1110,8 +1168,58 @@ export class MarketplaceService {
         throw new AppError(credentials.issues.join(' '), 400);
       }
 
+      const userSettingsService = (await import('./user-settings.service')).default;
+      const defaultChinaUsShippingUsd = await userSettingsService.getDefaultChinaUsShippingUsd(userId);
+
       let publishCustomData: any = request.customData;
       let preventivePrepared = false;
+      const prePublishCredentialsForMarketplace: Record<string, unknown> | undefined =
+        request.marketplace === 'ebay'
+          ? {
+              ...(credentials.credentials as Record<string, unknown>),
+              marketplace_id:
+                String(
+                  (credentials.credentials as Record<string, unknown> | undefined)?.marketplace_id ||
+                    'EBAY_US'
+                )
+                  .trim()
+                  .toUpperCase() || 'EBAY_US',
+            }
+          : (credentials.credentials as Record<string, unknown> | undefined);
+
+      if (request.marketplace === 'ebay') {
+        const priceOverride = Number(publishCustomData?.price);
+        if (!Number.isFinite(priceOverride) || priceOverride <= 0) {
+          const aliexpressCostUsd = Math.max(0.01, toNumber(product.aliexpressPrice));
+          const shippingCostUsd = Math.max(
+            0,
+            getEffectiveShippingCostForPublish(product, undefined, { defaultUsd: defaultChinaUsShippingUsd })
+          );
+          const marginMultiplier = Math.max(
+            1.01,
+            Number(publishCustomData?.targetMarginMultiplier) ||
+              Number(process.env.EBAY_TARGET_MARGIN_MULTIPLIER) ||
+              1.2
+          );
+          const ebayPricing = calculateEbayPrice({
+            aliexpressCostUsd,
+            shippingCostUsd,
+            targetMarginMultiplier: marginMultiplier,
+          });
+          publishCustomData = {
+            ...(publishCustomData || {}),
+            price: ebayPricing.suggestedPriceUsd,
+            targetMarginMultiplier: marginMultiplier,
+          };
+          logger.info('[MARKETPLACE] Applied dynamic eBay pricing before preventive validation', {
+            productId: product.id,
+            aliexpressCostUsd,
+            shippingCostUsd,
+            suggestedPriceUsd: ebayPricing.suggestedPriceUsd,
+            marginMultiplier,
+          });
+        }
+      }
 
       const requestedPublishIntent =
         request.marketplace === 'mercadolibre'
@@ -1138,7 +1246,7 @@ export class MarketplaceService {
             userId,
             product,
             marketplace: request.marketplace,
-            credentials: credentials.credentials as Record<string, unknown> | undefined,
+            credentials: prePublishCredentialsForMarketplace,
             listingSalePrice,
           });
           product = await persistPreventivePublishPreparation({
@@ -1281,7 +1389,7 @@ export class MarketplaceService {
             userId,
             product,
             marketplace: request.marketplace,
-            credentials: credentials.credentials as Record<string, unknown> | undefined,
+            credentials: prePublishCredentialsForMarketplace,
             listingSalePrice,
           });
           product = await persistPreventivePublishPreparation({
@@ -1306,7 +1414,13 @@ export class MarketplaceService {
       // Publish to specific marketplace
       switch (request.marketplace) {
         case 'ebay':
-          return await this.publishToEbay(product, credentials, publishCustomData, userId);
+          return await this.publishToEbay(
+            product,
+            credentials,
+            publishCustomData,
+            userId,
+            defaultChinaUsShippingUsd
+          );
 
         case 'mercadolibre':
           return await this.publishToMercadoLibre(
@@ -1314,11 +1428,18 @@ export class MarketplaceService {
             credentials.credentials,
             publishCustomData,
             userId,
-            Boolean(request.duplicateListing)
+            Boolean(request.duplicateListing),
+            defaultChinaUsShippingUsd
           );
 
         case 'amazon':
-          return await this.publishToAmazon(product, credentials.credentials, publishCustomData, userId);
+          return await this.publishToAmazon(
+            product,
+            credentials.credentials,
+            publishCustomData,
+            userId,
+            defaultChinaUsShippingUsd
+          );
 
         default:
           throw new AppError('Marketplace not supported', 400);
@@ -1369,7 +1490,8 @@ export class MarketplaceService {
     product: any,
     credentialEntry: MarketplaceCredentials,
     customData?: any,
-    userId?: number
+    userId?: number,
+    defaultChinaUsShippingUsd?: number
   ): Promise<PublishResult> {
     try {
       const ebayCreds = {
@@ -1444,7 +1566,9 @@ export class MarketplaceService {
       }
 
       const costNum = toNumber(product.aliexpressPrice);
-      const shippingNum = getEffectiveShippingCost(product);
+      const shippingNum = getEffectiveShippingCostForPublish(product, undefined, {
+        defaultUsd: defaultChinaUsShippingUsd,
+      });
       const importTaxNum = toNumber(product.importTax ?? 0);
       const totalCost = toNumber(product.totalCost) > 0
         ? toNumber(product.totalCost)
@@ -1482,6 +1606,17 @@ export class MarketplaceService {
         }
       }
 
+      // Force English listing copy for eBay US (title + description), even when source copy is provided manually.
+      if (userId) {
+        const translated = await this.forceEnglishListingCopy({
+          title: String(finalTitle || product.title || ''),
+          description: String(finalDescription || product.description || ''),
+          userId,
+        });
+        finalTitle = translated.title || finalTitle;
+        finalDescription = translated.description || finalDescription;
+      }
+
       finalTitle = String(finalTitle || '')
         .replace(/\s+/g, ' ')
         .trim();
@@ -1497,6 +1632,30 @@ export class MarketplaceService {
       finalTitle = sanitizeTitleForEbay(finalTitle);
       finalDescription = sanitizeDescriptionForEbay(finalDescription || '');
 
+      if (!env.EBAY_US_SKIP_DELIVERY_NOTICE) {
+        let fbMin = env.EBAY_US_DELIVERY_FALLBACK_MIN_DAYS;
+        let fbMax = env.EBAY_US_DELIVERY_FALLBACK_MAX_DAYS;
+        if (fbMax < fbMin) {
+          fbMax = fbMin;
+        }
+        const range = buildEbayUsDropshipDeliveryRange(product, {
+          fallbackMin: fbMin,
+          fallbackMax: fbMax,
+          processingMin: env.EBAY_US_DELIVERY_PROCESSING_MIN_DAYS,
+          processingMax: env.EBAY_US_DELIVERY_PROCESSING_MAX_DAYS,
+          automatedDropshipPadMin: env.EBAY_US_AUTOMATED_DROPSHIP_PAD_MIN_DAYS,
+          automatedDropshipPadMax: env.EBAY_US_AUTOMATED_DROPSHIP_PAD_MAX_DAYS,
+        });
+        finalDescription = appendEbayUsDropshipShippingNotice(finalDescription, range);
+        finalDescription = sanitizeDescriptionForEbay(finalDescription || '');
+        logger.info('[MARKETPLACE] eBay US delivery notice applied', {
+          productId: product.id,
+          minDays: range.minDays,
+          maxDays: range.maxDays,
+          source: range.source,
+        });
+      }
+
       const complianceCheck = checkMarketplaceCompliance('ebay', finalTitle, finalDescription || '');
       if (!complianceCheck.compliant && complianceCheck.violations.length > 0) {
         logger.warn('[MARKETPLACE] eBay compliance check: remaining violations after sanitization', {
@@ -1505,6 +1664,9 @@ export class MarketplaceService {
         });
       }
 
+      let ebayAspects = buildEbayAspectSeed(product, customData);
+      ebayAspects = await this.forceEnglishAspects(ebayAspects, userId);
+
       const ebayProduct: EbayProduct = {
         title: finalTitle,
         description: finalDescription,
@@ -1512,6 +1674,7 @@ export class MarketplaceService {
         startPrice: price,
         quantity: this.resolveListingQuantity(product, customData?.quantity),
         condition: 'NEW',
+        aspects: ebayAspects,
         images: images, // ✅ MULTI-IMAGE: Todas las imágenes preparadas para eBay
       };
 
@@ -1579,7 +1742,8 @@ export class MarketplaceService {
     customData?: any,
     userId?: number,
     /** When true, skip "already has marketplace_listing row" guard (e.g. ML listing deleted but DB row remains). */
-    allowDuplicateListing = false
+    allowDuplicateListing = false,
+    defaultChinaUsShippingUsd?: number
   ): Promise<PublishResult> {
     try {
       // Merge primaryImageIndex from productData (set in ProductPreview) into customData
@@ -1828,7 +1992,9 @@ export class MarketplaceService {
       }
 
       const costNumMl = toNumber(product.aliexpressPrice);
-      const shippingNumMl = getEffectiveShippingCost(product);
+      const shippingNumMl = getEffectiveShippingCostForPublish(product, undefined, {
+        defaultUsd: defaultChinaUsShippingUsd,
+      });
       const importTaxNumMl = toNumber(product.importTax ?? 0);
       const totalCostMl = toNumber(product.totalCost) > 0
         ? toNumber(product.totalCost)
@@ -1898,7 +2064,9 @@ export class MarketplaceService {
       const DROPSHIPPING_HANDLING_TIME_DAYS = userId
         ? await wfCfgSvcEarly.getMlHandlingTimeDays(userId)
         : 30;
-      const effectiveShippingCostEarly = getEffectiveShippingCost(product);
+      const effectiveShippingCostEarly = getEffectiveShippingCostForPublish(product, undefined, {
+        defaultUsd: defaultChinaUsShippingUsd,
+      });
       const freeShipping = effectiveShippingCostEarly < 1;
 
       // ── ML Chile Import Compliance Footer ──────────────────────────────────────
@@ -2899,7 +3067,8 @@ export class MarketplaceService {
     product: any, 
     credentials: AmazonCredentials, 
     customData?: any,
-    userId?: number
+    userId?: number,
+    defaultChinaUsShippingUsd?: number
   ): Promise<PublishResult> {
     try {
       const amazonService = new AmazonService();
@@ -2930,7 +3099,9 @@ export class MarketplaceService {
       }
 
       const costNumAmz = toNumber(product.aliexpressPrice);
-      const shippingNumAmz = getEffectiveShippingCost(product);
+      const shippingNumAmz = getEffectiveShippingCostForPublish(product, undefined, {
+        defaultUsd: defaultChinaUsShippingUsd,
+      });
       const importTaxNumAmz = toNumber(product.importTax ?? 0);
       const totalCostAmz = toNumber(product.totalCost) > 0
         ? toNumber(product.totalCost)
@@ -3315,6 +3486,138 @@ export class MarketplaceService {
     }
   }
 
+  private async forceEnglishListingCopy(
+    input: { title: string; description: string; userId?: number }
+  ): Promise<{ title: string; description: string }> {
+    const originalTitle = String(input.title || '').trim();
+    const originalDescription = String(input.description || '').trim();
+    if (!originalTitle || !input.userId) {
+      return { title: originalTitle, description: originalDescription };
+    }
+
+    try {
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      const groqCreds = await CredentialsManager.getCredentials(input.userId, 'groq', 'production');
+      if (!groqCreds?.apiKey) {
+        return { title: originalTitle, description: originalDescription };
+      }
+
+      const response = await fastHttpClient.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Translate and optimize product copy for eBay US. Return strict JSON only: {"title":"...","description":"..."}. Title must be English and <= 80 chars.',
+            },
+            {
+              role: 'user',
+              content: JSON.stringify({
+                title: originalTitle,
+                description: originalDescription,
+              }),
+            },
+          ],
+          temperature: 0.2,
+          max_tokens: 500,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${groqCreds.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const content = String(response.data?.choices?.[0]?.message?.content || '').trim();
+      if (!content) return { title: originalTitle, description: originalDescription };
+
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch?.[0]) {
+          parsed = JSON.parse(jsonMatch[0]);
+        }
+      }
+
+      const translatedTitle = String(parsed?.title || '').trim();
+      const translatedDescription = String(parsed?.description || '').trim();
+      return {
+        title: translatedTitle || originalTitle,
+        description: translatedDescription || originalDescription,
+      };
+    } catch (error) {
+      logger.debug('Failed to enforce English copy for eBay listing, using original copy', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { title: originalTitle, description: originalDescription };
+    }
+  }
+
+  private async forceEnglishAspects(
+    aspects: Record<string, string[]>,
+    userId?: number
+  ): Promise<Record<string, string[]>> {
+    if (!userId || Object.keys(aspects).length === 0) return aspects;
+
+    try {
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      const groqCreds = await CredentialsManager.getCredentials(userId, 'groq', 'production');
+      if (!groqCreds?.apiKey) return aspects;
+
+      const response = await fastHttpClient.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Translate all attribute keys and values to English for eBay listing aspects. Return strict JSON object with string keys and string-array values only.',
+            },
+            {
+              role: 'user',
+              content: JSON.stringify(aspects),
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 600,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${groqCreds.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const content = String(response.data?.choices?.[0]?.message?.content || '').trim();
+      if (!content) return aspects;
+
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch?.[0]) {
+          parsed = JSON.parse(jsonMatch[0]);
+        }
+      }
+
+      const normalized = normalizeEbayAspectRecord(parsed);
+      return Object.keys(normalized).length > 0 ? normalized : aspects;
+    } catch (error) {
+      logger.debug('Failed to enforce English aspect translation for eBay listing', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return aspects;
+    }
+  }
+
   /**
    * Generate listing preview for a product
    * Returns preview data without publishing
@@ -3356,6 +3659,9 @@ export class MarketplaceService {
       if (!product) {
         return { success: false, error: 'Product not found' };
       }
+
+      const userSettingsServiceForPreview = (await import('./user-settings.service')).default;
+      const previewDefaultShippingUsd = await userSettingsServiceForPreview.getDefaultChinaUsShippingUsd(userId);
 
       // ✅ CORREGIDO: No requerir credenciales para generar preview
       // El preview puede generarse sin credenciales (solo para mostrar cómo se verá el producto)
@@ -3431,7 +3737,9 @@ export class MarketplaceService {
       });
       
       const costBase = toNumber(product.aliexpressPrice);
-      let shippingCost = getEffectiveShippingCost(product, metadata ?? undefined);
+      let shippingCost = getEffectiveShippingCostForPublish(product, metadata ?? undefined, {
+        defaultUsd: previewDefaultShippingUsd,
+      });
       let importTaxVal = toNumber(product.importTax ?? metadata?.importTax ?? 0);
       const targetCountry = (product.targetCountry || metadata?.targetCountry || '').toString().toUpperCase() || undefined;
 
@@ -4082,17 +4390,17 @@ export class MarketplaceService {
 
   /**
    * Get maximum images allowed per marketplace
-   * eBay: 12 images maximum
+   * eBay: 24 images maximum
    * MercadoLibre: Up to 10 images (depending on plan)
    * Amazon: Up to 9 images (main + 8 additional)
    */
   private getMarketplaceImageLimit(marketplace: MarketplaceName): number {
     const limits: Record<MarketplaceName, number> = {
-      ebay: 12,
+      ebay: 24,
       mercadolibre: 10,
       amazon: 9,
     };
-    return limits[marketplace] || 12; // Default to eBay limit
+    return limits[marketplace] || 24; // Default to eBay limit
   }
 
   /**

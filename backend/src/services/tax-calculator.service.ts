@@ -38,7 +38,8 @@ class TaxCalculatorService {
     // Estados Unidos
     US: {
       vatRate: 0.0, // Sin IVA federal
-      importDuty: 0.0, // Generalmente sin arancel para productos < $800
+      // 2025-08+: flujo DS conservador para eBay US (Section 122 surcharge sobre item+shipping)
+      importDuty: 0.10,
       currency: 'USD'
     },
     // México

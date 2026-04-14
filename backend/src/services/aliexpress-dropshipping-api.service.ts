@@ -45,6 +45,11 @@ export interface DropshippingProductInfo {
     availableShippingMethods: ShippingMethod[];
     estimatedDeliveryDays?: number;
   };
+  /**
+   * 0–5 stars parsed from DS raw payload when present (Affiliate often omits scores).
+   * Used as eBay US rating evidence in preventive validation.
+   */
+  sellerRatingFive?: number;
 }
 
 export interface DropshippingSKU {
@@ -178,6 +183,37 @@ export interface TrackingEvent {
 }
 
 /** ds.product.get returns galleries under ae_multimedia_info_dto; simplequery often omits product_images. */
+/** Map evaluate_score / evaluate_rate style fields to 0–5 (same semantics as Affiliate preventive helper). */
+export function extractSellerRatingFiveFromDsRawPayload(raw: unknown): number | undefined {
+  const normPair = (a: unknown, b: unknown): number | undefined => {
+    for (const rawV of [a, b]) {
+      if (rawV == null || String(rawV).trim() === '') continue;
+      const n = parseFloat(String(rawV).replace(/%/g, '').replace(',', '.'));
+      if (!Number.isFinite(n) || n <= 0) continue;
+      if (n <= 5) return n;
+      if (n <= 100) return n / 20;
+    }
+    return undefined;
+  };
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  let x = normPair(o.evaluate_score, o.evaluate_rate);
+  if (x != null) return x;
+  const base = o.ae_item_base_info_dto;
+  if (base && typeof base === 'object') {
+    const b = base as Record<string, unknown>;
+    x = normPair(b.evaluate_score, b.evaluate_rate);
+    if (x != null) return x;
+  }
+  const store = o.ae_store_info;
+  if (store && typeof store === 'object') {
+    const s = store as Record<string, unknown>;
+    x = normPair(s.store_rating ?? s.score, s.item_as_described_rating);
+    if (x != null) return x;
+  }
+  return undefined;
+}
+
 function collectAliExpressDsProductImageUrls(multimediaRoot: unknown, skuRows: any[] | undefined): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -751,6 +787,7 @@ export class AliExpressDropshippingAPIService {
         originalPrice: parseFloat(product.original_price || product.list_price || '0'),
         currency: product.currency || 'USD',
         stock: parseInt(product.stock || product.available_stock || '0', 10),
+        sellerRatingFive: extractSellerRatingFiveFromDsRawPayload(rawAny),
         logisticsInfoDto:
           rawAny?.logistics_info_dto && typeof rawAny.logistics_info_dto === 'object'
             ? (rawAny.logistics_info_dto as Record<string, unknown>)

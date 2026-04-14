@@ -64,10 +64,65 @@ export interface PipelineDiagnostics {
   [key: string]: unknown;
 }
 
+/** Phase C — normalized economic quote for UI / downstream (optional on each opportunity). */
+export interface OpportunityEconomicSupplyQuote {
+  currency: string;
+  unitCost: number;
+  shippingEstimate: number;
+  landedCostEstimate: number;
+  costConfidence: 'high' | 'medium' | 'low';
+  quoteFreshness: 'fresh' | 'stale' | 'unknown';
+  shippingEstimateStatus: 'not_quoted' | 'estimated' | 'deep_quoted';
+  deepQuotePerformed: boolean;
+  deepQuoteAt?: string;
+  freightQuoteCachedAt?: string;
+  shippingSource?: string;
+  costSemantics?: {
+    unitCostKind: string;
+    shippingKind: string;
+    landedKind: string;
+  };
+  deliveryDaysBandMax?: number;
+  /** CJ logistic option label when deep-quoted. */
+  cjFreightMethod?: string;
+}
+
+/** Phase B — pipeline + row-level supply metadata (no secrets). */
+export interface OpportunitySupplyDiagnostics {
+  pipelinePreference: 'aliexpress' | 'cj' | 'auto';
+  cjSupplyMode: string;
+  sourcesTried: string[];
+  degradedPartial: boolean;
+  notes: string[];
+  rowMeta?: {
+    supplier: 'aliexpress' | 'cj';
+    quoteConfidence: string;
+    preferredSupplierSatisfied: boolean;
+    fallbackUsed: boolean;
+    unitCostTruth: string;
+    shippingTruth: string;
+    shippingEstimateStatus?: string;
+    shippingSource?: string;
+    deepQuotePerformed?: boolean;
+    deepQuoteAt?: string;
+    freightQuoteCachedAt?: string;
+    quoteFreshness?: string;
+    cjFreightMethod?: string;
+    deepQuoteFailureReason?: string;
+    costSemantics?: { unitCostKind: string; shippingKind: string; landedKind: string };
+  };
+  /** Phase C: selective CJ freight summary (from pipeline diagnostics.deepQuote). */
+  deepQuote?: Record<string, unknown>;
+}
+
 export interface OpportunityItem {
   productId?: string;
+  /** When known (e.g. single-variant CJ row), pass to CJ→eBay pipeline as variantId. */
+  cjVariantId?: string;
   title: string;
-  sourceMarketplace: 'aliexpress';
+  /** `cjdropshipping` when the discovery row came from CJ Open API (`OPPORTUNITY_CJ_SUPPLY_MODE`). */
+  sourceMarketplace: 'aliexpress' | 'cjdropshipping';
+  /** Supplier product URL (AliExpress or CJ catalog link). */
   aliexpressUrl: string;
   productUrl?: string;
   image?: string;
@@ -102,10 +157,21 @@ export interface OpportunityItem {
     probeCode?: string;
     probeDetail?: string;
   }>;
+  /** Phase B: how this opportunity was sourced (preference, CJ mode, row quote truth). */
+  supplyDiagnostics?: OpportunitySupplyDiagnostics;
+  /** Phase C: explicit unit/shipping/landed semantics for supplier cost (backward compatible). */
+  economicSupplyQuote?: OpportunityEconomicSupplyQuote;
+
   category?: string;
   shippingCost?: number;
   importTax?: number;
   totalCost?: number;
+  /** Unit supplier cost converted to baseCurrency (UI when costCurrency ≠ baseCurrency). */
+  costInBaseCurrency?: number;
+  /** Landed supplier cost (product + shipping + import tax) in baseCurrency for margin/ROI consistency. */
+  totalCostInBaseCurrency?: number;
+  /** Ganancia neta estimada por unidad en moneda base (precio sugerido − costo aterrizado en base). */
+  netProfitInBaseCurrency?: number;
   targetCountry?: string;
   trendData?: {
     trend: 'rising' | 'stable' | 'declining';
@@ -123,6 +189,8 @@ export interface OpportunityItem {
   supplierRating?: number;
   supplierReviewsCount?: number;
   shippingDaysMax?: number;
+  /** Días de entrega máx. cotizados (AliExpress hacia destino); alias semántico de shippingDaysMax. */
+  estimatedDeliveryDays?: number;
   supplierScorePct?: number;
   /** Automatic publishability decision — computed by the pipeline, not by the operator. */
   publishingDecision?: PublishingDecisionResult;
@@ -152,5 +220,6 @@ export interface DiscoveryProduct {
   supplierRating?: number;
   supplierReviewsCount?: number;
   shippingDaysMax?: number;
+  estimatedDeliveryDays?: number;
   supplierScorePct?: number;
 }

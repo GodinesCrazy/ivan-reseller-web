@@ -33,8 +33,17 @@ export interface FulfillOrderResult {
   success: boolean;
   orderId: string;
   aliexpressOrderId?: string;
+  supplierOrderId?: string;
   status: OrderStatus;
   error?: string;
+}
+
+function resolveOrderSupplier(order: { supplier?: string | null; productUrl?: string | null }): 'aliexpress' | 'cj' {
+  const configured = String(order.supplier || '').trim().toLowerCase();
+  if (configured === 'cj' || configured === 'cjdropshipping') return 'cj';
+  const url = String(order.productUrl || '').toLowerCase();
+  if (url.includes('cjdropshipping.com')) return 'cj';
+  return 'aliexpress';
 }
 
 export class OrderFulfillmentService {
@@ -98,6 +107,50 @@ export class OrderFulfillmentService {
     if (!shippingObj) {
       await this.markFailed(orderId, 'Invalid shipping address', order.userId ?? undefined);
       return { success: false, orderId, status: 'FAILED', error: 'Invalid shipping address' };
+    }
+
+    const orderSupplier = resolveOrderSupplier(order);
+    if (orderSupplier === 'cj') {
+      if (order.userId == null) {
+        await this.markFailed(orderId, 'Order with supplier=cj requires userId', order.userId ?? undefined);
+        return { success: false, orderId, status: 'FAILED', error: 'Order with supplier=cj requires userId' };
+      }
+      try {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { status: 'PURCHASING', supplier: 'cj', errorMessage: null },
+        });
+        const { supplierFulfillmentService } = await import('./supplier-fulfillment.service');
+        const created = await supplierFulfillmentService.createSupplierOrder({
+          orderId,
+          userId: order.userId,
+          supplier: 'cj',
+        });
+        logger.info('[ORDER-FULFILLMENT] CJ supplier order created through neutral layer', {
+          orderId,
+          supplierOrderId: created.supplierOrderId,
+          status: created.status,
+        });
+        try {
+          const { saleService } = await import('./sale.service');
+          await saleService.createSaleFromOrder(orderId);
+        } catch (autoErr: any) {
+          logger.warn('[ORDER-FULFILLMENT] createSaleFromOrder failed (non-fatal)', {
+            orderId,
+            error: autoErr?.message,
+          });
+        }
+        return {
+          success: true,
+          orderId,
+          supplierOrderId: created.supplierOrderId,
+          status: 'PURCHASED',
+        };
+      } catch (cjErr: any) {
+        const msg = cjErr?.message || String(cjErr);
+        await this.markFailed(orderId, msg, order.userId ?? undefined);
+        return { success: false, orderId, status: 'FAILED', error: msg };
+      }
     }
 
     let productUrl = (order.productUrl || '').trim();

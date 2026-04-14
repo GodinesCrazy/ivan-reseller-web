@@ -19,6 +19,7 @@ import { retryAutomaticPurchaseForManualOrders } from './manual-fulfillment.serv
 import { orderFulfillmentService } from './order-fulfillment.service';
 import { processPaidOrders } from './process-paid-orders.service';
 import { syncTrackingForEligibleOrders } from './fulfillment-tracking-sync.service';
+import { runSupplierPostsaleSyncBatch } from './supplier-postsale-sync.service';
 import { listingStateReconciliationService } from './listing-state-reconciliation.service';
 
 /**
@@ -38,6 +39,8 @@ export class ScheduledTasksService {
   private fulfillmentRetryEngineQueue: Queue | null = null;
   private processPaidOrdersQueue: Queue | null = null;
   private fulfillmentTrackingSyncQueue: Queue | null = null;
+  /** Phase D.5 — CJ / supplier neutral status + tracking poll */
+  private supplierPostsaleSyncQueue: Queue | null = null;
   private marketplaceOrderSyncQueue: Queue | null = null;
   private mercadolibreOrderSyncQueue: Queue | null = null;
   private amazonOrderSyncQueue: Queue | null = null;
@@ -73,6 +76,7 @@ export class ScheduledTasksService {
   private fulfillmentRetryEngineWorker: Worker | null = null;
   private processPaidOrdersWorker: Worker | null = null;
   private fulfillmentTrackingSyncWorker: Worker | null = null;
+  private supplierPostsaleSyncWorker: Worker | null = null;
   private marketplaceOrderSyncWorker: Worker | null = null;
   private mercadolibreOrderSyncWorker: Worker | null = null;
   private amazonOrderSyncWorker: Worker | null = null;
@@ -175,6 +179,22 @@ export class ScheduledTasksService {
     // Fulfillment tracking sync: fetch AliExpress tracking, submit to eBay/ML/Amazon every 30 min
     this.fulfillmentTrackingSyncQueue = new Queue('fulfillment-tracking-sync', {
       connection: this.bullMQRedis as any
+    });
+
+    // Phase D.5 — Supplier (CJ) neutral post-sale status + tracking sync
+    const postsaleAttempts = Math.min(15, Math.max(1, Number(process.env.SUPPLIER_POSTSALE_JOB_ATTEMPTS || 5) || 5));
+    const postsaleBackoffMs = Math.min(
+      600_000,
+      Math.max(5_000, Number(process.env.SUPPLIER_POSTSALE_JOB_BACKOFF_MS || 60_000) || 60_000)
+    );
+    this.supplierPostsaleSyncQueue = new Queue('supplier-postsale-sync', {
+      connection: this.bullMQRedis as any,
+      defaultJobOptions: {
+        attempts: postsaleAttempts,
+        backoff: { type: 'exponential', delay: postsaleBackoffMs },
+        removeOnComplete: 10,
+        removeOnFail: 100,
+      },
     });
 
     // Phase 40: Marketplace order sync (eBay/ML/Amazon) — fetch real orders every 5–10 min
@@ -575,6 +595,38 @@ export class ScheduledTasksService {
           concurrency: 1,
         }
       );
+    }
+
+    // Phase D.5 — CJ global post-sale polling (Order.supplier* + Sale when tracking appears)
+    if (this.supplierPostsaleSyncQueue) {
+      this.supplierPostsaleSyncWorker = new Worker(
+        'supplier-postsale-sync',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running supplier post-sale sync', { jobId: job.id });
+          return await runSupplierPostsaleSyncBatch();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.supplierPostsaleSyncWorker.on('completed', (job) => {
+        logger.info('Scheduled Tasks: supplier post-sale sync job completed', {
+          jobId: job?.id,
+          returnvalue: job?.returnvalue,
+        });
+      });
+      this.supplierPostsaleSyncWorker.on('failed', (job, err) => {
+        const max = (job?.opts?.attempts as number | undefined) ?? 1;
+        const made = job?.attemptsMade ?? 0;
+        logger.error('Scheduled Tasks: supplier post-sale sync job failed', {
+          jobId: job?.id,
+          attemptsMade: made,
+          maxAttempts: max,
+          retriesExhausted: made >= max,
+          error: err?.message,
+        });
+      });
     }
 
     // Phase 40: Marketplace order sync worker (eBay real orders → Order table)
@@ -1342,6 +1394,21 @@ export class ScheduledTasksService {
           },
           removeOnComplete: 5,
           removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase D.5 — supplier (CJ) post-sale status + tracking (neutral Order model)
+    if (this.supplierPostsaleSyncQueue) {
+      this.supplierPostsaleSyncQueue.add(
+        'supplier-postsale-sync-job',
+        {},
+        {
+          repeat: {
+            pattern: process.env.SUPPLIER_POSTSALE_SYNC_CRON || '*/15 * * * *',
+          },
+          removeOnComplete: 8,
+          removeOnFail: 8,
         }
       );
     }
@@ -2457,6 +2524,12 @@ export class ScheduledTasksService {
     }
     if (this.fullListingRecoveryQueue) {
       await this.fullListingRecoveryQueue.close();
+    }
+    if (this.supplierPostsaleSyncWorker) {
+      await this.supplierPostsaleSyncWorker.close();
+    }
+    if (this.supplierPostsaleSyncQueue) {
+      await this.supplierPostsaleSyncQueue.close();
     }
   }
 

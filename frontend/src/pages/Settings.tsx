@@ -29,6 +29,11 @@ interface UserSettings {
   dateFormat: string;
   currencyFormat: string;
   theme: string;
+  /** CSV: small, medium, large */
+  opportunityAllowedPackageTiers: string;
+  opportunitySmallMaxPriceUsd: number;
+  opportunityMediumMaxPriceUsd: number;
+  defaultChinaUsShippingUsd: number;
 }
 
 interface UserProfile {
@@ -72,7 +77,11 @@ export default function Settings() {
     timezone: 'America/New_York',
     dateFormat: 'MM/DD/YYYY',
     currencyFormat: 'USD',
-    theme: 'light'
+    theme: 'light',
+    opportunityAllowedPackageTiers: 'small',
+    opportunitySmallMaxPriceUsd: 45,
+    opportunityMediumMaxPriceUsd: 120,
+    defaultChinaUsShippingUsd: 5.99,
   });
 
   // User Profile
@@ -159,7 +168,11 @@ export default function Settings() {
           timezone: data.data.timezone || 'America/New_York',
           dateFormat: data.data.dateFormat || 'MM/DD/YYYY',
           currencyFormat: data.data.currencyFormat || 'USD',
-          theme: loadedTheme
+          theme: loadedTheme,
+          opportunityAllowedPackageTiers: data.data.opportunityAllowedPackageTiers || 'small',
+          opportunitySmallMaxPriceUsd: Number(data.data.opportunitySmallMaxPriceUsd ?? 45),
+          opportunityMediumMaxPriceUsd: Number(data.data.opportunityMediumMaxPriceUsd ?? 120),
+          defaultChinaUsShippingUsd: Number(data.data.defaultChinaUsShippingUsd ?? 5.99),
         });
         // ✅ CORRECCIÓN TEMA: Aplicar tema al cargar desde backend
         updateTheme(loadedTheme as 'light' | 'dark' | 'auto');
@@ -178,7 +191,11 @@ export default function Settings() {
             timezone: parsed.timezone || 'America/New_York',
             dateFormat: parsed.dateFormat || 'MM/DD/YYYY',
             currencyFormat: parsed.currencyFormat || 'USD',
-            theme: loadedTheme
+            theme: loadedTheme,
+            opportunityAllowedPackageTiers: parsed.opportunityAllowedPackageTiers || 'small',
+            opportunitySmallMaxPriceUsd: Number(parsed.opportunitySmallMaxPriceUsd ?? 45),
+            opportunityMediumMaxPriceUsd: Number(parsed.opportunityMediumMaxPriceUsd ?? 120),
+            defaultChinaUsShippingUsd: Number(parsed.defaultChinaUsShippingUsd ?? 5.99),
           });
           // ✅ CORRECCIÓN TEMA: Aplicar tema al cargar desde localStorage
           updateTheme(loadedTheme as 'light' | 'dark' | 'auto');
@@ -548,6 +565,105 @@ export default function Settings() {
                   <option value="dark">Dark</option>
                   <option value="auto">Auto (System)</option>
                 </select>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Oportunidades y envío (dropshipping)</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Filtra la búsqueda de oportunidades por tamaño de paquete (heurística por precio en USD del proveedor + palabras clave).
+                El envío China→EE. UU. por defecto se usa cuando no hay cotización en el producto.
+              </p>
+              <div className="space-y-2">
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">Tamaños permitidos en oportunidades</span>
+                <div className="flex flex-wrap gap-4 text-sm text-slate-700 dark:text-slate-300">
+                  {(['small', 'medium', 'large'] as const).map((tier) => {
+                    const selected = generalSettings.opportunityAllowedPackageTiers
+                      .split(',')
+                      .map((s) => s.trim())
+                      .includes(tier);
+                    return (
+                      <label key={tier} className="inline-flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => {
+                            const parts = generalSettings.opportunityAllowedPackageTiers
+                              .split(',')
+                              .map((s) => s.trim())
+                              .filter(Boolean);
+                            const set = new Set(parts);
+                            if (set.has(tier)) set.delete(tier);
+                            else set.add(tier);
+                            if (set.size === 0) set.add('small');
+                            setGeneralSettings({
+                              ...generalSettings,
+                              opportunityAllowedPackageTiers: Array.from(set).join(','),
+                            });
+                          }}
+                          className="rounded border-slate-300 dark:border-slate-600"
+                        />
+                        <span className="capitalize">{tier === 'small' ? 'Pequeño' : tier === 'medium' ? 'Mediano' : 'Grande'}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Máx. precio unitario &quot;small&quot; (USD)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={0.01}
+                    value={generalSettings.opportunitySmallMaxPriceUsd}
+                    onChange={(e) =>
+                      setGeneralSettings({
+                        ...generalSettings,
+                        opportunitySmallMaxPriceUsd: parseFloat(e.target.value) || 45,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Máx. precio unitario &quot;medium&quot; (USD)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={0.01}
+                    value={generalSettings.opportunityMediumMaxPriceUsd}
+                    onChange={(e) =>
+                      setGeneralSettings({
+                        ...generalSettings,
+                        opportunityMediumMaxPriceUsd: parseFloat(e.target.value) || 120,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Envío China→USA por defecto (USD)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={generalSettings.defaultChinaUsShippingUsd}
+                    onChange={(e) =>
+                      setGeneralSettings({
+                        ...generalSettings,
+                        defaultChinaUsShippingUsd: parseFloat(e.target.value) || 5.99,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
               </div>
             </div>
 

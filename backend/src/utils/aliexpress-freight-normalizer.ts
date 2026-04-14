@@ -187,7 +187,7 @@ function normalizeFreightOption(node: Record<string, unknown>): AliExpressFreigh
     freightAmount,
     freightCurrency: freightCurrency.toUpperCase(),
     estimatedDeliveryTime: estimatedDeliveryTime == null ? undefined : Number(estimatedDeliveryTime),
-    isTrackedLike: /(standard|tracked|tracking|registered|premium|select|cainiao.*standard)/i.test(
+    isTrackedLike: /(standard|std|tracked|tracking|registered|premium|select|cainiao.*(standard|std|fulfillment))/i.test(
       serviceName,
     ),
     isFreeShipping: Boolean(freeShipping),

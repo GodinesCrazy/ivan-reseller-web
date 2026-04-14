@@ -20,7 +20,7 @@ import costCalculator, { type CostBreakdown } from './cost-calculator.service';
 import { calculateFeeIntelligence } from './marketplace-fee-intelligence.service';
 import taxCalculatorService from './tax-calculator.service';
 import { toNumber } from '../utils/decimal.utils';
-import { getEffectiveShippingCost } from '../utils/shipping.utils';
+import { getEffectiveShippingCostForPublish } from '../utils/shipping.utils';
 import fx from './fx.service';
 import { normalizeAliExpressRawSkus } from '../utils/aliexpress-raw-sku-normalizer';
 import { selectMlChileFreightOption } from '../utils/ml-chile-freight-selector';
@@ -182,8 +182,36 @@ function convertCurrency(amount: number, fromCurrency: string, toCurrency: strin
 }
 
 /** Minimum shipping cost from DS shipping methods (>= 0). */
-export function minShippingCostFromApi(info: DropshippingProductInfo): number | null {
-  const methods = info.shippingInfo?.availableShippingMethods ?? [];
+export function isPreferredEbayUsShippingMethod(methodName: string): boolean {
+  const name = String(methodName || '').trim().toLowerCase();
+  if (!name) return false;
+  return /aliexpress\s*standard\s*shipping|speedpak|cainiao[_\s-]*(fulfillment[_\s-]*)?(standard|std)/.test(name);
+}
+
+export function hasValidInternationalTrackingMethod(methodName: string): boolean {
+  const name = String(methodName || '').trim().toLowerCase();
+  if (!name) return false;
+  return /aliexpress\s*standard|speedpak|tracked|tracking|registered|epacket|cainiao[_\s-]*(fulfillment[_\s-]*)?(standard|std)/.test(name);
+}
+
+export function minShippingCostFromApi(
+  info: DropshippingProductInfo,
+  options?: {
+    enforceEbayUsApprovedServices?: boolean;
+    requireInternationalTracking?: boolean;
+  }
+): number | null {
+  const methodsAll = info.shippingInfo?.availableShippingMethods ?? [];
+  const methods = methodsAll.filter((method) => {
+    const methodName = String(method?.methodName || '').trim();
+    if (options?.enforceEbayUsApprovedServices && !isPreferredEbayUsShippingMethod(methodName)) {
+      return false;
+    }
+    if (options?.requireInternationalTracking && !hasValidInternationalTrackingMethod(methodName)) {
+      return false;
+    }
+    return true;
+  });
   const costs = methods
     .map((m) => m.cost)
     .filter((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0);
@@ -547,6 +575,12 @@ function buildRejectedSupplierSummary(audit: PreventiveSupplierAuditResult): str
 
 function calculateImportTaxUsd(product: PrePublishProductShape, supplierUnitUsd: number, shippingUsd: number, shipCountry: string): number {
   const configured = Math.max(0, toNumber((product.importTax ?? 0) as Parameters<typeof toNumber>[0]));
+  if (String(shipCountry || '').trim().toUpperCase() === 'US') {
+    const section122Rate =
+      Math.max(0, Number(process.env.EBAY_US_IMPORT_TAX_RATE)) || 0.10;
+    const section122Tax = Math.max(0, supplierUnitUsd + shippingUsd) * section122Rate;
+    return Math.max(configured, Number(section122Tax.toFixed(2)));
+  }
   if (String(shipCountry || '').trim().toUpperCase() === 'CL') {
     const landedCost = calculateMlChileLandedCost({
       productCost: supplierUnitUsd,
@@ -703,6 +737,8 @@ export async function evaluatePrePublishValidation(
   }
 
   const { userId, product, marketplace, credentials, listingSalePrice } = params;
+  const userSettingsService = (await import('./user-settings.service')).default;
+  const defaultChinaUsShippingUsd = await userSettingsService.getDefaultChinaUsShippingUsd(userId);
 
   if (!listingSalePrice || listingSalePrice <= 0) {
     return {
@@ -788,7 +824,11 @@ export async function evaluatePrePublishValidation(
   const supplierCurrency = (info.currency || product.currency || 'USD').toString();
   const supplierUnitUsd = toUsd(selected.unitPrice, supplierCurrency);
 
-  let shippingUsd = minShippingCostFromApi(info);
+  const enforceEbayUsShippingPolicy = marketplace === 'ebay' && shipCountry === 'US';
+  let shippingUsd = minShippingCostFromApi(info, {
+    enforceEbayUsApprovedServices: enforceEbayUsShippingPolicy,
+    requireInternationalTracking: enforceEbayUsShippingPolicy,
+  });
   let usedShippingFallback = false;
   if (marketplace === 'mercadolibre' && shipCountry === 'CL') {
     const freightQuotes = await aliexpressDropshippingAPIService.calculateBuyerFreight({
@@ -814,7 +854,11 @@ export async function evaluatePrePublishValidation(
   }
   if (shippingUsd == null) {
     if (env.PRE_PUBLISH_SHIPPING_FALLBACK) {
-      shippingUsd = getEffectiveShippingCost(product as import('../utils/shipping.utils').ProductWithShippingCost);
+      shippingUsd = getEffectiveShippingCostForPublish(
+        product as import('../utils/shipping.utils').ProductWithShippingCost,
+        undefined,
+        { defaultUsd: defaultChinaUsShippingUsd }
+      );
       usedShippingFallback = true;
       logger.info('[PRE-PUBLISH] Using fallback shipping (API returned no method costs)', {
         productId: product.id,
@@ -1113,6 +1157,8 @@ export async function runPreventiveEconomicsCore(
   params: RunPreventiveEconomicsCoreParams
 ): Promise<PreventiveEconomicsCoreSuccess | PreventiveEconomicsCoreFailure> {
   const { userId, product, marketplace, credentials, listingSalePrice } = params;
+  const userSettingsService = (await import('./user-settings.service')).default;
+  const defaultChinaUsShippingUsd = await userSettingsService.getDefaultChinaUsShippingUsd(userId);
 
   if (!listingSalePrice || listingSalePrice <= 0) {
     return { ok: false, message: 'listing sale price is missing or invalid' };
@@ -1157,8 +1203,10 @@ export async function runPreventiveEconomicsCore(
     !persistedMlChileFreightTruth?.ok &&
     env.PRE_PUBLISH_SHIPPING_FALLBACK
   ) {
-    const fallbackShippingUsd = getEffectiveShippingCost(
-      product as import('../utils/shipping.utils').ProductWithShippingCost
+    const fallbackShippingUsd = getEffectiveShippingCostForPublish(
+      product as import('../utils/shipping.utils').ProductWithShippingCost,
+      undefined,
+      { defaultUsd: defaultChinaUsShippingUsd }
     );
     if (Number.isFinite(fallbackShippingUsd) && fallbackShippingUsd > 0) {
       const checkedAt = new Date().toISOString();
@@ -1238,6 +1286,36 @@ export async function runPreventiveEconomicsCore(
     };
   }
 
+  const productMeta = parseProductMetadata(product.productData);
+  const parseSeedNumber = (value: unknown): number | undefined => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const seedOriginalRatingFive =
+    parseSeedNumber(
+      (productMeta as any)?.manualListEbayUs?.compliance?.supplierRatingFive
+    ) ??
+    parseSeedNumber(
+      (productMeta as any)?.sourceData?.manualListEbayUs?.compliance?.supplierRatingFive
+    ) ??
+    parseSeedNumber((productMeta as any)?.sourceData?.supplierRatingFive) ??
+    parseSeedNumber(
+      (productMeta as any)?.preventivePublish?.selectedSupplier?.rating
+    ) ??
+    parseSeedNumber((productMeta as any)?.supplierRatingFive);
+  const seedOriginalOrderCount =
+    parseSeedNumber(
+      (productMeta as any)?.manualListEbayUs?.compliance?.supplierOrderCount
+    ) ??
+    parseSeedNumber(
+      (productMeta as any)?.sourceData?.manualListEbayUs?.compliance?.supplierOrderCount
+    ) ??
+    parseSeedNumber((productMeta as any)?.sourceData?.supplierOrderCount) ??
+    parseSeedNumber(
+      (productMeta as any)?.preventivePublish?.selectedSupplier?.orderCount
+    ) ??
+    parseSeedNumber((productMeta as any)?.supplierOrderCount);
+
   const { runPreventiveSupplierAudit } = await import('./preventive-supplier-validation.service');
   const supplierAudit = await runPreventiveSupplierAudit({
     userId,
@@ -1248,8 +1326,11 @@ export async function runPreventiveEconomicsCore(
       toNumber((product.aliexpressPrice ?? 0) as Parameters<typeof toNumber>[0])
     ),
     shipToCountry: shipCountry,
+    marketplace,
     preferredSkuId: product.aliexpressSku,
     persistedMlChileFreightTruth: persistedMlChileFreightTruth?.truth,
+    seedOriginalRatingFive,
+    seedOriginalOrderCount,
     skipAlternativeSearch:
       marketplace === 'mercadolibre' &&
       shipCountry === 'CL' &&
