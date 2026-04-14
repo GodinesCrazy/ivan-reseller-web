@@ -185,17 +185,6 @@ export default function CjEbayProductsPage() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-slate-600 dark:text-slate-300">
-        FASE 3C–3D: evaluación/pricing y borrador de listing (requiere APPROVED + imágenes HTTPS). Los datos se escriben en{' '}
-        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">cj_ebay_shipping_quotes</code>{' '}
-        y{' '}
-        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">
-          cj_ebay_product_evaluations
-        </code>{' '}
-        con <strong>Evaluar y persistir</strong>. El draft (FASE 3D) va a{' '}
-        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">cj_ebay_listings</code>.
-      </p>
-
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-4">
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Entrada</h2>
         <div className="grid gap-3 sm:grid-cols-2">
