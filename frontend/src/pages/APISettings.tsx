@@ -2094,10 +2094,10 @@ export default function APISettings() {
         [scopeKey]: scopeToPersist,
       }));
 
-      // ✅ FIX: Usar immediateStatus si está disponible (para Google Trends/SerpAPI)
+      // ✅ FIX-CJ: Usar immediateStatus si está disponible (para TODOS los APIs, incluyendo cj-dropshipping)
       const saveData = response.data?.data || {};
       const immediateStatus = saveData.immediateStatus;
-      
+
       // ✅ FIX SerpAPI: Marcar campo como válido tras guardar exitosamente
       const hasSerpKey = credentials?.apiKey || credentials?.SERP_API_KEY || formData[makeFormKey(apiName, currentEnvironment)]?.SERP_API_KEY;
       if ((apiName === 'googletrends' || apiName === 'serpapi') && hasSerpKey) {
@@ -2109,24 +2109,29 @@ export default function APISettings() {
         }));
       }
 
-      // Si hay immediateStatus, actualizar el estado local inmediatamente
-      if (immediateStatus && (apiName === 'googletrends' || apiName === 'serpapi')) {
-        const statusKey = makeEnvKey(apiName === 'serpapi' ? 'googletrends' : apiName, currentEnvironment);
+      // ✅ FIX-CJ: Aplicar immediateStatus para TODOS los APIs que lo devuelven (no solo serpapi/googletrends)
+      // Esto evita el falso positivo/negativo: el backend ya validó el estado real de la credencial,
+      // aplicarlo inmediatamente evita que checks redundantes posteriores contradigan el resultado correcto.
+      if (immediateStatus) {
+        // Normalizar nombre: serpapi se muestra como googletrends en frontend
+        const resolvedApiName = apiName === 'serpapi' ? 'googletrends' : apiName;
+        const statusKey = makeEnvKey(resolvedApiName, currentEnvironment);
         setStatuses((prev: Record<string, any>) => ({
           ...prev,
           [statusKey]: {
-            apiName: apiName === 'serpapi' ? 'googletrends' : apiName,
+            apiName: resolvedApiName,
             environment: currentEnvironment,
-            status: immediateStatus.status || undefined, // ✅ FIX: Incluir status ('healthy', 'unhealthy', etc.)
-            isConfigured: immediateStatus.isConfigured || false, // ✅ FIX: Incluir isConfigured
+            status: immediateStatus.status || (immediateStatus.isAvailable ? 'healthy' : 'unhealthy'),
+            isConfigured: immediateStatus.isConfigured !== undefined ? immediateStatus.isConfigured : true,
             isAvailable: immediateStatus.isAvailable || false,
-            available: immediateStatus.isAvailable || false, // Mantener para compatibilidad
+            available: immediateStatus.isAvailable || false,
             message: immediateStatus.message || undefined,
+            error: immediateStatus.isAvailable ? undefined : (immediateStatus.message || undefined),
             lastChecked: new Date().toISOString(),
           }
         }));
         log.info('[APISettings] Updated status from immediateStatus', {
-          apiName,
+          apiName: resolvedApiName,
           statusKey,
           status: immediateStatus.status,
           isConfigured: immediateStatus.isConfigured,
@@ -2151,10 +2156,10 @@ export default function APISettings() {
 
       // ✅ MEJORA: Mensaje de éxito mejorado y más claro según el estado
       const warnings = saveData.warnings || [];
-      
+
       // ✅ MEJORA: Determinar si requiere OAuth y mostrar mensaje apropiado
       const isOAuthRequired = ['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress-affiliate'].includes(apiName);
-      const hasBasicCreds = apiName === 'ebay' 
+      const hasBasicCreds = apiName === 'ebay'
         ? (credentials.appId && credentials.devId && credentials.certId)
         : apiName === 'mercadolibre'
         ? (credentials.clientId && credentials.clientSecret)
@@ -2164,7 +2169,7 @@ export default function APISettings() {
       const hasToken = (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress-affiliate')
         ? (credentials.accessToken || credentials.refreshToken)
         : (credentials.token || credentials.refreshToken || credentials.authToken);
-      
+
       if (isOAuthRequired && hasBasicCreds && !hasToken) {
         // Credenciales básicas guardadas, falta OAuth - mensaje claro con siguiente paso
         toast.success(`✅ Paso 1/2 completado: Credenciales básicas guardadas`, {
@@ -2178,39 +2183,58 @@ export default function APISettings() {
         });
       } else {
         // Credenciales completas guardadas
-        toast.success(`✅ ${apiDef.displayName} configurado correctamente`, { 
-          id: `save-${apiName}`,
-          duration: 4000,
-        });
+        // ✅ FIX-CJ: Usar immediateStatus para mostrar mensaje preciso al usuario
+        // Si el backend ya validó el estado real de la credencial, no decir "configurado correctamente"
+        // cuando en realidad la key está mal.
+        if (immediateStatus && immediateStatus.isAvailable === true) {
+          const latencyText = immediateStatus.latency ? ` (${immediateStatus.latency}ms)` : '';
+          toast.success(`✅ ${apiDef.displayName} configurado y verificado${latencyText}`, {
+            id: `save-${apiName}`,
+            duration: 4000,
+          });
+        } else if (immediateStatus && immediateStatus.isAvailable === false) {
+          // Key guardada pero falla con el proveedor — mostrar error claro en lugar de falso positivo
+          const errMsg = immediateStatus.message || immediateStatus.error || 'La conexión falló';
+          toast.error(`⚠️ Credenciales guardadas, pero la conexión falló: ${errMsg}`, {
+            id: `save-${apiName}`,
+            duration: 6000,
+          });
+        } else {
+          // No hay immediateStatus (API que no lo soporta) — mensaje genérico de guardado
+          toast.success(`✅ ${apiDef.displayName} configurado correctamente`, {
+            id: `save-${apiName}`,
+            duration: 4000,
+          });
+        }
       }
-      
+
       // Mostrar advertencias de validación si existen (máximo 1 para no saturar)
       if (Array.isArray(warnings) && warnings.length > 0) {
         warnings.slice(0, 1).forEach((warning: string) => {
-          toast(`ℹ️ ${warning}`, { 
-            id: `warning-${apiName}`, 
+          toast(`ℹ️ ${warning}`, {
+            id: `warning-${apiName}`,
             duration: 4000,
             icon: 'ℹ️'
           });
         });
       }
-      
-      // ✅ MEJORA: Test automático opcional y silencioso (solo para APIs que lo soportan)
-      // No mostrar error si el test falla, solo si es crítico
-      const shouldTestAutomatically = ['ebay', 'amazon', 'mercadolibre', 'paypal', 'cj-dropshipping'].includes(
-        apiName
-      );
-      
+
+      // ✅ FIX-CJ: Auto-test SOLO si immediateStatus no confirmó ya el resultado
+      // Evita llamadas duplicadas a CJ API que pueden causar rate-limiting y estados contradictorios
+      const immediateStatusConfirmed = immediateStatus !== undefined && immediateStatus !== null;
+      const shouldTestAutomatically = !immediateStatusConfirmed &&
+        ['ebay', 'amazon', 'mercadolibre', 'paypal'].includes(apiName);
+
       if (shouldTestAutomatically) {
         // Esperar un momento para que las credenciales se propaguen
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         try {
           // Ejecutar test de conexión automático (silencioso)
           const testResponse = await api.post(`/api/credentials/${apiName}/test`, {
             environment: currentEnvironment,
           }, { timeout: 15000 });
-          
+
           const testResult = testResponse.data?.data;
           if (testResult?.isAvailable || testResult?.status === 'healthy') {
             const latencyText = testResult.latency ? ` (${testResult.latency}ms)` : '';
@@ -2225,38 +2249,38 @@ export default function APISettings() {
                 status: 'healthy'
               }
             }));
-        } else {
-          // Solo mostrar warning si el error NO es "Missing credentials" (porque acabamos de guardarlas)
-          const errorMsg = testResult?.error || testResult?.message || 'Error desconocido';
-          const isMissingCredentials = errorMsg.toLowerCase().includes('missing credentials') || 
+          } else {
+            // Solo mostrar warning si el error NO es "Missing credentials" (porque acabamos de guardarlas)
+            const errorMsg = testResult?.error || testResult?.message || 'Error desconocido';
+            const isMissingCredentials = errorMsg.toLowerCase().includes('missing credentials') ||
+                                        errorMsg.toLowerCase().includes('credenciales') ||
+                                        errorMsg.toLowerCase().includes('no credentials');
+
+            if (!isMissingCredentials) {
+              toast(`ℹ️ La conexión no pudo verificarse. Puedes probarla manualmente más tarde.`, { id: `test-${apiName}`, duration: 4000, icon: 'ℹ️' });
+            }
+            // Actualizar estado sin mostrar error alarmante
+            setStatuses((prev: Record<string, APIStatus>) => ({
+              ...prev,
+              [`${apiName}_${currentEnvironment}`]: {
+                ...testResult,
+                environment: currentEnvironment,
+                isAvailable: false,
+                status: 'unknown'
+              }
+            }));
+          }
+        } catch (testError: unknown) {
+          // Solo mostrar error si NO es un error de "missing credentials" (porque acabamos de guardarlas)
+          const axiosErr = testError && typeof testError === 'object' && 'response' in testError ? testError as { response?: { data?: { message?: string } } } : null;
+          const errorMsg = axiosErr?.response?.data?.message || (testError instanceof Error ? testError.message : 'Error al validar conexión');
+          const isMissingCredentials = errorMsg.toLowerCase().includes('missing credentials') ||
                                       errorMsg.toLowerCase().includes('credenciales') ||
                                       errorMsg.toLowerCase().includes('no credentials');
-          
+
           if (!isMissingCredentials) {
-            toast(`ℹ️ La conexión no pudo verificarse. Puedes probarla manualmente más tarde.`, { id: `test-${apiName}`, duration: 4000, icon: 'ℹ️' });
+            toast(`ℹ️ No se pudo verificar la conexión automáticamente. Las credenciales se guardaron correctamente.`, { id: `test-${apiName}`, duration: 4000, icon: 'ℹ️' });
           }
-          // Actualizar estado sin mostrar error alarmante
-          setStatuses((prev: Record<string, APIStatus>) => ({
-            ...prev,
-            [`${apiName}_${currentEnvironment}`]: {
-              ...testResult,
-              environment: currentEnvironment,
-              isAvailable: false,
-              status: 'unknown'
-            }
-          }));
-        }
-      } catch (testError: any) {
-        // Solo mostrar error si NO es un error de "missing credentials" (porque acabamos de guardarlas)
-        const errorMsg = testError.response?.data?.message || testError.message || 'Error al validar conexión';
-        const isMissingCredentials = errorMsg.toLowerCase().includes('missing credentials') || 
-                                    errorMsg.toLowerCase().includes('credenciales') ||
-                                    errorMsg.toLowerCase().includes('no credentials');
-        
-        if (!isMissingCredentials) {
-          // Error real, pero no crítico - solo warning
-          toast(`ℹ️ No se pudo verificar la conexión automáticamente. Las credenciales se guardaron correctamente.`, { id: `test-${apiName}`, duration: 4000, icon: 'ℹ️' });
-        }
           // Actualizar estado como desconocido (no es un error crítico)
           setStatuses((prev: Record<string, APIStatus>) => ({
             ...prev,
@@ -2275,7 +2299,7 @@ export default function APISettings() {
       await loadCredentials(true);
       await fetchAuthStatuses();
       await loadMinimumDropshippingAPIs(true);
-      
+
       // Limpiar formulario
       setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
       setExpandedApi(null);

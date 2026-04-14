@@ -191,6 +191,8 @@ router.get('/status', async (req: Request, res: Response, next) => {
       await apiAvailability.clearAPICache(userId, 'mercadolibre').catch(() => {});
       await apiAvailability.clearAPICache(userId, 'serpapi').catch(() => {});
       await apiAvailability.clearAPICache(userId, 'googletrends').catch(() => {});
+      // ✅ FIX-CJ: Limpiar caché de CJ en forceRefresh para que el status post-save sea fresco
+      await apiAvailability.clearAPICache(userId, 'cj-dropshipping').catch(() => {});
     }
     
     // ✅ Intentar obtener estados con manejo de errores individual
@@ -973,36 +975,9 @@ router.post('/', async (req: Request, res: Response, next) => {
       }
     }
 
-    // ✅ REFACTOR: Encolar health check asíncrono en lugar de ejecutar síncronamente
-    // Esto previene bloqueos y crashes SIGSEGV, y permite que la respuesta se envíe inmediatamente
-    let healthCheckJobId: string | null = null;
-    try {
-      // Limpiar caché antes de encolar verificación (sin await para no bloquear)
-      apiAvailability.clearAPICache(targetUserId, normalizedApiName).catch(() => {});
-      
-      // Encolar health check asíncrono
-      healthCheckJobId = await apiHealthCheckQueueService.enqueueHealthCheck(
-        targetUserId,
-        normalizedApiName,
-        env
-      );
-      
-      logger.debug('[API Credentials] Health check enqueued', {
-        jobId: healthCheckJobId,
-        userId: targetUserId,
-        apiName: normalizedApiName,
-      });
-    } catch (queueError: any) {
-      logger.warn('Failed to enqueue health check after saving', {
-        error: queueError?.message,
-        userId: targetUserId,
-        apiName: normalizedApiName
-      });
-      // Continuar aunque falle el encolado - el usuario puede verificar manualmente después
-    }
-    
-    // ✅ Para SerpAPI/Google Trends: retornar immediateStatus para actualizar UI al instante
-    let immediateStatus: { isConfigured: boolean; isAvailable: boolean; status?: string; message?: string } | null = null;
+    // ✅ FIX-CJ: Calcular immediateStatus PRIMERO para APIs que lo soportan.
+    // Esto permite decidir si encolar el health check asíncrono o no (evitar llamadas duplicadas a CJ).
+    let immediateStatus: { isConfigured: boolean; isAvailable: boolean; status?: string; message?: string; error?: string; latency?: number } | null = null;
     if (normalizedApiName === 'serpapi') {
       try {
         const status = await apiAvailability.checkSerpAPI(targetUserId);
@@ -1013,7 +988,7 @@ router.post('/', async (req: Request, res: Response, next) => {
           message: status.message,
         };
       } catch (e) {
-        /* ignorar */
+        /* ignorar — health check queue cubrirá el caso */
       }
     }
     if (normalizedApiName === 'cj-dropshipping') {
@@ -1024,10 +999,51 @@ router.post('/', async (req: Request, res: Response, next) => {
           isAvailable: status.isAvailable ?? false,
           status: status.status,
           message: status.message,
+          error: status.error,
+          latency: status.latency,
         };
       } catch (e) {
-        /* ignorar */
+        /* ignorar — health check queue cubrirá el caso */
       }
+    }
+
+    // ✅ FIX-CJ: Encolar health check SOLO si immediateStatus no pudo confirmar el resultado.
+    // Cuando immediateStatus ya hizo la llamada real al proveedor (CJ, SerpAPI, etc.),
+    // enqueue adicional causaría: llamadas duplicadas, posible rate-limit y socket events que
+    // sobrescriben el estado correcto con un resultado potencialmente stale o erróneo.
+    let healthCheckJobId: string | null = null;
+    const immediateStatusConfirmed = immediateStatus !== null;
+    try {
+      if (!immediateStatusConfirmed) {
+        // Limpiar caché antes de encolar verificación (sin await para no bloquear)
+        apiAvailability.clearAPICache(targetUserId, normalizedApiName).catch(() => {});
+
+        // Encolar health check asíncrono
+        healthCheckJobId = await apiHealthCheckQueueService.enqueueHealthCheck(
+          targetUserId,
+          normalizedApiName,
+          env
+        );
+
+        logger.debug('[API Credentials] Health check enqueued (no immediateStatus available)', {
+          jobId: healthCheckJobId,
+          userId: targetUserId,
+          apiName: normalizedApiName,
+        });
+      } else {
+        logger.debug('[API Credentials] Skipping health check queue — immediateStatus already confirmed', {
+          userId: targetUserId,
+          apiName: normalizedApiName,
+          isAvailable: immediateStatus.isAvailable,
+        });
+      }
+    } catch (queueError: any) {
+      logger.warn('Failed to enqueue health check after saving', {
+        error: queueError?.message,
+        userId: targetUserId,
+        apiName: normalizedApiName
+      });
+      // Continuar aunque falle el encolado - el usuario puede verificar manualmente después
     }
 
     // ✅ FIX: Enviar respuesta inmediatamente, antes de cualquier operación que pueda causar crash
