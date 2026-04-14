@@ -135,6 +135,10 @@ const STATUS_BADGE_STYLES: Record<string, { className: string; label: string }> 
     className: 'bg-green-100 border-green-200 text-green-700',
     label: 'Sesión activa',
   },
+  unhealthy: {
+    className: 'bg-red-100 border-red-200 text-red-700',
+    label: 'Clave inválida',
+  },
   refreshing: {
     className: 'bg-amber-100 border-amber-200 text-amber-700',
     label: 'Renovando sesión…',
@@ -2481,13 +2485,16 @@ export default function APISettings() {
         toast.error(`Error de conexión: ${errorMsg}`);
       }
 
-      // Actualizar estado
+      // Actualizar estado — incluir status e isAvailable para que getStatusForAPI derive correctamente
+      // Sin status='unhealthy', el fallback es 'degraded' → muestra "Configurado con advertencias" en lugar de "Error de configuración"
       setStatuses((prev: Record<string, APIStatus>) => ({
         ...prev,
         [makeEnvKey(apiName, environment)]: {
           apiName,
           environment,
           available: isAvailable,
+          isAvailable: isAvailable,
+          status: isAvailable ? 'healthy' : 'unhealthy',
           message: errorMessage,
           lastChecked: status.lastChecked || status.checkedAt || new Date().toISOString(),
         },
@@ -4069,7 +4076,9 @@ export default function APISettings() {
           }
           const badgeTheme =
             statusInfo?.status && STATUS_BADGE_STYLES[statusInfo.status]
-              ? STATUS_BADGE_STYLES[statusInfo.status]
+              ? (!apiDef.supportsOAuth && statusInfo.status === 'healthy'
+                  ? { ...STATUS_BADGE_STYLES[statusInfo.status], label: 'API activa' }
+                  : STATUS_BADGE_STYLES[statusInfo.status])
               : STATUS_BADGE_STYLES.unknown;
 
           const unifiedStatusCard = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag, formData[formKey]);
