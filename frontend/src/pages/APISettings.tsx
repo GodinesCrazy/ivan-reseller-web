@@ -568,7 +568,7 @@ export default function APISettings() {
     if (!token || !user) return;
 
     const { url, path } = getSocketOptions();
-    const socket = io(url || API_BASE_URL, {
+    const socket: Socket = io(url || API_BASE_URL, {
       path,
       auth: { token },
       transports: ['websocket', 'polling'],
@@ -1005,7 +1005,6 @@ export default function APISettings() {
         }
 
         creds.forEach((cred) => {
-          const key = makeEnvKey(cred.apiName, cred.environment);
           // ✅ FIX EBAY: Buscar primero por envKey para APIs con environments (evita mezclar production/sandbox)
           const envKeyForLookup = makeEnvKey(cred.apiName, cred.environment);
           const altEnvKey = cred.apiName === 'googletrends' ? makeEnvKey('serpapi', cred.environment) : null;
@@ -3661,6 +3660,7 @@ export default function APISettings() {
           </div>
           {/* ✅ MEJORA UX: Botón para abrir wizard */}
           <button
+            type="button"
             onClick={() => {
               setWizardInitialAPI(undefined);
               setWizardOpen(true);
@@ -3678,6 +3678,7 @@ export default function APISettings() {
           </p>
           {/* ✅ Botón para testear todas las APIs */}
           <button
+            type="button"
             onClick={handleTestAllApis}
             disabled={apiTesting}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
@@ -3732,7 +3733,7 @@ export default function APISettings() {
                     <div className="h-3 w-24 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500"
-                        style={{ width: `${minimumDropshippingAPIs.progress.percentage}%` }}
+                        style={{ '--progress-pct': `${minimumDropshippingAPIs.progress.percentage}%`, width: 'var(--progress-pct)' } as React.CSSProperties}
                       />
                     </div>
                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
@@ -3742,6 +3743,7 @@ export default function APISettings() {
                 </div>
                 {/* Botón para refrescar */}
                 <button
+                  type="button"
                   onClick={() => { loadCredentials(true); loadMinimumDropshippingAPIs(true); }}
                   disabled={loadingMinimumAPIs}
                   className="flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -3816,6 +3818,7 @@ export default function APISettings() {
                         <div>
                           <p className="text-xs text-red-700 font-medium mb-2">❌ No configurada</p>
                           <button
+                            type="button"
                             onClick={() => {
                               // Expandir la API correspondiente en la lista principal
                               if (apiItem.apiName === 'marketplace') {
@@ -3887,6 +3890,8 @@ export default function APISettings() {
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Resultados de Pruebas de APIs</h2>
               </div>
               <button
+                type="button"
+                aria-label="Cerrar resultados de prueba"
                 onClick={() => setShowApiTestResults(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               >
@@ -3977,6 +3982,7 @@ export default function APISettings() {
                 <p className="text-sm text-red-800 mb-3">{error}</p>
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={() => {
                       setError(null);
                       loadCredentials(true);
@@ -3988,6 +3994,7 @@ export default function APISettings() {
                     Reintentar
                   </button>
                   <button
+                    type="button"
                     onClick={() => setError(null)}
                     className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600 transition text-sm"
                   >
@@ -4093,8 +4100,6 @@ export default function APISettings() {
                   : STATUS_BADGE_STYLES[statusInfo.status])
               : STATUS_BADGE_STYLES.unknown;
 
-          const unifiedStatusCard = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag, formData[formKey]);
-
           return (
             <div
               key={apiDef.name}
@@ -4110,6 +4115,7 @@ export default function APISettings() {
                       {displayName}
                       {/* Botón de ayuda contextual */}
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -4344,6 +4350,7 @@ export default function APISettings() {
                         {statusInfo?.status === 'manual_required' && (statusInfo as any)?.manualSession?.token ? (
                           <>
                             <button
+                              type="button"
                               onClick={async () => {
                                 try {
                                   await requestAuthRefresh('aliexpress');
@@ -4375,6 +4382,7 @@ export default function APISettings() {
                         ) : (
                           // ✅ Si NO hay manual_required real, solo mostrar botón opcional para guardar cookies
                           <button
+                            type="button"
                             onClick={openManualCookieModal}
                             className="inline-flex items-center gap-1 px-3 py-1 rounded border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition text-xs"
                             title="Las cookies son opcionales. El sistema funciona en modo público, pero las cookies mejoran la experiencia."
@@ -4401,6 +4409,7 @@ export default function APISettings() {
                         <div className="flex flex-wrap gap-2">
                           {envOptions.map(env => (
                             <button
+                              type="button"
                               key={env}
                               onClick={() => handleEnvironmentSelect(apiDef.name, env)}
                               className={`px-3 py-1.5 rounded-md text-xs font-medium border-2 transition-all ${
@@ -4446,6 +4455,7 @@ export default function APISettings() {
                     <div className="flex gap-2">
                       {/* Toggle Active */}
                       <button
+                        type="button"
                         onClick={() => handleToggle(apiDef.name, currentEnvironment, credential.isActive)}
                         disabled={!isAdmin && isGlobalScope}
                         className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
@@ -4494,6 +4504,7 @@ export default function APISettings() {
  
                       {/* Test Connection */}
                       <button
+                        type="button"
                         onClick={() => handleTest(apiDef.name, currentEnvironment)}
                         disabled={isTesting || !credential.isActive}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
@@ -4508,6 +4519,7 @@ export default function APISettings() {
 
                       {/* Edit */}
                       <button
+                        type="button"
                         onClick={() => {
                           const nextExpanded = isExpanded ? null : apiDef.name;
                           if (!isExpanded) {
@@ -4523,6 +4535,7 @@ export default function APISettings() {
 
                       {/* Delete */}
                       <button
+                        type="button"
                         onClick={() => handleDelete(apiDef.name, currentEnvironment)}
                         disabled={isDeleting}
                         className="p-2 text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
@@ -4537,6 +4550,7 @@ export default function APISettings() {
                     </div>
                   ) : (
                     <button
+                      type="button"
                       onClick={() => {
                         const nextExpanded = isExpanded ? null : apiDef.name;
                         if (!isExpanded) {
@@ -4571,6 +4585,7 @@ export default function APISettings() {
                         <div className="flex flex-wrap gap-2">
                           {envOptions.map(env => (
                             <button
+                              type="button"
                               key={env}
                               onClick={() => handleEnvironmentSelect(apiDef.name, env)}
                               className={`px-3 py-2 rounded-md text-sm font-medium border-2 transition-all flex items-center gap-2 ${
@@ -4619,6 +4634,7 @@ export default function APISettings() {
                           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Alcance:</span>
                           <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden w-fit">
                             <button
+                              type="button"
                               onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'user')}
                               className={`px-3 py-1 text-sm font-medium transition ${
                                 currentScope === 'user'
@@ -4629,6 +4645,7 @@ export default function APISettings() {
                               Personal
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'global')}
                               className={`px-3 py-1 text-sm font-medium transition ${
                                 currentScope === 'global'
@@ -4660,6 +4677,7 @@ export default function APISettings() {
                           crea una versión personal.
                         </p>
                         <button
+                          type="button"
                           onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'user')}
                           className="inline-flex items-center gap-2 px-3 py-1 rounded bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition"
                         >
@@ -4800,6 +4818,7 @@ export default function APISettings() {
 
                     <div className="flex gap-2 pt-2">
                       <button
+                        type="button"
                         onClick={() => handleSave(apiDef.name)}
                         disabled={isSaving || isReadOnly}
                         className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -4817,6 +4836,7 @@ export default function APISettings() {
                         )}
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
                           setExpandedApi(null);
                           setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
@@ -4859,6 +4879,7 @@ export default function APISettings() {
                 ⚠️ Ventana de OAuth bloqueada
               </h2>
               <button
+                type="button"
                 onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined })}
                 className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               >
@@ -4908,6 +4929,7 @@ export default function APISettings() {
                     Se abrirá la página de autorización en esta misma ventana. Después de autorizar, deberás volver manualmente a esta página.
                   </p>
                   <button
+                    type="button"
                     onClick={() => {
                       window.location.href = oauthBlockedModal.authUrl;
                     }}
@@ -4926,6 +4948,7 @@ export default function APISettings() {
                     {oauthBlockedModal.authUrl}
                   </div>
                   <button
+                    type="button"
                     onClick={async () => {
                       try {
                         await navigator.clipboard.writeText(oauthBlockedModal.authUrl);
@@ -4950,6 +4973,7 @@ export default function APISettings() {
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 dark:border-slate-800 px-6 py-4">
               <button
+                type="button"
                 onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined })}
                 className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition"
               >
@@ -4966,6 +4990,7 @@ export default function APISettings() {
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Guardar cookies de AliExpress manualmente</h2>
               <button
+                type="button"
                 onClick={closeManualCookieModal}
                 className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                 disabled={manualCookieSaving}
@@ -4989,9 +5014,9 @@ export default function APISettings() {
                       </span>
                     ) : null}
                     <button
+                      type="button"
                       onClick={startManualSession}
                       className="inline-flex items-center gap-2 rounded border border-blue-400 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-                      type="button"
                       disabled={manualSessionLoading}
                     >
                       {manualSessionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -5015,9 +5040,9 @@ export default function APISettings() {
                 {manualSessionLoginUrl ? (
                   <div className="mt-3">
                     <button
+                      type="button"
                       onClick={() => window.open(manualSessionLoginUrl, '_blank', 'noopener')}
                       className="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
-                      type="button"
                     >
                       <Link2 className="h-4 w-4" />
                       Abrir login de AliExpress
@@ -5040,9 +5065,9 @@ export default function APISettings() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-emerald-700">Snippet automático (recomendado)</span>
                   <button
+                    type="button"
                     onClick={handleCopyAutomatedSnippet}
                     className="inline-flex items-center gap-2 rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    type="button"
                     disabled={!automatedCookieSnippet}
                   >
                     <ClipboardPaste className="h-4 w-4" />
@@ -5058,9 +5083,9 @@ export default function APISettings() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Snippet manual (solo si falla el automático)</span>
                   <button
+                    type="button"
                     onClick={handleCopyFallbackSnippet}
                     className="text-xs font-semibold text-blue-600 hover:text-blue-800"
-                    type="button"
                   >
                     Copiar
                   </button>
@@ -5095,18 +5120,18 @@ export default function APISettings() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 px-6 py-4">
               <button
+                type="button"
                 onClick={closeManualCookieModal}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={manualCookieSaving}
-                type="button"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={handleManualCookiesSave}
                 className="inline-flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={manualCookieSaving}
-                type="button"
               >
                 {manualCookieSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Guardar sesión
