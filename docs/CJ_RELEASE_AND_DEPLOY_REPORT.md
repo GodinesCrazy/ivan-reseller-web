@@ -12,6 +12,7 @@ Se ejecutó la release completa del paquete CJ (pipeline CJ→eBay + settings se
 - **GitHub** actualizado con commit de release en `main`.
 - **Railway (backend)** desplegado en `ivan-reseller-backend` con estado final **SUCCESS**.
 - **Vercel (frontend)** desplegado en producción con alias activo en `https://www.ivanreseller.com`.
+- **Migraciones Prisma** verificadas por canal interno de Railway: **sin pendientes** (`Database schema is up to date`).
 - Verificación de rutas web y proxy API básica: **OK** (200/401 esperados según autenticación).
 
 **Veredicto global de release/deploy:** **GO CONDICIONAL** (listo para validación manual web; pendiente validación funcional con credenciales CJ reales dentro de sesión autenticada).
@@ -98,20 +99,20 @@ Build:
 
 ## 7) Migraciones ejecutadas
 
-Intento realizado:
+Estrategia final (conectividad interna válida):
 
-- `railway run npx prisma migrate deploy`
+- Se ejecutó la migración **dentro de la instancia activa del backend** usando SSH de Railway:
+  - `railway ssh --service ivan-reseller-backend --environment production -- sh -lc "cd /app && npx prisma migrate deploy"`
 
 Resultado:
 
-- Falló con `P1001` por `postgres.railway.internal:5432` no alcanzable desde ejecución CLI local (host interno de Railway).
+- `Prisma schema loaded ... postgres.railway.internal:5432`
+- `No pending migrations to apply.`
 
-Estado real:
+Verificación adicional:
 
-- No se aplicaron migraciones por este comando en esta pasada.
-- El servicio quedó desplegado y saludable; la aplicación arranca correctamente.
-
-> Acción recomendada operativa: ejecutar `prisma migrate deploy` dentro del runtime/runner con conectividad interna del servicio o habilitar URL pública de DB para comando de migración controlado.
+- `railway ssh --service ivan-reseller-backend --environment production -- sh -lc "cd /app && npx prisma migrate status"`
+- Resultado: `Database schema is up to date!`
 
 ---
 
@@ -140,6 +141,7 @@ Estado real:
 - Proxy frontend→backend `/api/health` → **200**
 - Endpoint protegido `/api/credentials/cj-dropshipping/test` sin sesión → **401** (esperado)
 - Endpoint protegido `/api/cj-ebay/listings` sin sesión → **401** (esperado)
+- Estado de migraciones en runtime Railway → **up to date** (sin pendientes)
 
 ---
 
@@ -159,7 +161,6 @@ El operador ya puede validar en web:
 
 ## 11) Riesgos residuales
 
-- Queda pendiente aplicar migraciones con canal de conectividad DB interno válido (comando CLI local no alcanzó host interno).
 - Validación funcional final depende de sesión real y credenciales CJ reales cargadas desde `/api-settings`.
 - Existen muchos archivos locales no versionados/no incluidos en release; no bloquean esta salida pero conviene limpieza posterior del workspace.
 
