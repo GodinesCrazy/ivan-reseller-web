@@ -198,3 +198,26 @@ Condicional por ejecución pendiente de migración vía ruta operativa válida y
 **Estado esperado post-parche:**
 - Clave válida → badge "API activa" (verde, no "Sesión activa")
 - Test fallido → badge "Clave inválida" (rojo), card body "Error de configuración"
+
+---
+
+## Actualización 2026-04-14 — Fix definitivo: clave enmascarada en test (c9f7c49)
+
+**Problema resuelto:** "Probar conexión" siempre fallaba con "APIkey is wrong" aunque la clave real en DB era válida.
+
+**Causa raíz:** `handleTest` cargaba credenciales vía `GET /api/credentials/cj-dropshipping`, que devuelve la clave enmascarada (`"****8817"`). El frontend enviaba ese valor enmascarado al endpoint de test. CJ recibía `"****8817"` y lo rechazaba correctamente.
+
+**Fix:** En `handleTest`, los valores que comienzan con `"****"` se descartan en dos puntos:
+1. Al normalizar lo cargado desde DB (si todos los valores son enmascarados → `testCredentials = null`)
+2. Al construir `testCredentials` desde `formData` (segunda capa defensiva)
+
+Cuando `testCredentials = null`, el backend usa `checkCjDropshippingAPI(userId)` → lee la clave real de DB → test honesto.
+
+**Commit:** `c9f7c49` — solo `frontend/src/pages/APISettings.tsx` (+18/-6 líneas).  
+**Backend:** sin cambios — Railway no requirió redeploy.  
+**Vercel:** deploy auto-lanzado tras push a `main`.
+
+**Estado esperado post-fix definitivo:**
+- Forma vacía + clave válida en DB → "Probar conexión" → success (toast verde, tarjeta verde)
+- Forma vacía + clave inválida en DB → "Probar conexión" → error real de CJ + tarjeta roja
+- Sin más contradicción posible entre estado inicial y resultado del test

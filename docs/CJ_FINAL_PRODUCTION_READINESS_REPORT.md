@@ -122,6 +122,8 @@ Un **NO-GO** solo aplicaría si en producción no se pudiera cumplir: Redis para
 
 **Addendum (2026-04-14 — v2, commit `c809b37`):** corregido bug de **estado contradictorio en tarjeta CJ** (`/api-settings`). La tarjeta ya no muestra "Sesión activa / Configurado y funcionando" simultáneamente con "APIkey is wrong" al probar la conexión. Tras el parche: clave inválida detectada → badge **"Clave inválida"** (rojo) + card body **"Error de configuración"**; clave válida → badge **"API activa"** (verde). Ver `docs/CJ_SETTINGS_FALSE_ACTIVE_ROOT_CAUSE_AND_FIX_REPORT.md` para el análisis completo.
 
+**Addendum (2026-04-14 — v3, commit `c9f7c49`):** corregida la **causa raíz definitiva** del bug. El endpoint de test enviaba la API key enmascarada (`"****8817"`) a CJ porque `handleTest` cargaba credenciales del endpoint `GET /api/credentials/cj-dropshipping`, que aplica `maskSecretTailFour` por seguridad. CJ rechazaba la clave enmascarada con "APIkey is wrong" aunque la clave real en DB era válida. Fix: valores con prefijo `"****"` son descartados antes de construir `testCredentials`; si no quedan credenciales reales, el backend usa `checkCjDropshippingAPI(userId)` que lee la clave sin enmascarar. Ver `docs/CJ_SETTINGS_SOURCE_OF_TRUTH_ROOT_CAUSE_AND_FIX_REPORT.md`. **Veredicto actualizado: GO** (sin condiciones pendientes en el flujo de settings CJ).
+
 ---
 
 ## Checklist operativa final (resumen)
