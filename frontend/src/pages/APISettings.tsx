@@ -2354,12 +2354,22 @@ export default function APISettings() {
             const normalized: Record<string, string> = {};
             Object.entries(creds).forEach(([key, value]) => {
               if (value !== undefined && value !== null) {
-                normalized[key] = typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value);
+                const strValue = typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value);
+                // ✅ FIX-CJ: Descartar valores enmascarados (formato "****XXXX").
+                // El backend enmascara secretos en GET /api/credentials/:apiName para no exponer
+                // claves completas al navegador. Si se envían al endpoint de test, la API remota
+                // (CJ, etc.) las rechaza con "APIkey is wrong". Cuando todos los valores son
+                // enmascarados, testCredentials queda null → el backend usa la clave real de DB.
+                if (!strValue.startsWith('****')) {
+                  normalized[key] = strValue;
+                }
               }
             });
-            currentFormData = normalized;
-            // Actualizar formData para futuras pruebas
-            setFormData(prev => ({ ...prev, [formKey]: normalized }));
+            if (Object.keys(normalized).length > 0) {
+              currentFormData = normalized;
+              // Actualizar formData para futuras pruebas
+              setFormData(prev => ({ ...prev, [formKey]: normalized }));
+            }
           }
         } catch (loadError) {
           // Si no se pueden cargar, continuar sin credenciales del formulario
@@ -2427,12 +2437,14 @@ export default function APISettings() {
           const rawValue = currentFormData[fieldKey] ?? (field.value !== undefined ? String(field.value) : '');
           const value = typeof rawValue === 'string' ? rawValue : String(rawValue ?? '');
           
-          if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled') || 
+          if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled') ||
               ((apiName === 'aliexpress-affiliate' || apiName === 'aliexpress-dropshipping') && fieldKey === 'sandbox')) {
             const backendKey = fieldMapping[fieldKey] || fieldKey;
             if (fieldKey === 'twoFactorEnabled' || fieldKey === 'sandbox') {
               testCredentials[backendKey] = value.trim().toLowerCase() === 'true';
-            } else if (value.trim()) {
+            } else if (value.trim() && !value.trim().startsWith('****')) {
+              // ✅ FIX-CJ: Ignorar valores enmascarados almacenados en formData (ej. "****8817").
+              // Si un campo tiene valor enmascarado, omitirlo → el backend leerá la clave real de DB.
               testCredentials[backendKey] = value.trim();
             }
           }
