@@ -182,3 +182,19 @@ Condicional por ejecución pendiente de migración vía ruta operativa válida y
 - **Backend:** `https://ivan-reseller-backend-production.up.railway.app`
 - **Qué probar ahora en web:** `/api-settings` (guardar/test CJ key), `/cj-ebay/listings`, Opportunities y Product Research con flujo CJ.
 - **Resultado deploy:** GitHub + Railway + Vercel actualizados con release; validación manual del operador habilitada.
+
+---
+
+## Actualización 2026-04-14 — Parche de estado contradictorio (c809b37)
+
+**Problema resuelto:** la tarjeta CJ mostraba "Sesión activa / Configurado y funcionando" (verde) pero "Probar conexión" devolvía error "APIkey is wrong".
+
+**Causa raíz:** `handleTest` → `setStatuses` no guardaba el campo `status`. Rendering derivaba `status='degraded'` → tarjeta mostraba "Configurado con advertencias" en vez de "Error de configuración".
+
+**Commit:** `c809b37` — solo afecta `frontend/src/pages/APISettings.tsx` (+11/-2 líneas).  
+**Backend:** sin cambios — Railway no requirió redeploy.  
+**Vercel:** deploy auto-lanzado tras push a `main`.
+
+**Estado esperado post-parche:**
+- Clave válida → badge "API activa" (verde, no "Sesión activa")
+- Test fallido → badge "Clave inválida" (rojo), card body "Error de configuración"

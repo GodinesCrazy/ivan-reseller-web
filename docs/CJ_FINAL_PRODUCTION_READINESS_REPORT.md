@@ -118,7 +118,9 @@ Un **NO-GO** solo aplicaría si en producción no se pudiera cumplir: Redis para
 
 **~92%** hacia “terminado real” del apartado CJ; el **8%** restante es principalmente **validación de negocio en dinero real**, **monitorización/alertas externas** (PagerDuty, etc., si se desea) y **extensión de mapping** para más orígenes de publicación si aparecen nuevos canales.
 
-**Addendum (2026-04-14):** la **CJ API Key** puede administrarse desde **`/api-settings`** con test de conexión y sin exponer la clave completa al cliente; ver `docs/CJ_SETTINGS_AND_WEB_OPERATION_REPORT.md`. Esto refuerza el requisito de **credenciales válidas** sin cambiar el veredicto **GO CONDICIONAL** sobre el primer pago real.
+**Addendum (2026-04-14 — v1):** la **CJ API Key** puede administrarse desde **`/api-settings`** con test de conexión y sin exponer la clave completa al cliente; ver `docs/CJ_SETTINGS_AND_WEB_OPERATION_REPORT.md`. Esto refuerza el requisito de **credenciales válidas** sin cambiar el veredicto **GO CONDICIONAL** sobre el primer pago real.
+
+**Addendum (2026-04-14 — v2, commit `c809b37`):** corregido bug de **estado contradictorio en tarjeta CJ** (`/api-settings`). La tarjeta ya no muestra "Sesión activa / Configurado y funcionando" simultáneamente con "APIkey is wrong" al probar la conexión. Tras el parche: clave inválida detectada → badge **"Clave inválida"** (rojo) + card body **"Error de configuración"**; clave válida → badge **"API activa"** (verde). Ver `docs/CJ_SETTINGS_FALSE_ACTIVE_ROOT_CAUSE_AND_FIX_REPORT.md` para el análisis completo.
 
 ---
 
