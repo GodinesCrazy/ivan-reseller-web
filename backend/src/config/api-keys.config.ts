@@ -241,6 +241,7 @@ export const API_NAMES = {
   STRIPE: 'stripe',
   SERPAPI: 'serpapi',
   GOOGLETRENDS: 'googletrends', // Alias para serpapi
+  CJ_DROPSHIPPING: 'cj-dropshipping',
 } as const;
 
 /**
@@ -304,6 +305,7 @@ export const API_IDS = {
   STRIPE: 14,
   SERPAPI: 17,
   GOOGLETRENDS: 17, // Alias - mismo que serpapi
+  CJ_DROPSHIPPING: 18,
 } as const;
 
 /**

@@ -322,6 +322,25 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
       { key: 'sandbox', label: 'Sandbox', required: true, type: 'text', placeholder: 'false', helpText: 'Marca "true" para ambiente de pruebas, "false" para producción' },
     ],
   },
+  'cj-dropshipping': {
+    name: 'cj-dropshipping',
+    displayName: 'CJ Dropshipping API',
+    description:
+      'Proveedor CJ (Open API 2.0) para el pipeline CJ → eBay: catálogo, cotizaciones, borradores y postventa. La clave se guarda solo en el backend.',
+    icon: '📦',
+    docsUrl: 'https://developers.cjdropshipping.com/en/api/api2/',
+    fields: [
+      {
+        key: 'CJ_API_KEY',
+        label: 'CJ API Key',
+        required: true,
+        type: 'password',
+        placeholder: 'Tu API key de CJ',
+        helpText:
+          'Obtenida en la consola CJ. Tras guardar, usá «Probar conexión»; la clave completa no se muestra de nuevo (solo máscara). El servidor puede usar CJ_API_KEY en entorno como respaldo.',
+      },
+    ],
+  },
   'aliexpress-dropshipping': {
     name: 'aliexpress-dropshipping',
     displayName: 'AliExpress Dropshipping API',
@@ -1641,6 +1660,7 @@ export default function APISettings() {
         'MERCADOLIBRE_SITE_ID': 'siteId',
         'MERCADOLIBRE_REDIRECT_URI': 'redirectUri',
         'GROQ_API_KEY': 'apiKey',
+        'CJ_API_KEY': 'apiKey',
         'SCRAPERAPI_KEY': 'apiKey',
         'ZENROWS_API_KEY': 'apiKey',
         'CAPTCHA_API_KEY': 'apiKey',
@@ -2177,7 +2197,9 @@ export default function APISettings() {
       
       // ✅ MEJORA: Test automático opcional y silencioso (solo para APIs que lo soportan)
       // No mostrar error si el test falla, solo si es crítico
-      const shouldTestAutomatically = ['ebay', 'amazon', 'mercadolibre', 'paypal'].includes(apiName);
+      const shouldTestAutomatically = ['ebay', 'amazon', 'mercadolibre', 'paypal', 'cj-dropshipping'].includes(
+        apiName
+      );
       
       if (shouldTestAutomatically) {
         // Esperar un momento para que las credenciales se propaguen
@@ -2343,6 +2365,7 @@ export default function APISettings() {
           'MERCADOLIBRE_CLIENT_SECRET': 'clientSecret',
           'MERCADOLIBRE_SITE_ID': 'siteId',
           'GROQ_API_KEY': 'apiKey',
+          'CJ_API_KEY': 'apiKey',
           'SCRAPERAPI_KEY': 'apiKey',
           'ZENROWS_API_KEY': 'apiKey',
           'CAPTCHA_API_KEY': 'apiKey',
@@ -3946,7 +3969,8 @@ export default function APISettings() {
                 'ebay',
                 'amazon',
                 'paypal',
-                'aliexpress-dropshipping'
+                'aliexpress-dropshipping',
+                'cj-dropshipping',
               ];
               return essentialAPIs.includes(apiDef.name);
             }

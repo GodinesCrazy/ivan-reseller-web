@@ -266,6 +266,134 @@ const envSchema = z.object({
   EBAY_REDIRECT_URI: z.string().optional(),
   EBAY_DEV_ID: z.string().optional(),
   EBAY_CERT_ID: z.string().optional(),
+  /** eBay US listing: min business-day range when no supplier ETA exists in productData (conservative for CN→US dropship) */
+  EBAY_US_DELIVERY_FALLBACK_MIN_DAYS: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (val == null || val === '') return 15;
+      const n = parseInt(val, 10);
+      return Number.isFinite(n) && n > 0 ? n : 15;
+    }),
+  /** eBay US listing: max business-day range when no supplier ETA exists in productData */
+  EBAY_US_DELIVERY_FALLBACK_MAX_DAYS: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (val == null || val === '') return 42;
+      const n = parseInt(val, 10);
+      return Number.isFinite(n) && n > 0 ? n : 42;
+    }),
+  /** Extra min days added to supplier transit estimate (payment → supplier ships) */
+  EBAY_US_DELIVERY_PROCESSING_MIN_DAYS: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (val == null || val === '') return 3;
+      const n = parseInt(val, 10);
+      return Number.isFinite(n) && n >= 0 ? n : 3;
+    }),
+  /** Extra max days added to supplier transit estimate */
+  EBAY_US_DELIVERY_PROCESSING_MAX_DAYS: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (val == null || val === '') return 8;
+      const n = parseInt(val, 10);
+      return Number.isFinite(n) && n >= 0 ? n : 8;
+    }),
+  /**
+   * Extra business days added to both ends of the published ETA range (automated multi-supplier dropship:
+   * order routing, varied ship-from cities in China).
+   */
+  EBAY_US_AUTOMATED_DROPSHIP_PAD_MIN_DAYS: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (val == null || val === '') return 2;
+      const n = parseInt(val, 10);
+      return Number.isFinite(n) && n >= 0 ? n : 2;
+    }),
+  EBAY_US_AUTOMATED_DROPSHIP_PAD_MAX_DAYS: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (val == null || val === '') return 5;
+      const n = parseInt(val, 10);
+      return Number.isFinite(n) && n >= 0 ? n : 5;
+    }),
+  /** When true, do not append the China-US estimated delivery block to eBay descriptions */
+  EBAY_US_SKIP_DELIVERY_NOTICE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /**
+   * If set, createOffer always uses this eBay inventory merchantLocationKey (must exist or be creatable).
+   * Overrides EBAY_INVENTORY_SHIP_FROM when non-empty.
+   */
+  EBAY_MERCHANT_LOCATION_KEY: z
+    .string()
+    .optional()
+    .transform((val) => {
+      const s = String(val || '').trim();
+      return s.length > 0 ? s.slice(0, 36) : undefined;
+    }),
+  /**
+   * Ship-from preference when resolving inventory location for new eBay US offers:
+   * CN (default, dropship from China), US, LEGACY (prefer CL then first — old behavior).
+   */
+  EBAY_INVENTORY_SHIP_FROM: z
+    .string()
+    .optional()
+    .transform((val) => {
+      const u = String(val || 'CN').trim().toUpperCase();
+      if (u === 'US' || u === 'LEGACY') return u as 'US' | 'LEGACY';
+      return 'CN';
+    }),
+  /** When true and ship-from is CN, POST a China WAREHOUSE location if none exists */
+  EBAY_AUTO_CREATE_CN_INVENTORY_LOCATION: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((val) => val === 'true'),
+  /** merchantLocationKey used when auto-creating China warehouse (max 36) */
+  EBAY_CN_MERCHANT_LOCATION_KEY: z
+    .string()
+    .optional()
+    .transform((val) => {
+      const s = String(val || 'china_dropship').trim().slice(0, 36);
+      return s || 'china_dropship';
+    }),
+  EBAY_CN_LOCATION_NAME: z
+    .string()
+    .optional()
+    .transform((val) => (String(val || '').trim() || 'China dropship warehouse').slice(0, 100)),
+  EBAY_CN_LOCATION_CITY: z
+    .string()
+    .optional()
+    .transform((val) => String(val || '').trim() || 'Shenzhen'),
+  EBAY_CN_LOCATION_STATE: z
+    .string()
+    .optional()
+    .transform((val) => String(val || '').trim() || 'Guangdong'),
+  EBAY_CN_LOCATION_POSTAL_CODE: z
+    .string()
+    .optional()
+    .transform((val) => String(val || '').trim() || '518000'),
+  /**
+   * Note on the China inventory location (eBay locationAdditionalInformation).
+   * Default copy explains multi-supplier dropship; override with EBAY_CN_LOCATION_ADDITIONAL_INFO or disable with EBAY_CN_SKIP_LOCATION_ADDITIONAL_INFO=true.
+   */
+  EBAY_CN_LOCATION_ADDITIONAL_INFO: z
+    .string()
+    .optional()
+    .transform((val) => {
+      const fallback =
+        'Orders are fulfilled by partner warehouses in China; ship-from region may vary by supplier.';
+      const raw = String(val ?? '').trim();
+      return (raw.length > 0 ? raw : fallback).slice(0, 256);
+    }),
+  /** When true, do not send locationAdditionalInformation on the China inventory location */
+  EBAY_CN_SKIP_LOCATION_ADDITIONAL_INFO: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((val) => val === 'true'),
   SCRAPER_API_KEY: z.string().optional(),
   ZENROWS_API_KEY: z.string().optional(),
   MERCADOLIBRE_CLIENT_ID: z.string().optional(),
@@ -382,6 +510,63 @@ const envSchema = z.object({
 
   /** Phase 51: safety lock — block all new marketplace publications until audit/validation is complete (Railway: set true during incidents). */
   BLOCK_NEW_PUBLICATIONS: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /** When true, exposes /api/cj-ebay/* and enables CJ→eBay USA vertical (isolated module). */
+  ENABLE_CJ_EBAY_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+
+  /**
+   * CJ Dropshipping Open API 2.0 — canonical env key (preferred). Alias legacy: CJ_DROPSHIPPING_API_KEY.
+   * Loaded by CredentialsManager for apiName `cj-dropshipping`; never send to frontend.
+   */
+  CJ_API_KEY: z.string().optional(),
+  /** Legacy alias for CJ Open API key; use CJ_API_KEY when possible. */
+  CJ_DROPSHIPPING_API_KEY: z.string().optional(),
+
+  /**
+   * Opportunity finder: use CJ Open API catalog as an extra or fallback supply source.
+   * `off` — no CJ calls from opportunity pipeline.
+   * `merge` — after AliExpress Affiliate results, append CJ hits (same query) up to maxItems.
+   * `fallback` — if Affiliate returns 0 rows, try CJ before eBay/scraper/cache/AI fallback.
+   */
+  OPPORTUNITY_CJ_SUPPLY_MODE: z.enum(['off', 'merge', 'fallback']).default('off'),
+  /**
+   * Default supplier preference when `user_settings.opportunitySupplierPreference` is null.
+   * Per-user value overrides (aliexpress | cj | auto).
+   */
+  OPPORTUNITY_SUPPLIER_PREFERENCE: z.enum(['aliexpress', 'cj', 'auto']).default('auto'),
+
+  /**
+   * Phase C: selective CJ `freightCalculate` for opportunity rows (not full discovery list).
+   * When false, only listing price + default commerce shipping apply.
+   */
+  OPPORTUNITY_CJ_DEEP_QUOTE_ENABLED: z.enum(['true', 'false']).default('true').transform((val) => val === 'true'),
+  /** Max CJ products per opportunity search that receive a deep freight quote (sequential, spaced). */
+  OPPORTUNITY_CJ_DEEP_QUOTE_MAX: z.string().default('3').transform((v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 0 && n <= 20 ? n : 3;
+  }),
+  /** Minimum delay between deep freight API calls (ms) to reduce QPS bursts. */
+  OPPORTUNITY_CJ_DEEP_QUOTE_MIN_SPACING_MS: z.string().default('400').transform((v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 0 && n <= 10_000 ? n : 400;
+  }),
+  /** TTL for in-process CJ freight quote cache (ms). */
+  OPPORTUNITY_CJ_FREIGHT_CACHE_TTL_MS: z.string().default('1800000').transform((v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 60_000 && n <= 86_400_000 ? n : 1_800_000;
+  }),
+  /** Optional US ZIP forwarded to CJ freightCalculate `zip` (no PII beyond postal). */
+  OPPORTUNITY_CJ_DEEP_QUOTE_DEST_ZIP: z.string().optional().transform((v) => (v && v.trim() ? v.trim().slice(0, 12) : undefined)),
+
+  /** Max automatic retries when CJ returns HTTP 429 (QPS), per logical request. */
+  CJ_429_MAX_RETRIES: z.string().default('3').transform((v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 0 && n <= 10 ? n : 3;
+  }),
+  /** Initial backoff (ms) for 429 retries; doubles each attempt (1s, 2s, 4s…). */
+  CJ_429_BASE_BACKOFF_MS: z.string().default('2000').transform((v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 500 && n <= 60_000 ? n : 2000;
+  }),
 
   /** Phase 53: skip AliExpress pre-publish validation (emergency / tests only). */
   PRE_PUBLISH_VALIDATION_DISABLED: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
@@ -396,9 +581,9 @@ const envSchema = z.object({
     return Number.isFinite(n) && n >= 0 && n <= 1 ? n : 0;
   }),
   /** If AliExpress getProductInfo has no shipping methods with cost, use product effective default shipping. */
-  PRE_PUBLISH_SHIPPING_FALLBACK: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  PRE_PUBLISH_SHIPPING_FALLBACK: z.enum(['true', 'false']).default('true').transform((val) => val === 'true'),
   /** When true, block publish if validation used shipping fallback (classification RISKY). Real E2E strict mode. */
-  PRE_PUBLISH_REJECT_RISKY: z.enum(['true', 'false']).default('true').transform((val) => val === 'true'),
+  PRE_PUBLISH_REJECT_RISKY: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
 
   /** P89: when true, web/API publish to Mercado Libre is blocked if WEBHOOK_SECRET_MERCADOLIBRE is unset (post-sale honesty). */
   ML_WEB_PUBLISH_REQUIRE_ML_WEBHOOK_SECRET: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),

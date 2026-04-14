@@ -372,6 +372,26 @@ export interface SerpAPICredentials {
 }
 
 /**
+ * Credenciales CJdropshipping Open API 2.0 (vertical CJ → eBay USA).
+ *
+ * - Guardar en `ApiCredential` con `apiName`: **`cj-dropshipping`** (misma convención que `CJ_EBAY_API_CREDENTIAL_NAME`).
+ * - Fallback env: **`CJ_API_KEY`** (preferido) o **`CJ_DROPSHIPPING_API_KEY`** (legacy).
+ * - Formato oficial de clave: `CJUserNum@api@...` (ver documentación CJ).
+ *
+ * @see https://developers.cjdropshipping.com/en/api/api2/api/auth.html
+ */
+export interface CjDropshippingCredentials {
+  /** API Key desde myCJ → API Key → Generate */
+  apiKey: string;
+  /** Opcional: cache de token si se persiste en JSON cifrado (el adaptador también cachea en memoria). */
+  accessToken?: string;
+  refreshToken?: string;
+  accessTokenExpiryDate?: string;
+  /** Simetría con otras APIs; CJ documenta sandbox en settings (`isSandbox` en respuestas). */
+  sandbox?: boolean;
+}
+
+/**
  * Tipo unión de todas las credenciales
  */
 export type ApiCredentials =
@@ -392,7 +412,8 @@ export type ApiCredentials =
   | TwilioCredentials
   | SlackCredentials
   | StripeCredentials
-  | SerpAPICredentials;
+  | SerpAPICredentials
+  | CjDropshippingCredentials;
 
 /**
  * Mapeo de nombre de API a tipo de credenciales
@@ -417,6 +438,7 @@ export type ApiCredentialsMap = {
   stripe: StripeCredentials;
   serpapi: SerpAPICredentials; // ✅ NUEVO: Google Trends via SerpAPI
   googletrends: SerpAPICredentials; // ✅ ALIAS: Google Trends (mismo tipo que serpapi)
+  'cj-dropshipping': CjDropshippingCredentials;
 };
 
 /**

@@ -5,14 +5,26 @@ import { AppError } from '../../middleware/error.middleware';
 import { productService, CreateProductDto } from '../../services/product.service';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { getAliExpressProductCascaded } from '../../services/aliexpress-acquisition.service';
+import { CredentialsManager } from '../../services/credentials-manager.service';
+import { aliexpressAffiliateAPIService } from '../../services/aliexpress-affiliate-api.service';
+import { aliexpressDropshippingAPIService } from '../../services/aliexpress-dropshipping-api.service';
 import { prisma } from '../../config/database';
 import { isRedisAvailable } from '../../config/redis';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
-import { getEffectiveShippingCost } from '../../utils/shipping.utils';
+import { getEffectiveShippingCostForPublish } from '../../utils/shipping.utils';
+import { extractAliExpressItemIdFromUrl } from '../../utils/aliexpress-item-id';
 import { jobService, publishingQueue } from '../../services/job.service';
 import { mercadoLibrePublishRequiresRedisQueue } from '../../utils/ml-operational-guards';
 import costCalculator from '../../services/cost-calculator.service';
+import { calculateEbayPrice } from '../../services/marketplace-fee-intelligence.service';
+import {
+  hasValidInternationalTrackingMethod,
+  isPreferredEbayUsShippingMethod,
+  minShippingCostFromApi,
+  selectPurchasableSkuSoft,
+} from '../../services/pre-publish-validator.service';
+import type { AliExpressDropshippingCredentials } from '../../types/api-credentials.types';
 import {
   autoGenerateSimpleProcessedPack,
   getCanonicalMercadoLibreAssetPackDir,
@@ -21,6 +33,304 @@ import {
 
 const router = Router();
 router.use(authenticate);
+
+const MANUAL_LIST_DEFAULT_MARGIN = 1.2;
+const MANUAL_LIST_MIN_RATING_FIVE = 4.75; // >95% positive
+const MANUAL_LIST_DISPATCH_TIME_MAX = 3;
+
+function toRatingFiveStar(evaluateScore?: number, evaluateRate?: number): number | null {
+  if (evaluateScore != null && Number.isFinite(evaluateScore)) {
+    if (evaluateScore <= 5) return evaluateScore;
+    if (evaluateScore <= 100) return evaluateScore / 20;
+  }
+  if (evaluateRate != null && Number.isFinite(evaluateRate)) {
+    if (evaluateRate <= 5) return evaluateRate;
+    if (evaluateRate <= 100) return evaluateRate / 20;
+  }
+  return null;
+}
+
+function resolveManualAliExpressItemId(raw: unknown): string | null {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  if (/^\d{6,}$/.test(value)) return value;
+  return extractAliExpressItemIdFromUrl(value);
+}
+
+async function loadAffiliateForManualList(userId: number) {
+  const envAppKey = (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim();
+  const envAppSecret = (
+    process.env.ALIEXPRESS_AFFILIATE_APP_SECRET ||
+    process.env.ALIEXPRESS_APP_SECRET ||
+    ''
+  ).trim();
+
+  const envCreds =
+    envAppKey && envAppSecret
+      ? ({
+          appKey: envAppKey,
+          appSecret: envAppSecret,
+          trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
+          sandbox: false,
+        } as const)
+      : null;
+
+  const creds = envCreds ?? (await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', 'production'));
+  if (!creds || !('appKey' in creds) || !('appSecret' in creds) || !creds.appKey || !creds.appSecret) {
+    throw new AppError(
+      'AliExpress Affiliate credentials are required for manual eBay listing preload.',
+      400
+    );
+  }
+  aliexpressAffiliateAPIService.setCredentials(creds as any);
+  return aliexpressAffiliateAPIService;
+}
+
+async function loadDropshippingForManualList(userId: number) {
+  const creds = (await CredentialsManager.getCredentials(
+    userId,
+    'aliexpress-dropshipping',
+    'production'
+  )) as AliExpressDropshippingCredentials | null;
+  if (!creds?.appKey || !creds?.appSecret || !creds?.accessToken) {
+    throw new AppError(
+      'AliExpress Dropshipping credentials are required for manual eBay listing preload.',
+      400
+    );
+  }
+  aliexpressDropshippingAPIService.setCredentials(creds);
+  return aliexpressDropshippingAPIService;
+}
+
+async function buildManualEbayUsDraft(params: {
+  userId: number;
+  aliexpressItemId: string;
+  targetMarginMultiplier?: number;
+}) {
+  const userId = params.userId;
+  const itemId = params.aliexpressItemId;
+  const targetMarginMultiplier = Math.max(
+    1.01,
+    Number(params.targetMarginMultiplier) || MANUAL_LIST_DEFAULT_MARGIN
+  );
+  const aliexpressUrl = `https://www.aliexpress.com/item/${itemId}.html`;
+
+  const dsService = await loadDropshippingForManualList(userId);
+  const dsInfo = await dsService.getProductInfo(itemId, {
+    localCountry: 'US',
+    localLanguage: 'en',
+  });
+
+  const skuPick = selectPurchasableSkuSoft(dsInfo);
+  if (skuPick.ok === false) {
+    throw new AppError(`AliExpress SKU is not purchasable: ${skuPick.reason}`, 400);
+  }
+
+  const rawMethods = dsInfo.shippingInfo?.availableShippingMethods ?? [];
+  const approvedMethods = rawMethods
+    .map((method) => {
+      const methodName = String(method?.methodName || '').trim();
+      const costUsd = Number(method?.cost);
+      return {
+        methodName,
+        costUsd: Number.isFinite(costUsd) ? costUsd : NaN,
+        estimatedDays:
+          method?.estimatedDays != null && Number.isFinite(Number(method.estimatedDays))
+            ? Number(method.estimatedDays)
+            : null,
+        isPreferred: isPreferredEbayUsShippingMethod(methodName),
+        hasTracking: hasValidInternationalTrackingMethod(methodName),
+      };
+    })
+    .filter((m) => Number.isFinite(m.costUsd) && m.costUsd >= 0)
+    .filter((m) => m.isPreferred && m.hasTracking)
+    .sort((a, b) => a.costUsd - b.costUsd);
+
+  const selectedMethod = approvedMethods[0] || null;
+  const approvedFreightFallbackOptions: Array<{
+    methodName: string;
+    costUsd: number;
+    estimatedDays: number | null;
+    isPreferred: boolean;
+    hasTracking: boolean;
+  }> = [];
+
+  if (!selectedMethod) {
+    try {
+      const freightQuote = await dsService.calculateBuyerFreight({
+        countryCode: 'US',
+        productId: itemId,
+        productNum: 1,
+        sendGoodsCountryCode: 'CN',
+        skuId: skuPick.skuId || undefined,
+        price: String(Math.max(0.01, Number(skuPick.unitPrice) || Number(dsInfo.salePrice) || 0.01)),
+        priceCurrency: String(dsInfo.currency || 'USD').toUpperCase(),
+      });
+
+      for (const option of freightQuote.options || []) {
+        const methodName = String(option.serviceName || '').trim();
+        const costUsd = Number(option.freightAmount);
+        if (!methodName || !Number.isFinite(costUsd) || costUsd < 0) continue;
+
+        const isPreferred = isPreferredEbayUsShippingMethod(methodName);
+        const hasTracking = hasValidInternationalTrackingMethod(methodName);
+        if (!isPreferred || !hasTracking) continue;
+
+        approvedFreightFallbackOptions.push({
+          methodName,
+          costUsd,
+          estimatedDays:
+            option.estimatedDeliveryTime != null && Number.isFinite(Number(option.estimatedDeliveryTime))
+              ? Number(option.estimatedDeliveryTime)
+              : null,
+          isPreferred,
+          hasTracking,
+        });
+      }
+
+      approvedFreightFallbackOptions.sort((a, b) => a.costUsd - b.costUsd);
+    } catch (error: any) {
+      logger.warn('[PUBLISHER][manual-list] buyer freight fallback failed', {
+        itemId,
+        error: error?.message || String(error),
+      });
+    }
+  }
+
+  const selectedFreightFallback = approvedFreightFallbackOptions[0] || null;
+  const shippingCostUsd =
+    selectedMethod?.costUsd ??
+    selectedFreightFallback?.costUsd ??
+    minShippingCostFromApi(dsInfo, {
+      enforceEbayUsApprovedServices: true,
+      requireInternationalTracking: true,
+    });
+
+  if (shippingCostUsd == null || !Number.isFinite(shippingCostUsd) || shippingCostUsd < 0) {
+    throw new AppError(
+      'Supplier does not offer AliExpress Standard Shipping or SpeedPAK with valid international tracking for eBay US.',
+      400
+    );
+  }
+
+  let affiliateDetail: any = null;
+  try {
+    const affiliate = await loadAffiliateForManualList(userId);
+    const details = await affiliate.getProductDetails({
+      productIds: itemId,
+      shipToCountry: 'US',
+      targetCurrency: 'USD',
+      targetLanguage: 'EN',
+    });
+    affiliateDetail = details?.[0] || null;
+  } catch (error: any) {
+    logger.warn('[PUBLISHER][manual-list] Could not load affiliate detail', {
+      itemId,
+      error: error?.message || String(error),
+    });
+  }
+
+  const supplierRatingFive = toRatingFiveStar(
+    affiliateDetail?.evaluateScore,
+    affiliateDetail?.evaluateRate
+  );
+  const supplierPositivePercent =
+    supplierRatingFive != null ? Number((supplierRatingFive * 20).toFixed(2)) : null;
+  const passesRating = supplierRatingFive != null && supplierRatingFive >= MANUAL_LIST_MIN_RATING_FIVE;
+  const hasValidTracking = selectedMethod != null || selectedFreightFallback != null;
+  const selectedShippingServiceName =
+    selectedMethod?.methodName || selectedFreightFallback?.methodName || null;
+  const selectedShippingEtaDays =
+    selectedMethod?.estimatedDays ?? selectedFreightFallback?.estimatedDays ?? null;
+  const approvedShippingOptions = [
+    ...approvedMethods,
+    ...approvedFreightFallbackOptions.filter(
+      (fallback) => !approvedMethods.some((method) => method.methodName === fallback.methodName)
+    ),
+  ];
+
+  const blockers: string[] = [];
+  if (!passesRating) {
+    blockers.push('Supplier must have >95% positive rating to publish on eBay US.');
+  }
+  if (!hasValidTracking) {
+    blockers.push(
+      'Supplier must offer AliExpress Standard Shipping or SpeedPAK with international tracking.'
+    );
+  }
+
+  const title = String(affiliateDetail?.productTitle || dsInfo.productTitle || `AliExpress Item ${itemId}`).trim();
+  const description = String(affiliateDetail?.description || '').trim();
+  const category = String(affiliateDetail?.categoryName || '').trim() || null;
+  const images = [
+    String(affiliateDetail?.productMainImageUrl || '').trim(),
+    ...((Array.isArray(affiliateDetail?.productSmallImageUrls)
+      ? affiliateDetail.productSmallImageUrls
+      : []) as unknown[])
+      .map((v) => String(v || '').trim()),
+    ...((Array.isArray(dsInfo.productImages) ? dsInfo.productImages : []) as unknown[])
+      .map((v) => String(v || '').trim()),
+  ].filter((url, idx, arr) => Boolean(url) && arr.indexOf(url) === idx);
+
+  const aliexpressCostUsd = Math.max(0.01, Number(skuPick.unitPrice) || Number(dsInfo.salePrice) || 0.01);
+  const pricing = calculateEbayPrice({
+    aliexpressCostUsd,
+    shippingCostUsd,
+    targetMarginMultiplier,
+  });
+  const importTaxUsd = Number(pricing.breakdown.importTaxUsd || 0);
+  const estimatedEbayFeeUsd = Number(
+    (
+      pricing.suggestedPriceUsd * (Number(pricing.breakdown.feePercentApplied || 0) / 100) +
+      Number(pricing.breakdown.fixedFeeUsd || 0)
+    ).toFixed(2)
+  );
+  const landedCostBeforeFeesUsd = Number((aliexpressCostUsd + shippingCostUsd + importTaxUsd).toFixed(2));
+  const totalEstimatedCostUsd = Number((landedCostBeforeFeesUsd + estimatedEbayFeeUsd).toFixed(2));
+
+  return {
+    aliexpressItemId: itemId,
+    aliexpressUrl,
+    title,
+    description,
+    category,
+    images,
+    pricing: {
+      aliexpressCostUsd: Number(aliexpressCostUsd.toFixed(2)),
+      shippingCostUsd: Number(shippingCostUsd.toFixed(2)),
+      importTaxUsd,
+      ebayFeePercent: Number(pricing.breakdown.feePercentApplied || 0),
+      ebayFixedFeeUsd: Number(pricing.breakdown.fixedFeeUsd || 0),
+      estimatedEbayFeeUsd,
+      landedCostBeforeFeesUsd,
+      totalEstimatedCostUsd,
+      targetMarginMultiplier,
+      suggestedPriceUsd: pricing.suggestedPriceUsd,
+      roundedRule: 'round_up_to_.99_usd',
+    },
+    compliance: {
+      supplierRatingFive,
+      supplierPositivePercent,
+      minimumRequiredRatingFive: MANUAL_LIST_MIN_RATING_FIVE,
+      hasValidInternationalTracking: hasValidTracking,
+      selectedShippingService: selectedShippingServiceName,
+      selectedShippingEtaDays,
+      approvedShippingOptions: approvedShippingOptions.slice(0, 5),
+      canPublish: blockers.length === 0,
+      blockers,
+    },
+    ebayPolicyPreview: {
+      country: 'CN',
+      location: 'China',
+      shippingService: 'StandardShippingFromChina',
+      dispatchTimeMax: MANUAL_LIST_DISPATCH_TIME_MAX,
+    },
+    source: {
+      skuId: skuPick.skuId || null,
+      shippingMethodsDetected: rawMethods.length,
+    },
+  };
+}
 
 // GET /api/publisher/proxy-image?url=... - Proxy de imágenes (evita hotlink blocking de AliExpress)
 const ALLOWED_IMAGE_HOSTS = ['alicdn.com', 'aliexpress.com', 'ae01.alicdn.com', 'ae02.alicdn.com', 'ae03.alicdn.com', 'placehold.co', 'via.placeholder.com'];
@@ -305,6 +615,310 @@ router.post('/add_for_approval', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/publisher/ebay/listing-economics-preview
+ * Desglose de costos, impuesto modelo US, comisiones eBay y margen neto antes de publicar.
+ */
+router.post('/ebay/listing-economics-preview', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const productId = Number(req.body?.productId);
+    if (!Number.isFinite(productId) || productId <= 0) {
+      return res.status(400).json({ success: false, message: 'productId requerido' });
+    }
+    const userSettingsService = (await import('../../services/user-settings.service')).default;
+    const defaultUsd = await userSettingsService.getDefaultChinaUsShippingUsd(userId);
+    const row = await prisma.product.findFirst({
+      where: { id: productId, userId },
+    });
+    if (!row) {
+      return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+    }
+    const { calculateEbayPrice, calculateFeeIntelligence } = await import(
+      '../../services/marketplace-fee-intelligence.service'
+    );
+    const aliexpressCostUsd = Math.max(0.01, toNumber(row.aliexpressPrice));
+    const shippingCostUsd = getEffectiveShippingCostForPublish(row, undefined, { defaultUsd });
+    const marginMultiplier = Math.max(
+      1.01,
+      Number(req.body?.targetMarginMultiplier) ||
+        Number(process.env.EBAY_TARGET_MARGIN_MULTIPLIER) ||
+        1.2
+    );
+    const ebayPricing = calculateEbayPrice({
+      aliexpressCostUsd,
+      shippingCostUsd,
+      targetMarginMultiplier: marginMultiplier,
+    });
+    const listPriceUsd = ebayPricing.suggestedPriceUsd;
+    const importTaxUsd = ebayPricing.breakdown.importTaxUsd;
+    const landedSupplierUsd = aliexpressCostUsd + shippingCostUsd + importTaxUsd;
+    const fees = calculateFeeIntelligence({
+      marketplace: 'ebay',
+      listingPrice: listPriceUsd,
+      supplierCost: landedSupplierUsd,
+      shippingCostToCustomer: 0,
+      currency: 'USD',
+    });
+    return res.json({
+      success: true,
+      data: {
+        productId,
+        listingPriceUsd: listPriceUsd,
+        costs: {
+          aliexpressCostUsd,
+          shippingCostUsd,
+          importTaxUsd,
+          landedSupplierUsd: Number(landedSupplierUsd.toFixed(2)),
+        },
+        marginModel: {
+          targetMarginMultiplier: marginMultiplier,
+          ...ebayPricing.breakdown,
+        },
+        marketplaceFees: fees.breakdown,
+        expectedMarginPercent: fees.expectedMarginPercent,
+        expectedNetProfitUsd: fees.expectedProfit,
+        totalMarketplaceFeesUsd: fees.totalMarketplaceCost,
+      },
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('[PUBLISHER] ebay listing-economics-preview failed', { message });
+    return res.status(500).json({ success: false, message });
+  }
+});
+
+// GET /api/publisher/manual-list/:aliexpressItemId
+// Preload manual eBay US listing economics + compliance from AliExpress item id/url.
+router.get('/manual-list/:aliexpressItemId', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const resolvedItemId = resolveManualAliExpressItemId(req.params.aliexpressItemId);
+    if (!resolvedItemId) {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_aliexpress_item_id',
+        message: 'Provide a valid AliExpress item id or URL.',
+      });
+    }
+
+    const targetMarginMultiplier = Math.max(
+      1.01,
+      Number(req.query?.targetMarginMultiplier || req.query?.margin) || MANUAL_LIST_DEFAULT_MARGIN
+    );
+    const draft = await buildManualEbayUsDraft({
+      userId,
+      aliexpressItemId: resolvedItemId,
+      targetMarginMultiplier,
+    });
+
+    return res.json({
+      success: true,
+      data: draft,
+    });
+  } catch (error: any) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn('[PUBLISHER][manual-list] preload failed', {
+      userId: req.user?.userId,
+      aliexpressItemId: req.params.aliexpressItemId,
+      error: message,
+    });
+    return res.status(error instanceof AppError ? error.statusCode : 500).json({
+      success: false,
+      error: 'manual_list_preload_failed',
+      message,
+    });
+  }
+});
+
+// POST /api/publisher/manual-list/confirm-and-publish
+// Creates (or refreshes) product draft and triggers one-click publish to eBay US.
+router.post('/manual-list/confirm-and-publish', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+
+    const resolvedItemId = resolveManualAliExpressItemId(
+      req.body?.aliexpressItemId || req.body?.aliexpress_item_id || req.body?.aliexpressUrl
+    );
+    if (!resolvedItemId) {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_aliexpress_item_id',
+        message: 'Provide a valid aliexpressItemId or AliExpress URL.',
+      });
+    }
+
+    const targetMarginMultiplier = Math.max(
+      1.01,
+      Number(req.body?.targetMarginMultiplier) || MANUAL_LIST_DEFAULT_MARGIN
+    );
+    const draft = await buildManualEbayUsDraft({
+      userId,
+      aliexpressItemId: resolvedItemId,
+      targetMarginMultiplier,
+    });
+
+    if (!draft.compliance.canPublish) {
+      return res.status(400).json({
+        success: false,
+        error: 'manual_list_compliance_blocked',
+        message: 'Supplier does not pass eBay US preventive validation.',
+        blockers: draft.compliance.blockers,
+        data: draft,
+      });
+    }
+
+    const aliexpressUrl = draft.aliexpressUrl;
+    const existing = await prisma.product.findFirst({
+      where: {
+        userId,
+        aliexpressUrl: {
+          equals: aliexpressUrl,
+          mode: 'insensitive',
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        isPublished: true,
+        productData: true,
+      },
+    });
+
+    if (existing?.id && (String(existing.status || '').toUpperCase() === 'PUBLISHED' || existing.isPublished)) {
+      return res.status(409).json({
+        success: false,
+        error: 'manual_list_existing_published_product',
+        message:
+          'This AliExpress item already exists as a published product. To avoid altering a live listing, use the existing product flow.',
+        existingProductId: existing.id,
+      });
+    }
+
+    const manualProductDataPatch = {
+      manualListEbayUs: {
+        aliexpressItemId: resolvedItemId,
+        validatedAt: new Date().toISOString(),
+        pricing: draft.pricing,
+        compliance: draft.compliance,
+        ebayPolicyPreview: draft.ebayPolicyPreview,
+      },
+    };
+
+    let productId: number;
+    if (existing?.id) {
+      let existingMeta: Record<string, unknown> = {};
+      if (existing.productData && typeof existing.productData === 'string') {
+        try {
+          const parsed = JSON.parse(existing.productData);
+          if (parsed && typeof parsed === 'object') existingMeta = parsed as Record<string, unknown>;
+        } catch {
+          existingMeta = {};
+        }
+      }
+
+      await prisma.product.update({
+        where: { id: existing.id },
+        data: {
+          title: draft.title || `AliExpress Item ${resolvedItemId}`,
+          description: draft.description || '',
+          category: draft.category || undefined,
+          aliexpressPrice: draft.pricing.aliexpressCostUsd,
+          suggestedPrice: draft.pricing.suggestedPriceUsd,
+          finalPrice: draft.pricing.suggestedPriceUsd,
+          currency: 'USD',
+          images: JSON.stringify(draft.images || []),
+          shippingCost: draft.pricing.shippingCostUsd,
+          importTax: draft.pricing.importTaxUsd,
+          totalCost: draft.pricing.landedCostBeforeFeesUsd,
+          targetCountry: 'US',
+          originCountry: 'CN',
+          productData: JSON.stringify({
+            ...existingMeta,
+            ...manualProductDataPatch,
+          }),
+        },
+      });
+      productId = existing.id;
+    } else {
+      const dto: CreateProductDto = {
+        title: draft.title || `AliExpress Item ${resolvedItemId}`,
+        description: draft.description || '',
+        aliexpressUrl,
+        aliexpressPrice: draft.pricing.aliexpressCostUsd,
+        suggestedPrice: draft.pricing.suggestedPriceUsd,
+        finalPrice: draft.pricing.suggestedPriceUsd,
+        imageUrl: draft.images?.[0],
+        imageUrls: draft.images,
+        category: draft.category || undefined,
+        currency: 'USD',
+        shippingCost: draft.pricing.shippingCostUsd,
+        importTax: draft.pricing.importTaxUsd,
+        totalCost: draft.pricing.landedCostBeforeFeesUsd,
+        targetCountry: 'US',
+        originCountry: 'CN',
+        estimatedDeliveryDays: draft.compliance.selectedShippingEtaDays || 25,
+        productData: manualProductDataPatch,
+      };
+      const created = await productService.createProduct(userId, dto, isAdmin);
+      productId = created.id;
+    }
+
+    await productService.updateProductStatusSafely(productId, 'APPROVED', false, userId);
+
+    const marketplaceService = new MarketplaceService();
+    const { workflowConfigService } = await import('../../services/workflow-config.service');
+    const userEnvironment = await workflowConfigService.getUserEnvironment(userId);
+    const publishResult = await marketplaceService.publishProduct(
+      userId,
+      {
+        productId,
+        marketplace: 'ebay',
+        customData: {
+          price: draft.pricing.suggestedPriceUsd,
+          targetMarginMultiplier: draft.pricing.targetMarginMultiplier,
+          publishMode: 'international',
+          publishIntent: 'production',
+        },
+      },
+      userEnvironment
+    );
+
+    if (!publishResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'manual_list_publish_failed',
+        message: publishResult.error || 'Failed to publish to eBay.',
+        productId,
+        draft,
+        publishResult,
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Product validated and published to eBay US.',
+      productId,
+      draft,
+      publishResult,
+    });
+  } catch (error: any) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('[PUBLISHER][manual-list] confirm-and-publish failed', {
+      userId: req.user?.userId,
+      bodyItemId: req.body?.aliexpressItemId || req.body?.aliexpress_item_id || req.body?.aliexpressUrl,
+      error: message,
+    });
+    return res.status(error instanceof AppError ? error.statusCode : 500).json({
+      success: false,
+      error: 'manual_list_confirm_failed',
+      message,
+    });
+  }
+});
+
 // GET /api/publisher/pending
 // ✅ MEJORADO: Incluye información de productos pendientes de aprobación
 router.get('/pending', async (req: Request, res: Response) => {
@@ -350,11 +964,16 @@ router.get('/pending', async (req: Request, res: Response) => {
       return { images: [], imageUrl: null };
     };
 
+    const userSettingsServiceForPending = (await import('../../services/user-settings.service')).default;
+    const pendingDefaultShippingUsd = await userSettingsServiceForPending.getDefaultChinaUsShippingUsd(userId);
+
     const marketplaceService = new MarketplaceService();
     const enrichedItems: any[] = [];
     for (const item of products) {
       const costNum = toNumber(item.aliexpressPrice);
-      const shippingNum = getEffectiveShippingCost(item);
+      const shippingNum = getEffectiveShippingCostForPublish(item, undefined, {
+        defaultUsd: pendingDefaultShippingUsd,
+      });
       const importTaxNum = toNumber(item.importTax ?? 0);
       const totalCostNum = toNumber(item.totalCost);
       const effectiveCost = totalCostNum > 0 ? totalCostNum : costNum + shippingNum + importTaxNum;

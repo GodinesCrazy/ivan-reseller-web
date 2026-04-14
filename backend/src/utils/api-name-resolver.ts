@@ -23,6 +23,7 @@ export type APIName =
   | 'aliexpress'
   | 'aliexpress-affiliate'
   | 'aliexpress-dropshipping'
+  | 'cj-dropshipping'
   | 'email'
   | 'twilio'
   | 'slack'
@@ -88,6 +89,12 @@ const API_ALIASES_TO_CANONICAL: Record<string, APIName> = {
   'ali-express': 'aliexpress',
   'aliexpress-affiliate': 'aliexpress-affiliate',
   'aliexpress-dropshipping': 'aliexpress-dropshipping',
+
+  // CJ Dropshipping Open API 2.0 (CJ → eBay pipeline)
+  'cj-dropshipping': 'cj-dropshipping',
+  'cj_dropshipping': 'cj-dropshipping',
+  'cjdropshipping': 'cj-dropshipping',
+  'cj': 'cj-dropshipping',
   
   // Email
   'email': 'email',

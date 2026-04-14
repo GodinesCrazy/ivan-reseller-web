@@ -11,6 +11,20 @@ import type { ApiName, ApiEnvironment } from '../../types/api-credentials.types'
 import { normalizeAPIName, resolveToFrontend } from '../../utils/api-name-resolver';
 import { apiHealthCheckQueueService } from '../../services/api-health-check-queue.service';
 import { notificationService } from '../../services/notification.service';
+import { maskSecretTailFour } from '../../utils/redact';
+
+function maskCjCredentialsForResponse(
+  credentials: Record<string, unknown> | null | undefined
+): Record<string, unknown> | null {
+  if (!credentials || typeof credentials !== 'object') return null;
+  const c = { ...credentials };
+  const raw = String(c.apiKey ?? c.cjApiKey ?? '').trim();
+  if (raw) {
+    c.apiKey = maskSecretTailFour(raw);
+    delete c.cjApiKey;
+  }
+  return c;
+}
 
 const router = Router();
 router.use(authenticate);
@@ -608,6 +622,13 @@ router.get('/:apiName', authenticate, async (req: Request, res: Response, next) 
         credentials = { ...creds, redirectUri: envRedirect };
       }
     }
+
+    if (backendApiName === 'cj-dropshipping' && !shouldMaskCredentials && credentials && typeof credentials === 'object') {
+      credentials = maskCjCredentialsForResponse(credentials as Record<string, unknown>) as Record<
+        string,
+        unknown
+      >;
+    }
     
     // ✅ REFACTOR: Usar resolver para mapeo frontend
     const displayApiName = resolveToFrontend(backendApiName);
@@ -995,6 +1016,19 @@ router.post('/', async (req: Request, res: Response, next) => {
         /* ignorar */
       }
     }
+    if (normalizedApiName === 'cj-dropshipping') {
+      try {
+        const status = await apiAvailability.checkCjDropshippingAPI(targetUserId);
+        immediateStatus = {
+          isConfigured: status.isConfigured ?? false,
+          isAvailable: status.isAvailable ?? false,
+          status: status.status,
+          message: status.message,
+        };
+      } catch (e) {
+        /* ignorar */
+      }
+    }
 
     // ✅ FIX: Enviar respuesta inmediatamente, antes de cualquier operación que pueda causar crash
     res.json({
@@ -1298,6 +1332,7 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         'googletrends': [], // ✅ Opcional - no requiere campos
         'serpapi': [], // ✅ Opcional - mismo que googletrends
         'aliexpress': ['ALIEXPRESS_EMAIL', 'ALIEXPRESS_PASSWORD'],
+        'cj-dropshipping': ['CJ_API_KEY'],
       };
 
       // ✅ FIX: Usar normalizedApiName para buscar requiredFields
@@ -1317,6 +1352,7 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         'googletrends': { 'apiKey': 'SERP_API_KEY' }, // ✅ Google Trends usa SerpAPI Key
         'serpapi': { 'apiKey': 'SERP_API_KEY' }, // ✅ SerpAPI mismo mapping
         'aliexpress': { 'email': 'ALIEXPRESS_EMAIL', 'password': 'ALIEXPRESS_PASSWORD' },
+        'cj-dropshipping': { 'apiKey': 'CJ_API_KEY', 'cjApiKey': 'CJ_API_KEY' },
       };
 
       // ✅ FIX: Usar normalizedApiName para buscar el mapping
@@ -1340,6 +1376,45 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
             message: `Faltan credenciales requeridas: ${missingFields.join(', ')}`,
             missingFields
           }
+        });
+      }
+
+      // CJ: real network test with temporary key (before save)
+      if (normalizedApiName === 'cj-dropshipping') {
+        const rawKey = String(
+          tempCredentials.apiKey || tempCredentials.cjApiKey || ''
+        ).trim();
+        if (!rawKey) {
+          return res.json({
+            success: true,
+            data: {
+              apiName: 'cj-dropshipping',
+              name: 'CJ Dropshipping API',
+              isConfigured: false,
+              isAvailable: false,
+              lastChecked: new Date(),
+              error: 'Missing apiKey',
+              message: 'CJ API key is required',
+            },
+          });
+        }
+        const { testCjDropshippingConnectionWithApiKey } = await import(
+          '../../modules/cj-ebay/adapters/cj-supplier.adapter'
+        );
+        const r = await testCjDropshippingConnectionWithApiKey(rawKey);
+        return res.json({
+          success: true,
+          data: {
+            apiName: 'cj-dropshipping',
+            name: 'CJ Dropshipping API',
+            isConfigured: true,
+            isAvailable: r.ok,
+            lastChecked: new Date(),
+            message: r.message,
+            error: r.ok ? undefined : r.error,
+            latency: r.latencyMs,
+            status: r.ok ? 'healthy' : 'unhealthy',
+          },
         });
       }
 
@@ -1420,6 +1495,9 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         break;
       case 'aliexpress':
         status = await apiAvailability.checkAliExpressAPI(userId);
+        break;
+      case 'cj-dropshipping':
+        status = await apiAvailability.checkCjDropshippingAPI(userId);
         break;
       default:
         throw new AppError('Invalid API name', 400);

@@ -78,6 +78,17 @@ model User {
   pilotDecisionLedgers    PilotDecisionLedger[]
   pilotControlStates      PilotControlState[]
 
+  // CJ → eBay USA vertical (isolated module; FASE 3A+)
+  cjEbayAccountSettings   CjEbayAccountSettings?
+  cjEbayProducts          CjEbayProduct[]
+  cjEbayShippingQuotes    CjEbayShippingQuote[]
+  cjEbayProductEvaluations CjEbayProductEvaluation[]
+  cjEbayListings          CjEbayListing[]
+  cjEbayOrders            CjEbayOrder[]
+  cjEbayAlerts            CjEbayAlert[]
+  cjEbayProfitSnapshots   CjEbayProfitSnapshot[]
+  cjEbayExecutionTraces   CjEbayExecutionTrace[]
+
   @@index([email])
   @@index([username])
   @@index([role, isActive])
@@ -399,6 +410,18 @@ model UserSettings {
   dateFormat     String @default("MM/DD/YYYY") // MM/DD/YYYY, DD/MM/YYYY, etc.
   currencyFormat String @default("USD") // USD, EUR, GBP, CLP, MXN, BRL, etc.
   theme          String @default("light") // light, dark, auto
+
+  /// Tamaños de paquete permitidos en búsqueda de oportunidades (CSV): small, medium, large
+  opportunityAllowedPackageTiers String @default("small")
+  /// Precio unitario proveedor (USD) máximo para clasificar como "small" (heurística)
+  opportunitySmallMaxPriceUsd      Decimal @default(45) @db.Decimal(10, 2)
+  /// Precio unitario proveedor (USD) máximo para clasificar como "medium"
+  opportunityMediumMaxPriceUsd   Decimal @default(120) @db.Decimal(10, 2)
+  /// Envío China→USA asumido (USD) si no hay cotización real (paquete pequeño por defecto)
+  defaultChinaUsShippingUsd       Decimal @default(5.99) @db.Decimal(10, 2)
+
+  /// Preferencia de fuente en descubrimiento de oportunidades: aliexpress | cj | auto (null = env OPPORTUNITY_SUPPLIER_PREFERENCE)
+  opportunitySupplierPreference String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1273,6 +1296,16 @@ model Order {
   // Phase 48: smart supplier recommendation for manual fulfillment (single validated pick)
   recommendedSupplierUrl  String?
   recommendedSupplierMeta Json?
+  /// Phase D: supplier post-sale neutral contract (cj, aliexpress, future providers)
+  supplier          String?
+  supplierOrderId   String?
+  supplierStatus    String?
+  supplierPaymentStatus String?
+  supplierTrackingNumber String?
+  supplierTrackingUrl String?
+  supplierLogisticName String?
+  supplierSyncAt    DateTime?
+  supplierMetadata  Json?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -1284,6 +1317,8 @@ model Order {
   @@index([createdAt])
   @@index([userId])
   @@index([manualFulfillmentRequired])
+  @@index([supplier, supplierStatus])
+  @@index([supplierOrderId])
   @@map("orders")
 }
 
@@ -1488,4 +1523,302 @@ model PayoneerAccount {
 
   @@index([isActive])
   @@map("payoneer_accounts")
+}
+
+// ====================================
+// CJ → eBay USA vertical (cj_ebay_*)
+// Not linked to legacy Product / Order / Sale.
+// ====================================
+
+model CjEbayAccountSettings {
+  id                       Int      @id @default(autoincrement())
+  userId                   Int      @unique
+  minMarginPct             Decimal? @db.Decimal(6, 4)
+  minProfitUsd             Decimal? @db.Decimal(18, 2)
+  maxShippingUsd           Decimal? @db.Decimal(18, 2)
+  handlingBufferDays       Int      @default(3)
+  minStock                 Int      @default(1)
+  rejectOnUnknownShipping  Boolean  @default(true)
+  maxRiskScore             Int?
+  priceChangePctReevaluate Decimal? @db.Decimal(6, 4)
+  /// % sobre (supplier + shipping) como colchón incidentes (FASE 3C).
+  incidentBufferPct         Decimal? @db.Decimal(6, 4)
+  /// FVF eBay efectivo asumido para pricing CJ (% del precio de venta).
+  defaultEbayFeePct         Decimal? @db.Decimal(6, 4)
+  /// Comisión variable pasarela (% del precio de venta).
+  defaultPaymentFeePct      Decimal? @db.Decimal(6, 4)
+  /// Comisión fija pasarela (USD por orden).
+  defaultPaymentFixedFeeUsd Decimal? @db.Decimal(18, 2)
+  /// Tras `createOrderV2` con payType=3: `MANUAL` (confirm/pay vía API) o `AUTO_CONFIRM_PAY` (servidor llama confirm+payBalance).
+  cjPostCreateCheckoutMode  String   @default("MANUAL")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cj_ebay_account_settings")
+}
+
+model CjEbayProduct {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  cjProductId      String
+  title            String
+  description      String?   @db.Text
+  images           Json?
+  rawPayloadHash   String?
+  snapshotStatus   String    @default("SYNCED")
+  lastSyncedAt     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variants         CjEbayProductVariant[]
+  shippingQuotes   CjEbayShippingQuote[]
+  evaluations      CjEbayProductEvaluation[]
+  listings         CjEbayListing[]
+  cjEbayOrders     CjEbayOrder[]
+
+  @@unique([userId, cjProductId])
+  @@index([userId])
+  @@index([userId, snapshotStatus])
+  @@map("cj_ebay_products")
+}
+
+model CjEbayProductVariant {
+  id             Int       @id @default(autoincrement())
+  productId      Int
+  cjSku          String
+  /// CJ variant id (vid) para freight/stock API.
+  cjVid          String?
+  attributes     Json?
+  unitCostUsd    Decimal?  @db.Decimal(18, 2)
+  stockLastKnown Int?
+  stockCheckedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  product        CjEbayProduct             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shippingQuotes CjEbayShippingQuote[]
+  evaluations    CjEbayProductEvaluation[]
+  listings       CjEbayListing[]
+  cjEbayOrders   CjEbayOrder[]
+
+  @@unique([productId, cjSku])
+  @@index([productId])
+  @@index([productId, cjVid])
+  @@map("cj_ebay_product_variants")
+}
+
+model CjEbayShippingQuote {
+  id                Int       @id @default(autoincrement())
+  userId            Int
+  productId         Int
+  variantId         Int?
+  quantity          Int       @default(1)
+  amountUsd         Decimal   @db.Decimal(18, 2)
+  currency          String    @default("USD")
+  serviceName       String?
+  carrier           String?
+  estimatedMinDays  Int?
+  estimatedMaxDays  Int?
+  confidence        String    @default("unknown")
+  validFrom         DateTime  @default(now())
+  validUntil        DateTime?
+  createdAt         DateTime  @default(now())
+
+  user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product CjEbayProduct         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant     CjEbayProductVariant?      @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  evaluations CjEbayProductEvaluation[]
+  listings    CjEbayListing[]
+
+  @@index([userId])
+  @@index([productId])
+  @@map("cj_ebay_shipping_quotes")
+}
+
+model CjEbayProductEvaluation {
+  id               Int      @id @default(autoincrement())
+  userId           Int
+  productId        Int
+  variantId        Int?
+  shippingQuoteId  Int?
+  decision         String
+  reasons          Json?
+  estimatedMarginPct Decimal? @db.Decimal(8, 4)
+  evaluatedAt      DateTime @default(now())
+
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product       CjEbayProduct          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant       CjEbayProductVariant?  @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  shippingQuote CjEbayShippingQuote?   @relation(fields: [shippingQuoteId], references: [id], onDelete: SetNull)
+  listings      CjEbayListing[]
+
+  @@index([userId])
+  @@index([userId, decision])
+  @@index([productId])
+  @@map("cj_ebay_product_evaluations")
+}
+
+model CjEbayListing {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  productId       Int
+  variantId       Int?
+  ebayListingId   String?
+  ebayOfferId     String?
+  ebaySku         String?
+  status          String    @default("DRAFT")
+  listedPriceUsd  Decimal?  @db.Decimal(18, 2)
+  quantity        Int?
+  lastSyncedAt    DateTime?
+  /// Snapshot del borrador (título, imágenes, política de envío honesta, breakdown, SKU interno).
+  draftPayload    Json?
+  lastError       String?   @db.Text
+  evaluationId    Int?
+  shippingQuoteId Int?
+  /// Días hábiles de handling comunicados al comprador (buffer cuenta + suplemento conservador si aplica).
+  handlingTimeDays Int?
+  publishedAt     DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product CjEbayProduct         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant CjEbayProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  evaluation   CjEbayProductEvaluation? @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
+  shippingQuote CjEbayShippingQuote?    @relation(fields: [shippingQuoteId], references: [id], onDelete: SetNull)
+  orders        CjEbayOrder[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([ebayListingId])
+  @@map("cj_ebay_listings")
+}
+
+model CjEbayOrder {
+  id           String   @id @default(cuid())
+  userId       Int
+  ebayOrderId  String
+  cjOrderId    String?
+  status       String   @default("DETECTED")
+  lineItemRef  String?
+  productId    Int?
+  variantId    Int?
+  /// Listing CJ vertical que originó la venta (mapeo por `ebaySku`).
+  listingId    Int?
+  /// SKU en eBay (inventory) usado para el match; coincide con `cj_ebay_listings.ebaySku`.
+  ebaySku      String?
+  lineQuantity Int      @default(1)
+  /// Resumen de la orden eBay (line items ids, sku, totales) para fulfillment/tracking.
+  rawEbaySummary Json?
+  buyerPayload Json?
+  totalUsd     Decimal? @db.Decimal(18, 2)
+  currency     String   @default("USD")
+  lastError    String?  @db.Text
+  /// FASE 3E.3: `PATCH confirmOrder` CJ ejecutado correctamente.
+  cjConfirmedAt DateTime?
+  /// FASE 3E.3: `POST payBalance` CJ ejecutado correctamente.
+  cjPaidAt      DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing  CjEbayListing?       @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  product  CjEbayProduct?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant  CjEbayProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  events   CjEbayOrderEvent[]
+  tracking CjEbayTracking?
+
+  @@unique([userId, ebayOrderId])
+  @@index([userId, status])
+  @@index([listingId])
+  @@map("cj_ebay_orders")
+}
+
+model CjEbayOrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  step      String
+  message   String?  @db.Text
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  order CjEbayOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("cj_ebay_order_events")
+}
+
+model CjEbayTracking {
+  id                  Int       @id @default(autoincrement())
+  orderId             String    @unique
+  carrierCode         String?
+  trackingNumber      String?
+  status              String    @default("NOT_AVAILABLE")
+  rawPayload          Json?
+  submittedToEbayAt   DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  order CjEbayOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("cj_ebay_tracking")
+}
+
+model CjEbayAlert {
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  type           String
+  severity       String    @default("warning")
+  status         String    @default("OPEN")
+  payload        Json?
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, severity])
+  @@map("cj_ebay_alerts")
+}
+
+model CjEbayProfitSnapshot {
+  id                   Int      @id @default(autoincrement())
+  userId               Int
+  snapshotDate         DateTime @db.Date
+  estimatedRevenueUsd  Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedFeesUsd     Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedCjCostUsd   Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedProfitUsd   Decimal  @default(0) @db.Decimal(18, 2)
+  metadata             Json?
+  createdAt            DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, snapshotDate])
+  @@index([userId])
+  @@map("cj_ebay_profit_snapshots")
+}
+
+model CjEbayExecutionTrace {
+  id             String   @id @default(cuid())
+  userId         Int
+  correlationId  String?
+  route          String?
+  step           String
+  message        String   @db.Text
+  meta           Json?
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([correlationId])
+  @@map("cj_ebay_execution_traces")
 }

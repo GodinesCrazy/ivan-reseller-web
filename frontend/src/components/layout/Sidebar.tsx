@@ -24,7 +24,13 @@ import {
   Stethoscope,
   FileBarChart2,
   Briefcase,
+  BadgeDollarSign,
+  Truck,
+  Bell,
+  LineChart,
+  ScrollText,
 } from 'lucide-react';
+import { isCjEbayModuleEnabled } from '@/config/feature-flags';
 
 interface NavItem {
   path: string;
@@ -39,6 +45,19 @@ interface NavGroup {
   roles?: string[];
 }
 
+const cjEbayNavGroup: NavGroup = {
+  title: 'CJ → eBay USA',
+  items: [
+    { path: '/cj-ebay/overview', label: 'Resumen', icon: LayoutDashboard },
+    { path: '/cj-ebay/products', label: 'Productos CJ', icon: Package },
+    { path: '/cj-ebay/listings', label: 'Listings', icon: List },
+    { path: '/cj-ebay/orders', label: 'Órdenes', icon: Truck },
+    { path: '/cj-ebay/alerts', label: 'Alertas', icon: Bell },
+    { path: '/cj-ebay/profit', label: 'Profit', icon: LineChart },
+    { path: '/cj-ebay/logs', label: 'Logs', icon: ScrollText },
+  ],
+};
+
 const navGroups: NavGroup[] = [
   {
     title: 'Flujo principal',
@@ -47,6 +66,7 @@ const navGroups: NavGroup[] = [
       { path: '/control-center', label: 'Control Center', icon: Activity },
       { path: '/opportunities', label: 'Oportunidades', icon: Search },
       { path: '/publisher', label: 'Publicador', icon: Send },
+      { path: '/manual-list', label: 'Manual List', icon: BadgeDollarSign },
       { path: '/listings', label: 'Listings', icon: List },
       { path: '/autopilot', label: 'Autopilot', icon: Bot },
     ],
@@ -97,7 +117,11 @@ export default function Sidebar() {
   const userRole = user?.role?.toUpperCase() || 'USER';
   const { pendingPurchasesCount, productsPending } = useInventoryBadges();
 
-  const visibleGroups = navGroups.filter((group) => {
+  const allNavGroups: NavGroup[] = isCjEbayModuleEnabled()
+    ? [cjEbayNavGroup, ...navGroups]
+    : navGroups;
+
+  const visibleGroups = allNavGroups.filter((group) => {
     if (group.roles && !group.roles.includes(userRole)) return false;
     const visibleItems = group.items.filter((item) => {
       if (!item.roles) return true;

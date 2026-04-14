@@ -374,6 +374,23 @@ router.get('/apis', authenticate, async (req, res) => {
         documentation: 'https://developer.alibaba.com/help/en/portal'
       },
 
+      {
+        id: API_IDS.CJ_DROPSHIPPING,
+        name: 'CJ Dropshipping API',
+        apiName: API_NAMES.CJ_DROPSHIPPING,
+        category: API_CATEGORIES.AUTOMATION,
+        supportsEnvironments: false,
+        status: configuredMap.has(`cj-dropshipping-production`) ? 'configured' : 'not_configured',
+        isActive: configuredMap.get(`cj-dropshipping-production`)?.isActive || false,
+        lastUpdated: configuredMap.get(`cj-dropshipping-production`)?.updatedAt?.toISOString() || null,
+        fields: [
+          { key: 'apiKey', label: 'CJ API Key', required: true, type: 'password', placeholder: 'Your CJ Open API key' },
+        ],
+        description:
+          'CJdropshipping Open API 2.0 for catalog, quotes, and orders in the CJ → eBay pipeline. Prefer saving the key here; backend may fall back to CJ_API_KEY / CJ_DROPSHIPPING_API_KEY in environment.',
+        documentation: 'https://developers.cjdropshipping.com/en/api/api2/',
+      },
+
       // NUEVAS APIs de Notificaciones
       {
         id: API_IDS.EMAIL,
@@ -502,7 +519,11 @@ router.get('/', authenticate, async (req, res) => {
         timezone: settings.timezone,
         dateFormat: settings.dateFormat,
         currencyFormat: settings.currencyFormat,
-        theme: settings.theme
+        theme: settings.theme,
+        opportunityAllowedPackageTiers: (settings as any).opportunityAllowedPackageTiers ?? 'small',
+        opportunitySmallMaxPriceUsd: Number((settings as any).opportunitySmallMaxPriceUsd ?? 45),
+        opportunityMediumMaxPriceUsd: Number((settings as any).opportunityMediumMaxPriceUsd ?? 120),
+        defaultChinaUsShippingUsd: Number((settings as any).defaultChinaUsShippingUsd ?? 5.99),
       }
     });
   } catch (error: any) {
@@ -527,10 +548,29 @@ router.post('/', authenticate, async (req, res) => {
   try {
     const userId = req.user!.userId;
     const userSettingsService = (await import('../services/user-settings.service')).default;
-    const { language, timezone, dateFormat, currencyFormat, theme } = req.body;
+    const {
+      language,
+      timezone,
+      dateFormat,
+      currencyFormat,
+      theme,
+      opportunityAllowedPackageTiers,
+      opportunitySmallMaxPriceUsd,
+      opportunityMediumMaxPriceUsd,
+      defaultChinaUsShippingUsd,
+    } = req.body;
 
-    // Validar que al menos un campo esté presente
-    if (!language && !timezone && !dateFormat && !currencyFormat && !theme) {
+    if (
+      !language &&
+      !timezone &&
+      !dateFormat &&
+      !currencyFormat &&
+      !theme &&
+      opportunityAllowedPackageTiers == null &&
+      opportunitySmallMaxPriceUsd == null &&
+      opportunityMediumMaxPriceUsd == null &&
+      defaultChinaUsShippingUsd == null
+    ) {
       return res.status(400).json({
         success: false,
         message: 'Al menos un campo debe estar presente para actualizar'
@@ -542,7 +582,14 @@ router.post('/', authenticate, async (req, res) => {
       timezone,
       dateFormat,
       currencyFormat,
-      theme
+      theme,
+      opportunityAllowedPackageTiers,
+      opportunitySmallMaxPriceUsd:
+        opportunitySmallMaxPriceUsd != null ? Number(opportunitySmallMaxPriceUsd) : undefined,
+      opportunityMediumMaxPriceUsd:
+        opportunityMediumMaxPriceUsd != null ? Number(opportunityMediumMaxPriceUsd) : undefined,
+      defaultChinaUsShippingUsd:
+        defaultChinaUsShippingUsd != null ? Number(defaultChinaUsShippingUsd) : undefined,
     });
 
     res.json({
@@ -553,7 +600,11 @@ router.post('/', authenticate, async (req, res) => {
         timezone: settings.timezone,
         dateFormat: settings.dateFormat,
         currencyFormat: settings.currencyFormat,
-        theme: settings.theme
+        theme: settings.theme,
+        opportunityAllowedPackageTiers: (settings as any).opportunityAllowedPackageTiers ?? 'small',
+        opportunitySmallMaxPriceUsd: Number((settings as any).opportunitySmallMaxPriceUsd ?? 45),
+        opportunityMediumMaxPriceUsd: Number((settings as any).opportunityMediumMaxPriceUsd ?? 120),
+        defaultChinaUsShippingUsd: Number((settings as any).defaultChinaUsShippingUsd ?? 5.99),
       }
     });
   } catch (error: any) {

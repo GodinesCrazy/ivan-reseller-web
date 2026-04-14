@@ -18,6 +18,7 @@ const Commissions = lazy(() => import('@pages/Commissions'));
 const FinanceDashboard = lazy(() => import('@pages/FinanceDashboard'));
 const FlexibleDropshipping = lazy(() => import('@pages/FlexibleDropshipping'));
 const IntelligentPublisher = lazy(() => import('@pages/IntelligentPublisher'));
+const ManualList = lazy(() => import('@pages/ManualList'));
 const Jobs = lazy(() => import('@pages/Jobs'));
 const Reports = lazy(() => import('@pages/Reports'));
 const Users = lazy(() => import('@pages/Users'));
@@ -47,6 +48,15 @@ const Orders = lazy(() => import('@pages/Orders'));
 const OrderDetail = lazy(() => import('@pages/OrderDetail'));
 const Checkout = lazy(() => import('@pages/Checkout'));
 const Diagnostics = lazy(() => import('@pages/Diagnostics'));
+const CjEbayModuleGate = lazy(() => import('@pages/cj-ebay/CjEbayModuleGate'));
+const CjEbayLayout = lazy(() => import('@pages/cj-ebay/CjEbayLayout'));
+const CjEbayOverviewPage = lazy(() => import('@pages/cj-ebay/CjEbayOverviewPage'));
+const CjEbayProductsPage = lazy(() => import('@pages/cj-ebay/CjEbayProductsPage'));
+const CjEbayListingsPage = lazy(() => import('@pages/cj-ebay/CjEbayListingsPage'));
+const CjEbayOrdersPage = lazy(() => import('@pages/cj-ebay/CjEbayOrdersPage'));
+const CjEbayAlertsPage = lazy(() => import('@pages/cj-ebay/CjEbayAlertsPage'));
+const CjEbayProfitPage = lazy(() => import('@pages/cj-ebay/CjEbayProfitPage'));
+const CjEbayLogsPage = lazy(() => import('@pages/cj-ebay/CjEbayLogsPage'));
 const Listings = lazy(() => import('@pages/Listings'));
 const ControlCenter = lazy(() => import('@pages/ControlCenter'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
@@ -235,6 +245,20 @@ function AppContent() {
       >
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
+
+        {/* CJ → eBay USA (feature-flagged; gate redirects if VITE_ENABLE_CJ_EBAY_MODULE is not true) */}
+        <Route path="cj-ebay" element={<CjEbayModuleGate />}>
+          <Route element={<CjEbayLayout />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<CjEbayOverviewPage />} />
+            <Route path="products" element={<CjEbayProductsPage />} />
+            <Route path="listings" element={<CjEbayListingsPage />} />
+            <Route path="orders" element={<CjEbayOrdersPage />} />
+            <Route path="alerts" element={<CjEbayAlertsPage />} />
+            <Route path="profit" element={<CjEbayProfitPage />} />
+            <Route path="logs" element={<CjEbayLogsPage />} />
+          </Route>
+        </Route>
         <Route path="control-center" element={<ControlCenter />} />
         
         {/* Opportunities System */}
@@ -262,6 +286,7 @@ function AppContent() {
         
         {/* Publishing */}
         <Route path="publisher" element={<IntelligentPublisher />} />
+        <Route path="manual-list" element={<ManualList />} />
         <Route path="listings" element={<Listings />} />
         
         {/* Jobs & Reports */}

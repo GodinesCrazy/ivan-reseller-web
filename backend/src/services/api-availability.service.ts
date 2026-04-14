@@ -1449,6 +1449,65 @@ export class APIAvailabilityService {
   }
 
   /**
+   * CJ Dropshipping Open API 2.0 — uses stored credential or env CJ_API_KEY / CJ_DROPSHIPPING_API_KEY.
+   */
+  async checkCjDropshippingAPI(userId: number): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, 'cj-dropshipping');
+    const cached = await this.getCached(cacheKey);
+    if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+      return cached;
+    }
+
+    try {
+      const credentials = await this.getUserCredentials(userId, 'cj-dropshipping', 'production');
+      const apiKey = String(credentials?.apiKey || credentials?.cjApiKey || '').trim();
+      if (!apiKey) {
+        const status: APIStatus = {
+          apiName: 'cj-dropshipping',
+          name: 'CJ Dropshipping API',
+          isConfigured: false,
+          isAvailable: false,
+          lastChecked: new Date(),
+          error:
+            'CJ API key not configured: save ApiCredential cj-dropshipping or set CJ_API_KEY in backend environment',
+          message: 'CJ no configurado',
+        };
+        await this.setCached(cacheKey, status);
+        return status;
+      }
+
+      const { testCjDropshippingConnectionWithApiKey } = await import(
+        '../modules/cj-ebay/adapters/cj-supplier.adapter'
+      );
+      const r = await testCjDropshippingConnectionWithApiKey(apiKey);
+      const status: APIStatus = {
+        apiName: 'cj-dropshipping',
+        name: 'CJ Dropshipping API',
+        isConfigured: true,
+        isAvailable: r.ok,
+        status: r.ok ? 'healthy' : 'unhealthy',
+        lastChecked: new Date(),
+        latency: r.latencyMs,
+        message: r.ok ? r.message || 'CJ connection OK' : r.message || r.error,
+        error: r.ok ? undefined : r.error,
+      };
+      await this.setCached(cacheKey, status);
+      return status;
+    } catch (error) {
+      const status: APIStatus = {
+        apiName: 'cj-dropshipping',
+        name: 'CJ Dropshipping API',
+        isConfigured: false,
+        isAvailable: false,
+        lastChecked: new Date(),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      await this.setCached(cacheKey, status);
+      return status;
+    }
+  }
+
+  /**
    * Check ScraperAPI availability for specific user
    */
   async checkSerpAPI(userId: number): Promise<APIStatus> {
@@ -2732,6 +2791,7 @@ export class APIAvailabilityService {
       () => this.checkAliExpressAPI(userId),
       () => this.checkAliExpressAffiliateAPI(userId, 'production'),
       () => this.checkAliExpressDropshippingAPI(userId, 'production'),
+      () => this.checkCjDropshippingAPI(userId),
       () => this.checkEmailAPI(userId),
       () => this.checkTwilioAPI(userId),
       () => this.checkSlackAPI(userId),
@@ -2832,7 +2892,7 @@ export class APIAvailabilityService {
     } as APIStatus;
     
     // Extraer resultados simples con nombres correctos
-    const simpleCheckNames = ['groq', 'scraperapi', 'serpapi', 'zenrows', '2captcha', 'aliexpress', 'aliexpress-affiliate', 'aliexpress-dropshipping', 'email', 'twilio', 'slack', 'openai'];
+    const simpleCheckNames = ['groq', 'scraperapi', 'serpapi', 'zenrows', '2captcha', 'aliexpress', 'aliexpress-affiliate', 'aliexpress-dropshipping', 'cj-dropshipping', 'email', 'twilio', 'slack', 'openai'];
     const [
       groq,
       scraper,
@@ -2842,6 +2902,7 @@ export class APIAvailabilityService {
       aliexpress,
       aliexpressAffiliate,
       aliexpressDropshipping,
+      cjDropshipping,
       email,
       twilio,
       slack,
@@ -2897,6 +2958,7 @@ export class APIAvailabilityService {
       aliexpress,
       aliexpressAffiliate,
       aliexpressDropshipping,
+      cjDropshipping,
       email,
       twilio,
       slack,

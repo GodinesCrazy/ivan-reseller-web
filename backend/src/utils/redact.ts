@@ -3,6 +3,14 @@
  * Prevents exposure of credentials, tokens, and other sensitive information
  */
 
+/** Mask a secret for API responses (never send full keys to the browser). */
+export function maskSecretTailFour(value: string): string {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  if (s.length <= 4) return '****';
+  return `****${s.slice(-4)}`;
+}
+
 /**
  * Redact sensitive values from an object
  * Replaces sensitive fields with masked values

@@ -83,6 +83,8 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
             return await apiAvailability.checkAliExpressAffiliateAPI(userId, environment);
           case 'aliexpress-dropshipping':
             return await apiAvailability.checkAliExpressDropshippingAPI(userId, environment);
+          case 'cj-dropshipping':
+            return await apiAvailability.checkCjDropshippingAPI(userId);
           default:
             logger.warn('[APIHealthCheckQueue] Unknown API name', { apiName });
             // ✅ FIX: No hacer throw - solo loggear y retornar status degraded

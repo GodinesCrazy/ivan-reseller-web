@@ -28,6 +28,7 @@ import {
   getOrderTruthFlags,
   markOrderCancelledOnMarketplace,
 } from '../../services/order-truth.service';
+import { supplierFulfillmentService } from '../../services/supplier-fulfillment.service';
 
 const marketplaceService = new MarketplaceService();
 
@@ -1239,6 +1240,102 @@ router.post('/:id/retry-automatic-fulfillment', async (req: Request, res: Respon
   } catch (err: any) {
     logger.error('[ORDERS] retry-automatic-fulfillment failed', { error: err?.message, id: req.params.id });
     return res.status(500).json({ error: err?.message || 'Failed' });
+  }
+});
+
+/**
+ * Phase D — provider-neutral supplier post-sale actions (CJ implemented first).
+ */
+router.post('/:id/supplier/create', async (req: Request, res: Response) => {
+  try {
+    const orderId = String(req.params.id || '').trim();
+    const userId = req.user!.userId;
+    if (!orderId) return res.status(400).json({ error: 'Order ID required' });
+    const body = (req.body || {}) as Record<string, unknown>;
+    const supplier = typeof body.supplier === 'string' ? body.supplier.trim().toLowerCase() : undefined;
+    const metadata =
+      body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
+        ? (body.metadata as Record<string, unknown>)
+        : undefined;
+    const out = await supplierFulfillmentService.createSupplierOrder({
+      orderId,
+      userId,
+      supplier: supplier === 'cj' || supplier === 'aliexpress' ? supplier : undefined,
+      metadata,
+    });
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    return res.status(200).json({ ok: true, action: 'createSupplierOrder', result: out, order });
+  } catch (err: any) {
+    logger.error('[ORDERS] supplier/create failed', { error: err?.message, id: req.params.id });
+    const code = err?.statusCode || err?.status || 500;
+    return res.status(code).json({ ok: false, error: err?.message || 'Failed' });
+  }
+});
+
+router.post('/:id/supplier/confirm', async (req: Request, res: Response) => {
+  try {
+    const orderId = String(req.params.id || '').trim();
+    const userId = req.user!.userId;
+    if (!orderId) return res.status(400).json({ error: 'Order ID required' });
+    const out = await supplierFulfillmentService.confirmSupplierOrder({ orderId, userId });
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    return res.status(200).json({ ok: true, action: 'confirmSupplierOrder', result: out, order });
+  } catch (err: any) {
+    logger.error('[ORDERS] supplier/confirm failed', { error: err?.message, id: req.params.id });
+    const code = err?.statusCode || err?.status || 500;
+    return res.status(code).json({ ok: false, error: err?.message || 'Failed' });
+  }
+});
+
+router.post('/:id/supplier/pay', async (req: Request, res: Response) => {
+  try {
+    const orderId = String(req.params.id || '').trim();
+    const userId = req.user!.userId;
+    if (!orderId) return res.status(400).json({ error: 'Order ID required' });
+    const body = (req.body || {}) as { dryRun?: boolean; executePay?: boolean; payConfirmToken?: string };
+    const out = await supplierFulfillmentService.paySupplierOrder({
+      orderId,
+      userId,
+      dryRun: body.dryRun === true,
+      executePay: body.executePay === true,
+      payConfirmToken: typeof body.payConfirmToken === 'string' ? body.payConfirmToken : undefined,
+    });
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    return res.status(200).json({ ok: true, action: 'paySupplierOrder', result: out, order });
+  } catch (err: any) {
+    logger.error('[ORDERS] supplier/pay failed', { error: err?.message, id: req.params.id });
+    const code = err?.statusCode || err?.status || 500;
+    return res.status(code).json({ ok: false, error: err?.message || 'Failed' });
+  }
+});
+
+router.get('/:id/supplier/status', async (req: Request, res: Response) => {
+  try {
+    const orderId = String(req.params.id || '').trim();
+    const userId = req.user!.userId;
+    if (!orderId) return res.status(400).json({ error: 'Order ID required' });
+    const out = await supplierFulfillmentService.getSupplierOrderStatus({ orderId, userId });
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    return res.status(200).json({ ok: true, action: 'getSupplierOrderStatus', result: out, order });
+  } catch (err: any) {
+    logger.error('[ORDERS] supplier/status failed', { error: err?.message, id: req.params.id });
+    const code = err?.statusCode || err?.status || 500;
+    return res.status(code).json({ ok: false, error: err?.message || 'Failed' });
+  }
+});
+
+router.get('/:id/supplier/tracking', async (req: Request, res: Response) => {
+  try {
+    const orderId = String(req.params.id || '').trim();
+    const userId = req.user!.userId;
+    if (!orderId) return res.status(400).json({ error: 'Order ID required' });
+    const out = await supplierFulfillmentService.getSupplierTracking({ orderId, userId });
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    return res.status(200).json({ ok: true, action: 'getSupplierTracking', result: out, order });
+  } catch (err: any) {
+    logger.error('[ORDERS] supplier/tracking failed', { error: err?.message, id: req.params.id });
+    const code = err?.statusCode || err?.status || 500;
+    return res.status(code).json({ ok: false, error: err?.message || 'Failed' });
   }
 });
 

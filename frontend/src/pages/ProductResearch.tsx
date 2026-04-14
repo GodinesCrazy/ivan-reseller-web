@@ -5,18 +5,23 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import axios from 'axios';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrencySimple } from '../utils/currency';
-import { Search, TrendingUp, BarChart3, DollarSign, PlusCircle, ExternalLink, Sparkles, Eye, Globe } from 'lucide-react';
+import { Search, TrendingUp, BarChart3, DollarSign, PlusCircle, ExternalLink, Sparkles, Eye, Globe, Store, Rocket } from 'lucide-react';
+import { isCjEbayModuleEnabled } from '@/config/feature-flags';
+import CjEbayVariantPickerModal from '@/components/cj-ebay/CjEbayVariantPickerModal';
+import { cjVariantKey, type CjProductVariantApi } from '@/lib/cjEbayVariantUtils';
 
 type Marketplace = 'ebay' | 'amazon' | 'mercadolibre';
 
 interface ResearchItem {
   productId?: string;
+  cjVariantId?: string;
   title: string;
-  sourceMarketplace: 'aliexpress';
+  sourceMarketplace: 'aliexpress' | 'cjdropshipping';
   aliexpressUrl: string;
   productUrl?: string;
   image?: string;
@@ -89,6 +94,14 @@ export default function ProductResearch() {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ResearchItem[]>([]);
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [cjEbayBusyKey, setCjEbayBusyKey] = useState<string | null>(null);
+  const [cjEbayVariantModal, setCjEbayVariantModal] = useState<null | {
+    item: ResearchItem;
+    publish: boolean;
+    variants: CjProductVariantApi[];
+    productTitle: string;
+    busyKey: string;
+  }>(null);
   const [marketOpportunities, setMarketOpportunities] = useState<MarketOpportunityRow[]>([]);
   const [marketOppLoading, setMarketOppLoading] = useState(true);
   const [demandSignals, setDemandSignals] = useState<DemandSignalRow[]>([]);
@@ -197,6 +210,136 @@ export default function ProductResearch() {
       }
     },
     [navigate]
+  );
+
+  const researchRowKey = useCallback(
+    (item: ResearchItem) => item.aliexpressUrl || item.title.slice(0, 80),
+    []
+  );
+
+  const destPostalResearch = () => (region === 'us' ? '90210' : undefined);
+
+  const executeCjEbayResearch = useCallback(
+    async (item: ResearchItem, busyKey: string, variantKey: string | undefined, publish: boolean) => {
+      const pid = item.productId?.trim();
+      if (!pid) {
+        toast.error('Falta ID de producto CJ.');
+        return;
+      }
+      setCjEbayBusyKey(busyKey);
+      try {
+        const res = await api.post<{
+          ok: boolean;
+          resolvedVariantId?: string;
+          listing?: { id: number } | null;
+          evaluate?: { decision?: string };
+          publish?: { ebayListingId: string } | null;
+          publishSkippedReason?: string | null;
+        }>('/api/cj-ebay/opportunities/ebay-pipeline', {
+          productId: pid,
+          variantId: variantKey,
+          quantity: 1,
+          destPostalCode: destPostalResearch(),
+          publish,
+        });
+        const data = res.data;
+        if (!data?.ok) {
+          toast.error('No se pudo ejecutar el pipeline CJ→eBay.');
+          return;
+        }
+        if (data.evaluate?.decision && data.evaluate.decision !== 'APPROVED') {
+          toast.message(`Calificación: ${data.evaluate.decision}`);
+        }
+        if (data.listing?.id) {
+          const desc = `Listing #${data.listing.id}`;
+          if (publish && data.publishSkippedReason === 'BLOCK_NEW_PUBLICATIONS') {
+            toast.warning('Borrador listo; publicación bloqueada (BLOCK_NEW_PUBLICATIONS).', { description: desc });
+          } else if (publish && data.publishSkippedReason?.startsWith('PUBLISH_FAILED')) {
+            toast.error('Borrador listo; falló la publicación.', {
+              description: data.publishSkippedReason.replace(/^PUBLISH_FAILED:?/, '').slice(0, 160),
+            });
+          } else if (publish && data.publish != null && !data.publishSkippedReason) {
+            toast.success('Publicado en eBay.', { description: desc });
+          } else {
+            toast.success('Borrador eBay creado (CJ).', { description: desc });
+          }
+          navigate('/cj-ebay/listings');
+        }
+      } catch (err: unknown) {
+        let msg = 'Error en pipeline CJ→eBay.';
+        if (axios.isAxiosError(err) && err.response?.data && typeof err.response.data === 'object') {
+          const d = err.response.data as { message?: string; error?: string };
+          msg = d.message || d.error || msg;
+        } else if (err instanceof Error) msg = err.message;
+        toast.error(msg);
+      } finally {
+        setCjEbayBusyKey(null);
+      }
+    },
+    [navigate, region]
+  );
+
+  const startCjEbayResearchFlow = useCallback(
+    async (item: ResearchItem, publish: boolean) => {
+      const pid = item.productId?.trim();
+      if (!pid) {
+        toast.error('Falta ID de producto CJ.');
+        return;
+      }
+      const busyKey = researchRowKey(item);
+      const preset = item.cjVariantId?.trim();
+      if (preset) {
+        await executeCjEbayResearch(item, busyKey, preset, publish);
+        return;
+      }
+      setCjEbayBusyKey(busyKey);
+      try {
+        const res = await api.get<{
+          ok: boolean;
+          product?: { title?: string; variants?: CjProductVariantApi[] };
+        }>(`/api/cj-ebay/cj/product/${encodeURIComponent(pid)}`);
+        if (!res.data?.ok || !res.data.product) {
+          toast.error('No se pudo cargar el producto CJ.');
+          return;
+        }
+        const variants = Array.isArray(res.data.product.variants) ? res.data.product.variants : [];
+        if (variants.length === 0) {
+          toast.error('Sin variantes reconocibles para este producto CJ.');
+          return;
+        }
+        if (variants.length === 1) {
+          await executeCjEbayResearch(item, busyKey, cjVariantKey(variants[0]!), publish);
+          return;
+        }
+        setCjEbayVariantModal({
+          item,
+          publish,
+          variants,
+          productTitle: res.data.product.title || item.title,
+          busyKey,
+        });
+      } catch (err: unknown) {
+        let msg = 'No se pudieron obtener variantes CJ.';
+        if (axios.isAxiosError(err) && err.response?.data && typeof err.response.data === 'object') {
+          const d = err.response.data as { message?: string; error?: string };
+          msg = d.message || d.error || msg;
+        } else if (err instanceof Error) msg = err.message;
+        toast.error(msg);
+      } finally {
+        setCjEbayBusyKey(null);
+      }
+    },
+    [executeCjEbayResearch, researchRowKey]
+  );
+
+  const confirmCjEbayResearchVariant = useCallback(
+    async (variantKey: string) => {
+      if (!cjEbayVariantModal) return;
+      const { item, publish, busyKey } = cjEbayVariantModal;
+      setCjEbayVariantModal(null);
+      await executeCjEbayResearch(item, busyKey, variantKey, publish);
+    },
+    [cjEbayVariantModal, executeCjEbayResearch]
   );
 
   return (
@@ -408,9 +551,16 @@ export default function ProductResearch() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-slate-900 dark:text-white truncate" title={item.title}>
-                  {item.title}
-                </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  {item.sourceMarketplace === 'cjdropshipping' && (
+                    <span className="px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-950/50 text-violet-800 dark:text-violet-200 text-[10px] font-semibold uppercase">
+                      CJ
+                    </span>
+                  )}
+                  <h3 className="font-medium text-slate-900 dark:text-white truncate" title={item.title}>
+                    {item.title}
+                  </h3>
+                </div>
                 <div className="flex flex-wrap gap-4 mt-2 text-sm">
                   <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
                     <DollarSign className="w-4 h-4" />
@@ -430,7 +580,7 @@ export default function ProductResearch() {
                     </span>
                   )}
                 </div>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex flex-wrap gap-2">
                   <a
                     href={item.aliexpressUrl}
                     target="_blank"
@@ -438,8 +588,32 @@ export default function ProductResearch() {
                     className="text-sm text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
                   >
                     <ExternalLink className="w-3 h-3" />
-                    AliExpress
+                    {item.sourceMarketplace === 'cjdropshipping' ? 'CJ catálogo' : 'AliExpress'}
                   </a>
+                  {isCjEbayModuleEnabled() &&
+                    item.sourceMarketplace === 'cjdropshipping' &&
+                    Boolean(item.productId?.trim()) && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void startCjEbayResearchFlow(item, false)}
+                          disabled={cjEbayBusyKey === researchRowKey(item) || addingId !== null}
+                          className="text-sm px-3 py-1 rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <Store className="w-3 h-3" />
+                          {cjEbayBusyKey === researchRowKey(item) ? 'eBay…' : 'Crear draft eBay'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void startCjEbayResearchFlow(item, true)}
+                          disabled={cjEbayBusyKey === researchRowKey(item) || addingId !== null}
+                          className="text-sm px-3 py-1 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <Rocket className="w-3 h-3" />
+                          Publicar en eBay
+                        </button>
+                      </>
+                    )}
                   <button
                     type="button"
                     onClick={() => addToOpportunities(item)}
@@ -459,6 +633,18 @@ export default function ProductResearch() {
       {!loading && items.length === 0 && query && !error && (
         <p className="text-slate-500 dark:text-slate-500 text-sm">No results. Try another search.</p>
       )}
+
+      <CjEbayVariantPickerModal
+        open={cjEbayVariantModal != null}
+        productTitle={cjEbayVariantModal?.productTitle ?? ''}
+        cjProductId={cjEbayVariantModal?.item.productId?.trim() ?? ''}
+        variants={cjEbayVariantModal?.variants ?? []}
+        busy={
+          cjEbayVariantModal != null && cjEbayBusyKey === cjEbayVariantModal.busyKey
+        }
+        onCancel={() => setCjEbayVariantModal(null)}
+        onConfirm={(key) => void confirmCjEbayResearchVariant(key)}
+      />
     </div>
   );
 }

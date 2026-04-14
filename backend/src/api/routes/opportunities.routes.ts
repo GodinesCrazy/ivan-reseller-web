@@ -10,6 +10,7 @@ import competitorAnalyzer from '../../services/competitor-analyzer.service';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
 import { OPPORTUNITY_MAX_PAGE } from '../../utils/opportunity-search-pagination';
+import { runOpportunityFullCycleToEbay } from '../../services/opportunity-full-cycle-ebay.service';
 
 const router = Router();
 const OPPORTUNITIES_CACHE_TTL = Number(process.env.OPPORTUNITIES_CACHE_TTL_SECONDS) || 120;
@@ -550,6 +551,56 @@ router.post('/add-from-research', async (req, res) => {
       error: 'internal_error',
       message: e?.message || 'Failed to save opportunity.',
     });
+  }
+});
+
+/** Ciclo autenticado: búsqueda → producto → aprobación → publicación eBay (o ML si se pide). Refleja la misma lógica que /api/internal/test-full-cycle-search-to-publish sin producto placeholder. */
+const fullCycleEbayBodySchema = z.object({
+  keyword: z.string().min(1).max(200).optional(),
+  dryRun: z.boolean().optional(),
+  maxPriceUsd: z.number().positive().max(5000).optional(),
+  marketplace: z.enum(['ebay', 'mercadolibre']).optional(),
+  credentialEnvironment: z.enum(['sandbox', 'production']).optional(),
+  region: z.string().min(2).max(16).optional(),
+  maxItems: z.number().int().min(1).max(20).optional(),
+});
+
+router.post('/full-cycle-ebay', async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const parsed = fullCycleEbayBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.flatten() });
+    }
+    const b = parsed.data;
+    let region = b.region?.toLowerCase() || 'us';
+    if (!b.region) {
+      try {
+        const dr = await getDefaultRegionForUser(userId);
+        if (dr) region = dr;
+      } catch {
+        /* keep us */
+      }
+    }
+    const result = await runOpportunityFullCycleToEbay({
+      userId,
+      internalRunner: false,
+      keyword: b.keyword,
+      dryRun: b.dryRun === true,
+      maxPriceUsd: b.maxPriceUsd,
+      marketplace: b.marketplace,
+      credentialEnvironment: b.credentialEnvironment,
+      allowFallbackProduct: false,
+      region,
+      maxItems: b.maxItems,
+    });
+    return res.status(result.httpStatus).json(result.body);
+  } catch (e: any) {
+    logger.error('[opportunities/full-cycle-ebay]', { error: e?.message, userId: req.user?.userId });
+    return res.status(500).json({ success: false, error: e?.message || 'full_cycle_failed' });
   }
 });
 

@@ -73,6 +73,7 @@ import diagRoutes from './api/routes/diag.routes';
 import internalRoutes from './api/routes/internal.routes';
 import paypalRoutes from './api/routes/paypal.routes';
 import ordersRoutes from './api/routes/orders.routes';
+import cjEbayRoutes from './modules/cj-ebay/cj-ebay.routes';
 
 // ✅ FIX STABILITY: Import overload protection and timeout middlewares
 import { overloadProtectionMiddleware } from './middleware/overload-protection.middleware';
@@ -1145,6 +1146,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/paypal', paypalRoutes);
 app.use('/api/orders', ordersRoutes);
+app.use('/api/cj-ebay', cjEbayRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/proxies', proxiesRoutes);

@@ -57,6 +57,7 @@ function normalizeApiName(apiName: string): string {
   const n = String(apiName || '').toLowerCase().trim();
   if (n === 'aliexpress_affiliate') return 'aliexpress-affiliate';
   if (n === 'aliexpress_dropshipping') return 'aliexpress-dropshipping';
+  if (n === 'cj_dropshipping' || n === 'cjdropshipping') return 'cj-dropshipping';
   if (n === 'googletrends' || n === 'google-trends' || n === 'google_trends') return 'serpapi';
   return n;
 }
@@ -95,6 +96,13 @@ function normalizeCredentialShape(
   if (n === 'paypal') {
     out.clientId = out.clientId || out.PAYPAL_CLIENT_ID;
     out.clientSecret = out.clientSecret || out.PAYPAL_CLIENT_SECRET;
+  }
+
+  if (n === 'cj-dropshipping') {
+    out.apiKey =
+      String(
+        out.apiKey || out.cjApiKey || process.env.CJ_API_KEY || process.env.CJ_DROPSHIPPING_API_KEY || ''
+      ).trim() || undefined;
   }
 
   return out;
@@ -437,6 +445,16 @@ function loadFromEnv(
     const apiKey = (process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY || '').trim();
     if (!apiKey) return null;
     return { apiKey };
+  }
+
+  // CJ Dropshipping Open API 2.0 (vertical CJ → eBay USA; isolated from AliExpress)
+  if (n === 'cj-dropshipping') {
+    const apiKey = (process.env.CJ_API_KEY || process.env.CJ_DROPSHIPPING_API_KEY || '').trim();
+    if (!apiKey) return null;
+    return {
+      apiKey,
+      sandbox: environment === 'sandbox',
+    };
   }
 
   return null;
@@ -876,6 +894,9 @@ export const CredentialsManager = {
       if (credentials?.accessToken && credentials?.refreshToken && String(credentials.accessToken) === String(credentials.refreshToken)) {
         err.push('accessToken and refreshToken must be different');
       }
+    } else if (n === 'cj-dropshipping') {
+      const k = credentials?.apiKey || credentials?.cjApiKey;
+      if (!k || String(k).trim() === '') err.push('apiKey is required');
     }
 
     return {

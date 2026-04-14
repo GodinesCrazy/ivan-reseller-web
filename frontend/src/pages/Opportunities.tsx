@@ -5,7 +5,10 @@ import { toast } from 'sonner';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { formatCurrencySimple } from '../utils/currency';
-import { Download, Info, Package, Truck, Receipt } from 'lucide-react';
+import { Download, Info, Package, Truck, Receipt, Rocket, Store } from 'lucide-react';
+import { isCjEbayModuleEnabled } from '@/config/feature-flags';
+import CjEbayVariantPickerModal from '@/components/cj-ebay/CjEbayVariantPickerModal';
+import { cjVariantKey, type CjProductVariantApi } from '@/lib/cjEbayVariantUtils';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import PublishingDecisionBadge, { type PublishingDecisionResult, type PublishingDecision } from '@/components/PublishingDecisionBadge';
 
@@ -86,8 +89,10 @@ function isFieldEstimated(
 
 interface OpportunityItem {
   productId?: string;
+  /** CJ vid or SKU when pipeline cannot auto-resolve (multi-variant). */
+  cjVariantId?: string;
   title: string;
-  sourceMarketplace: 'aliexpress';
+  sourceMarketplace: 'aliexpress' | 'cjdropshipping';
   aliexpressUrl: string;
   image?: string;
   imageUrl?: string;
@@ -100,6 +105,11 @@ interface OpportunityItem {
   shippingCost?: number;
   importTax?: number;
   totalCost?: number;
+  /** Costo unitario proveedor convertido a moneda base (backend). */
+  costInBaseCurrency?: number;
+  /** Costo total aterrizado en moneda base (backend). */
+  totalCostInBaseCurrency?: number;
+  netProfitInBaseCurrency?: number;
   targetCountry?: string;
   suggestedPriceUsd: number;
   suggestedPriceAmount: number;
@@ -115,6 +125,25 @@ interface OpportunityItem {
   estimatedFields?: string[];
   estimationNotes?: string[];
   commercialTruth?: CommercialTruthMeta;
+  /** Phase B supply pipeline (preference, CJ mode, row quote meta) — optional. */
+  supplyDiagnostics?: Record<string, unknown>;
+  /** Phase C — unit / shipping / landed semantics (optional; UI can show later). */
+  economicSupplyQuote?: {
+    currency: string;
+    unitCost: number;
+    shippingEstimate: number;
+    landedCostEstimate: number;
+    costConfidence: 'high' | 'medium' | 'low';
+    quoteFreshness: 'fresh' | 'stale' | 'unknown';
+    shippingEstimateStatus: 'not_quoted' | 'estimated' | 'deep_quoted';
+    deepQuotePerformed: boolean;
+    deepQuoteAt?: string;
+    freightQuoteCachedAt?: string;
+    shippingSource?: string;
+    costSemantics?: { unitCostKind: string; shippingKind: string; landedKind: string };
+    deliveryDaysBandMax?: number;
+    cjFreightMethod?: string;
+  };
   competitionDiagnostics?: Array<{
     marketplace: string;
     region: string;
@@ -208,6 +237,14 @@ export default function Opportunities() {
   /** Tracks whether the user has run at least one explicit search in this session. */
   const [hasSearched, setHasSearched] = useState(false);
   const [publishing, setPublishing] = useState<Record<number, boolean>>({});
+  const [cjEbayPipelineBusy, setCjEbayPipelineBusy] = useState<Record<number, boolean>>({});
+  const [cjEbayVariantModal, setCjEbayVariantModal] = useState<null | {
+    item: OpportunityItem;
+    itemIndex: number;
+    publish: boolean;
+    variants: CjProductVariantApi[];
+    productTitle: string;
+  }>(null);
   const authStatuses = useAuthStatusStore((state) => state.statuses);
   const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
   const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
@@ -220,6 +257,43 @@ export default function Opportunities() {
   });
   const [showAliExpressModal, setShowAliExpressModal] = useState(false);
   const [pendingSearchUrl, setPendingSearchUrl] = useState<string | null>(null);
+
+  /** Ciclo completo autenticado: POST /api/opportunities/full-cycle-ebay */
+  const [fullCycleRunning, setFullCycleRunning] = useState(false);
+  const [fullCycleResult, setFullCycleResult] = useState<Record<string, unknown> | null>(null);
+  const [fullCycleDryRun, setFullCycleDryRun] = useState(false);
+  const [fullCycleMaxPrice, setFullCycleMaxPrice] = useState(12);
+  const [fullCycleCredEnv, setFullCycleCredEnv] = useState<'' | 'sandbox' | 'production'>('');
+
+  type EbayListingEconomicsPreview = {
+    productId: number;
+    listingPriceUsd: number;
+    costs: {
+      aliexpressCostUsd: number;
+      shippingCostUsd: number;
+      importTaxUsd: number;
+      landedSupplierUsd: number;
+    };
+    marginModel: Record<string, unknown>;
+    marketplaceFees: {
+      listingFee: number;
+      finalValueFee: number;
+      paymentProcessingFee: number;
+      shippingSubsidyOrCost: number;
+      supplierCost: number;
+      taxesOrOther: number;
+    };
+    expectedMarginPercent: number;
+    expectedNetProfitUsd: number;
+    totalMarketplaceFeesUsd: number;
+  };
+
+  const [ebayPublishGate, setEbayPublishGate] = useState<{
+    itemIndex: number;
+    productId: number;
+    environment: EnvironmentKey;
+    preview: EbayListingEconomicsPreview;
+  } | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
   /** Ref to the most recent successfully-executed query, used by pagination to avoid stale closure. */
   const lastExecutedQueryRef = useRef<string>('');
@@ -547,6 +621,53 @@ export default function Opportunities() {
     setMarketplaces(prev => prev.includes(mp) ? prev.filter(m => m !== mp) : [...prev, mp]);
   }
 
+  async function runFullCycleEbay() {
+    const kw = query.trim();
+    if (!kw) {
+      toast.error('Escribí una búsqueda arriba (misma keyword que usás para Buscar).');
+      return;
+    }
+    setFullCycleRunning(true);
+    setFullCycleResult(null);
+    try {
+      const { data, status } = await api.post(
+        '/api/opportunities/full-cycle-ebay',
+        {
+          keyword: kw,
+          dryRun: fullCycleDryRun,
+          maxPriceUsd: fullCycleMaxPrice,
+          marketplace: 'ebay',
+          region,
+          ...(fullCycleCredEnv ? { credentialEnvironment: fullCycleCredEnv } : {}),
+        },
+        { timeout: 180_000 }
+      );
+      setFullCycleResult({ ...(typeof data === 'object' && data ? data : {}), _httpStatus: status });
+      const st = data?.stages as Record<string, unknown> | undefined;
+      if (data?.success === true && data?.listingUrl) {
+        toast.success('Publicado en eBay');
+      } else if (data?.success === true && data?.dryRun) {
+        toast.success('Ciclo dry-run: producto creado y aprobado (sin publicar).');
+      } else if (data?.success === true && (data?.ebayPendingOAuth || st?.publish === 'pending_oauth')) {
+        toast('Producto listo; falta OAuth eBay o token.', { icon: 'ℹ️' });
+      } else if (data?.success === false) {
+        toast.error(String(data?.message || data?.error || 'Ciclo falló'));
+      }
+    } catch (e: any) {
+      const data = e?.response?.data;
+      const msg =
+        data?.message || data?.error || e?.message || 'Error en ciclo completo';
+      setFullCycleResult({
+        ...(typeof data === 'object' && data ? data : {}),
+        _httpStatus: e?.response?.status,
+        _error: msg,
+      });
+      toast.error(String(msg));
+    } finally {
+      setFullCycleRunning(false);
+    }
+  }
+
   const resolveEnvironmentForMarketplace = async (
     marketplace: Marketplace
   ): Promise<EnvironmentKey | null> => {
@@ -698,6 +819,139 @@ export default function Opportunities() {
     });
   }
 
+  /** US ZIP default for CJ freight quote when region is US (server evaluates shipping). */
+  function destPostalForCjPipeline(): string | undefined {
+    return region === 'us' ? '90210' : undefined;
+  }
+
+  async function executeCjEbayPipeline(
+    item: OpportunityItem,
+    itemIndex: number,
+    variantKey: string | undefined,
+    publish: boolean
+  ) {
+    const pid = item.productId?.trim();
+    if (!pid) {
+      toast.error('Falta ID de producto CJ.');
+      return;
+    }
+    setCjEbayPipelineBusy((prev) => ({ ...prev, [itemIndex]: true }));
+    try {
+      const res = await api.post<{
+        ok: boolean;
+        resolvedVariantId?: string;
+        evaluate?: { decision?: string };
+        listing?: { id: number; status: string } | null;
+        publish?: { ebayListingId: string; listingUrl: string } | null;
+        publishSkippedReason?: string | null;
+        message?: string;
+        error?: string;
+      }>('/api/cj-ebay/opportunities/ebay-pipeline', {
+        productId: pid,
+        variantId: variantKey,
+        quantity: 1,
+        destPostalCode: destPostalForCjPipeline(),
+        publish,
+      });
+      const data = res.data;
+      if (!data?.ok) {
+        toast.error(data?.message || data?.error || 'No se pudo ejecutar el pipeline CJ→eBay.');
+        return;
+      }
+      const dec = data.evaluate?.decision;
+      if (dec && dec !== 'APPROVED') {
+        toast.message(`Calificación CJ: ${dec}`, {
+          description: 'Revisá umbral en CJ eBay → Config o elegí otra variante.',
+        });
+      }
+      if (data.listing?.id) {
+        const desc = `Listing local #${data.listing.id}${
+          data.resolvedVariantId ? ` · variante ${data.resolvedVariantId}` : ''
+        }`;
+        if (publish && data.publishSkippedReason === 'BLOCK_NEW_PUBLICATIONS') {
+          toast.warning('Borrador listo; publicación bloqueada (BLOCK_NEW_PUBLICATIONS).', { description: desc });
+        } else if (publish && data.publishSkippedReason?.startsWith('PUBLISH_FAILED')) {
+          toast.error('Borrador listo; falló la publicación en eBay.', {
+            description: data.publishSkippedReason.replace(/^PUBLISH_FAILED:?/, '').slice(0, 200),
+          });
+        } else if (publish && data.publish && !data.publishSkippedReason) {
+          toast.success('Publicado en eBay.', { description: desc });
+        } else {
+          toast.success('Borrador eBay creado desde CJ.', { description: desc });
+        }
+        navigate('/cj-ebay/listings');
+      }
+    } catch (err: unknown) {
+      let msg = 'Error en pipeline CJ→eBay.';
+      if (axios.isAxiosError(err) && err.response?.data && typeof err.response.data === 'object') {
+        const d = err.response.data as { message?: string; error?: string };
+        msg = d.message || d.error || msg;
+        if (d.error === 'MULTIPLE_CJ_VARIANTS') {
+          msg = 'Este producto CJ tiene varias variantes: elegí una en el selector.';
+        }
+      } else if (err instanceof Error) msg = err.message;
+      toast.error(msg);
+    } finally {
+      setCjEbayPipelineBusy((prev) => ({ ...prev, [itemIndex]: false }));
+    }
+  }
+
+  async function startCjEbayPipelineFlow(item: OpportunityItem, itemIndex: number, publish: boolean) {
+    const pid = item.productId?.trim();
+    if (!pid) {
+      toast.error('Falta ID de producto CJ.');
+      return;
+    }
+    const preset = item.cjVariantId?.trim();
+    if (preset) {
+      await executeCjEbayPipeline(item, itemIndex, preset, publish);
+      return;
+    }
+    setCjEbayPipelineBusy((prev) => ({ ...prev, [itemIndex]: true }));
+    try {
+      const res = await api.get<{
+        ok: boolean;
+        product?: { title?: string; variants?: CjProductVariantApi[] };
+      }>(`/api/cj-ebay/cj/product/${encodeURIComponent(pid)}`);
+      if (!res.data?.ok || !res.data.product) {
+        toast.error('No se pudo cargar el producto CJ desde la API.');
+        return;
+      }
+      const variants = Array.isArray(res.data.product.variants) ? res.data.product.variants : [];
+      if (variants.length === 0) {
+        toast.error('Este producto CJ no tiene variantes reconocibles.');
+        return;
+      }
+      if (variants.length === 1) {
+        await executeCjEbayPipeline(item, itemIndex, cjVariantKey(variants[0]!), publish);
+        return;
+      }
+      setCjEbayVariantModal({
+        item,
+        itemIndex,
+        publish,
+        variants,
+        productTitle: res.data.product.title || item.title,
+      });
+    } catch (err: unknown) {
+      let msg = 'No se pudo obtener variantes CJ.';
+      if (axios.isAxiosError(err) && err.response?.data && typeof err.response.data === 'object') {
+        const d = err.response.data as { message?: string; error?: string };
+        msg = d.message || d.error || msg;
+      } else if (err instanceof Error) msg = err.message;
+      toast.error(msg);
+    } finally {
+      setCjEbayPipelineBusy((prev) => ({ ...prev, [itemIndex]: false }));
+    }
+  }
+
+  async function confirmCjEbayVariantModal(variantKey: string) {
+    if (!cjEbayVariantModal) return;
+    const { item, itemIndex, publish } = cjEbayVariantModal;
+    setCjEbayVariantModal(null);
+    await executeCjEbayPipeline(item, itemIndex, variantKey, publish);
+  }
+
   async function importProduct(item: OpportunityItem) {
     const itemIndex = items.indexOf(item);
 
@@ -790,6 +1044,7 @@ export default function Opportunities() {
   async function createAndPublishProduct(item: OpportunityItem, targetMarketplace: Marketplace) {
     const itemIndex = items.indexOf(item);
 
+    let openedEbayApprovalModal = false;
     try {
       const environment = await resolveEnvironmentForMarketplace(targetMarketplace);
       if (!environment) {
@@ -856,6 +1111,26 @@ export default function Opportunities() {
         );
       }
 
+      if (targetMarketplace === 'ebay') {
+        const previewResp = await api.post('/api/publisher/ebay/listing-economics-preview', {
+          productId: Number(productId),
+        });
+        const previewData = previewResp.data?.data as EbayListingEconomicsPreview | undefined;
+        if (!previewResp.data?.success || !previewData) {
+          throw new Error(
+            String(previewResp.data?.message || previewResp.data?.error || 'No se pudo calcular la vista prevía de eBay')
+          );
+        }
+        openedEbayApprovalModal = true;
+        setEbayPublishGate({
+          itemIndex,
+          productId: Number(productId),
+          environment,
+          preview: previewData,
+        });
+        return;
+      }
+
       const publishResponse = await api.post('/api/marketplace/publish', {
         productId: Number(productId),
         marketplace: targetMarketplace,
@@ -885,11 +1160,52 @@ export default function Opportunities() {
         data?.error || data?.message || error.message || 'Error al crear o publicar producto';
       toast.error(String(errorMessage));
     } finally {
+      if (!openedEbayApprovalModal) {
+        setPublishing(prev => ({ ...prev, [itemIndex]: false }));
+      }
+      loadMarketplaceEnvStatus().catch(() => {
+        /* silent */
+      });
+    }
+  }
+
+  async function confirmEbayPublishFromGate() {
+    if (!ebayPublishGate) return;
+    const { itemIndex, productId, environment } = ebayPublishGate;
+    setPublishing(prev => ({ ...prev, [itemIndex]: true }));
+    try {
+      const publishResponse = await api.post('/api/marketplace/publish', {
+        productId,
+        marketplace: 'ebay',
+        environment,
+      });
+      if (publishResponse.data?.success) {
+        toast.success(`Publicado en eBay (${environment}) exitosamente`);
+        setEbayPublishGate(null);
+        setTimeout(() => {
+          navigate('/products');
+        }, 1500);
+      } else {
+        throw new Error(publishResponse.data?.error || 'Error al publicar');
+      }
+    } catch (error: any) {
+      const data = error.response?.data as Record<string, unknown> | undefined;
+      const errorMessage = data?.error || data?.message || error.message || 'Error al publicar en eBay';
+      toast.error(String(errorMessage));
+    } finally {
       setPublishing(prev => ({ ...prev, [itemIndex]: false }));
       loadMarketplaceEnvStatus().catch(() => {
         /* silent */
       });
     }
+  }
+
+  function cancelEbayPublishGate() {
+    if (!ebayPublishGate) return;
+    const { itemIndex } = ebayPublishGate;
+    setEbayPublishGate(null);
+    setPublishing(prev => ({ ...prev, [itemIndex]: false }));
+    toast.info('Publicación eBay cancelada. El producto quedó importado en Productos.');
   }
 
   return (
@@ -974,6 +1290,122 @@ export default function Opportunities() {
             <input type="checkbox" checked={marketplaces.includes('mercadolibre')} onChange={() => toggleMarketplace('mercadolibre')} className="rounded border-slate-300 dark:border-slate-600 text-primary-600 focus:ring-primary-500/40" />
             <span className="text-xs">MercadoLibre</span>
           </label>
+        </div>
+      </div>
+
+      {/* Ciclo completo eBay (misma lógica que backend interno; requiere sesión + ENABLE_EBAY_PUBLISH para publicar real) */}
+      <div className={premiumCard + ' p-4 border-primary-200/60 dark:border-primary-800/40'}>
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 rounded-lg bg-primary-100 dark:bg-primary-900/40 p-2">
+            <Rocket className="w-4 h-4 text-primary-700 dark:text-primary-300" aria-hidden />
+          </div>
+          <div className="flex-1 space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ciclo completo eBay</h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Usa la <strong>misma keyword</strong> del campo de búsqueda y la <strong>región</strong> seleccionada: busca oportunidades, crea el producto, lo aprueba y{' '}
+                {fullCycleDryRun ? (
+                  <span className="text-amber-700 dark:text-amber-300">en dry-run no publica</span>
+                ) : (
+                  <span>publica en eBay</span>
+                )}
+                . Equivalente al endpoint autenticado{' '}
+                <code className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1 rounded">POST /api/opportunities/full-cycle-ebay</code>.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 mb-1">Tope precio listado (USD)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={5000}
+                  step={0.01}
+                  value={fullCycleMaxPrice}
+                  onChange={(e) => setFullCycleMaxPrice(Number(e.target.value) || 12)}
+                  className="w-28 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-sm bg-white dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-500 mb-1">Entorno credenciales</label>
+                <select
+                  value={fullCycleCredEnv}
+                  onChange={(e) => setFullCycleCredEnv((e.target.value as '' | 'sandbox' | 'production') || '')}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-sm bg-white dark:bg-slate-800 min-w-[140px]"
+                >
+                  <option value="">Workflow del usuario</option>
+                  <option value="production">production</option>
+                  <option value="sandbox">sandbox</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer pb-1">
+                <input
+                  type="checkbox"
+                  checked={fullCycleDryRun}
+                  onChange={(e) => setFullCycleDryRun(e.target.checked)}
+                  className="rounded border-slate-300 dark:border-slate-600 text-primary-600"
+                />
+                Dry-run (solo crear + aprobar)
+              </label>
+              <button
+                type="button"
+                onClick={() => void runFullCycleEbay()}
+                disabled={fullCycleRunning || loading}
+                className="rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:opacity-90 disabled:opacity-50 px-4 py-2 text-sm font-medium"
+              >
+                {fullCycleRunning ? 'Ejecutando ciclo…' : 'Ejecutar ciclo eBay'}
+              </button>
+            </div>
+            {fullCycleResult && (
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 text-[11px] space-y-2">
+                <div className="font-medium text-slate-800 dark:text-slate-200">Resultado</div>
+                <ul className="space-y-1 text-slate-600 dark:text-slate-300">
+                  {typeof fullCycleResult.productId === 'number' && (
+                    <li>
+                      Producto:{' '}
+                      <button
+                        type="button"
+                        className="text-primary-600 underline"
+                        onClick={() => navigate(`/products/${fullCycleResult.productId}/preview`)}
+                      >
+                        #{fullCycleResult.productId}
+                      </button>
+                    </li>
+                  )}
+                  {typeof fullCycleResult.listingUrl === 'string' && fullCycleResult.listingUrl.startsWith('http') && (
+                    <li>
+                      Listado eBay:{' '}
+                      <a
+                        href={fullCycleResult.listingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 underline break-all"
+                      >
+                        {fullCycleResult.listingUrl}
+                      </a>
+                    </li>
+                  )}
+                  {typeof fullCycleResult.listingId === 'string' && !fullCycleResult.listingUrl && (
+                    <li>Listing ID: {fullCycleResult.listingId}</li>
+                  )}
+                  {fullCycleResult.stages != null && (
+                    <li>
+                      Etapas: <code className="text-[10px]">{JSON.stringify(fullCycleResult.stages)}</code>
+                    </li>
+                  )}
+                  {typeof fullCycleResult.message === 'string' && fullCycleResult.message.length > 0 && (
+                    <li className="text-amber-800 dark:text-amber-200">{fullCycleResult.message}</li>
+                  )}
+                  {(fullCycleResult.publishError as string) && (
+                    <li className="text-red-700 dark:text-red-300">Publicación: {String(fullCycleResult.publishError)}</li>
+                  )}
+                  {fullCycleResult._httpStatus != null && (
+                    <li className="text-slate-400">HTTP {String(fullCycleResult._httpStatus)}</li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1097,6 +1529,89 @@ export default function Opportunities() {
           >
             Reintentar ahora
           </button>
+        </div>
+      )}
+
+      {/* eBay publish authorization (costs, margin, fees) */}
+      {ebayPublishGate && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={premiumCard + ' max-w-lg w-full p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto'}>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Autorizar publicación en eBay</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Revisá el desglose antes de confirmar. El precio de listado y las comisiones siguen la misma lógica que en publicación automática.
+            </p>
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+              <div className="px-3 py-2 flex justify-between gap-2">
+                <span className="text-slate-600 dark:text-slate-400">Precio de publicación (USD)</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                  {formatCurrencySimple(ebayPublishGate.preview.listingPriceUsd, 'USD')}
+                </span>
+              </div>
+              <div className="px-3 py-2 space-y-1">
+                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Costos proveedor / modelo</p>
+                <div className="flex justify-between text-slate-700 dark:text-slate-300">
+                  <span>Producto (AliExpress)</span>
+                  <span>{formatCurrencySimple(ebayPublishGate.preview.costs.aliexpressCostUsd, 'USD')}</span>
+                </div>
+                <div className="flex justify-between text-slate-700 dark:text-slate-300">
+                  <span>Envío (efectivo o por defecto)</span>
+                  <span>{formatCurrencySimple(ebayPublishGate.preview.costs.shippingCostUsd, 'USD')}</span>
+                </div>
+                <div className="flex justify-between text-slate-700 dark:text-slate-300">
+                  <span>Impuesto importación (modelo)</span>
+                  <span>{formatCurrencySimple(ebayPublishGate.preview.costs.importTaxUsd, 'USD')}</span>
+                </div>
+                <div className="flex justify-between font-medium text-slate-900 dark:text-slate-100 pt-1">
+                  <span>Costo aterrizado</span>
+                  <span>{formatCurrencySimple(ebayPublishGate.preview.costs.landedSupplierUsd, 'USD')}</span>
+                </div>
+              </div>
+              <div className="px-3 py-2 space-y-1">
+                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Comisiones eBay (estim.)</p>
+                <div className="flex justify-between text-slate-700 dark:text-slate-300">
+                  <span>Inserción</span>
+                  <span>{formatCurrencySimple(ebayPublishGate.preview.marketplaceFees.listingFee, 'USD')}</span>
+                </div>
+                <div className="flex justify-between text-slate-700 dark:text-slate-300">
+                  <span>Final value + fijo</span>
+                  <span>{formatCurrencySimple(ebayPublishGate.preview.marketplaceFees.finalValueFee, 'USD')}</span>
+                </div>
+                <div className="flex justify-between font-medium text-slate-900 dark:text-slate-100 pt-1">
+                  <span>Total fees marketplace</span>
+                  <span>{formatCurrencySimple(ebayPublishGate.preview.totalMarketplaceFeesUsd, 'USD')}</span>
+                </div>
+              </div>
+              <div className="px-3 py-2 space-y-1">
+                <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
+                  <span>Margen neto estimado</span>
+                  <span className="font-semibold">
+                    {ebayPublishGate.preview.expectedMarginPercent.toFixed(1)}% ·{' '}
+                    {formatCurrencySimple(ebayPublishGate.preview.expectedNetProfitUsd, 'USD')}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Multiplicador objetivo:{' '}
+                  {String((ebayPublishGate.preview.marginModel as { targetMarginMultiplier?: number }).targetMarginMultiplier ?? '—')}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => void confirmEbayPublishFromGate()}
+                className="flex-1 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium shadow-sm transition"
+              >
+                Autorizar y publicar
+              </button>
+              <button
+                type="button"
+                onClick={cancelEbayPublishGate}
+                className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1236,12 +1751,23 @@ export default function Opportunities() {
                   )}
                 </td>
                 <td className="px-3 py-3 text-slate-900 dark:text-slate-100">
+                  <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                    {it.sourceMarketplace === 'cjdropshipping' && (
+                      <span className="px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-950/50 text-violet-800 dark:text-violet-200 text-[10px] font-semibold uppercase tracking-wide">
+                        CJ
+                      </span>
+                    )}
+                  </div>
                   <a
                     href={it.aliexpressUrl || it.productUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="font-medium line-clamp-2 max-w-xs text-primary-600 hover:underline text-sm"
-                    title="Abrir producto en AliExpress"
+                    title={
+                      it.sourceMarketplace === 'cjdropshipping'
+                        ? 'Abrir en catálogo CJ'
+                        : 'Abrir producto en AliExpress'
+                    }
                   >
                     {it.title}
                   </a>
@@ -1276,46 +1802,78 @@ export default function Opportunities() {
                     {it.totalCost && it.totalCost > it.costUsd ? (
                       <>
                         <div className="flex items-center gap-1 group relative">
-                          <span className="font-semibold tabular-nums">{formatMoney(it.totalCost, it.baseCurrency)}</span>
+                          <span className="font-semibold tabular-nums">
+                            {formatMoney(it.totalCost, it.costCurrency || it.baseCurrency)}
+                          </span>
                           <Info className="w-3 h-3 text-slate-400 cursor-help" />
                           <div className="absolute right-0 top-full mt-1 w-64 p-2.5 bg-slate-900 text-white text-[11px] rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                             <div className="font-semibold mb-1.5">Desglose de costos:</div>
                             <div className="space-y-0.5">
-                              <div className="flex justify-between">
+                              <div className="flex justify-between gap-2">
                                 <span>Producto:</span>
-                                <span>{formatMoney(it.costUsd, it.baseCurrency)}</span>
+                                <span>{formatMoney(it.costUsd, it.costCurrency || it.baseCurrency)}</span>
                               </div>
                               {it.shippingCost && it.shippingCost > 0 && (
-                                <div className="flex justify-between">
+                                <div className="flex justify-between gap-2">
                                   <span>Envío:</span>
-                                  <span>{formatMoney(it.shippingCost, it.baseCurrency)}</span>
+                                  <span>{formatMoney(it.shippingCost, it.costCurrency || it.baseCurrency)}</span>
                                 </div>
                               )}
                               {it.importTax && it.importTax > 0 && (
-                                <div className="flex justify-between">
+                                <div className="flex justify-between gap-2">
                                   <span>Impuestos:</span>
-                                  <span>{formatMoney(it.importTax, it.baseCurrency)}</span>
+                                  <span>{formatMoney(it.importTax, it.costCurrency || it.baseCurrency)}</span>
                                 </div>
                               )}
-                              <div className="border-t border-slate-700 mt-1 pt-1 flex justify-between font-semibold">
+                              <div className="border-t border-slate-700 mt-1 pt-1 flex justify-between font-semibold gap-2">
                                 <span>Total:</span>
-                                <span>{formatMoney(it.totalCost, it.baseCurrency)}</span>
+                                <span>{formatMoney(it.totalCost, it.costCurrency || it.baseCurrency)}</span>
                               </div>
+                              {typeof it.totalCostInBaseCurrency === 'number' &&
+                                Number.isFinite(it.totalCostInBaseCurrency) &&
+                                String(it.costCurrency || '').toUpperCase() !==
+                                  String(it.baseCurrency).toUpperCase() && (
+                                  <div className="flex justify-between gap-2 text-slate-300 border-t border-slate-600 mt-1 pt-1">
+                                    <span>Equiv. ({it.baseCurrency}):</span>
+                                    <span>{formatMoney(it.totalCostInBaseCurrency, it.baseCurrency)}</span>
+                                  </div>
+                                )}
                             </div>
                           </div>
                         </div>
                         <div className="text-[11px] text-slate-400 tabular-nums">
-                          Base: {formatMoney(it.costUsd, it.baseCurrency)}
+                          Unitario: {formatMoney(it.costUsd, it.costCurrency || it.baseCurrency)}
                         </div>
+                        {typeof it.totalCostInBaseCurrency === 'number' &&
+                          Number.isFinite(it.totalCostInBaseCurrency) &&
+                          String(it.costCurrency || '').toUpperCase() !==
+                            String(it.baseCurrency).toUpperCase() && (
+                            <div className="text-[11px] text-slate-400 tabular-nums">
+                              ≈ {formatMoney(it.totalCostInBaseCurrency, it.baseCurrency)}
+                            </div>
+                          )}
+                      </>
+                    ) : String(it.costCurrency || '').toUpperCase() !== String(it.baseCurrency).toUpperCase() ? (
+                      <>
+                        <span className="font-semibold tabular-nums">
+                          {formatMoney(it.costUsd, it.costCurrency || 'USD')}
+                        </span>
+                        {typeof it.costInBaseCurrency === 'number' && Number.isFinite(it.costInBaseCurrency) ? (
+                          <div className="text-[11px] text-slate-400 tabular-nums">
+                            ≈ {formatMoney(it.costInBaseCurrency, it.baseCurrency)}
+                          </div>
+                        ) : null}
+                        {typeof it.costAmount === 'number' &&
+                        Number.isFinite(it.costAmount) &&
+                        Math.abs(it.costAmount - it.costUsd) > 0.005 ? (
+                          <span className="text-[11px] text-slate-400 tabular-nums">
+                            ({formatMoney(it.costAmount, it.costCurrency || 'USD')})
+                          </span>
+                        ) : null}
                       </>
                     ) : (
                       <span className="font-semibold tabular-nums">{formatMoney(it.costUsd, it.baseCurrency)}</span>
                     )}
-                    {it.costCurrency && it.costCurrency !== it.baseCurrency ? (
-                      <span className="text-[11px] text-slate-400 tabular-nums">
-                        ({formatMoney(it.costAmount, it.costCurrency)})
-                      </span>
-                    ) : null}
                   </div>
                 </td>
                 <td className="px-3 py-3 text-sm">
@@ -1414,6 +1972,41 @@ export default function Opportunities() {
                     {it.publishingDecision && (
                       <PublishingDecisionBadge result={it.publishingDecision} />
                     )}
+                    {isCjEbayModuleEnabled() &&
+                      it.sourceMarketplace === 'cjdropshipping' &&
+                      Boolean(it.productId?.trim()) && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void startCjEbayPipelineFlow(it, idx, false)}
+                            disabled={cjEbayPipelineBusy[idx] || publishing[idx]}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium shadow-sm transition-colors"
+                            title="Evaluar CJ y crear borrador eBay (sin publicar)."
+                          >
+                            {cjEbayPipelineBusy[idx] ? (
+                              <>
+                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                eBay…
+                              </>
+                            ) : (
+                              <>
+                                <Store className="w-3.5 h-3.5" />
+                                Crear draft eBay
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void startCjEbayPipelineFlow(it, idx, true)}
+                            disabled={cjEbayPipelineBusy[idx] || publishing[idx]}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium shadow-sm transition-colors"
+                            title="Evaluar CJ, crear borrador y publicar en eBay si el servidor lo permite."
+                          >
+                            <Rocket className="w-3.5 h-3.5" />
+                            Publicar en eBay
+                          </button>
+                        </>
+                      )}
                     <button
                       type="button"
                       onClick={() => importProduct(it)}
@@ -1472,6 +2065,18 @@ export default function Opportunities() {
       </div>
 
       {/* Estimated Values Footnote */}
+      <CjEbayVariantPickerModal
+        open={cjEbayVariantModal != null}
+        productTitle={cjEbayVariantModal?.productTitle ?? ''}
+        cjProductId={cjEbayVariantModal?.item.productId?.trim() ?? ''}
+        variants={cjEbayVariantModal?.variants ?? []}
+        busy={
+          cjEbayVariantModal != null && !!cjEbayPipelineBusy[cjEbayVariantModal.itemIndex]
+        }
+        onCancel={() => setCjEbayVariantModal(null)}
+        onConfirm={(key) => void confirmCjEbayVariantModal(key)}
+      />
+
       {hasEstimatedValues && (
         <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-[11px] px-4 py-3 space-y-1.5">
           <p>

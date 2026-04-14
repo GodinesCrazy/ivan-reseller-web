@@ -71,3 +71,11 @@ secrets/
 docs/RAILWAY_URL.local
 *.local
 .vercel
+
+# Local credential dumps & agent scratch (never commit)
+backend/creds.json
+backend/creds2.txt
+backend/creds_summary.json
+backend/scratch/
+artifacts/
+.claude/

@@ -8,6 +8,8 @@ import { prisma } from '../config/database';
 import logger from '../config/logger';
 import MarketplaceService from './marketplace.service';
 import { EbayService, EbayCredentials } from './ebay.service';
+import { CJ_EBAY_LISTING_STATUS } from '../modules/cj-ebay/cj-ebay.constants';
+import { buildCjEbayBridgeSupplierMetadata } from './marketplace-order-sync-cj-metadata';
 
 const marketplaceService = new MarketplaceService();
 
@@ -93,6 +95,7 @@ export async function upsertOrderFromEbayPayload(
   const firstLine = ebayOrder.lineItems?.[0];
   const sku = firstLine?.sku;
   const itemId = (firstLine as any)?.itemId;
+  const lineTitleEarly = (firstLine?.title || '').trim() || `eBay order ${orderId}`;
   let listing: { productId: number; userId: number; supplierUrl: string | null } | null = null;
   if (itemId) {
     listing = await prisma.marketplaceListing.findFirst({
@@ -112,7 +115,41 @@ export async function upsertOrderFromEbayPayload(
       select: { productId: true, userId: true, supplierUrl: true },
     });
   }
-  const lineTitle = (firstLine?.title || '').trim() || `eBay order ${orderId}`;
+
+  /** CJ → eBay vertical: match inventory SKU to `cj_ebay_listings.ebaySku` (no legacy Product row). */
+  let cjEbayBridge: {
+    title: string;
+    productUrl: string;
+    supplierMetadata: Record<string, unknown>;
+  } | null = null;
+  if (!listing && sku) {
+    const cjRow = await prisma.cjEbayListing.findFirst({
+      where: {
+        userId,
+        ebaySku: String(sku).trim(),
+        status: { in: [CJ_EBAY_LISTING_STATUS.ACTIVE, CJ_EBAY_LISTING_STATUS.PAUSED] },
+      },
+      include: { product: true, variant: true },
+    });
+    if (cjRow?.product) {
+      const pid = String(cjRow.product.cjProductId || '').trim();
+      const catalogUrl = pid
+        ? `https://www.cjdropshipping.com/product/${encodeURIComponent(pid)}`
+        : '';
+      cjEbayBridge = {
+        title: (cjRow.product.title || lineTitleEarly).slice(0, 2000),
+        productUrl: catalogUrl,
+        supplierMetadata: buildCjEbayBridgeSupplierMetadata(cjRow),
+      };
+      logger.info('[MARKETPLACE-SYNC] eBay line matched CJ eBay listing by SKU', {
+        userId,
+        cjEbayListingId: cjRow.id,
+        ebayOrderId: orderId,
+      });
+    }
+  }
+
+  const lineTitle = lineTitleEarly;
   const itemIdStr = itemId != null ? String(itemId) : '';
   const skuStr = sku != null ? String(sku) : '';
 
@@ -139,6 +176,10 @@ export async function upsertOrderFromEbayPayload(
     }
   }
 
+  if (!productUrl && cjEbayBridge?.productUrl) {
+    productUrl = cjEbayBridge.productUrl.trim();
+  }
+
   let amount = ebayOrder.total ?? (firstLine?.price ?? 0) * (firstLine?.quantity ?? 1);
   if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) {
     logger.warn('[MARKETPLACE-SYNC] eBay order missing total/price, using fallback', { orderId, total: ebayOrder.total, linePrice: firstLine?.price });
@@ -148,8 +189,8 @@ export async function upsertOrderFromEbayPayload(
   const shippingStr = normalizeShippingAddress(ebayOrder.shippingAddress, ebayOrder.buyerName);
 
   const unmappedParts = [
-    !listing || listing.userId !== userId ? 'no_listing' : null,
-    !product ? 'no_product' : null,
+    (!listing || listing.userId !== userId) && !cjEbayBridge ? 'no_listing' : null,
+    !product && !cjEbayBridge ? 'no_product' : null,
     !productUrl ? 'no_aliexpress_url' : null,
   ].filter(Boolean);
   const ebayFulfilled = String(ebayOrder.fulfillmentStatus || '').toUpperCase() === 'FULFILLED';
@@ -165,7 +206,7 @@ export async function upsertOrderFromEbayPayload(
     data: {
       userId,
       productId: product?.id ?? null,
-      title: product?.title ?? lineTitle,
+      title: product?.title ?? cjEbayBridge?.title ?? lineTitle,
       price: amount,
       currency: 'USD',
       customerName: ebayOrder.buyerName || 'Buyer',
@@ -176,6 +217,12 @@ export async function upsertOrderFromEbayPayload(
       productUrl: productUrl || '',
       errorMessage: ebayFulfilled && errorMessage ? `${errorMessage} (eBay ya fulfilled)` : errorMessage,
       ...(aliexpressOrderId ? { aliexpressOrderId } : {}),
+      ...(cjEbayBridge
+        ? {
+            supplier: 'cj',
+            supplierMetadata: cjEbayBridge.supplierMetadata as object,
+          }
+        : {}),
     },
   });
 
@@ -184,6 +231,7 @@ export async function upsertOrderFromEbayPayload(
     ebayOrderId: orderId,
     userId,
     unmapped: unmappedParts.length > 0,
+    cjEbayMapped: !!cjEbayBridge,
   });
 
   if (product && productUrl) {
