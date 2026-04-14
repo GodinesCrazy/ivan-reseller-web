@@ -62,17 +62,19 @@ class NotificationService {
    * Initialize Socket.IO server
    */
   initialize(httpServer: HttpServer): void {
-    // ✅ GO-LIVE: Parse CORS_ORIGIN igual que en app.ts para consistencia
-    const allowedOrigins = env.CORS_ORIGIN.split(',')
+    // ✅ SOCKET FIX: Vercel no soporta WebSocket proxying; frontend conecta directamente a Railway.
+    // Incluir ivanreseller.com siempre + cualquier origen en CORS_ORIGIN env var.
+    const productionFallbacks = ['https://www.ivanreseller.com', 'https://ivanreseller.com'];
+    const fromEnv = env.CORS_ORIGIN.split(',')
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0);
+    const allowedOrigins = [...new Set([...productionFallbacks, ...fromEnv])];
 
-    // path: '/api/socket.io' para que Vercel rewrite /api/:path* lo enrute; fallback a /socket.io si no hay proxy
-    const socketPath = env.NODE_ENV === 'production' ? '/api/socket.io' : '/socket.io';
+    // Usar siempre /socket.io — Vercel no puede proxear WebSocket, frontend conecta directo a Railway.
     this.io = new Server(httpServer, {
-      path: socketPath,
+      path: '/socket.io',
       cors: {
-        origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins, // Socket.IO acepta string o array
+        origin: allowedOrigins,
         methods: ['GET', 'POST'],
         credentials: true
       },
