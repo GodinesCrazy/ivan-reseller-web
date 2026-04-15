@@ -609,11 +609,7 @@ export default function CjEbayProductsPage() {
     };
   }, []);
 
-  /**
-   * Opens the inline account pricing panel and brings it into view.
-   * Root issue fixed: the panel lives above the pricing breakdown; setting state alone
-   * expanded it off-screen so the CTA felt broken (no scroll / no focus).
-   */
+  /** Opens the inline pricing panel and scrolls it into view (panel sits above the breakdown). */
   function openPricingConfigPanelAndReveal() {
     setPricingConfigOpen(true);
     setPricingConfigMessage(null);
