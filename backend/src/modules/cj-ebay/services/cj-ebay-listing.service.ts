@@ -58,6 +58,69 @@ function buildInternalSku(userId: number, productRowId: number, variantRowId: nu
   return `CJE${userId}P${productRowId}V${variantRowId}`.slice(0, 50);
 }
 
+/**
+ * Detecta si un error de eBay corresponde a un bloqueo de cuenta/política (no a contenido del listing).
+ * Señales: error 25019, Overseas Warehouse Block Policy, Location_Mismatch_Inventory_Block,
+ * forward-deployed item, ship-from China not authorized.
+ * Cuando esto ocurre el publish no se puede resolver corrigiendo título/descripción.
+ * Requiere aprobación eBay Global Seller / overseas warehouse para la cuenta.
+ */
+function isEbayOverseasWarehouseBlock(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  const err = e as Record<string, unknown>;
+  const ebayErrors: unknown[] = Array.isArray((err as any)?.response?.data?.errors)
+    ? (err as any).response.data.errors
+    : [];
+
+  // Error 25019 es el código canónico para Overseas Warehouse Block Policy
+  if (ebayErrors.some((x: any) => x?.errorId === 25019 || String(x?.errorId ?? '') === '25019')) {
+    return true;
+  }
+
+  // Construir texto completo para buscar patrones
+  const allText = [
+    String((err as any)?.message ?? ''),
+    ...ebayErrors.map((x: any) =>
+      [x?.message, x?.longMessage, x?.domain, x?.category, x?.subdomain]
+        .map((v) => String(v ?? ''))
+        .join(' ')
+    ),
+    // Incluir el JSON crudo del cuerpo de error (truncado) para capturar parámetros en el payload
+    JSON.stringify((err as any)?.response?.data ?? {}).slice(0, 3000),
+  ].join(' ');
+
+  const OVERSEAS_SIGNALS = [
+    '25019',
+    'Overseas Warehouse Block',
+    'Location_Mismatch_Inventory_Block',
+    'forward-deployed item',
+    'overseas.*warehouse',
+    'ship.from.china.not.authorized',
+    'overseas.*block.*polic',
+  ];
+
+  return OVERSEAS_SIGNALS.some((sig) => {
+    try {
+      return new RegExp(sig, 'i').test(allText);
+    } catch {
+      return allText.toLowerCase().includes(sig.toLowerCase());
+    }
+  });
+}
+
+/**
+ * Mensaje canónico para el operador cuando el publish falla por policy de cuenta eBay.
+ * El draft se conserva. No reintentar hasta aprobación eBay.
+ */
+const ACCOUNT_POLICY_BLOCK_MESSAGE =
+  'ACCOUNT_POLICY_BLOCK — eBay bloqueó este publish con error 25019 ' +
+  '(Overseas Warehouse Block Policy / Location_Mismatch_Inventory_Block). ' +
+  'La cuenta eBay no está autorizada para publicar con ship-from China ' +
+  '(almacén en el extranjero / forward-deployed / CJ Dropshipping). ' +
+  'Este NO es un error de título, descripción ni precio. ' +
+  'El draft se conserva íntegro. ' +
+  'No reintentar hasta que eBay aprueba el perfil de Global Seller / overseas warehouse para esta cuenta.';
+
 function isQuoteStale(quote: { createdAt: Date; validUntil: Date | null }): boolean {
   const age = Date.now() - quote.createdAt.getTime();
   if (age > CJ_EBAY_LISTING_QUOTE_MAX_AGE_MS) return true;
@@ -315,6 +378,15 @@ export const cjEbayListingService = {
     if (listing.status === CJ_EBAY_LISTING_STATUS.PUBLISHING) {
       throw new AppError('Listing publish already in progress.', 409);
     }
+    // Guardrail: bloqueo de cuenta/política eBay persistente. No reintentar hasta intervención manual.
+    if (listing.status === CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK) {
+      throw new AppError(
+        'Publish bloqueado: la cuenta eBay no está autorizada para overseas warehouse / ship-from China (ACCOUNT_POLICY_BLOCK). ' +
+          'El draft se conserva. No reintentar hasta que eBay apruebe el perfil de Global Seller / overseas warehouse. ' +
+          'Para desbloquear manualmente, contactar soporte eBay y luego cambiar el estado del listing desde la interfaz de administración.',
+        423
+      );
+    }
     if (
       listing.status !== CJ_EBAY_LISTING_STATUS.DRAFT &&
       listing.status !== CJ_EBAY_LISTING_STATUS.FAILED
@@ -416,6 +488,31 @@ export const cjEbayListingService = {
       });
       return { listingId: pub.listingId, listingUrl: pub.listingUrl, offerId: pub.offerId };
     } catch (e) {
+      // Clasificar el error: policy/cuenta vs. error genérico de listing
+      if (isEbayOverseasWarehouseBlock(e)) {
+        // Bloqueo persistente de cuenta eBay — no es error de contenido, no reintentar
+        await prisma.cjEbayListing.update({
+          where: { id: listing.id },
+          data: {
+            status: CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK,
+            lastError: ACCOUNT_POLICY_BLOCK_MESSAGE,
+          },
+        });
+        await cjEbayTraceService.record({
+          userId: input.userId,
+          correlationId: input.correlationId,
+          route: input.route,
+          step: CJ_EBAY_TRACE_STEP.LISTING_PUBLISH_ACCOUNT_POLICY_BLOCK,
+          message: 'listing.publish.account_policy_block',
+          meta: {
+            listingId: listing.id,
+            sku: listing.ebaySku,
+            rawError: (e instanceof Error ? e.message : String(e)).slice(0, 500),
+          },
+        });
+        throw new AppError(ACCOUNT_POLICY_BLOCK_MESSAGE, 423);
+      }
+
       const msg = e instanceof Error ? e.message : String(e);
       await prisma.cjEbayListing.update({
         where: { id: listing.id },

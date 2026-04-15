@@ -69,7 +69,9 @@ export default function CjEbayListingsPage() {
       if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
         const d = e.response.data as { message?: string; error?: string };
         msg = d.message || d.error || msg;
-        if (e.response.status === 423) msg = `${msg} (BLOCK_NEW_PUBLICATIONS)`;
+        if (e.response.status === 423 && !msg.includes('ACCOUNT_POLICY_BLOCK')) {
+          msg = `${msg} (publicación bloqueada en servidor)`;
+        }
       } else if (e instanceof Error) msg = e.message;
       setError(msg);
       await load();
@@ -142,6 +144,27 @@ export default function CjEbayListingsPage() {
         </Link>
         .
       </p>
+      {listings.some((r) => r.status === 'ACCOUNT_POLICY_BLOCK') && (
+        <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 space-y-1">
+          <p className="font-semibold">Publicación bloqueada — cuenta eBay no autorizada para ship-from China</p>
+          <p>
+            Uno o más listings tienen estado <strong>ACCOUNT_POLICY_BLOCK</strong>. eBay rechazó el publish con
+            error 25019 (Overseas Warehouse Block Policy / Location_Mismatch_Inventory_Block).
+            Este NO es un problema de título, descripción ni precio.
+          </p>
+          <p>
+            <strong>Causa:</strong> la cuenta eBay aún no está aprobada para el modelo de overseas warehouse
+            / Global Seller (CJ Dropshipping ship-from China).
+          </p>
+          <p>
+            <strong>Qué hacer:</strong> esperar la aprobación de eBay para vendedor global / overseas warehouse,
+            luego reintentar el publish desde este panel. El draft se conserva.
+          </p>
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            No reintentar publish mientras el bloqueo esté activo — eBay rechazará cada intento.
+          </p>
+        </div>
+      )}
       {error && (
         <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 px-4 py-3 text-sm text-rose-900 dark:text-rose-100">
           {error}
@@ -174,9 +197,18 @@ export default function CjEbayListingsPage() {
                   <tr className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40">
                     <td className="px-3 py-2 font-mono tabular-nums">{row.id}</td>
                     <td className="px-3 py-2">
-                      <span className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs">
-                        {row.status}
-                      </span>
+                      {row.status === 'ACCOUNT_POLICY_BLOCK' ? (
+                        <span
+                          className="rounded bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200"
+                          title="Bloqueado por política de cuenta eBay (overseas warehouse). No es error de contenido."
+                        >
+                          POLICY BLOCK
+                        </span>
+                      ) : (
+                        <span className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs">
+                          {row.status}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 max-w-[200px] truncate" title={row.productTitle}>
                       {row.productTitle}
@@ -205,14 +237,23 @@ export default function CjEbayListingsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 space-x-2 whitespace-nowrap">
-                      <button
-                        type="button"
-                        disabled={busyId === row.id || !['DRAFT', 'FAILED'].includes(row.status)}
-                        className="text-xs font-medium text-primary-600 dark:text-primary-400 disabled:opacity-40"
-                        onClick={() => void publish(row.id)}
-                      >
-                        {busyId === row.id ? '…' : 'Publicar'}
-                      </button>
+                      {row.status === 'ACCOUNT_POLICY_BLOCK' ? (
+                        <span
+                          className="text-xs font-medium text-amber-600 dark:text-amber-400 cursor-not-allowed"
+                          title="Publicación bloqueada por política de cuenta eBay (overseas warehouse). Ver banner arriba."
+                        >
+                          Bloqueado (política)
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busyId === row.id || !['DRAFT', 'FAILED'].includes(row.status)}
+                          className="text-xs font-medium text-primary-600 dark:text-primary-400 disabled:opacity-40"
+                          onClick={() => void publish(row.id)}
+                        >
+                          {busyId === row.id ? '…' : 'Publicar'}
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={busyId === row.id || row.status !== 'ACTIVE'}
@@ -236,10 +277,30 @@ export default function CjEbayListingsPage() {
                         <p className="font-medium text-slate-800 dark:text-slate-200 mb-1">
                           Estado API: {detail.status}
                         </p>
-                        {detail.lastError && (
-                          <pre className="whitespace-pre-wrap text-rose-800 dark:text-rose-200 mb-2">
-                            {detail.lastError}
-                          </pre>
+                        {detail.status === 'ACCOUNT_POLICY_BLOCK' ? (
+                          <div className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 mb-2 space-y-1 text-amber-900 dark:text-amber-100">
+                            <p className="font-semibold">Bloqueo de cuenta eBay — no es error del listing</p>
+                            <p>
+                              eBay rechazó el publish con error 25019: <em>Overseas Warehouse Block Policy /
+                              Location_Mismatch_Inventory_Block</em>. La cuenta no está autorizada para
+                              publicar con ship-from China (CJ Dropshipping).
+                            </p>
+                            <p>
+                              <strong>El draft se conserva.</strong> No corregir título ni descripción — el
+                              problema es a nivel de cuenta/política, no de contenido.
+                            </p>
+                            <p>
+                              <strong>Acción requerida:</strong> esperar aprobación de eBay para el perfil
+                              de vendedor global / overseas warehouse. Una vez aprobada, reintentar publish
+                              desde este panel (primero cambiar el estado a DRAFT o contactar soporte).
+                            </p>
+                          </div>
+                        ) : (
+                          detail.lastError && (
+                            <pre className="whitespace-pre-wrap text-rose-800 dark:text-rose-200 mb-2">
+                              {detail.lastError}
+                            </pre>
+                          )
                         )}
                         <details>
                           <summary className="cursor-pointer text-slate-500">draftPayload (JSON)</summary>

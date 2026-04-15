@@ -23,6 +23,8 @@ export const CJ_EBAY_TRACE_STEP = {
   LISTING_PUBLISH_START: 'listing.publish.start',
   LISTING_PUBLISH_SUCCESS: 'listing.publish.success',
   LISTING_PUBLISH_ERROR: 'listing.publish.error',
+  /** Publish bloqueado: cuenta eBay no autorizada para overseas warehouse / ship-from China. No es error de contenido. */
+  LISTING_PUBLISH_ACCOUNT_POLICY_BLOCK: 'listing.publish.account_policy_block',
   LISTING_PAUSE: 'listing.pause',
   /** FASE 3E — órdenes */
   ORDER_IMPORT_START: 'order.import.start',
@@ -94,4 +96,12 @@ export const CJ_EBAY_LISTING_STATUS = {
   FAILED: 'FAILED',
   PAUSED: 'PAUSED',
   ARCHIVED: 'ARCHIVED',
+  /**
+   * Publish bloqueado por policy/cuenta eBay (no es error de contenido del listing).
+   * Causas: eBay error 25019, Overseas Warehouse Block Policy, Location_Mismatch_Inventory_Block,
+   * forward-deployed item, ship-from China no autorizado en la cuenta.
+   * Requiere intervención manual del operador (aprobación eBay Global Seller / overseas warehouse).
+   * El draft se conserva; NO reintentar publish hasta que la cuenta esté autorizada.
+   */
+  ACCOUNT_POLICY_BLOCK: 'ACCOUNT_POLICY_BLOCK',
 } as const;
