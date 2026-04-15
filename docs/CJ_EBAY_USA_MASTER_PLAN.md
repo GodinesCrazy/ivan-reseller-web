@@ -1903,4 +1903,61 @@ Validación con cuenta CJ real; reglas P4–P6/P8–P10; listing engine; workers
 
 ---
 
+## FASE 3F — Buscador de productos CJ en Products (2026-04-14)
+
+> **Decisión de producto:** La pantalla *Products* pasa a ser la puerta de entrada real al ciclo CJ → eBay USA. El flujo anterior basado en `productId`/`variantId` manuales queda disponible como modo avanzado/debug. El buscador vive dentro del mismo módulo, sección Products. No se creó un módulo separado.
+
+### Problema resuelto
+
+El flujo de entrada original exigía conocer IDs técnicos CJ (`productId`, `variantId`/vid/SKU) antes de poder operar. Esto era una barrera de entrada que rompía la usabilidad para cualquier operador sin acceso directo al portal CJ.
+
+### Nuevo flujo en Products
+
+```
+[Sección A] Input de búsqueda textual → POST /api/cj-ebay/cj/search
+[Sección B] Grid de resultados: imagen, título, precio, botón Seleccionar
+[Sección C] Producto seleccionado → GET /api/cj-ebay/cj/product/:id
+            - Variante única: auto-selección
+            - Múltiples variantes: picker con atributos/precio/stock
+[Sección D] Configuración (quantity, destPostalCode) + botones pipeline
+            - Vista previa pricing
+            - Evaluar y persistir
+            - Crear draft listing
+[Sección E] Modo avanzado / manual (colapsado por defecto)
+            - Inputs para productId, variantId manual
+            - Mismos botones de pipeline
+```
+
+### Backend
+
+Sin cambios. Los endpoints necesarios ya existían:
+
+| Endpoint | Existía | Uso |
+|---|---|---|
+| `POST /api/cj-ebay/cj/search` | Sí | Búsqueda textual CJ |
+| `GET /api/cj-ebay/cj/product/:cjProductId` | Sí | Detalle + variantes |
+| `POST /api/cj-ebay/pricing/preview` | Sí | Preview sin persistir |
+| `POST /api/cj-ebay/evaluate` | Sí | Evaluar + persistir |
+| `POST /api/cj-ebay/listings/draft` | Sí | Crear draft |
+
+### Frontend
+
+Archivo modificado: `frontend/src/pages/cj-ebay/CjEbayProductsPage.tsx`
+
+Nuevos tipos: `CjProductSummary`, `CjVariantDetail`, `CjProductDetail`  
+Nuevo estado: `searchQuery/Results/Loading/Error`, `selectedProduct`, `selectedVariantKey`, `advancedOpen`  
+Nuevas funciones: `runSearch()`, `selectProduct()`, `chooseVariant()`, `extractApiError()`, `variantLabel()`, `variantKey()`  
+Conservado intacto: `runPreview()`, `runEvaluate()`, `runDraft()`, `body()`, paneles de decisión y pricing
+
+### Documentación
+
+Nuevo documento de diseño: `docs/CJ_EBAY_USA_PRODUCT_SEARCH_PLAN.md`
+
+### Estado
+
+- **FASE 3F:** **COMPLETA** — buscador implementado; modo manual como fallback; documentación creada; sin cambios backend; sin romper el resto del módulo.
+- Pendiente de validación con cuenta CJ real en producción (misma condición que FASE 3B–3D).
+
+---
+
 *Fin del documento v2.12.*

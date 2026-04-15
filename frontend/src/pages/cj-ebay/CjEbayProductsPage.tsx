@@ -3,6 +3,33 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
 
+// ── CJ catalog types ──────────────────────────────────────────────────────────
+
+type CjProductSummary = {
+  cjProductId: string;
+  title: string;
+  mainImageUrl?: string;
+  listPriceUsd?: number;
+};
+
+type CjVariantDetail = {
+  cjSku: string;
+  cjVid?: string;
+  attributes: Record<string, string>;
+  unitCostUsd: number;
+  stock: number;
+};
+
+type CjProductDetail = {
+  cjProductId: string;
+  title: string;
+  description?: string;
+  imageUrls: string[];
+  variants: CjVariantDetail[];
+};
+
+// ── Pipeline types ────────────────────────────────────────────────────────────
+
 type NullableNum = number | null;
 
 type PricingBreakdownJson = {
@@ -53,6 +80,8 @@ type EvaluateOk = PreviewOk & {
   };
 };
 
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
 function fmtUsd(n: NullableNum): string {
   if (n == null || !Number.isFinite(n)) return '—';
   return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
@@ -62,6 +91,26 @@ function fmtPct(n: NullableNum): string {
   if (n == null || !Number.isFinite(n)) return '—';
   return `${n.toFixed(2)}%`;
 }
+
+function variantLabel(v: CjVariantDetail): string {
+  const attrs = Object.entries(v.attributes);
+  if (!attrs.length) return 'Variante única';
+  return attrs.map(([k, val]) => `${k}: ${val}`).join(' · ');
+}
+
+function variantKey(v: CjVariantDetail): string {
+  return v.cjVid ?? v.cjSku;
+}
+
+function extractApiError(e: unknown, fallback: string): string {
+  if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
+    const d = e.response.data as { error?: string; message?: string };
+    return d.message || d.error || fallback;
+  }
+  return e instanceof Error ? e.message : fallback;
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
 
 function DecisionPill({ decision }: { decision: EvaluateOk['decision'] }) {
   const styles: Record<EvaluateOk['decision'], string> = {
@@ -81,12 +130,39 @@ function DecisionPill({ decision }: { decision: EvaluateOk['decision'] }) {
   );
 }
 
+function Row({ label, v }: { label: string; v: NullableNum }) {
+  return (
+    <div className="flex justify-between gap-4 border-b border-slate-100 dark:border-slate-800 py-1">
+      <span className="text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="font-mono tabular-nums text-slate-900 dark:text-slate-100">{fmtUsd(v)}</span>
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+
 export default function CjEbayProductsPage() {
+  // ─── Search ──────────────────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<CjProductSummary[] | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // ─── Product selection ────────────────────────────────────────────────────────
+  const [selectedProduct, setSelectedProduct] = useState<CjProductDetail | null>(null);
+  const [productDetailLoading, setProductDetailLoading] = useState(false);
+  const [selectedVariantKey, setSelectedVariantKey] = useState<string>('');
+
+  // ─── Pipeline inputs (auto-filled from selection; editable in advanced mode) ──
   const [productId, setProductId] = useState('');
   const [variantId, setVariantId] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [destPostalCode, setDestPostalCode] = useState('90210');
 
+  // ─── Advanced/manual panel ────────────────────────────────────────────────────
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // ─── Pipeline state ───────────────────────────────────────────────────────────
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadingEvaluate, setLoadingEvaluate] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(false);
@@ -95,6 +171,9 @@ export default function CjEbayProductsPage() {
   const [preview, setPreview] = useState<PreviewOk | null>(null);
   const [evaluate, setEvaluate] = useState<EvaluateOk | null>(null);
 
+  // ─── Derived ──────────────────────────────────────────────────────────────────
+  const canRunPipeline = productId.trim().length > 0 && variantId.trim().length > 0;
+
   const body = () => ({
     productId: productId.trim(),
     variantId: variantId.trim(),
@@ -102,6 +181,72 @@ export default function CjEbayProductsPage() {
     destPostalCode: destPostalCode.trim() || undefined,
   });
 
+  // ─── Search handler ───────────────────────────────────────────────────────────
+  async function runSearch() {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setSearchError(null);
+    setSearchLoading(true);
+    setSearchResults(null);
+    setSelectedProduct(null);
+    setSelectedVariantKey('');
+    setProductId('');
+    setVariantId('');
+    setPreview(null);
+    setEvaluate(null);
+    setError(null);
+    try {
+      const res = await api.post<{ ok: boolean; items: CjProductSummary[] }>(
+        '/api/cj-ebay/cj/search',
+        { keyword: q, page: 1, pageSize: 20 },
+      );
+      setSearchResults(res.data?.items ?? []);
+    } catch (e) {
+      setSearchError(extractApiError(e, 'Error al buscar productos CJ.'));
+    } finally {
+      setSearchLoading(false);
+    }
+  }
+
+  // ─── Select product handler ────────────────────────────────────────────────────
+  async function selectProduct(summary: CjProductSummary) {
+    setProductDetailLoading(true);
+    setSelectedProduct(null);
+    setSelectedVariantKey('');
+    setProductId('');
+    setVariantId('');
+    setPreview(null);
+    setEvaluate(null);
+    setError(null);
+    try {
+      const res = await api.get<{ ok: boolean; product: CjProductDetail }>(
+        `/api/cj-ebay/cj/product/${encodeURIComponent(summary.cjProductId)}`,
+      );
+      const detail = res.data?.product;
+      if (!detail) throw new Error('No se recibió detalle del producto.');
+      setSelectedProduct(detail);
+      setProductId(detail.cjProductId);
+      if (detail.variants.length === 1) {
+        const vk = variantKey(detail.variants[0]);
+        setSelectedVariantKey(vk);
+        setVariantId(vk);
+      }
+    } catch (e) {
+      setError(extractApiError(e, 'Error al cargar detalle del producto.'));
+    } finally {
+      setProductDetailLoading(false);
+    }
+  }
+
+  function chooseVariant(vk: string) {
+    setSelectedVariantKey(vk);
+    setVariantId(vk);
+    setPreview(null);
+    setEvaluate(null);
+    setError(null);
+  }
+
+  // ─── Pipeline handlers ─────────────────────────────────────────────────────────
   async function runPreview() {
     setError(null);
     setPreview(null);
@@ -109,20 +254,14 @@ export default function CjEbayProductsPage() {
     setLoadingPreview(true);
     try {
       const res = await api.post<PreviewOk>('/api/cj-ebay/pricing/preview', body());
-      if (res.data?.ok) {
-        setPreview(res.data);
-      }
+      if (res.data?.ok) setPreview(res.data);
     } catch (e: unknown) {
       let msg = 'Error en vista previa.';
       if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
         const d = e.response.data as { error?: string; message?: string };
-        if (d.error === 'NO_UNIT_COST') {
-          msg = 'La variante no tiene costo unitario usable (NO_UNIT_COST).';
-        } else if (d.message) {
-          msg = d.message;
-        } else if (d.error) {
-          msg = d.error;
-        }
+        if (d.error === 'NO_UNIT_COST') msg = 'La variante no tiene costo unitario usable (NO_UNIT_COST).';
+        else if (d.message) msg = d.message;
+        else if (d.error) msg = d.error;
       } else if (e instanceof Error) {
         msg = e.message;
       }
@@ -138,19 +277,9 @@ export default function CjEbayProductsPage() {
     setLoadingEvaluate(true);
     try {
       const res = await api.post<EvaluateOk>('/api/cj-ebay/evaluate', body());
-      if (res.data?.ok) {
-        setEvaluate(res.data);
-      }
-    } catch (e: unknown) {
-      let msg = 'Error al evaluar.';
-      if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
-        const d = e.response.data as { error?: string; message?: string };
-        if (d.message) msg = d.message;
-        else if (d.error) msg = d.error;
-      } else if (e instanceof Error) {
-        msg = e.message;
-      }
-      setError(msg);
+      if (res.data?.ok) setEvaluate(res.data);
+    } catch (e) {
+      setError(extractApiError(e, 'Error al evaluar.'));
     } finally {
       setLoadingEvaluate(false);
     }
@@ -161,21 +290,13 @@ export default function CjEbayProductsPage() {
     setDraftListingId(null);
     setLoadingDraft(true);
     try {
-      const res = await api.post<{
-        ok: boolean;
-        listingId: number;
-        policyNote?: string;
-      }>('/api/cj-ebay/listings/draft', body());
-      if (res.data?.ok && typeof res.data.listingId === 'number') {
-        setDraftListingId(res.data.listingId);
-      }
-    } catch (e: unknown) {
-      let msg = 'Error al crear draft.';
-      if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
-        const d = e.response.data as { message?: string; error?: string };
-        msg = d.message || d.error || msg;
-      } else if (e instanceof Error) msg = e.message;
-      setError(msg);
+      const res = await api.post<{ ok: boolean; listingId: number; policyNote?: string }>(
+        '/api/cj-ebay/listings/draft',
+        body(),
+      );
+      if (res.data?.ok && typeof res.data.listingId === 'number') setDraftListingId(res.data.listingId);
+    } catch (e) {
+      setError(extractApiError(e, 'Error al crear draft.'));
     } finally {
       setLoadingDraft(false);
     }
@@ -183,96 +304,342 @@ export default function CjEbayProductsPage() {
 
   const showBreakdown = preview ?? evaluate;
 
+  // ─── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-4">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Entrada</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-            productId (CJ)
-            <input
-              className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
-              value={productId}
-              onChange={(ev) => setProductId(ev.target.value)}
-              placeholder="p.ej. identificador de producto CJ"
-            />
-          </label>
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-            variantId (vid o SKU)
-            <input
-              className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
-              value={variantId}
-              onChange={(ev) => setVariantId(ev.target.value)}
-              placeholder="vid preferido"
-            />
-          </label>
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-            quantity
-            <input
-              type="number"
-              min={1}
-              className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
-              value={quantity}
-              onChange={(ev) => setQuantity(Number(ev.target.value))}
-            />
-          </label>
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-            destPostalCode (USA)
-            <input
-              className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
-              value={destPostalCode}
-              onChange={(ev) => setDestPostalCode(ev.target.value)}
-            />
-          </label>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={loadingPreview || !productId.trim() || !variantId.trim()}
-            className="rounded-lg bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-sm font-medium px-4 py-2 disabled:opacity-50"
-            onClick={() => void runPreview()}
-          >
-            {loadingPreview ? 'Vista previa…' : 'Vista previa pricing'}
-          </button>
-          <button
-            type="button"
-            disabled={loadingEvaluate || !productId.trim() || !variantId.trim()}
-            className="rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-medium px-4 py-2 disabled:opacity-50"
-            onClick={() => void runEvaluate()}
-          >
-            {loadingEvaluate ? 'Evaluando…' : 'Evaluar y persistir'}
-          </button>
-          <button
-            type="button"
-            disabled={
-              loadingDraft ||
-              evaluate?.decision !== 'APPROVED' ||
-              !productId.trim() ||
-              !variantId.trim()
-            }
-            className="rounded-lg border border-emerald-300 dark:border-emerald-700 text-sm font-medium px-4 py-2 text-emerald-800 dark:text-emerald-200 disabled:opacity-50"
-            onClick={() => void runDraft()}
-            title="Requiere última evaluación APPROVED para esta variante en BD"
-          >
-            {loadingDraft ? 'Draft…' : 'Crear draft listing'}
-          </button>
-        </div>
-        {draftListingId != null && (
-          <p className="text-sm text-emerald-700 dark:text-emerald-300">
-            Draft guardado: listing local #{draftListingId}.{' '}
-            <Link to="/cj-ebay/listings" className="underline font-medium">
-              Ir a Listings → Publicar
-            </Link>
+
+      {/* ══ SECCIÓN A — Buscador CJ ═══════════════════════════════════════════════ */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            Buscar producto CJ
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Escribe un término para explorar el catálogo CJ Dropshipping
           </p>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            className="flex-1 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
+            placeholder="p.ej. phone holder, laptop stand, led lamp…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void runSearch();
+            }}
+          />
+          <button
+            type="button"
+            disabled={searchLoading || !searchQuery.trim()}
+            className="rounded-lg bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-sm font-medium px-4 py-2 disabled:opacity-50 whitespace-nowrap"
+            onClick={() => void runSearch()}
+          >
+            {searchLoading ? 'Buscando…' : 'Buscar'}
+          </button>
+        </div>
+        {searchError && (
+          <p className="text-sm text-rose-700 dark:text-rose-300">{searchError}</p>
         )}
       </div>
 
+      {/* ══ SECCIÓN B — Resultados CJ ════════════════════════════════════════════ */}
+      {searchResults !== null && (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            Resultados{searchResults.length > 0 ? ` (${searchResults.length})` : ''}
+          </h2>
+          {searchResults.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              Sin resultados para ese término. Prueba con otra búsqueda.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {searchResults.map((item) => (
+                <button
+                  key={item.cjProductId}
+                  type="button"
+                  onClick={() => void selectProduct(item)}
+                  disabled={productDetailLoading}
+                  className={`text-left rounded-lg border p-3 space-y-2 transition-colors hover:border-slate-400 dark:hover:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-60 ${
+                    selectedProduct?.cjProductId === item.cjProductId
+                      ? 'border-slate-800 dark:border-slate-200 bg-slate-50 dark:bg-slate-800/40'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30'
+                  }`}
+                >
+                  {item.mainImageUrl ? (
+                    <img
+                      src={item.mainImageUrl}
+                      alt={item.title}
+                      className="w-full aspect-square object-contain rounded bg-slate-50 dark:bg-slate-800"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full aspect-square rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 text-xs">
+                      Sin imagen
+                    </div>
+                  )}
+                  <p className="text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-2 leading-snug">
+                    {item.title}
+                  </p>
+                  {item.listPriceUsd != null && (
+                    <p className="text-xs text-slate-500">{fmtUsd(item.listPriceUsd)}</p>
+                  )}
+                  <span className="inline-block text-xs rounded-full bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 px-2 py-0.5 font-medium">
+                    Seleccionar
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Loading detail ─────────────────────────────────────────────────────────── */}
+      {productDetailLoading && (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 text-sm text-slate-500">
+          Cargando detalle del producto…
+        </div>
+      )}
+
+      {/* ══ SECCIÓN C — Producto seleccionado ════════════════════════════════════ */}
+      {selectedProduct && !productDetailLoading && (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-4">
+          <div className="flex gap-4">
+            {selectedProduct.imageUrls[0] && (
+              <img
+                src={selectedProduct.imageUrls[0]}
+                alt={selectedProduct.title}
+                className="w-20 h-20 object-contain rounded bg-slate-50 dark:bg-slate-800 shrink-0"
+              />
+            )}
+            <div className="min-w-0 space-y-1">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-snug">
+                {selectedProduct.title}
+              </h2>
+              <p className="text-xs font-mono text-slate-400">{selectedProduct.cjProductId}</p>
+              <p className="text-xs text-slate-500">
+                {selectedProduct.variants.length} variante
+                {selectedProduct.variants.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+
+          {/* Variant picker */}
+          {selectedProduct.variants.length > 1 ? (
+            <div>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
+                Selecciona una variante
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {selectedProduct.variants.map((v) => {
+                  const vk = variantKey(v);
+                  const isSelected = selectedVariantKey === vk;
+                  return (
+                    <button
+                      key={vk}
+                      type="button"
+                      onClick={() => chooseVariant(vk)}
+                      className={`text-left rounded-lg border px-3 py-2 text-xs transition-colors ${
+                        isSelected
+                          ? 'border-slate-800 dark:border-slate-200 bg-slate-50 dark:bg-slate-800/40 font-medium'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'
+                      }`}
+                    >
+                      <span className="text-slate-800 dark:text-slate-200">{variantLabel(v)}</span>
+                      <span className="block text-slate-400 mt-0.5">
+                        {fmtUsd(v.unitCostUsd)} · stock {v.stock}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : selectedProduct.variants.length === 1 ? (
+            <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200">
+              Variante única seleccionada automáticamente ·{' '}
+              {variantLabel(selectedProduct.variants[0])} ·{' '}
+              {fmtUsd(selectedProduct.variants[0].unitCostUsd)} · stock{' '}
+              {selectedProduct.variants[0].stock}
+            </div>
+          ) : (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Este producto no tiene variantes registradas en CJ.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ══ SECCIÓN D — Configuración operativa + acciones ═══════════════════════ */}
+      {(canRunPipeline || (selectedProduct && !productDetailLoading)) && (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-4">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            Configuración
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+              Cantidad
+              <input
+                type="number"
+                min={1}
+                className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
+              />
+            </label>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+              Código postal destino (USA)
+              <input
+                className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                value={destPostalCode}
+                onChange={(e) => setDestPostalCode(e.target.value)}
+              />
+            </label>
+          </div>
+
+          {canRunPipeline && (
+            <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 px-3 py-2 text-xs font-mono text-emerald-800 dark:text-emerald-200">
+              productId: {productId} · variantId: {variantId}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={loadingPreview || !canRunPipeline}
+              className="rounded-lg bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-sm font-medium px-4 py-2 disabled:opacity-50"
+              onClick={() => void runPreview()}
+            >
+              {loadingPreview ? 'Vista previa…' : 'Vista previa pricing'}
+            </button>
+            <button
+              type="button"
+              disabled={loadingEvaluate || !canRunPipeline}
+              className="rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-medium px-4 py-2 disabled:opacity-50"
+              onClick={() => void runEvaluate()}
+            >
+              {loadingEvaluate ? 'Evaluando…' : 'Evaluar y persistir'}
+            </button>
+            <button
+              type="button"
+              disabled={
+                loadingDraft || evaluate?.decision !== 'APPROVED' || !canRunPipeline
+              }
+              className="rounded-lg border border-emerald-300 dark:border-emerald-700 text-sm font-medium px-4 py-2 text-emerald-800 dark:text-emerald-200 disabled:opacity-50"
+              onClick={() => void runDraft()}
+              title="Requiere última evaluación APPROVED para esta variante en BD"
+            >
+              {loadingDraft ? 'Draft…' : 'Crear draft listing'}
+            </button>
+          </div>
+
+          {draftListingId != null && (
+            <p className="text-sm text-emerald-700 dark:text-emerald-300">
+              Draft guardado: listing local #{draftListingId}.{' '}
+              <Link to="/cj-ebay/listings" className="underline font-medium">
+                Ir a Listings → Publicar
+              </Link>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ══ SECCIÓN E — Modo avanzado / entrada manual de IDs ════════════════════ */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50">
+        <button
+          type="button"
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+          onClick={() => setAdvancedOpen((o) => !o)}
+          aria-expanded={advancedOpen ? 'true' : 'false'}
+        >
+          <span>Modo avanzado / entrada manual de IDs</span>
+          <span className="text-slate-400 text-xs">{advancedOpen ? '▲' : '▼'}</span>
+        </button>
+        {advancedOpen && (
+          <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-4 space-y-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Para debug, fallback operativo o cuando ya conoces los IDs técnicos CJ.
+              Los campos actualizan directamente las variables del pipeline.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                productId (CJ)
+                <input
+                  className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                  value={productId}
+                  onChange={(e) => setProductId(e.target.value)}
+                  placeholder="identificador CJ del producto"
+                />
+              </label>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                variantId (vid o SKU)
+                <input
+                  className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                  value={variantId}
+                  onChange={(e) => setVariantId(e.target.value)}
+                  placeholder="vid preferido, o SKU como fallback"
+                />
+              </label>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                quantity
+                <input
+                  type="number"
+                  min={1}
+                  className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                  value={quantity}
+                  onChange={(e) => setQuantity(Number(e.target.value))}
+                />
+              </label>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                destPostalCode (USA)
+                <input
+                  className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                  value={destPostalCode}
+                  onChange={(e) => setDestPostalCode(e.target.value)}
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={loadingPreview || !canRunPipeline}
+                className="rounded-lg bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-sm font-medium px-4 py-2 disabled:opacity-50"
+                onClick={() => void runPreview()}
+              >
+                {loadingPreview ? 'Vista previa…' : 'Vista previa pricing'}
+              </button>
+              <button
+                type="button"
+                disabled={loadingEvaluate || !canRunPipeline}
+                className="rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-medium px-4 py-2 disabled:opacity-50"
+                onClick={() => void runEvaluate()}
+              >
+                {loadingEvaluate ? 'Evaluando…' : 'Evaluar y persistir'}
+              </button>
+              <button
+                type="button"
+                disabled={
+                  loadingDraft || evaluate?.decision !== 'APPROVED' || !canRunPipeline
+                }
+                className="rounded-lg border border-emerald-300 dark:border-emerald-700 text-sm font-medium px-4 py-2 text-emerald-800 dark:text-emerald-200 disabled:opacity-50"
+                onClick={() => void runDraft()}
+                title="Requiere última evaluación APPROVED para esta variante en BD"
+              >
+                {loadingDraft ? 'Draft…' : 'Crear draft listing'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Error display */}
       {error && (
         <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 px-4 py-3 text-sm text-rose-900 dark:text-rose-100">
           {error}
         </div>
       )}
 
+      {/* ══ Decision panel ════════════════════════════════════════════════════════ */}
       {evaluate && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -280,12 +647,10 @@ export default function CjEbayProductsPage() {
             <DecisionPill decision={evaluate.decision} />
             <span className="text-xs text-slate-500">riskScore: {evaluate.riskScore}</span>
           </div>
-          <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-            <p>
-              productDbId {evaluate.ids.productDbId} · variantDbId {evaluate.ids.variantDbId} ·
-              shippingQuoteId {evaluate.ids.shippingQuoteId} · evaluationId {evaluate.ids.evaluationId}
-            </p>
-          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            productDbId {evaluate.ids.productDbId} · variantDbId {evaluate.ids.variantDbId} ·
+            shippingQuoteId {evaluate.ids.shippingQuoteId} · evaluationId {evaluate.ids.evaluationId}
+          </p>
           <div>
             <h3 className="text-sm font-medium text-slate-800 dark:text-slate-200 mb-2">Razones</h3>
             <ul className="space-y-2 text-sm">
@@ -307,6 +672,7 @@ export default function CjEbayProductsPage() {
         </div>
       )}
 
+      {/* ══ Pricing breakdown ════════════════════════════════════════════════════ */}
       {showBreakdown && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-4">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -356,15 +722,6 @@ export default function CjEbayProductsPage() {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function Row({ label, v }: { label: string; v: NullableNum }) {
-  return (
-    <div className="flex justify-between gap-4 border-b border-slate-100 dark:border-slate-800 py-1">
-      <span className="text-slate-500 dark:text-slate-400">{label}</span>
-      <span className="font-mono tabular-nums text-slate-900 dark:text-slate-100">{fmtUsd(v)}</span>
     </div>
   );
 }
