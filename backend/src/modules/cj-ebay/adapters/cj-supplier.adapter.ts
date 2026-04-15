@@ -608,8 +608,7 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
         const data = await this.authedGet(`product/stock/queryByVid?vid=${encodeURIComponent(v)}`);
         out.set(v, extractCjStockNum(data, v));
       } catch {
-        // Network/auth error — leave as 0; caller falls back to catalog stock
-        out.set(v, 0);
+        // Network/auth error — leave key absent so caller can treat it as unknown
       }
     }
     return out;

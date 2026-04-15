@@ -1,9 +1,9 @@
 # CJ → eBay USA — Plan: Buscador de Productos en Products
 
-**Versión:** 1.2  
-**Fecha:** 2026-04-14 / actualizado 2026-04-15  
+**Versión:** 1.3  
+**Fecha:** 2026-04-14  
 **Autor:** Principal Product Architect + Staff Full-Stack  
-**Estado:** Implementado — ranking operativo activo (§17)
+**Estado:** Implementado — ranking operativo + segmentación real de operabilidad activa (§17–§18)
 
 ---
 
@@ -56,20 +56,27 @@ El flujo manual anterior **no se eliminó**: queda disponible como panel secunda
 - Error state si falla la llamada
 
 ### Sección B — Resultados CJ
-Grid responsive (1→2→3→4 columnas según viewport).  
+Grid responsive (1→2→3→4 columnas según viewport), ahora dividido en tres buckets:
+- **Resultados operables** — flujo principal, solo productos con stock live confirmado
+- **Stock por confirmar** — sección secundaria para respuestas donde todavía no hay evidencia suficiente
+- **Sin disponibilidad / no operables** — sección secundaria degradada para candidatos ya descartados
+
 Cada card muestra:
 - Imagen del producto (aspect-square, object-contain)
 - Título (line-clamp-2)
 - Precio base si disponible (`listPriceUsd`)
-- Botón "Seleccionar" integrado en la card
+- Badge de stock + badge de operabilidad
+- CTA contextual (`Seleccionar`, `Revisar stock`, `Ver detalle`)
 - Highlight visual cuando la card está seleccionada
 
 ### Sección C — Producto seleccionado
 Al hacer clic en una card:
 - Se llama `GET /api/cj-ebay/cj/product/:cjProductId`
 - Se muestra imagen principal + título + productId técnico + número de variantes
-- **Si hay 1 variante:** se selecciona automáticamente y se muestra badge de confirmación verde
-- **Si hay N variantes:** se muestra un grid de botones con label de atributos (Color/Size/etc.), precio unitario y stock por variante
+- Las variantes se ordenan con `stock >= 1` primero
+- **Si hay al menos una variante operable:** se auto-selecciona la primera variante disponible
+- **Si hay N variantes:** se separan visualmente `Variantes operables` y `Variantes sin stock`
+- **Si todas están agotadas:** se bloquea el flujo principal y se muestra advertencia explícita
 - **Si hay 0 variantes:** aviso amber (edge case del fallback sintético del adapter)
 
 ### Sección D — Configuración operativa
@@ -94,12 +101,12 @@ Panel plegable discreto al fondo de la pantalla:
 
 ## 5. Arquitectura backend
 
-No se requirió ningún cambio backend. Los endpoints necesarios ya existían:
+Se reutilizaron los endpoints existentes, pero sí se ajustó el contrato de búsqueda para exponer clasificación de operabilidad sin romper compatibilidad:
 
 | Endpoint | Uso |
 |---|---|
-| `POST /api/cj-ebay/cj/search` | Búsqueda textual en catálogo CJ |
-| `GET /api/cj-ebay/cj/product/:cjProductId` | Detalle del producto + variantes |
+| `POST /api/cj-ebay/cj/search` | Búsqueda textual en catálogo CJ + `operabilityStatus` + `operabilitySummary` |
+| `GET /api/cj-ebay/cj/product/:cjProductId` | Detalle del producto + variantes con stock live enriquecido |
 | `POST /api/cj-ebay/pricing/preview` | Preview pricing sin persistir |
 | `POST /api/cj-ebay/evaluate` | Evaluación + persistencia en BD |
 | `POST /api/cj-ebay/listings/draft` | Crear draft listing |
@@ -108,8 +115,9 @@ No se requirió ningún cambio backend. Los endpoints necesarios ya existían:
 
 ## 6. Arquitectura frontend
 
-### Archivo modificado
-`frontend/src/pages/cj-ebay/CjEbayProductsPage.tsx`
+### Archivos modificados
+- `frontend/src/pages/cj-ebay/CjEbayProductsPage.tsx`
+- `frontend/src/pages/cj-ebay/CjEbayLayout.tsx`
 
 ### Nuevos tipos añadidos al archivo
 ```typescript
@@ -118,6 +126,7 @@ type CjProductSummary = {
   title: string;
   mainImageUrl?: string;
   listPriceUsd?: number;
+  operabilityStatus?: 'operable' | 'stock_unknown' | 'unavailable';
 };
 
 type CjVariantDetail = {
@@ -151,8 +160,8 @@ advancedOpen
 
 ### Funciones nuevas
 - `runSearch()` — POST /cj/search, resetea selección previa
-- `selectProduct(summary)` — GET /cj/product/:id, auto-selecciona variante única
-- `chooseVariant(vk)` — actualiza variantId + resetea resultados previos del pipeline
+- `selectProduct(summary)` — GET /cj/product/:id, ordena variantes y auto-selecciona la primera operable
+- `chooseVariant(variant)` — solo permite elegir variantes con stock >= 1 en el flujo principal
 
 ### Funciones conservadas intactas
 - `runPreview()`, `runEvaluate()`, `runDraft()`
@@ -162,6 +171,9 @@ advancedOpen
 - `variantLabel(v)` — formatea atributos como "Color: Red · Size: XL"
 - `variantKey(v)` — devuelve `cjVid ?? cjSku` (misma lógica que el backend)
 - `extractApiError(e, fallback)` — extrae mensaje de error de AxiosError o Error nativo
+- `searchOperabilityStatus(item)` — normaliza la operabilidad del resultado CJ
+- `groupSearchResults(items)` — separa operables / stock desconocido / no operables
+- `sortVariantsForOperator(variants)` — prioriza variantes con stock útil
 
 ---
 
@@ -183,9 +195,15 @@ Response:
       "cjProductId": "...",
       "title": "...",
       "mainImageUrl": "https://...",
-      "listPriceUsd": 4.50
+      "listPriceUsd": 4.50,
+      "operabilityStatus": "operable"
     }
-  ]
+  ],
+  "operabilitySummary": {
+    "operable": 12,
+    "stockUnknown": 5,
+    "unavailable": 3
+  }
 }
 ```
 
@@ -208,6 +226,11 @@ Response:
         "stock": 150
       }
     ]
+  },
+  "liveStockCoverage": {
+    "checked": 12,
+    "total": 12,
+    "complete": true
   }
 }
 ```
@@ -254,8 +277,11 @@ El modo avanzado no se degrada: cuando el usuario expande el panel, los campos `
 
 - [x] Products permite buscar productos CJ por texto
 - [x] Muestra resultados reales con imagen, título y precio
+- [x] El flujo principal muestra solo productos con stock confirmado
+- [x] Los productos con stock incierto o agotado quedan separados en secciones secundarias
 - [x] El usuario puede seleccionar un producto con un clic
 - [x] Puede seleccionar variante sin escribir IDs manualmente
+- [x] El flujo principal solo permite elegir variantes con stock >= 1
 - [x] Se rellenan correctamente `productId` y `variantId`
 - [x] Vista previa pricing funciona desde este flujo
 - [x] Evaluar y persistir funciona desde este flujo
@@ -270,16 +296,18 @@ El modo avanzado no se degrada: cuando el usuario expande el panel, los campos `
 
 ## 12. Criterios de validación
 
-1. Escribir "phone holder" → clic Buscar → aparece grid de resultados reales CJ
-2. Clic en un resultado → aparece Sección C con variantes cargadas
-3. Si hay una sola variante: badge verde "Variante única seleccionada automáticamente"
-4. Si hay múltiples: picker con atributos, precios y stock por variante
-5. Después de seleccionar variante: aparece Sección D con badge verde mostrando IDs
-6. "Vista previa pricing" → devuelve breakdown completo
-7. "Evaluar y persistir" → devuelve decisión APPROVED/REJECTED/PENDING
-8. Si APPROVED, "Crear draft listing" → crea draft y link a Listings
-9. Sección E colapsada por defecto, expandible, con campos editables
-10. Ninguna otra pantalla del módulo (Listings, Orders, Overview) fue afectada
+1. Escribir "phone holder" → clic Buscar → `Resultados operables` muestra solo productos con stock confirmado
+2. Los resultados con stock incierto o agotado aparecen solo en secciones secundarias
+3. Clic en un resultado → aparece Sección C con variantes cargadas y ordenadas por disponibilidad
+4. Si hay una sola variante operable: selección automática
+5. Si hay múltiples: el bloque `Variantes operables` aparece antes de `Variantes sin stock`
+6. Si todas están agotadas: banner amber + flujo principal bloqueado
+7. Después de seleccionar variante operable: aparece Sección D con badge verde mostrando IDs
+8. "Vista previa pricing" → devuelve breakdown completo
+9. "Evaluar y persistir" → devuelve decisión APPROVED/REJECTED/PENDING
+10. Si APPROVED, "Crear draft listing" → crea draft y link a Listings
+11. Sección E colapsada por defecto, expandible, con campos editables
+12. Ninguna otra pantalla del módulo (Listings, Orders, Overview) fue afectada
 
 ---
 
@@ -293,6 +321,7 @@ El modo avanzado no se degrada: cuando el usuario expande el panel, los campos `
 | Usuario cambia variante después de evaluar | `chooseVariant()` limpia `preview` y `evaluate` para evitar inconsistencias |
 | `aria-expanded` con valor booleano en JSX | Corregido: se usa boolean nativo — React lo serializa como string en el DOM |
 | Todos los productos aparecen con stock 0 | Ver §16 — tres causas raíz identificadas y corregidas en backend + frontend |
+| `inventoryTotal` ausente en `listV2` | El producto no entra al flujo principal; queda en `Stock por confirmar` hasta revisar detalle |
 
 ---
 
@@ -362,14 +391,16 @@ Fix: extracción explícita de `inventoryNum → inventory → inventoryQuantity
 |---|---|
 | `cj-supplier.adapter.ts` | `parseVariantRow` aliases, `extractCjStockNum`, `getStockForSkus` try/catch |
 | `cj-supplier.adapter.interface.ts` | `inventoryTotal?: number` con JSDoc en `CjProductSummary` |
-| `cj-ebay.routes.ts` | Sort por stock, campo `stockCoverage` en respuesta de search |
-| `CjEbayProductsPage.tsx` | `StockBadge`, `hasKnownStock`, cards dimmed, variant picker con stock labels y warning |
+| `cj-ebay.routes.ts` | Ranking + `operabilityStatus`, `operabilitySummary`, live stock probe en search y detalle |
+| `CjEbayProductsPage.tsx` | `StockBadge`, segmentación operable/secundaria, fail-closed de variantes agotadas |
+| `CjEbayLayout.tsx` | Remoción del bloque técnico superior del flujo principal |
 
 ### UX resultante
 
-- **Sección B (resultados):** cards con stock conocido y positivo muestran badge verde "En stock (N)"; sin stock conocido muestran badge amber; sin datos no muestran badge. Resultados con stock > 0 aparecen primero.
-- **Sección C (variante picker):** cada variante muestra label de color: emerald "N en stock" o amber "Sin stock". Variantes con stock 0 quedan dimmed pero seleccionables. Si todas las variantes tienen stock 0, aparece banner de advertencia.
-- **Sección C (variante única):** badge verde cuando stock > 0, amber cuando stock = 0.
+- **Sección B (resultados):** la lista principal solo contiene candidatos operables. `Stock por confirmar` y `Sin disponibilidad / no operables` quedan fuera del flujo principal.
+- **Sección C (variante picker):** las variantes con stock útil quedan agrupadas arriba y son las únicas seleccionables desde la UI principal.
+- **Sección C (agotados):** las variantes con stock 0 siguen visibles, pero degradadas y fuera del flujo principal.
+- **Detalle del producto:** la UI deja de confiar en `product/variant/query` cuando ese endpoint trae stock nulo/0 y usa `product/stock/queryByVid` para reconstruir stock live.
 
 ---
 
@@ -377,7 +408,7 @@ Fix: extracción explícita de `inventoryNum → inventory → inventoryQuantity
 
 ### Objetivo
 
-Ordenar los resultados de búsqueda CJ para que los productos más prometedores para el ciclo `preview → evaluate → draft` aparezcan primero, sin eliminar resultados y sin llamadas extra a la API CJ.
+Ordenar los resultados de búsqueda CJ para que los productos más prometedores para el ciclo `preview → evaluate → draft` aparezcan primero, ahora dentro de una segmentación real por operabilidad y usando probes live acotados cuando el resumen CJ no trae stock útil.
 
 ### Señales reales disponibles para ranking
 
@@ -389,14 +420,14 @@ Ordenar los resultados de búsqueda CJ para que los productos más prometedores 
 | `title` / longitud | `product/listV2` `productNameEn` | Alta | Sí — señal D |
 | `cjProductId` | `product/listV2` `pid/id` | Siempre | No — identidad, no ranking |
 
-### Señales descartadas (no disponibles en listV2 sin calls extra)
+### Señales descartadas como señal primaria de ranking (siguen siendo caras en búsqueda)
 
 | Señal | Por qué descartada |
 |---|---|
 | Variant count | Requiere `product/variant/query` — 20 calls para 20 resultados = ~22s de latencia |
 | `unitCostUsd` por variante | Ídem — necesita variant detail |
 | `cjVid` disponibilidad | Ídem |
-| Stock real por variante | Requiere `product/stock/queryByVid` por cada variante |
+| Stock real exhaustivo por variante | Requiere `product/stock/queryByVid` por cada variante |
 | Shipping a USA | Requiere `freightCalculate` — call extra prohibitiva en búsqueda |
 | Categoría del producto | No expuesta en listV2 |
 
@@ -434,27 +465,26 @@ Umbral "Operable": ≥ 70 pts (stock>0 + sweet spot price)
 
 - **Backend** — `cjSearchRankScore()` en `backend/src/modules/cj-ebay/cj-ebay.routes.ts`
 - Ejecutado sobre resultados de `product/listV2` antes de devolver respuesta
-- **Cero calls extra** a CJ API (sin impacto en latencia)
+- El mismo endpoint emite `operabilityStatus` por item y `operabilitySummary` agregada
+- Cuando `listV2` no trae stock útil, el backend hace probes live acotados sobre los top resultados usando `product/query` + `product/stock/queryByVid`
 - Frontend consume el orden ya calculado
 
 ### UX añadida
 
-- Badge **"Operable"** (azul) en cards donde `isTopCandidate() === true`:
-  `inventoryTotal > 0 AND listPriceUsd >= 1 AND listPriceUsd <= 25`
-- Función `isTopCandidate()` en frontend refleja el umbral del tier superior del ranking
-- Cards siguen siendo todas visibles y seleccionables (no hay exclusión)
+- El ranking ya no reemplaza al filtro operativo: primero se segmenta por evidencia de stock live (`operable > stock_unknown > unavailable`) y luego se ordena por score dentro de cada bucket.
+- El frontend solo usa el bucket `operable` como flujo principal; los demás quedan en secciones secundarias.
 
 ### Impacto de performance
 
-Ninguno. Todo el scoring ocurre sobre datos ya obtenidos de `product/listV2`.
-La función `cjSearchRankScore()` es O(n) sobre el array de resultados (n ≤ pageSize, default 20).
+El scoring sigue siendo O(n) sobre `product/listV2`, pero ahora la búsqueda puede hacer probes live adicionales sobre un subconjunto pequeño de resultados para confirmar operabilidad. Es un costo deliberado para evitar que el flujo principal siga tratando agotados como candidatos normales.
 
 ### Limitaciones conocidas
 
-1. `inventoryTotal` de listV2 puede no estar disponible para todos los productos → ~30-50% de items pueden tener `undefined` → van al tier de 20 pts (neutro, no penalizados).
+1. `inventoryTotal` de listV2 puede no estar disponible para todos los productos → el backend hace probes live sobre un subconjunto superior; el resto queda en `Stock por confirmar`.
 2. La señal de precio (`listPriceUsd`) puede ser la cota baja de un rango (`"0.55 -- 7.18"` → 0.55) — subestima precio real para algunos productos.
 3. No sabemos cuántas variantes tiene el producto ni si tiene `cjVid` hasta cargar detalle — la señal de precio no garantiza que exista una variante con unitCostUsd usable.
 4. El ranking no es causal: un producto bien rankeado puede fallar en preview si `unitCostUsd = 0` (error `NO_UNIT_COST`). El ranking maximiza probabilidad pero no la garantiza.
+5. El detalle de producto ahora usa stock live por variante, pero productos con muchísimas variantes pueden tardar más en abrir porque el backend valida disponibilidad real antes de presentar la selección operativa.
 
 ### Cómo ayuda al operador
 
@@ -464,4 +494,38 @@ Un operador que busca "phone holder" verá primero los productos que:
 - Tienen imagen (prerequisito para listing eBay)
 - Tienen datos de título completos
 
-Los productos muertos (stock=0, sin imagen, sin precio) quedan al fondo sin ser eliminados — el operador puede acceder a ellos si los necesita.
+Los productos muertos (stock=0, sin imagen, sin precio) ya no compiten como candidatos principales: quedan separados en `Sin disponibilidad / no operables`.
+
+---
+
+## 18. Limpieza UX y filtro operativo real — 2026-04-14
+
+### Limpieza UX
+
+- Se eliminó del layout compartido de CJ/eBay el bloque técnico superior que mostraba mensajes internos del tipo "Vertical aislada", "Operador — dónde seguir", referencias a `BLOCK_NEW_PUBLICATIONS` y rutas `/api/cj-ebay/orders/*`.
+- La cabecera del módulo ahora deja solo una descripción corta y orientada al operador.
+- La información técnica de Listings/Orders se mantiene en superficies contextuales de esas pantallas, no en Products.
+
+### Criterio de producto operable
+
+- **Producto operable:** el backend logra confirmar `stock >= 1` en al menos una variante usando stock live (`product/stock/queryByVid`) o, si CJ ya entrega inventario útil en `listV2`, con esa señal directa.
+- **Producto no operable:** CJ reporta `inventoryTotal = 0` o el producto queda descartado tras validar las variantes disponibles que sí pudieron auditarse.
+- **Stock por confirmar:** no hay evidencia suficiente todavía; queda fuera del flujo principal hasta inspección adicional.
+
+### Segmentación actual
+
+- **Resultados operables:** únicos candidatos del flujo principal.
+- **Stock por confirmar:** sección secundaria colapsable.
+- **Sin disponibilidad / no operables:** sección secundaria colapsable y visualmente degradada.
+- **Variantes agotadas:** visibles en detalle, pero fuera del flujo principal y no seleccionables desde la UI principal.
+
+### Impacto UX
+
+- La pantalla Products vuelve a comportarse como flujo operativo: buscar → elegir producto operable → elegir variante operable → preview → evaluate → draft.
+- Se reduce el ruido visual y desaparece el copy interno que no aportaba a la tarea del operador.
+- Se evita que un producto agotado compita visualmente con uno publicable.
+
+### Limitaciones conocidas
+
+- La segmentación de búsqueda depende de una combinación entre `listV2` y probes live acotados. Si CJ omite stock y el candidato no entra al subconjunto enriquecido, queda temporalmente en `Stock por confirmar`.
+- El detalle de producto privilegia precisión sobre velocidad: para reconstruir stock live real, el backend consulta variantes individuales antes de renderizar la selección operativa.

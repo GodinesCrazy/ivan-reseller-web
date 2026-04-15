@@ -35,6 +35,7 @@ import { CJ_EBAY_TRACE_STEP } from './cj-ebay.constants';
 import type { CjEbayHealthResponse, CjEbayOverviewResponse } from './cj-ebay.types';
 import { createCjSupplierAdapter } from './adapters/cj-supplier.adapter';
 import { CjSupplierError } from './adapters/cj-supplier.errors';
+import type { CjProductDetail } from './adapters/cj-supplier.adapter.interface';
 import { pricingBreakdownForResponse } from './services/cj-ebay-pricing.service';
 import { cjEbayOpportunityPipelineService } from './services/cj-ebay-opportunity-pipeline.service';
 
@@ -115,6 +116,107 @@ function cjSearchRankScore(item: import('./adapters/cj-supplier.adapter.interfac
   else if (titleLen >= 10) score += 3;
 
   return score; // max 100 (45+30+15+10), min 0
+}
+
+type CjSearchOperabilityStatus = 'operable' | 'stock_unknown' | 'unavailable';
+
+const CJ_SEARCH_OPERABILITY_ENRICH_LIMIT = 6;
+const CJ_SEARCH_VARIANT_LIVE_PROBE_LIMIT = 1;
+const CJ_PRODUCT_DETAIL_LIVE_STOCK_LIMIT = 100;
+
+function cjSearchOperabilityStatus(
+  item: import('./adapters/cj-supplier.adapter.interface').CjProductSummary
+): CjSearchOperabilityStatus {
+  if (item.inventoryTotal !== undefined && item.inventoryTotal > 0) {
+    return 'operable';
+  }
+  if (item.inventoryTotal === 0) {
+    return 'unavailable';
+  }
+  return 'stock_unknown';
+}
+
+function cjSearchOperabilityPriority(status: CjSearchOperabilityStatus): number {
+  switch (status) {
+    case 'operable':
+      return 0;
+    case 'stock_unknown':
+      return 1;
+    case 'unavailable':
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function liveStockVariantKeys(detail: CjProductDetail): string[] {
+  return detail.variants
+    .map((variant) => String(variant.cjVid || '').trim())
+    .filter(Boolean);
+}
+
+async function probeProductOperabilityByLiveStock(
+  adapter: ReturnType<typeof createCjSupplierAdapter>,
+  cjProductId: string
+): Promise<CjSearchOperabilityStatus> {
+  const detail = await adapter.getProductById(cjProductId);
+  const variantKeys = liveStockVariantKeys(detail);
+
+  if (variantKeys.length === 0) {
+    if (detail.variants.length === 0) {
+      return 'unavailable';
+    }
+    return detail.variants.some((variant) => variant.stock > 0) ? 'operable' : 'stock_unknown';
+  }
+
+  const probeKeys = variantKeys.slice(0, Math.min(CJ_SEARCH_VARIANT_LIVE_PROBE_LIMIT, variantKeys.length));
+  for (const key of probeKeys) {
+    const liveStock = await adapter.getStockForSkus([key]);
+    const stock = liveStock.get(key);
+    if (stock === undefined) {
+      return 'stock_unknown';
+    }
+    if (stock > 0) {
+      return 'operable';
+    }
+  }
+
+  return variantKeys.length > probeKeys.length ? 'stock_unknown' : 'unavailable';
+}
+
+async function enrichProductDetailWithLiveStock(
+  adapter: ReturnType<typeof createCjSupplierAdapter>,
+  detail: CjProductDetail
+): Promise<{
+  product: CjProductDetail;
+  liveStockCoverage: { checked: number; total: number; complete: boolean };
+}> {
+  const probeKeys = liveStockVariantKeys(detail).slice(0, CJ_PRODUCT_DETAIL_LIVE_STOCK_LIMIT);
+  if (probeKeys.length === 0) {
+    return {
+      product: detail,
+      liveStockCoverage: { checked: 0, total: 0, complete: true },
+    };
+  }
+
+  const liveStock = await adapter.getStockForSkus(probeKeys);
+  const product: CjProductDetail = {
+    ...detail,
+    variants: detail.variants.map((variant) => {
+      const key = String(variant.cjVid || '').trim();
+      const stock = key ? liveStock.get(key) : undefined;
+      return stock === undefined ? variant : { ...variant, stock };
+    }),
+  };
+
+  return {
+    product,
+    liveStockCoverage: {
+      checked: probeKeys.length,
+      total: liveStockVariantKeys(detail).length,
+      complete: probeKeys.length >= liveStockVariantKeys(detail).length,
+    },
+  };
 }
 
 function cjEbayEnabled(): boolean {
@@ -891,12 +993,15 @@ router.get('/cj/product/:cjProductId', async (req: Request, res: Response, next:
       throw new AppError('Invalid cjProductId', 400);
     }
     const adapter = createCjSupplierAdapter(userId);
-    const product = await adapter.getProductById(cjProductId);
+    const productDetail = await adapter.getProductById(cjProductId);
+    const { product, liveStockCoverage } = await enrichProductDetailWithLiveStock(adapter, productDetail);
     await traceComplete(req, userId, 'GET /cj/product/:cjProductId', { statusCode: 200 });
     res.json({
       ok: true,
       product,
-      note: 'Uses official POST product/query + product/variant/query with { pid }. Response mapping is best-effort.',
+      liveStockCoverage,
+      note:
+        'Uses official GET product/query + product/variant/query plus live stock probes via product/stock/queryByVid for the returned variants.',
     });
   } catch (e) {
     if (e instanceof CjSupplierError) {
@@ -932,7 +1037,37 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
       productQueryBody: parsed.data.productQueryBody,
     });
 
-    const items = [...raw].sort((a, b) => cjSearchRankScore(b) - cjSearchRankScore(a));
+    const ranked = [...raw].sort((a, b) => cjSearchRankScore(b) - cjSearchRankScore(a));
+    const liveOperability = new Map<string, CjSearchOperabilityStatus>();
+
+    for (const item of ranked.slice(0, Math.min(ranked.length, CJ_SEARCH_OPERABILITY_ENRICH_LIMIT))) {
+      if (item.inventoryTotal !== undefined) {
+        liveOperability.set(item.cjProductId, cjSearchOperabilityStatus(item));
+        continue;
+      }
+      try {
+        const status = await probeProductOperabilityByLiveStock(adapter, item.cjProductId);
+        liveOperability.set(item.cjProductId, status);
+      } catch {
+        liveOperability.set(item.cjProductId, 'stock_unknown');
+      }
+    }
+
+    const items = ranked
+      .map((item) => ({
+        ...item,
+        operabilityStatus:
+          liveOperability.get(item.cjProductId) ?? cjSearchOperabilityStatus(item),
+      }))
+      .sort((a, b) => {
+        const operabilityDelta =
+          cjSearchOperabilityPriority(a.operabilityStatus) -
+          cjSearchOperabilityPriority(b.operabilityStatus);
+        if (operabilityDelta !== 0) {
+          return operabilityDelta;
+        }
+        return cjSearchRankScore(b) - cjSearchRankScore(a);
+      });
 
     // Diagnostics for stock coverage (helps tune field mapping)
     const withStock = items.filter((x) => (x.inventoryTotal ?? 0) > 0).length;
@@ -944,7 +1079,17 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
       ok: true,
       items,
       stockCoverage: { withStock, unknownStock, zeroStock },
-      note: 'Results ranked by operational score (stock + price viability + image + title). See cjSearchRankScore().',
+      operabilitySummary: {
+        operable: items.filter((x) => x.operabilityStatus === 'operable').length,
+        stockUnknown: items.filter((x) => x.operabilityStatus === 'stock_unknown').length,
+        unavailable: items.filter((x) => x.operabilityStatus === 'unavailable').length,
+      },
+      liveProbeSummary: {
+        enrichedTopResults: Math.min(ranked.length, CJ_SEARCH_OPERABILITY_ENRICH_LIMIT),
+        variantProbeLimitPerProduct: CJ_SEARCH_VARIANT_LIVE_PROBE_LIMIT,
+      },
+      note:
+        'Results are segmented by live stock evidence first (operable > stock_unknown > unavailable) and ranked by operational score within each segment.',
     });
   } catch (e) {
     if (e instanceof CjSupplierError) {
