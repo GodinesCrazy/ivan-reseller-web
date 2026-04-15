@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
@@ -525,6 +525,8 @@ export default function CjEbayProductsPage() {
   // ─── Advanced/manual panel ────────────────────────────────────────────────────
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [pricingConfigOpen, setPricingConfigOpen] = useState(false);
+  const pricingConfigSectionRef = useRef<HTMLDivElement>(null);
+  const pricingConfigFirstFieldRef = useRef<HTMLInputElement>(null);
 
   // ─── Account pricing config ───────────────────────────────────────────────────
   const [pricingSettings, setPricingSettings] = useState<PricingConfigSettings | null>(null);
@@ -606,6 +608,25 @@ export default function CjEbayProductsPage() {
       cancelled = true;
     };
   }, []);
+
+  /**
+   * Opens the inline account pricing panel and brings it into view.
+   * Root issue fixed: the panel lives above the pricing breakdown; setting state alone
+   * expanded it off-screen so the CTA felt broken (no scroll / no focus).
+   */
+  function openPricingConfigPanelAndReveal() {
+    setPricingConfigOpen(true);
+    setPricingConfigMessage(null);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        pricingConfigSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+        });
+        pricingConfigFirstFieldRef.current?.focus({ preventScroll: true });
+      });
+    });
+  }
 
   async function savePricingConfig() {
     setPricingConfigError(null);
@@ -1093,7 +1114,11 @@ export default function CjEbayProductsPage() {
             </label>
           </div>
 
-          <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950/20">
+          <div
+            ref={pricingConfigSectionRef}
+            id="cj-ebay-account-pricing-config"
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950/20 scroll-mt-4"
+          >
             <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -1143,7 +1168,13 @@ export default function CjEbayProductsPage() {
               <button
                 type="button"
                 className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200"
-                onClick={() => setPricingConfigOpen((open) => !open)}
+                onClick={() => {
+                  if (pricingConfigOpen) {
+                    setPricingConfigOpen(false);
+                  } else {
+                    openPricingConfigPanelAndReveal();
+                  }
+                }}
               >
                 {pricingConfigOpen ? 'Ocultar configuracion' : 'Configurar pricing'}
               </button>
@@ -1170,6 +1201,7 @@ export default function CjEbayProductsPage() {
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
                     Margen objetivo minimo (%)
                     <input
+                      ref={pricingConfigFirstFieldRef}
                       className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
                       value={pricingConfigForm.minMarginPct}
                       onChange={(e) => {
@@ -1180,6 +1212,7 @@ export default function CjEbayProductsPage() {
                         setPricingConfigMessage(null);
                       }}
                       placeholder="ej. 15"
+                      autoComplete="off"
                     />
                   </label>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
@@ -1501,7 +1534,7 @@ export default function CjEbayProductsPage() {
                     <button
                       type="button"
                       className="rounded-md border border-current/20 px-2 py-1 font-medium"
-                      onClick={() => setPricingConfigOpen(true)}
+                      onClick={() => openPricingConfigPanelAndReveal()}
                     >
                       Completar configuracion
                     </button>
