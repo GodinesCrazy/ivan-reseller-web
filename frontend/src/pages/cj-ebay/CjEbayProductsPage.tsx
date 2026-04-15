@@ -10,6 +10,13 @@ type CjProductSummary = {
   title: string;
   mainImageUrl?: string;
   listPriceUsd?: number;
+  /**
+   * Total inventory from CJ listV2.
+   * undefined = not provided by CJ (unknown)
+   * 0 = CJ reported zero stock
+   * >0 = CJ reported available stock
+   */
+  inventoryTotal?: number;
 };
 
 type CjVariantDetail = {
@@ -100,6 +107,28 @@ function variantLabel(v: CjVariantDetail): string {
 
 function variantKey(v: CjVariantDetail): string {
   return v.cjVid ?? v.cjSku;
+}
+
+/** True if the product has any variant with known positive stock. */
+function hasKnownStock(inv: number | undefined): boolean {
+  return inv !== undefined && inv > 0;
+}
+
+/** Badge for search result cards based on inventoryTotal. */
+function StockBadge({ inv }: { inv: number | undefined }) {
+  if (inv === undefined) return null;
+  if (inv > 0) {
+    return (
+      <span className="inline-block text-xs rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 font-medium">
+        En stock ({inv})
+      </span>
+    );
+  }
+  return (
+    <span className="inline-block text-xs rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-2 py-0.5 font-medium">
+      Sin stock registrado
+    </span>
+  );
 }
 
 function extractApiError(e: unknown, fallback: string): string {
@@ -354,43 +383,60 @@ export default function CjEbayProductsPage() {
               Sin resultados para ese término. Prueba con otra búsqueda.
             </p>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {searchResults.map((item) => (
-                <button
-                  key={item.cjProductId}
-                  type="button"
-                  onClick={() => void selectProduct(item)}
-                  disabled={productDetailLoading}
-                  className={`text-left rounded-lg border p-3 space-y-2 transition-colors hover:border-slate-400 dark:hover:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-60 ${
-                    selectedProduct?.cjProductId === item.cjProductId
-                      ? 'border-slate-800 dark:border-slate-200 bg-slate-50 dark:bg-slate-800/40'
-                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30'
-                  }`}
-                >
-                  {item.mainImageUrl ? (
-                    <img
-                      src={item.mainImageUrl}
-                      alt={item.title}
-                      className="w-full aspect-square object-contain rounded bg-slate-50 dark:bg-slate-800"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-full aspect-square rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 text-xs">
-                      Sin imagen
-                    </div>
-                  )}
-                  <p className="text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-2 leading-snug">
-                    {item.title}
+            <>
+              {searchResults.some((x) => x.inventoryTotal === 0) &&
+                !searchResults.some((x) => hasKnownStock(x.inventoryTotal)) && (
+                  <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-md px-3 py-2">
+                    Todos los resultados tienen stock 0 según CJ. Prueba otra búsqueda o usa el modo avanzado para ingresar IDs manuales.
                   </p>
-                  {item.listPriceUsd != null && (
-                    <p className="text-xs text-slate-500">{fmtUsd(item.listPriceUsd)}</p>
-                  )}
-                  <span className="inline-block text-xs rounded-full bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 px-2 py-0.5 font-medium">
-                    Seleccionar
-                  </span>
-                </button>
-              ))}
-            </div>
+                )}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {searchResults.map((item) => {
+                  const isZeroStock = item.inventoryTotal === 0;
+                  const isSelected = selectedProduct?.cjProductId === item.cjProductId;
+                  return (
+                    <button
+                      key={item.cjProductId}
+                      type="button"
+                      onClick={() => void selectProduct(item)}
+                      disabled={productDetailLoading}
+                      className={`text-left rounded-lg border p-3 space-y-2 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-60 ${
+                        isSelected
+                          ? 'border-slate-800 dark:border-slate-200 bg-slate-50 dark:bg-slate-800/40'
+                          : isZeroStock
+                            ? 'border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/20 opacity-60 hover:opacity-90 hover:border-slate-300 dark:hover:border-slate-600'
+                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 hover:border-slate-400 dark:hover:border-slate-500'
+                      }`}
+                    >
+                      {item.mainImageUrl ? (
+                        <img
+                          src={item.mainImageUrl}
+                          alt={item.title}
+                          className="w-full aspect-square object-contain rounded bg-slate-50 dark:bg-slate-800"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full aspect-square rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 text-xs">
+                          Sin imagen
+                        </div>
+                      )}
+                      <p className="text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-2 leading-snug">
+                        {item.title}
+                      </p>
+                      <div className="flex flex-wrap gap-1 items-center">
+                        {item.listPriceUsd != null && (
+                          <span className="text-xs text-slate-500">{fmtUsd(item.listPriceUsd)}</span>
+                        )}
+                        <StockBadge inv={item.inventoryTotal} />
+                      </div>
+                      <span className="inline-block text-xs rounded-full bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 px-2 py-0.5 font-medium">
+                        Seleccionar
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -427,14 +473,20 @@ export default function CjEbayProductsPage() {
 
           {/* Variant picker */}
           {selectedProduct.variants.length > 1 ? (
-            <div>
-              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
                 Selecciona una variante
               </p>
+              {selectedProduct.variants.every((v) => v.stock === 0) && (
+                <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-md px-3 py-2">
+                  Todas las variantes reportan stock 0 en CJ. Puede que el stock no esté disponible actualmente o que los datos sean preliminares.
+                </p>
+              )}
               <div className="grid gap-2 sm:grid-cols-2">
                 {selectedProduct.variants.map((v) => {
                   const vk = variantKey(v);
                   const isSelected = selectedVariantKey === vk;
+                  const isZeroStock = v.stock === 0;
                   return (
                     <button
                       key={vk}
@@ -443,12 +495,15 @@ export default function CjEbayProductsPage() {
                       className={`text-left rounded-lg border px-3 py-2 text-xs transition-colors ${
                         isSelected
                           ? 'border-slate-800 dark:border-slate-200 bg-slate-50 dark:bg-slate-800/40 font-medium'
-                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'
+                          : isZeroStock
+                            ? 'border-slate-200 dark:border-slate-700 opacity-60 hover:opacity-90 hover:border-slate-300 dark:hover:border-slate-600'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'
                       }`}
                     >
                       <span className="text-slate-800 dark:text-slate-200">{variantLabel(v)}</span>
-                      <span className="block text-slate-400 mt-0.5">
-                        {fmtUsd(v.unitCostUsd)} · stock {v.stock}
+                      <span className="block text-slate-400 mt-0.5">{fmtUsd(v.unitCostUsd)}</span>
+                      <span className={`block mt-0.5 ${isZeroStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                        {isZeroStock ? 'Sin stock' : `${v.stock} en stock`}
                       </span>
                     </button>
                   );
@@ -456,12 +511,22 @@ export default function CjEbayProductsPage() {
               </div>
             </div>
           ) : selectedProduct.variants.length === 1 ? (
-            <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200">
-              Variante única seleccionada automáticamente ·{' '}
-              {variantLabel(selectedProduct.variants[0])} ·{' '}
-              {fmtUsd(selectedProduct.variants[0].unitCostUsd)} · stock{' '}
-              {selectedProduct.variants[0].stock}
-            </div>
+            (() => {
+              const sv = selectedProduct.variants[0];
+              const isZeroStock = sv.stock === 0;
+              return (
+                <div className={`rounded-md border px-3 py-2 text-xs ${
+                  isZeroStock
+                    ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/50 text-amber-800 dark:text-amber-200'
+                    : 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-200'
+                }`}>
+                  Variante única seleccionada automáticamente ·{' '}
+                  {variantLabel(sv)} ·{' '}
+                  {fmtUsd(sv.unitCostUsd)} ·{' '}
+                  {isZeroStock ? 'sin stock' : `${sv.stock} en stock`}
+                </div>
+              );
+            })()
           ) : (
             <p className="text-xs text-amber-700 dark:text-amber-300">
               Este producto no tiene variantes registradas en CJ.
@@ -550,7 +615,7 @@ export default function CjEbayProductsPage() {
           type="button"
           className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
           onClick={() => setAdvancedOpen((o) => !o)}
-          aria-expanded={advancedOpen ? 'true' : 'false'}
+          aria-expanded={advancedOpen}
         >
           <span>Modo avanzado / entrada manual de IDs</span>
           <span className="text-slate-400 text-xs">{advancedOpen ? '▲' : '▼'}</span>

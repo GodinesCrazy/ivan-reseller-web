@@ -151,7 +151,17 @@ function rowToSummary(row: Record<string, unknown>): CjProductSummary | null {
   const mainImageUrl =
     typeof imgRaw === 'string' ? imgRaw.split(',')[0]?.trim() || undefined : undefined;
   const listPriceUsd = parseCjListPriceUsd(row);
-  return { cjProductId: pid, title, mainImageUrl, listPriceUsd };
+  // CJ listV2 may include total inventory across all variants.
+  // Try multiple field names; treat missing as `undefined` (unknown), not zero.
+  const invRaw = row.inventoryNum ?? row.inventory ?? row.inventoryQuantity ?? row.stock;
+  const inventoryTotal =
+    invRaw !== undefined && invRaw !== null
+      ? (() => {
+          const n = Number(invRaw);
+          return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
+        })()
+      : undefined;
+  return { cjProductId: pid, title, mainImageUrl, listPriceUsd, inventoryTotal };
 }
 
 /** `product/listV2` returns `{ content: [{ productList: [...] }] }` per CJ Open API 2.0 docs. */
@@ -181,8 +191,12 @@ function parseVariantRow(v: Record<string, unknown>): CjVariantDetail | null {
   if (!sku && !vid) return null;
   const price = Number(v.variantSellPrice ?? 0);
   const unitCostUsd = Number.isFinite(price) ? price : 0;
-  const stockRaw = Number(v.storageNum ?? 0);
-  const stock = Number.isFinite(stockRaw) ? stockRaw : 0;
+  // CJ uses several field names for stock depending on API version / endpoint.
+  // storageNum is documented; inventoryNum / inventory / stock / quantity are observed aliases.
+  const stockRaw = Number(
+    v.storageNum ?? v.inventoryNum ?? v.inventory ?? v.stock ?? v.quantity ?? 0,
+  );
+  const stock = Number.isFinite(stockRaw) && stockRaw >= 0 ? Math.floor(stockRaw) : 0;
   const attributes: Record<string, string> = {};
   const vn = v.variantNameEn ?? v.variantName;
   if (typeof vn === 'string' && vn.trim()) attributes.label = vn.trim();
@@ -193,6 +207,32 @@ function parseVariantRow(v: Record<string, unknown>): CjVariantDetail | null {
     unitCostUsd,
     stock,
   };
+}
+
+/**
+ * Extract a stock number from a CJ `product/stock/queryByVid` response.
+ * CJ returns `data` as either a single object or an array depending on API version.
+ * Tries multiple field names used across CJ API versions.
+ */
+function extractCjStockNum(data: unknown, vidHint: string): number {
+  const readNum = (r: Record<string, unknown>): number => {
+    const n = Number(r.storageNum ?? r.inventoryNum ?? r.inventory ?? r.stock ?? r.quantity ?? 0);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+  };
+  if (Array.isArray(data)) {
+    // Some CJ endpoints return an array in data; try to find the matching entry by vid
+    for (const item of data) {
+      const r = asRecord(item);
+      if (!r) continue;
+      const itemVid = String(r.vid || r.variantSku || '').trim();
+      if (!itemVid || itemVid === vidHint || data.length === 1) {
+        return readNum(r);
+      }
+    }
+    return 0;
+  }
+  const r = asRecord(data);
+  return r ? readNum(r) : 0;
 }
 
 function normalizedToLegacyQuote(q: CjShippingQuoteNormalized): CjShippingQuoteResult {
@@ -555,18 +595,22 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
   }
 
   /**
-   * CJ path `product/stock/queryByVid` keys by **variant id (vid)**, not necessarily SKU string.
-   * This method treats each input string as `vid` in the request body until a SKU→VID resolver exists.
+   * CJ path `product/stock/queryByVid` — real-time stock per variant id.
+   * The response `data` field can be either a single object or an array (CJ API is inconsistent).
+   * Handles both shapes and tries multiple field names for the stock quantity.
    */
   async getStockForSkus(skus: string[]): Promise<Map<string, number>> {
     const out = new Map<string, number>();
     for (const vid of skus) {
       const v = String(vid || '').trim();
       if (!v) continue;
-      const data = await this.authedGet(`product/stock/queryByVid?vid=${encodeURIComponent(v)}`);
-      const r = asRecord(data);
-      const n = r ? Number(r.storageNum ?? 0) : 0;
-      out.set(v, Number.isFinite(n) ? n : 0);
+      try {
+        const data = await this.authedGet(`product/stock/queryByVid?vid=${encodeURIComponent(v)}`);
+        out.set(v, extractCjStockNum(data, v));
+      } catch {
+        // Network/auth error — leave as 0; caller falls back to catalog stock
+        out.set(v, 0);
+      }
     }
     return out;
   }

@@ -866,17 +866,30 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
       throw new AppError('Invalid search body', 400);
     }
     const adapter = createCjSupplierAdapter(userId);
-    const items = await adapter.searchProducts({
+    const raw = await adapter.searchProducts({
       keyword: parsed.data.keyword,
       page: parsed.data.page,
       pageSize: parsed.data.pageSize,
       productQueryBody: parsed.data.productQueryBody,
     });
+
+    // Sort: known positive stock first (score 2), unknown stock second (score 1),
+    // known zero stock last (score 0). Does not remove any results — honest display.
+    const stockScore = (inv: number | undefined): number =>
+      inv === undefined ? 1 : inv > 0 ? 2 : 0;
+    const items = [...raw].sort((a, b) => stockScore(b.inventoryTotal) - stockScore(a.inventoryTotal));
+
+    // Diagnostics for stock coverage (helps tune field mapping)
+    const withStock = items.filter((x) => (x.inventoryTotal ?? 0) > 0).length;
+    const unknownStock = items.filter((x) => x.inventoryTotal === undefined).length;
+    const zeroStock = items.filter((x) => x.inventoryTotal === 0).length;
+
     await traceComplete(req, userId, 'POST /cj/search', { statusCode: 200 });
     res.json({
       ok: true,
       items,
-      note: 'Uses official POST product/query. productName/pageNum/pageSize come from CJ field glossary when keyword/page are supplied.',
+      stockCoverage: { withStock, unknownStock, zeroStock },
+      note: 'Results sorted: positive stock → unknown stock → zero stock. stockCoverage shows inventory data quality from CJ listV2.',
     });
   } catch (e) {
     if (e instanceof CjSupplierError) {

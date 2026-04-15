@@ -8,13 +8,21 @@
 import { type CjSupplierError } from './cj-supplier.errors';
 import type { CjShippingQuoteNormalized } from './cj-freight-calculate.official';
 
-/** Product summary from CJ catalog search (stub shape). */
+/** Product summary from CJ catalog search (`product/listV2`). */
 export interface CjProductSummary {
   cjProductId: string;
   title: string;
   mainImageUrl?: string;
   /** From `product/listV2` `sellPrice` / `nowPrice` when parseable (USD-ish per CJ listing). */
   listPriceUsd?: number;
+  /**
+   * Total inventory across all variants as reported by CJ listV2
+   * (`inventoryNum` / `inventory` / similar fields).
+   * - `undefined` = field not present in CJ response (stock unknown — show product)
+   * - `0`         = CJ reported no available stock
+   * - `> 0`       = CJ reported this many units available
+   */
+  inventoryTotal?: number;
 }
 
 export interface CjSearchQuery {
