@@ -114,6 +114,20 @@ function hasKnownStock(inv: number | undefined): boolean {
   return inv !== undefined && inv > 0;
 }
 
+/**
+ * Top candidate: stock confirmed > 0 AND price in the sweet spot for eBay USA resale.
+ * Mirrors the top tier of cjSearchRankScore() in the backend.
+ * Used to show the "Operable" badge — not a hard filter.
+ */
+function isTopCandidate(item: CjProductSummary): boolean {
+  return (
+    (item.inventoryTotal ?? 0) > 0 &&
+    item.listPriceUsd != null &&
+    item.listPriceUsd >= 1 &&
+    item.listPriceUsd <= 25
+  );
+}
+
 /** Badge for search result cards based on inventoryTotal. */
 function StockBadge({ inv }: { inv: number | undefined }) {
   if (inv === undefined) return null;
@@ -394,6 +408,7 @@ export default function CjEbayProductsPage() {
                 {searchResults.map((item) => {
                   const isZeroStock = item.inventoryTotal === 0;
                   const isSelected = selectedProduct?.cjProductId === item.cjProductId;
+                  const topCandidate = isTopCandidate(item);
                   return (
                     <button
                       key={item.cjProductId}
@@ -428,6 +443,11 @@ export default function CjEbayProductsPage() {
                           <span className="text-xs text-slate-500">{fmtUsd(item.listPriceUsd)}</span>
                         )}
                         <StockBadge inv={item.inventoryTotal} />
+                        {topCandidate && (
+                          <span className="inline-block text-xs rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 px-2 py-0.5 font-medium">
+                            Operable
+                          </span>
+                        )}
                       </div>
                       <span className="inline-block text-xs rounded-full bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 px-2 py-0.5 font-medium">
                         Seleccionar

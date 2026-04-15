@@ -58,6 +58,65 @@ function httpStatusForCj(err: CjSupplierError): number {
   }
 }
 
+/**
+ * Operational ranking score for CJ search results (0–100).
+ * Uses only signals available from product/listV2 — no extra CJ API calls.
+ *
+ * A  Stock presence      0–45 pts  Most predictive of pipeline success.
+ *                                  Unknown stock is neutral (20pts), not penalized.
+ *                                  Deep stock (≥50 units) gets +5 bonus.
+ *
+ * B  Price viability     0–30 pts  Sweet spot $1–$25: margin survives eBay fees (~16%)
+ *                                  + typical CJ→US shipping ($3–$8).
+ *                                  Unknown price: neutral (15pts).
+ *
+ * C  Image present       0–15 pts  eBay listings require at least one quality image.
+ *
+ * D  Title depth         0–10 pts  Longer title = more complete CJ catalog data.
+ *
+ * Products are NOT excluded — only sorted. Score 0 = weak candidate, not removed.
+ */
+function cjSearchRankScore(item: import('./adapters/cj-supplier.adapter.interface').CjProductSummary): number {
+  let score = 0;
+
+  // A — Stock
+  if (item.inventoryTotal !== undefined && item.inventoryTotal > 0) {
+    score += 40;
+    if (item.inventoryTotal >= 50) score += 5; // deep stock = reliable supplier
+  } else if (item.inventoryTotal === undefined) {
+    score += 20; // missing field: neutral — many real products don't populate this
+  }
+  // inventoryTotal === 0 → 0 pts (likely dead stock)
+
+  // B — Price viability for eBay USA dropship
+  if (item.listPriceUsd != null && item.listPriceUsd > 0) {
+    if (item.listPriceUsd >= 1 && item.listPriceUsd <= 25) {
+      score += 30; // sweet spot: margin viable after fees + standard CJ→US shipping
+    } else if (item.listPriceUsd < 1) {
+      score += 8; // too cheap: shipping alone likely exceeds product cost
+    } else if (item.listPriceUsd <= 50) {
+      score += 20; // acceptable but tighter margin
+    } else {
+      score += 8; // >$50: capital-intensive, lower turnover on eBay
+    }
+  } else {
+    score += 15; // unknown price: neutral
+  }
+
+  // C — Image (required for eBay listing)
+  if (typeof item.mainImageUrl === 'string' && item.mainImageUrl.startsWith('http')) {
+    score += 15;
+  }
+
+  // D — Title depth (longer = more complete product data from CJ catalog)
+  const titleLen = item.title && item.title !== '(no title)' ? item.title.trim().length : 0;
+  if (titleLen >= 40) score += 10;
+  else if (titleLen >= 20) score += 6;
+  else if (titleLen >= 10) score += 3;
+
+  return score; // max 100 (45+30+15+10), min 0
+}
+
 function cjEbayEnabled(): boolean {
   return env.ENABLE_CJ_EBAY_MODULE === true;
 }
@@ -873,11 +932,7 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
       productQueryBody: parsed.data.productQueryBody,
     });
 
-    // Sort: known positive stock first (score 2), unknown stock second (score 1),
-    // known zero stock last (score 0). Does not remove any results — honest display.
-    const stockScore = (inv: number | undefined): number =>
-      inv === undefined ? 1 : inv > 0 ? 2 : 0;
-    const items = [...raw].sort((a, b) => stockScore(b.inventoryTotal) - stockScore(a.inventoryTotal));
+    const items = [...raw].sort((a, b) => cjSearchRankScore(b) - cjSearchRankScore(a));
 
     // Diagnostics for stock coverage (helps tune field mapping)
     const withStock = items.filter((x) => (x.inventoryTotal ?? 0) > 0).length;
@@ -889,7 +944,7 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
       ok: true,
       items,
       stockCoverage: { withStock, unknownStock, zeroStock },
-      note: 'Results sorted: positive stock → unknown stock → zero stock. stockCoverage shows inventory data quality from CJ listV2.',
+      note: 'Results ranked by operational score (stock + price viability + image + title). See cjSearchRankScore().',
     });
   } catch (e) {
     if (e instanceof CjSupplierError) {
