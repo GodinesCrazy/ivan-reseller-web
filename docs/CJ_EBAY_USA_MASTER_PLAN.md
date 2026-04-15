@@ -1964,6 +1964,21 @@ Nuevo documento de diseño: `docs/CJ_EBAY_USA_PRODUCT_SEARCH_PLAN.md`
 - **No es FASE 3F completa.** La FASE 3F del plan maestro comprende workers BullMQ, sistema de alertas y dashboard de profit. Eso sigue pendiente.
 - Esta mejora es la **entrada usable al ciclo** — reemplaza el flujo de IDs manuales por búsqueda visual — sin ampliar el alcance de las demás fases.
 
+### Fix stock-awareness — 2026-04-15 (commit `d51aa7a`)
+
+**Síntoma:** todos los productos en buscador y picker de variantes mostraban `stock: 0`.
+
+**Causas raíz corregidas:**
+1. `parseVariantRow` solo leía `storageNum` — CJ usa también `inventoryNum`, `inventory`, `stock`, `quantity`. Fix: aliases en cascada.
+2. `getStockForSkus` / `product/stock/queryByVid` devuelve `data` como array. `asRecord(array)` → null → 0 siempre. Fix: `extractCjStockNum` maneja array y objeto.
+3. `rowToSummary` no capturaba `inventoryTotal` de `product/listV2`. Fix: lectura de `inventoryNum/inventory/inventoryQuantity/stock`.
+
+**UX resultante:**
+- Sección B: resultados ordenados stock>0 > desconocido > 0; badge verde/amber por card; warning si todos son 0.
+- Sección C: etiqueta de stock por variante con color; dimmed si stock 0; banner si todas las variantes son 0.
+- Sección C variante única: badge verde/amber según stock.
+- Ruta `/cj/search` emite `stockCoverage: { withStock, unknownStock, zeroStock }` para diagnóstico.
+
 ---
 
-*Fin del documento v2.12.*
+*Fin del documento v2.13.*

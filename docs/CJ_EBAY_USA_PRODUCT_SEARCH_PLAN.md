@@ -264,6 +264,7 @@ El modo avanzado no se degrada: cuando el usuario expande el panel, los campos `
 - [x] La documentación .md fue creada
 - [x] El plan maestro fue actualizado
 - [x] Validación con cuenta CJ real en producción ejecutada 2026-04-15: search ✅ · product detail ✅ · preview pricing ✅ · bug imageUrls corregido ✅
+- [x] Auditoría stock 2026-04-15: todos los productos mostraban stock 0 — causa raíz identificada y corregida (ver §16)
 
 ---
 
@@ -290,7 +291,8 @@ El modo avanzado no se degrada: cuando el usuario expande el panel, los campos `
 | Producto sin variantes (fallback sintético del adapter) | Mensaje amber informativo; usuario puede usar modo avanzado |
 | Timeout en búsqueda CJ | Error state claro + botón para reintentar |
 | Usuario cambia variante después de evaluar | `chooseVariant()` limpia `preview` y `evaluate` para evitar inconsistencias |
-| `aria-expanded` con valor booleano en JSX | Corregido: se usa `advancedOpen ? 'true' : 'false'` para cumplir ARIA spec |
+| `aria-expanded` con valor booleano en JSX | Corregido: se usa boolean nativo — React lo serializa como string en el DOM |
+| Todos los productos aparecen con stock 0 | Ver §16 — tres causas raíz identificadas y corregidas en backend + frontend |
 
 ---
 
@@ -322,3 +324,49 @@ Un operador sin conocimiento técnico de CJ puede:
 9. Ir a Listings → Publish
 
 Sin copiar un solo ID técnico.
+
+---
+
+## 16. Auditoría de stock — 2026-04-15
+
+### Síntoma
+Todos los productos en el buscador y todas las variantes en el picker mostraban `stock: 0`. Se sospechó que podía ser dato real o bug de mapeo.
+
+### Causa raíz (tres problemas independientes)
+
+**Problema 1 — `parseVariantRow` ignoraba aliases de campo**
+
+CJ devuelve el stock de variante bajo distintos nombres según el endpoint:
+`storageNum`, `inventoryNum`, `inventory`, `stock`, `quantity`.
+El adapter solo leía `storageNum`. Al no encontrarlo, retornaba 0.
+
+Fix: cadena de aliases `storageNum ?? inventoryNum ?? inventory ?? stock ?? quantity ?? 0`.
+
+**Problema 2 — `getStockForSkus` con respuesta array**
+
+`product/stock/queryByVid` a veces devuelve `data` como array, no como objeto.
+`asRecord(data)` retorna `null` cuando recibe array → `extractCjStockNum` siempre devolvía 0.
+
+Fix: nuevo helper `extractCjStockNum` que maneja tanto array como objeto, con matching por `vid`.
+
+**Problema 3 — `rowToSummary` no capturaba `inventoryTotal`**
+
+`product/listV2` incluye `inventoryNum` / `inventory` en cada producto del catálogo.
+`rowToSummary` no los leía → `inventoryTotal` siempre `undefined` → la UI no podía diferenciar "sin datos" de "en stock".
+
+Fix: extracción explícita de `inventoryNum → inventory → inventoryQuantity → stock` con normalización numérica.
+
+### Cambios implementados
+
+| Archivo | Cambio |
+|---|---|
+| `cj-supplier.adapter.ts` | `parseVariantRow` aliases, `extractCjStockNum`, `getStockForSkus` try/catch |
+| `cj-supplier.adapter.interface.ts` | `inventoryTotal?: number` con JSDoc en `CjProductSummary` |
+| `cj-ebay.routes.ts` | Sort por stock, campo `stockCoverage` en respuesta de search |
+| `CjEbayProductsPage.tsx` | `StockBadge`, `hasKnownStock`, cards dimmed, variant picker con stock labels y warning |
+
+### UX resultante
+
+- **Sección B (resultados):** cards con stock conocido y positivo muestran badge verde "En stock (N)"; sin stock conocido muestran badge amber; sin datos no muestran badge. Resultados con stock > 0 aparecen primero.
+- **Sección C (variante picker):** cada variante muestra label de color: emerald "N en stock" o amber "Sin stock". Variantes con stock 0 quedan dimmed pero seleccionables. Si todas las variantes tienen stock 0, aparece banner de advertencia.
+- **Sección C (variante única):** badge verde cuando stock > 0, amber cuando stock = 0.
