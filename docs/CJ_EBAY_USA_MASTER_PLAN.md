@@ -2134,4 +2134,91 @@ Nuevo documento de diseño: `docs/CJ_EBAY_USA_PRODUCT_SEARCH_PLAN.md`
 
 ---
 
-*Fin del documento v2.13.*
+## FASE 3E.5 — Postventa CJ: UI propia, ruta aislada, detalle por orden (2026-04-15)
+
+### Causa raíz detectada (auditoría)
+
+El módulo CJ → eBay USA **ya estaba correctamente enrutado** (`/cj-ebay/orders` → `CjEbayOrdersPage`). No había mezcla de routing ni de API. El problema real era:
+
+1. **`CjEbayOperatorPathCallout`** incluía un bullet que enlazaba a la ruta legacy `/orders` desde dentro del módulo CJ, generando confusión visual y operativa.
+2. **No existía ruta de detalle propia** (`/cj-ebay/orders/:orderId`). El detalle era un expand inline en la tabla, sin URL propia, sin usar los endpoints `operational-flow` ni `evidence-summary`.
+3. La tabla de órdenes carecía de columnas de fecha, total USD y colores de estado.
+
+### Cambios de routing
+
+| Ruta | Estado anterior | Estado actual |
+|---|---|---|
+| `/cj-ebay/orders` | `CjEbayOrdersPage` ✓ | Igual ✓ (sin cambio) |
+| `/cj-ebay/orders/:orderId` | No existía | **Nueva → `CjEbayOrderDetailPage`** |
+| `/orders` (legacy) | Sin cambio | Sin cambio ✓ |
+
+### Cambios en sidebar / menú
+
+Sin cambios. El ítem `{ path: '/cj-ebay/orders', label: 'Órdenes', icon: Truck }` ya apuntaba correctamente a la ruta propia del módulo.
+
+### Cómo quedó CJ → eBay USA → Orders
+
+**`CjEbayOrdersPage`** (`/cj-ebay/orders`):
+- Banner de readiness del ciclo postventa (Import / Place / Confirm / Pay / Tracking / Validación viva).
+- KPI strip: total órdenes · en progreso · fallo/manual.
+- Tabla con columnas: eBay order · Estado (badge con color semántico) · CJ order · SKU · Total USD · Actualizado · Acciones.
+- Botón **Detalle** navega a `/cj-ebay/orders/:orderId` (ya no expande inline).
+- Acciones rápidas (Place CJ / CJ status / Tracking / Confirmar / Pagar) disponibles por fila.
+- El callout de operador ya **no enlaza a legacy `/orders`**.
+
+### Cómo quedó el detalle de orden (`CjEbayOrderDetailPage`)
+
+**`CjEbayOrderDetailPage`** (`/cj-ebay/orders/:orderId`):
+- Header con eBay order ID, badge de estado con color, botón refrescar, breadcrumb "Órdenes".
+- Sección **Datos de la orden**: mapping eBay ↔ CJ completo (ebayOrderId, cjOrderId, ebaySku, qty, totalUsd, listingId, ebayListingId, cjConfirmedAt, cjPaidAt).
+- Sección **Acciones del ciclo postventa**: 5 botones (Place CJ / Confirmar / Pagar / Actualizar estado / Sync tracking) habilitados según estado actual. Spinner individual por acción.
+- Sección **Tracking** (si existe): estado, número de tracking, carrier.
+- Sección **Timeline de eventos**: lista cronológica de todos los `OrderEvent` con step, mensaje y timestamp.
+- Sección **Flujo operacional** (nuevo): consume `GET /api/cj-ebay/orders/:orderId/operational-flow`. Muestra `suggestedNext`, gates del flujo (met/pendiente), últimas trazas.
+- Sección **Evidencia resumida** (nueva, colapsable): consume `GET /api/cj-ebay/orders/:orderId/evidence-summary`. Audit trail para referencia.
+- Sección **Raw eBay summary** (colapsable): payload eBay original.
+- Banners de error y confirmación de acciones propios del módulo CJ.
+
+### Endpoints que usa la vista CJ Orders
+
+| Endpoint | Usado en |
+|---|---|
+| `GET /api/cj-ebay/orders` | Lista de órdenes (orders page) |
+| `POST /api/cj-ebay/orders/import` | Import por ebayOrderId |
+| `GET /api/cj-ebay/orders/:orderId` | Detalle base |
+| `GET /api/cj-ebay/orders/:orderId/status` | Sync estado CJ |
+| `GET /api/cj-ebay/orders/:orderId/operational-flow` | Gates + suggested next |
+| `GET /api/cj-ebay/orders/:orderId/evidence-summary` | Audit trail |
+| `POST /api/cj-ebay/orders/:orderId/place` | Place CJ order |
+| `POST /api/cj-ebay/orders/:orderId/confirm` | Confirm CJ order |
+| `POST /api/cj-ebay/orders/:orderId/pay` | Pay CJ balance |
+| `POST /api/cj-ebay/orders/:orderId/sync-tracking` | Sync tracking |
+
+Todos bajo el prefijo `/api/cj-ebay/`. **Cero dependencia de `/api/orders`.**
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `frontend/src/pages/cj-ebay/CjEbayOrderDetailPage.tsx` | **Nuevo** — página de detalle con timeline, flujo operacional, evidencia, acciones |
+| `frontend/src/pages/cj-ebay/CjEbayOrdersPage.tsx` | Reescrito — sin inline detail, navega al detalle, columns mejoradas, status badges, readiness banner |
+| `frontend/src/App.tsx` | Nueva ruta `orders/:orderId` dentro del módulo CjEbay |
+| `frontend/src/components/cj-ebay/CjEbayOperatorPathCallout.tsx` | Eliminado el link a legacy `/orders`; callout ahora scoped al módulo |
+| `docs/CJ_EBAY_USA_MASTER_PLAN.md` | Este bloque |
+| `docs/CJ_EBAY_USA_POSTSALE_UI_FLOW.md` | Nuevo documento de referencia del flujo UI postventa |
+
+### Estado del ciclo postventa (2026-04-15)
+
+| Paso | Estado en código | Pendiente |
+|---|---|---|
+| Import orden eBay | ✅ Listo | — |
+| Place CJ (createOrderV2) | ✅ Listo | — |
+| Confirm CJ (confirmOrder) | ✅ Listo | — |
+| Pay CJ (payBalance) | ✅ Listo | Requiere `CJ_PHASE_D_ALLOW_PAY=true` en producción |
+| Sync tracking desde CJ | ✅ Listo | — |
+| Validación con cuenta real | ⏳ Pendiente | Primera orden real en cuenta CJ activa |
+| Workers BullMQ (FASE 3F) | ⏳ Pendiente | Sin iniciar hasta criterio explícito post-3E.4 |
+
+---
+
+*Fin del documento v2.14 (actualizado 2026-04-15).*

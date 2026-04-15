@@ -54,6 +54,7 @@ const CjEbayOverviewPage = lazy(() => import('@pages/cj-ebay/CjEbayOverviewPage'
 const CjEbayProductsPage = lazy(() => import('@pages/cj-ebay/CjEbayProductsPage'));
 const CjEbayListingsPage = lazy(() => import('@pages/cj-ebay/CjEbayListingsPage'));
 const CjEbayOrdersPage = lazy(() => import('@pages/cj-ebay/CjEbayOrdersPage'));
+const CjEbayOrderDetailPage = lazy(() => import('@pages/cj-ebay/CjEbayOrderDetailPage'));
 const CjEbayAlertsPage = lazy(() => import('@pages/cj-ebay/CjEbayAlertsPage'));
 const CjEbayProfitPage = lazy(() => import('@pages/cj-ebay/CjEbayProfitPage'));
 const CjEbayLogsPage = lazy(() => import('@pages/cj-ebay/CjEbayLogsPage'));
@@ -254,6 +255,7 @@ function AppContent() {
             <Route path="products" element={<CjEbayProductsPage />} />
             <Route path="listings" element={<CjEbayListingsPage />} />
             <Route path="orders" element={<CjEbayOrdersPage />} />
+            <Route path="orders/:orderId" element={<CjEbayOrderDetailPage />} />
             <Route path="alerts" element={<CjEbayAlertsPage />} />
             <Route path="profit" element={<CjEbayProfitPage />} />
             <Route path="logs" element={<CjEbayLogsPage />} />
