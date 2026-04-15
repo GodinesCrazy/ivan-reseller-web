@@ -50,6 +50,39 @@ export interface CjPricingFeeSettingsResolved extends CjPricingFeeSettingsInput 
   defaultsApplied: Record<string, number>;
 }
 
+const PRICING_THRESHOLD_FIELDS = ['minMarginPct', 'minProfitUsd'] as const;
+const PRICING_FEE_FIELDS = [
+  'defaultEbayFeePct',
+  'defaultPaymentFeePct',
+  'defaultPaymentFixedFeeUsd',
+  'incidentBufferPct',
+] as const;
+
+export type CjPricingThresholdField = (typeof PRICING_THRESHOLD_FIELDS)[number];
+export type CjPricingFeeField = (typeof PRICING_FEE_FIELDS)[number];
+export type CjPricingMode = 'target_margin_profit' | 'cost_floor_only';
+export type CjPricingFeeConfigSource = 'account' | 'defaults' | 'mixed';
+
+export interface CjPricingContext {
+  thresholdsConfigured: boolean;
+  pricingMode: CjPricingMode;
+  configuredThresholds: {
+    minMarginPct: number | null;
+    minProfitUsd: number | null;
+  };
+  missingThresholdFields: CjPricingThresholdField[];
+  feeConfigSource: CjPricingFeeConfigSource;
+  feeConfigComplete: boolean;
+  configuredFees: CjPricingFeeSettingsInput;
+  effectiveFees: {
+    defaultEbayFeePct: number;
+    defaultPaymentFeePct: number;
+    defaultPaymentFixedFeeUsd: number;
+    incidentBufferPct: number;
+  };
+  missingFeeFields: CjPricingFeeField[];
+}
+
 export function resolveFeeSettings(row: CjPricingFeeSettingsInput): CjPricingFeeSettingsResolved {
   const defaultsApplied: Record<string, number> = {};
   let ebay = row.defaultEbayFeePct;
@@ -82,6 +115,50 @@ export function resolveFeeSettings(row: CjPricingFeeSettingsInput): CjPricingFee
   };
 }
 
+export function buildPricingContext(params: {
+  feeRow: CjPricingFeeSettingsInput;
+  fees: CjPricingFeeSettingsResolved;
+  minMarginPct: number | null;
+  minProfitUsd: number | null;
+}): CjPricingContext {
+  const missingThresholdFields = PRICING_THRESHOLD_FIELDS.filter((field) => {
+    const value = params[field];
+    return value == null || !Number.isFinite(value);
+  });
+  const missingFeeFields = PRICING_FEE_FIELDS.filter((field) => {
+    const value = params.feeRow[field];
+    return value == null || !Number.isFinite(value);
+  });
+  const feeConfigSource: CjPricingFeeConfigSource =
+    missingFeeFields.length === 0 ? 'account' : missingFeeFields.length === PRICING_FEE_FIELDS.length ? 'defaults' : 'mixed';
+
+  return {
+    thresholdsConfigured: missingThresholdFields.length === 0,
+    pricingMode:
+      missingThresholdFields.length === 0 ? 'target_margin_profit' : 'cost_floor_only',
+    configuredThresholds: {
+      minMarginPct: params.minMarginPct,
+      minProfitUsd: params.minProfitUsd,
+    },
+    missingThresholdFields: [...missingThresholdFields],
+    feeConfigSource,
+    feeConfigComplete: missingFeeFields.length === 0,
+    configuredFees: {
+      incidentBufferPct: params.feeRow.incidentBufferPct,
+      defaultEbayFeePct: params.feeRow.defaultEbayFeePct,
+      defaultPaymentFeePct: params.feeRow.defaultPaymentFeePct,
+      defaultPaymentFixedFeeUsd: params.feeRow.defaultPaymentFixedFeeUsd,
+    },
+    effectiveFees: {
+      incidentBufferPct: params.fees.incidentBufferPctEffective,
+      defaultEbayFeePct: params.fees.ebayFeePctEffective,
+      defaultPaymentFeePct: params.fees.paymentFeePctEffective,
+      defaultPaymentFixedFeeUsd: params.fees.paymentFixedFeeUsdEffective,
+    },
+    missingFeeFields: [...missingFeeFields],
+  };
+}
+
 export interface CjPricingBreakdownInput {
   supplierCostUsd: number;
   shippingUsd: number;
@@ -103,6 +180,7 @@ export interface CjPricingBreakdown {
   minimumAllowedPriceUsd: number;
   /** Supuestos de fee si la cuenta no tenía valores en BD. */
   feeDefaultsApplied: Record<string, number>;
+  pricingContext: CjPricingContext;
 }
 
 function roundMoney(n: number): number {
@@ -111,7 +189,7 @@ function roundMoney(n: number): number {
 
 export function computeBreakdownAtListPrice(input: CjPricingBreakdownInput): Omit<
   CjPricingBreakdown,
-  'suggestedPriceUsd' | 'minimumAllowedPriceUsd'
+  'suggestedPriceUsd' | 'minimumAllowedPriceUsd' | 'pricingContext'
 > & { feeDefaultsApplied: Record<string, number> } {
   const { supplierCostUsd: S, shippingUsd: H, listPriceUsd: P, fees } = input;
   const rE = fees.ebayFeePctEffective / 100;
@@ -204,6 +282,12 @@ export function computeFullPricingPreview(params: {
   minProfitUsd: number | null;
 }): CjPricingBreakdown {
   const fees = resolveFeeSettings(params.feeRow);
+  const pricingContext = buildPricingContext({
+    feeRow: params.feeRow,
+    fees,
+    minMarginPct: params.minMarginPct,
+    minProfitUsd: params.minProfitUsd,
+  });
   const minRes = computeMinimumListPrice({
     supplierCostUsd: params.supplierCostUsd,
     shippingUsd: params.shippingUsd,
@@ -228,6 +312,7 @@ export function computeFullPricingPreview(params: {
     ...atSuggested,
     suggestedPriceUsd,
     minimumAllowedPriceUsd,
+    pricingContext,
   };
 }
 
@@ -263,5 +348,6 @@ export function pricingBreakdownForResponse(b: CjPricingBreakdown): Record<strin
     suggestedPriceUsd: n(b.suggestedPriceUsd),
     minimumAllowedPriceUsd: n(b.minimumAllowedPriceUsd),
     feeDefaultsApplied: b.feeDefaultsApplied,
+    pricingContext: b.pricingContext,
   };
 }

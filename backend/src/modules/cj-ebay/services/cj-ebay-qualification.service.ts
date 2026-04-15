@@ -10,6 +10,7 @@ import { CJ_EBAY_TRACE_STEP } from '../cj-ebay.constants';
 import type { ICjSupplierAdapter } from '../adapters/cj-supplier.adapter.interface';
 import type { CjProductDetail, CjVariantDetail } from '../adapters/cj-supplier.adapter.interface';
 import {
+  buildPricingContext,
   computeFullPricingPreview,
   prismaSettingsToFeeInput,
   resolveFeeSettings,
@@ -33,9 +34,13 @@ export type QualificationReason = {
 
 function invalidCostBreakdown(
   shippingUsd: number,
-  settingsRow: Parameters<typeof prismaSettingsToFeeInput>[0]
+  settingsRow: Parameters<typeof prismaSettingsToFeeInput>[0] & {
+    minMarginPct: Prisma.Decimal | null;
+    minProfitUsd: Prisma.Decimal | null;
+  }
 ): CjPricingBreakdown {
-  const fees = resolveFeeSettings(prismaSettingsToFeeInput(settingsRow));
+  const feeRow = prismaSettingsToFeeInput(settingsRow);
+  const fees = resolveFeeSettings(feeRow);
   const sh = Math.round(shippingUsd * 100) / 100;
   return {
     supplierCostUsd: NaN,
@@ -50,6 +55,12 @@ function invalidCostBreakdown(
     suggestedPriceUsd: NaN,
     minimumAllowedPriceUsd: NaN,
     feeDefaultsApplied: fees.defaultsApplied,
+    pricingContext: buildPricingContext({
+      feeRow,
+      fees,
+      minMarginPct: settingsRow.minMarginPct != null ? Number(settingsRow.minMarginPct) : null,
+      minProfitUsd: settingsRow.minProfitUsd != null ? Number(settingsRow.minProfitUsd) : null,
+    }),
   };
 }
 

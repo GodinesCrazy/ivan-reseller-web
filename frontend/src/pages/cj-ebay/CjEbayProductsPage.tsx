@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
@@ -55,7 +55,62 @@ type PricingBreakdownJson = {
   suggestedPriceUsd: NullableNum;
   minimumAllowedPriceUsd: NullableNum;
   feeDefaultsApplied: Record<string, number>;
+  pricingContext: PricingContextJson;
 };
+
+type PricingContextJson = {
+  thresholdsConfigured: boolean;
+  pricingMode: 'target_margin_profit' | 'cost_floor_only';
+  configuredThresholds: {
+    minMarginPct: NullableNum;
+    minProfitUsd: NullableNum;
+  };
+  missingThresholdFields: Array<'minMarginPct' | 'minProfitUsd'>;
+  feeConfigSource: 'account' | 'defaults' | 'mixed';
+  feeConfigComplete: boolean;
+  configuredFees: {
+    incidentBufferPct: NullableNum;
+    defaultEbayFeePct: NullableNum;
+    defaultPaymentFeePct: NullableNum;
+    defaultPaymentFixedFeeUsd: NullableNum;
+  };
+  effectiveFees: {
+    incidentBufferPct: number;
+    defaultEbayFeePct: number;
+    defaultPaymentFeePct: number;
+    defaultPaymentFixedFeeUsd: number;
+  };
+  missingFeeFields: Array<
+    'defaultEbayFeePct' | 'defaultPaymentFeePct' | 'defaultPaymentFixedFeeUsd' | 'incidentBufferPct'
+  >;
+};
+
+type PricingConfigSettings = {
+  minMarginPct: NullableNum;
+  minProfitUsd: NullableNum;
+  defaultEbayFeePct: NullableNum;
+  defaultPaymentFeePct: NullableNum;
+  defaultPaymentFixedFeeUsd: NullableNum;
+  incidentBufferPct: NullableNum;
+};
+
+type PricingConfigResponse = {
+  ok: boolean;
+  settings: PricingConfigSettings & {
+    maxShippingUsd: NullableNum;
+    handlingBufferDays: number;
+    minStock: number;
+    rejectOnUnknownShipping: boolean;
+    maxRiskScore: number | null;
+    priceChangePctReevaluate: number | null;
+    cjPostCreateCheckoutMode: 'MANUAL' | 'AUTO_CONFIRM_PAY';
+  };
+};
+
+type PricingConfigForm = Record<
+  keyof PricingConfigSettings,
+  string
+>;
 
 type ShippingSnippet = {
   cost: number;
@@ -113,6 +168,11 @@ function fmtUsd(n: NullableNum): string {
 }
 
 function fmtPct(n: NullableNum): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return `${n.toFixed(2)}%`;
+}
+
+function fmtFeePct(n: NullableNum): string {
   if (n == null || !Number.isFinite(n)) return '—';
   return `${n.toFixed(2)}%`;
 }
@@ -215,6 +275,117 @@ function extractApiError(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
 }
 
+function configFieldLabel(
+  field:
+    | 'minMarginPct'
+    | 'minProfitUsd'
+    | 'defaultEbayFeePct'
+    | 'defaultPaymentFeePct'
+    | 'defaultPaymentFixedFeeUsd'
+    | 'incidentBufferPct',
+): string {
+  switch (field) {
+    case 'minMarginPct':
+      return 'margen objetivo';
+    case 'minProfitUsd':
+      return 'utilidad objetivo';
+    case 'defaultEbayFeePct':
+      return 'fee eBay';
+    case 'defaultPaymentFeePct':
+      return 'fee porcentual de pago';
+    case 'defaultPaymentFixedFeeUsd':
+      return 'fee fijo de pago';
+    case 'incidentBufferPct':
+      return 'buffer de incidentes';
+    default:
+      return field;
+  }
+}
+
+function pricingConfigToForm(settings: PricingConfigSettings): PricingConfigForm {
+  return {
+    minMarginPct: settings.minMarginPct != null ? String(settings.minMarginPct) : '',
+    minProfitUsd: settings.minProfitUsd != null ? String(settings.minProfitUsd) : '',
+    defaultEbayFeePct: settings.defaultEbayFeePct != null ? String(settings.defaultEbayFeePct) : '',
+    defaultPaymentFeePct:
+      settings.defaultPaymentFeePct != null ? String(settings.defaultPaymentFeePct) : '',
+    defaultPaymentFixedFeeUsd:
+      settings.defaultPaymentFixedFeeUsd != null ? String(settings.defaultPaymentFixedFeeUsd) : '',
+    incidentBufferPct: settings.incidentBufferPct != null ? String(settings.incidentBufferPct) : '',
+  };
+}
+
+function parseOptionalNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function summarizePricingSettings(settings: PricingConfigSettings) {
+  const missingThresholdFields = (['minMarginPct', 'minProfitUsd'] as const).filter((field) => {
+    const value = settings[field];
+    return value == null || !Number.isFinite(value);
+  });
+  const missingFeeFields = (
+    [
+      'defaultEbayFeePct',
+      'defaultPaymentFeePct',
+      'defaultPaymentFixedFeeUsd',
+      'incidentBufferPct',
+    ] as const
+  ).filter((field) => {
+    const value = settings[field];
+    return value == null || !Number.isFinite(value);
+  });
+
+  const feeConfigSource =
+    missingFeeFields.length === 0
+      ? 'account'
+      : missingFeeFields.length === 4
+        ? 'defaults'
+        : 'mixed';
+
+  return {
+    thresholdsConfigured: missingThresholdFields.length === 0,
+    missingThresholdFields,
+    feeConfigComplete: missingFeeFields.length === 0,
+    missingFeeFields,
+    feeConfigSource,
+  };
+}
+
+function feeConfigMessage(context: PricingContextJson): string {
+  if (context.feeConfigSource === 'account') {
+    return 'Fees aplicados desde la configuracion de cuenta.';
+  }
+  if (context.feeConfigSource === 'mixed') {
+    const missing = context.missingFeeFields.map(configFieldLabel).join(', ');
+    return `Se aplico tu configuracion de cuenta, pero faltan ${missing}; esos campos se completaron con defaults operativos.`;
+  }
+  return 'Se estan usando fees por defecto porque tu cuenta aun no tiene configuracion de fees CJ/eBay guardada.';
+}
+
+function feeConfigTone(context: PricingContextJson): string {
+  return context.feeConfigSource === 'account'
+    ? 'border-emerald-100 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'
+    : 'border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200';
+}
+
+function thresholdMessage(context: PricingContextJson): string {
+  if (context.thresholdsConfigured) {
+    return 'El precio sugerido ya incorpora tus objetivos de margen y utilidad.';
+  }
+  const missing = context.missingThresholdFields.map(configFieldLabel).join(' y ');
+  return `Faltan ${missing}. El precio sugerido actual es solo el piso de costos, no un precio rentable final.`;
+}
+
+function thresholdTone(context: PricingContextJson): string {
+  return context.thresholdsConfigured
+    ? 'border-emerald-100 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'
+    : 'border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200';
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function DecisionPill({ decision }: { decision: EvaluateOk['decision'] }) {
@@ -240,6 +411,26 @@ function Row({ label, v }: { label: string; v: NullableNum }) {
     <div className="flex justify-between gap-4 border-b border-slate-100 dark:border-slate-800 py-1">
       <span className="text-slate-500 dark:text-slate-400">{label}</span>
       <span className="font-mono tabular-nums text-slate-900 dark:text-slate-100">{fmtUsd(v)}</span>
+    </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-950/20 px-3 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 text-base font-semibold text-slate-900 dark:text-slate-100">{value}</p>
+      {hint && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
     </div>
   );
 }
@@ -333,6 +524,22 @@ export default function CjEbayProductsPage() {
 
   // ─── Advanced/manual panel ────────────────────────────────────────────────────
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [pricingConfigOpen, setPricingConfigOpen] = useState(false);
+
+  // ─── Account pricing config ───────────────────────────────────────────────────
+  const [pricingSettings, setPricingSettings] = useState<PricingConfigSettings | null>(null);
+  const [pricingConfigForm, setPricingConfigForm] = useState<PricingConfigForm>({
+    minMarginPct: '',
+    minProfitUsd: '',
+    defaultEbayFeePct: '',
+    defaultPaymentFeePct: '',
+    defaultPaymentFixedFeeUsd: '',
+    incidentBufferPct: '',
+  });
+  const [pricingConfigLoading, setPricingConfigLoading] = useState(true);
+  const [pricingConfigSaving, setPricingConfigSaving] = useState(false);
+  const [pricingConfigError, setPricingConfigError] = useState<string | null>(null);
+  const [pricingConfigMessage, setPricingConfigMessage] = useState<string | null>(null);
 
   // ─── Pipeline state ───────────────────────────────────────────────────────────
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -351,6 +558,7 @@ export default function CjEbayProductsPage() {
   const availableVariants = selectedProduct?.variants.filter(isVariantOperable) ?? [];
   const unavailableVariants = selectedProduct?.variants.filter((variant) => !isVariantOperable(variant)) ?? [];
   const hasOperableVariants = availableVariants.length > 0;
+  const pricingSettingsSummary = pricingSettings ? summarizePricingSettings(pricingSettings) : null;
 
   const body = () => ({
     productId: productId.trim(),
@@ -358,6 +566,88 @@ export default function CjEbayProductsPage() {
     quantity: Math.max(1, Math.floor(quantity)),
     destPostalCode: destPostalCode.trim() || undefined,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPricingConfig() {
+      setPricingConfigLoading(true);
+      setPricingConfigError(null);
+      try {
+        const res = await api.get<PricingConfigResponse>('/api/cj-ebay/config');
+        if (!cancelled && res.data?.ok && res.data.settings) {
+          const nextSettings: PricingConfigSettings = {
+            minMarginPct: res.data.settings.minMarginPct,
+            minProfitUsd: res.data.settings.minProfitUsd,
+            defaultEbayFeePct: res.data.settings.defaultEbayFeePct,
+            defaultPaymentFeePct: res.data.settings.defaultPaymentFeePct,
+            defaultPaymentFixedFeeUsd: res.data.settings.defaultPaymentFixedFeeUsd,
+            incidentBufferPct: res.data.settings.incidentBufferPct,
+          };
+          setPricingSettings(nextSettings);
+          setPricingConfigForm(pricingConfigToForm(nextSettings));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setPricingConfigError(
+            extractApiError(e, 'No se pudo cargar la configuracion de pricing CJ/eBay.'),
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setPricingConfigLoading(false);
+        }
+      }
+    }
+
+    void loadPricingConfig();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function savePricingConfig() {
+    setPricingConfigError(null);
+    setPricingConfigMessage(null);
+    setPricingConfigSaving(true);
+    try {
+      const payload: PricingConfigSettings = {
+        minMarginPct: parseOptionalNumber(pricingConfigForm.minMarginPct),
+        minProfitUsd: parseOptionalNumber(pricingConfigForm.minProfitUsd),
+        defaultEbayFeePct: parseOptionalNumber(pricingConfigForm.defaultEbayFeePct),
+        defaultPaymentFeePct: parseOptionalNumber(pricingConfigForm.defaultPaymentFeePct),
+        defaultPaymentFixedFeeUsd: parseOptionalNumber(pricingConfigForm.defaultPaymentFixedFeeUsd),
+        incidentBufferPct: parseOptionalNumber(pricingConfigForm.incidentBufferPct),
+      };
+
+      const res = await api.post<PricingConfigResponse>('/api/cj-ebay/config', payload);
+      if (res.data?.ok && res.data.settings) {
+        const nextSettings: PricingConfigSettings = {
+          minMarginPct: res.data.settings.minMarginPct,
+          minProfitUsd: res.data.settings.minProfitUsd,
+          defaultEbayFeePct: res.data.settings.defaultEbayFeePct,
+          defaultPaymentFeePct: res.data.settings.defaultPaymentFeePct,
+          defaultPaymentFixedFeeUsd: res.data.settings.defaultPaymentFixedFeeUsd,
+          incidentBufferPct: res.data.settings.incidentBufferPct,
+        };
+        setPricingSettings(nextSettings);
+        setPricingConfigForm(pricingConfigToForm(nextSettings));
+        setPreview(null);
+        setEvaluate(null);
+        setDraftListingId(null);
+        setPricingConfigMessage(
+          'Configuracion guardada. Ejecuta Vista previa pricing otra vez para recalcular con estos valores.',
+        );
+      }
+    } catch (e) {
+      setPricingConfigError(
+        extractApiError(e, 'No se pudo guardar la configuracion de pricing CJ/eBay.'),
+      );
+    } finally {
+      setPricingConfigSaving(false);
+    }
+  }
 
   // ─── Search handler ───────────────────────────────────────────────────────────
   async function runSearch() {
@@ -487,6 +777,15 @@ export default function CjEbayProductsPage() {
   }
 
   const showBreakdown = preview ?? evaluate;
+  const pricingContext = showBreakdown?.breakdown.pricingContext ?? null;
+  const priceFloorLabel =
+    pricingContext?.pricingMode === 'target_margin_profit' ? 'Precio minimo rentable' : 'Piso de costos';
+  const feeSourceLabel =
+    pricingContext?.feeConfigSource === 'account'
+      ? 'Configuracion de cuenta'
+      : pricingContext?.feeConfigSource === 'mixed'
+        ? 'Cuenta + defaults'
+        : 'Defaults operativos';
 
   // ─── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -794,6 +1093,198 @@ export default function CjEbayProductsPage() {
             </label>
           </div>
 
+          <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950/20">
+            <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  Objetivos de rentabilidad y fees de cuenta
+                </p>
+                {pricingConfigLoading ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Cargando configuracion guardada...
+                  </p>
+                ) : pricingSettingsSummary ? (
+                  <>
+                    <p
+                      className={`text-xs ${
+                        pricingSettingsSummary.thresholdsConfigured
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : 'text-amber-700 dark:text-amber-300'
+                      }`}
+                    >
+                      {pricingSettingsSummary.thresholdsConfigured
+                        ? 'Objetivos de margen y utilidad configurados.'
+                        : `Faltan ${pricingSettingsSummary.missingThresholdFields
+                            .map(configFieldLabel)
+                            .join(' y ')}.`}
+                    </p>
+                    <p
+                      className={`text-xs ${
+                        pricingSettingsSummary.feeConfigSource === 'account'
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : 'text-amber-700 dark:text-amber-300'
+                      }`}
+                    >
+                      {pricingSettingsSummary.feeConfigSource === 'account'
+                        ? 'Fees completos desde la configuracion de cuenta.'
+                        : pricingSettingsSummary.feeConfigSource === 'mixed'
+                          ? `Configuracion parcial: faltan ${pricingSettingsSummary.missingFeeFields
+                              .map(configFieldLabel)
+                              .join(', ')}.`
+                          : 'Sin fees guardados; el preview usara defaults operativos hasta que los completes.'}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    No se pudo leer la configuracion actual.
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200"
+                onClick={() => setPricingConfigOpen((open) => !open)}
+              >
+                {pricingConfigOpen ? 'Ocultar configuracion' : 'Configurar pricing'}
+              </button>
+            </div>
+
+            {(pricingConfigError || pricingConfigMessage) && (
+              <div className="border-t border-slate-200 dark:border-slate-800 px-4 py-3 space-y-2">
+                {pricingConfigError && (
+                  <p className="text-xs text-rose-700 dark:text-rose-300">{pricingConfigError}</p>
+                )}
+                {pricingConfigMessage && (
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300">{pricingConfigMessage}</p>
+                )}
+              </div>
+            )}
+
+            {pricingConfigOpen && (
+              <div className="border-t border-slate-200 dark:border-slate-800 px-4 py-4 space-y-4">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Esta configuracion se guarda en tu cuenta via <code>/api/cj-ebay/config</code> y
+                  controla el preview pricing y las evaluaciones.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Margen objetivo minimo (%)
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                      value={pricingConfigForm.minMarginPct}
+                      onChange={(e) => {
+                        setPricingConfigForm((current) => ({
+                          ...current,
+                          minMarginPct: e.target.value,
+                        }));
+                        setPricingConfigMessage(null);
+                      }}
+                      placeholder="ej. 15"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Utilidad objetivo minima (USD)
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                      value={pricingConfigForm.minProfitUsd}
+                      onChange={(e) => {
+                        setPricingConfigForm((current) => ({
+                          ...current,
+                          minProfitUsd: e.target.value,
+                        }));
+                        setPricingConfigMessage(null);
+                      }}
+                      placeholder="ej. 5"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Fee eBay estimado (%)
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                      value={pricingConfigForm.defaultEbayFeePct}
+                      onChange={(e) => {
+                        setPricingConfigForm((current) => ({
+                          ...current,
+                          defaultEbayFeePct: e.target.value,
+                        }));
+                        setPricingConfigMessage(null);
+                      }}
+                      placeholder="ej. 13.25"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Fee pago estimado (%)
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                      value={pricingConfigForm.defaultPaymentFeePct}
+                      onChange={(e) => {
+                        setPricingConfigForm((current) => ({
+                          ...current,
+                          defaultPaymentFeePct: e.target.value,
+                        }));
+                        setPricingConfigMessage(null);
+                      }}
+                      placeholder="ej. 2.9"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Fee fijo de pago (USD)
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                      value={pricingConfigForm.defaultPaymentFixedFeeUsd}
+                      onChange={(e) => {
+                        setPricingConfigForm((current) => ({
+                          ...current,
+                          defaultPaymentFixedFeeUsd: e.target.value,
+                        }));
+                        setPricingConfigMessage(null);
+                      }}
+                      placeholder="ej. 0.30"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Buffer de incidentes (%)
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                      value={pricingConfigForm.incidentBufferPct}
+                      onChange={(e) => {
+                        setPricingConfigForm((current) => ({
+                          ...current,
+                          incidentBufferPct: e.target.value,
+                        }));
+                        setPricingConfigMessage(null);
+                      }}
+                      placeholder="ej. 2"
+                    />
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={pricingConfigSaving}
+                    className="rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 disabled:opacity-50"
+                    onClick={() => void savePricingConfig()}
+                  >
+                    {pricingConfigSaving ? 'Guardando...' : 'Guardar configuracion'}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200"
+                    onClick={() => {
+                      if (pricingSettings) {
+                        setPricingConfigForm(pricingConfigToForm(pricingSettings));
+                        setPricingConfigMessage(null);
+                        setPricingConfigError(null);
+                      }
+                    }}
+                  >
+                    Restablecer desde cuenta
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {selectedProduct && !canRunPipeline && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
               {hasOperableVariants
@@ -1001,30 +1492,105 @@ export default function CjEbayProductsPage() {
               ? ` · ~${showBreakdown.shipping.estimatedDays} d`
               : ' · plazo desconocido'}
           </p>
+          {pricingContext && (
+            <>
+              <div className={`rounded-md border px-3 py-2 text-xs ${thresholdTone(pricingContext)}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{thresholdMessage(pricingContext)}</span>
+                  {!pricingContext.thresholdsConfigured && (
+                    <button
+                      type="button"
+                      className="rounded-md border border-current/20 px-2 py-1 font-medium"
+                      onClick={() => setPricingConfigOpen(true)}
+                    >
+                      Completar configuracion
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className={`rounded-md border px-3 py-2 text-xs ${feeConfigTone(pricingContext)}`}>
+                <p className="font-medium">{feeConfigMessage(pricingContext)}</p>
+                <p className="mt-1">
+                  Fees efectivos: eBay {fmtFeePct(pricingContext.effectiveFees.defaultEbayFeePct)} ·
+                  pago {fmtFeePct(pricingContext.effectiveFees.defaultPaymentFeePct)} +{' '}
+                  {fmtUsd(pricingContext.effectiveFees.defaultPaymentFixedFeeUsd)} · buffer{' '}
+                  {fmtFeePct(pricingContext.effectiveFees.incidentBufferPct)}
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <SummaryCard
+                  label="Costo total"
+                  value={fmtUsd(showBreakdown.breakdown.totalCostUsd)}
+                  hint="Costo total estimado al precio final mostrado"
+                />
+                <SummaryCard
+                  label="Margen objetivo"
+                  value={fmtPct(pricingContext.configuredThresholds.minMarginPct)}
+                  hint={
+                    pricingContext.thresholdsConfigured
+                      ? 'Objetivo minimo guardado en tu cuenta'
+                      : 'Todavia no configurado'
+                  }
+                />
+                <SummaryCard
+                  label="Utilidad objetivo"
+                  value={fmtUsd(pricingContext.configuredThresholds.minProfitUsd)}
+                  hint={
+                    pricingContext.thresholdsConfigured
+                      ? 'Objetivo minimo guardado en tu cuenta'
+                      : 'Todavia no configurada'
+                  }
+                />
+                <SummaryCard
+                  label="Origen fees"
+                  value={feeSourceLabel}
+                  hint={
+                    pricingContext.feeConfigSource === 'account'
+                      ? 'Sin placeholders'
+                      : pricingContext.feeConfigSource === 'mixed'
+                        ? 'Parte desde cuenta y parte desde defaults'
+                        : 'Todos los fees salen de defaults operativos'
+                  }
+                />
+                <SummaryCard
+                  label={priceFloorLabel}
+                  value={fmtUsd(showBreakdown.breakdown.minimumAllowedPriceUsd)}
+                  hint={
+                    pricingContext.pricingMode === 'target_margin_profit'
+                      ? 'Minimo necesario para cumplir margen/utilidad objetivo'
+                      : 'Break-even con fees; aun no incluye utilidad objetivo'
+                  }
+                />
+                <SummaryCard
+                  label="Precio final sugerido"
+                  value={fmtUsd(showBreakdown.breakdown.suggestedPriceUsd)}
+                  hint={
+                    pricingContext.pricingMode === 'target_margin_profit'
+                      ? 'Ya incorpora rentabilidad objetivo'
+                      : 'Solo piso de costos hasta completar thresholds'
+                  }
+                />
+              </div>
+            </>
+          )}
           <div className="grid gap-2 sm:grid-cols-2 text-sm">
-            <Row label="Costo proveedor (línea)" v={showBreakdown.breakdown.supplierCostUsd} />
+            <Row label="Costo proveedor (linea)" v={showBreakdown.breakdown.supplierCostUsd} />
             <Row label="Shipping" v={showBreakdown.breakdown.shippingUsd} />
             <Row label="Fee eBay (est.)" v={showBreakdown.breakdown.ebayFeeUsd} />
             <Row label="Fee pago (est.)" v={showBreakdown.breakdown.paymentFeeUsd} />
             <Row label="Buffer incidentes" v={showBreakdown.breakdown.incidentBufferUsd} />
-            <Row label="Costo total @ list price" v={showBreakdown.breakdown.totalCostUsd} />
-            <Row label="Precio lista (sugerido)" v={showBreakdown.breakdown.listPriceUsd} />
-            <Row label="Utilidad neta" v={showBreakdown.breakdown.netProfitUsd} />
+            <Row label="Costo total @ precio final" v={showBreakdown.breakdown.totalCostUsd} />
+            <Row label="Precio lista usado en calculo" v={showBreakdown.breakdown.listPriceUsd} />
+            <Row label="Utilidad neta @ precio final" v={showBreakdown.breakdown.netProfitUsd} />
             <div className="sm:col-span-2">
-              Margen neto:{' '}
+              Margen neto @ precio final:{' '}
               <span className="font-semibold tabular-nums">
                 {fmtPct(showBreakdown.breakdown.netMarginPct)}
               </span>
             </div>
-            <Row label="Precio sugerido" v={showBreakdown.breakdown.suggestedPriceUsd} />
-            <Row label="Precio mínimo permitido" v={showBreakdown.breakdown.minimumAllowedPriceUsd} />
+            <Row label="Precio final sugerido" v={showBreakdown.breakdown.suggestedPriceUsd} />
+            <Row label={priceFloorLabel} v={showBreakdown.breakdown.minimumAllowedPriceUsd} />
           </div>
-          {Object.keys(showBreakdown.breakdown.feeDefaultsApplied || {}).length > 0 && (
-            <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 rounded-md px-3 py-2">
-              Fees por defecto aplicados (configura cuenta):{' '}
-              {JSON.stringify(showBreakdown.breakdown.feeDefaultsApplied)}
-            </p>
-          )}
         </div>
       )}
     </div>
