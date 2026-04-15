@@ -34,24 +34,114 @@ export interface CjListingDraftBody {
 }
 
 function parseImages(raw: unknown): string[] {
+  let urls: string[] = [];
   if (Array.isArray(raw)) {
-    return raw
-      .filter((x) => typeof x === 'string' && /^https?:\/\//i.test(x))
-      .slice(0, 12);
-  }
-  if (typeof raw === 'string') {
+    urls = raw.filter((x) => typeof x === 'string' && /^https?:\/\//i.test(x));
+  } else if (typeof raw === 'string') {
     try {
       const j = JSON.parse(raw) as unknown;
       if (Array.isArray(j)) {
-        return j
-          .filter((x) => typeof x === 'string' && /^https?:\/\//i.test(x))
-          .slice(0, 12);
+        urls = j.filter((x) => typeof x === 'string' && /^https?:\/\//i.test(x));
       }
     } catch {
       /* ignore */
     }
   }
-  return [];
+  // Deduplicate (CJ sometimes returns the same URL multiple times)
+  return [...new Set(urls)].slice(0, 12);
+}
+
+/**
+ * Clean a raw CJ product title for eBay:
+ * - Collapse whitespace / tabs / newlines
+ * - Replace pipe/slash/backslash characters with a space (common CJ catalog noise)
+ * - Strip leading/trailing punctuation noise
+ * - Truncate to eBay 80-char title limit
+ */
+function sanitizeCjTitle(raw: string): string {
+  return raw
+    .replace(/[\t\r\n]+/g, ' ')   // newlines → space
+    .replace(/[|\\]+/g, ' ')       // pipes/backslashes → space
+    .replace(/ {2,}/g, ' ')        // collapse multiple spaces
+    .replace(/^[\s\-–—,;:.]+/, '') // strip leading noise chars
+    .replace(/[\s\-–—,;:.]+$/, '') // strip trailing noise chars
+    .trim()
+    .slice(0, 80);
+}
+
+/**
+ * Build eBay item aspects (item specifics) from CJ variant attributes.
+ * Always includes Brand=Generic.
+ * If variant attributes are available, maps them directly (e.g. Color, Size, Material).
+ * Limits each aspect value to 65 chars (eBay limit).
+ */
+function buildAspectsFromVariant(variantAttributes: unknown): Record<string, string[]> {
+  const base: Record<string, string[]> = { Brand: ['Generic'] };
+  if (!variantAttributes || typeof variantAttributes !== 'object') {
+    return { ...base, Type: ['Product'] };
+  }
+  const attrs = variantAttributes as Record<string, unknown>;
+  for (const [k, v] of Object.entries(attrs)) {
+    const key = String(k || '').trim();
+    const val = String(v ?? '').trim().slice(0, 65);
+    if (key && val) {
+      base[key] = [val];
+    }
+  }
+  return base;
+}
+
+/**
+ * Non-blocking quality warnings for the draft listing.
+ * Returns an array of actionable messages the operator should review.
+ * None of these block draft creation.
+ */
+export interface DraftQualityWarning {
+  code: string;
+  message: string;
+}
+
+function buildDraftQualityWarnings(params: {
+  rawTitle: string;
+  cleanTitle: string;
+  imageCount: number;
+  hasVariantAttributes: boolean;
+  descriptionBodyLength: number;
+}): DraftQualityWarning[] {
+  const warnings: DraftQualityWarning[] = [];
+
+  if (params.cleanTitle.length < 20) {
+    warnings.push({
+      code: 'TITLE_TOO_SHORT',
+      message: `Title is very short (${params.cleanTitle.length} chars). eBay best practice is 30+ characters for better search visibility.`,
+    });
+  }
+  if (params.rawTitle !== params.cleanTitle) {
+    warnings.push({
+      code: 'TITLE_SANITIZED',
+      message: 'Title was cleaned (pipes/extra spaces removed). Review the cleaned title in the draft payload.',
+    });
+  }
+  if (params.imageCount === 1) {
+    warnings.push({
+      code: 'SINGLE_IMAGE',
+      message: 'Only 1 image available. eBay listings with 3+ images convert significantly better.',
+    });
+  }
+  if (!params.hasVariantAttributes) {
+    warnings.push({
+      code: 'NO_VARIANT_ATTRIBUTES',
+      message: 'No variant attributes available for item specifics. eBay will receive Brand=Generic/Type=Product only. Add item specifics in Seller Hub after publish if possible.',
+    });
+  }
+  if (params.descriptionBodyLength < 20) {
+    warnings.push({
+      code: 'DESCRIPTION_BODY_EMPTY',
+      message: 'Product description from CJ is empty or very short. Listing will use a placeholder body. Consider enriching the description after publish.',
+    });
+  }
+
+  return warnings;
 }
 
 function buildInternalSku(userId: number, productRowId: number, variantRowId: number): string {
@@ -252,15 +342,26 @@ export const cjEbayListingService = {
       shippingMinDays: quote.estimatedMinDays,
       shippingMaxDays: quote.estimatedMaxDays,
       quoteConfidence: quote.confidence || 'unknown',
-      shippingCostUsd: shipCost,
       shippingMethod: quote.serviceName || quote.carrier || null,
     });
 
-    const title = product.title.slice(0, 80);
+    const rawTitle = product.title;
+    const title = sanitizeCjTitle(rawTitle);
     const stock = variantRow.stockLastKnown ?? 0;
     const listQty = Math.max(1, Math.min(stock > 0 ? stock : 1, lineQty, 999));
 
-    const categoryId = await cjEbayEbayFacadeService.suggestCategory(input.userId, product.title);
+    const aspects = buildAspectsFromVariant(variantRow.attributes);
+    const hasVariantAttributes = Object.keys(aspects).length > 1; // beyond Brand alone
+
+    const categoryId = await cjEbayEbayFacadeService.suggestCategory(input.userId, title);
+
+    const qualityWarnings = buildDraftQualityWarnings({
+      rawTitle,
+      cleanTitle: title,
+      imageCount: images.length,
+      hasVariantAttributes,
+      descriptionBodyLength: (product.description || '').trim().length,
+    });
 
     const draftPayload = {
       version: 1 as const,
@@ -275,6 +376,7 @@ export const cjEbayListingService = {
       title,
       descriptionHtml,
       imageUrls: images,
+      aspects,
       categoryId,
       listPriceUsd: price,
       quantity: listQty,
@@ -285,7 +387,6 @@ export const cjEbayListingService = {
         minDays: quote.estimatedMinDays,
         maxDays: quote.estimatedMaxDays,
         confidence: quote.confidence,
-        costUsd: shipCost,
         method: quote.serviceName || quote.carrier,
         policyNote:
           'International shipment from China. Handling time is business days before dispatch; transit is separate and depends on carrier and customs.',
@@ -296,6 +397,7 @@ export const cjEbayListingService = {
       evaluatedAt: evaluation.evaluatedAt.toISOString(),
       quoteId: quote.id,
       quoteCreatedAt: quote.createdAt.toISOString(),
+      qualityWarnings,
     };
 
     const existing = await prisma.cjEbayListing.findFirst({
@@ -352,6 +454,7 @@ export const cjEbayListingService = {
       breakdown: pricingBreakdownForResponse(breakdown),
       draftPayload,
       policyNote: draftPayload.shipping.policyNote,
+      qualityWarnings,
     };
   },
 
@@ -435,6 +538,14 @@ export const cjEbayListingService = {
       throw new AppError('Invalid price or quantity on draft.', 400);
     }
 
+    // Recover aspects saved in draft payload (built from variant attributes at draft creation time)
+    const draftAspects =
+      draft.aspects &&
+      typeof draft.aspects === 'object' &&
+      !Array.isArray(draft.aspects)
+        ? (draft.aspects as Record<string, string[]>)
+        : undefined;
+
     const ebayProduct: EbayProduct = {
       title,
       description: descriptionHtml,
@@ -443,6 +554,7 @@ export const cjEbayListingService = {
       quantity: Math.floor(listQty),
       condition: 'NEW',
       images: imageUrls.slice(0, 12),
+      ...(draftAspects ? { aspects: draftAspects } : {}),
     };
 
     await prisma.cjEbayListing.update({

@@ -32,6 +32,7 @@ export default function CjEbayListingsPage() {
     lastError: string | null;
     draftPayload: unknown;
     status: string;
+    qualityWarnings?: Array<{ code: string; message: string }>;
   } | null>(null);
 
   const load = useCallback(async () => {
@@ -108,13 +109,21 @@ export default function CjEbayListingsPage() {
     try {
       const res = await api.get<{
         ok: boolean;
-        listing: { lastError: string | null; draftPayload: unknown; status: string };
+        listing: {
+          lastError: string | null;
+          draftPayload: unknown;
+          status: string;
+        };
       }>(`/api/cj-ebay/listings/${id}`);
       if (res.data?.ok && res.data.listing) {
+        const dp = res.data.listing.draftPayload as Record<string, unknown> | null;
         setDetail({
           lastError: res.data.listing.lastError,
-          draftPayload: res.data.listing.draftPayload,
+          draftPayload: dp,
           status: res.data.listing.status,
+          qualityWarnings: Array.isArray(dp?.qualityWarnings)
+            ? (dp.qualityWarnings as Array<{ code: string; message: string }>)
+            : undefined,
         });
       }
     } catch {
@@ -129,20 +138,41 @@ export default function CjEbayListingsPage() {
   return (
     <div className="space-y-4">
       <CjEbayOperatorPathCallout variant="listings" />
+
+      {/* Module readiness summary */}
+      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-4 py-3 text-xs space-y-1">
+        <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm">Estado del módulo CJ → eBay USA</p>
+        <div className="grid gap-1 sm:grid-cols-2">
+          {([
+            { label: 'Búsqueda CJ', ok: true },
+            { label: 'Selección variante / stock real', ok: true },
+            { label: 'Configuración pricing', ok: true },
+            { label: 'Evaluate (APPROVED)', ok: true },
+            { label: 'Crear draft listing', ok: true },
+            { label: 'Publicar en eBay (ship-from China)', ok: false, note: 'Pendiente: aprobación cuenta eBay overseas warehouse' },
+            { label: 'Postventa (órdenes)', ok: false, note: 'Se abre cuando exista un listing publicado real' },
+          ] as const).map((item) => (
+            <div key={item.label} className="flex items-start gap-1.5">
+              <span className={item.ok ? 'text-emerald-600 dark:text-emerald-400 mt-0.5' : 'text-amber-600 dark:text-amber-400 mt-0.5'}>
+                {item.ok ? '✓' : '○'}
+              </span>
+              <span className={item.ok ? 'text-slate-700 dark:text-slate-300' : 'text-slate-500 dark:text-slate-400'}>
+                {item.label}
+                {'note' in item && item.note && (
+                  <span className="block text-[11px] text-amber-600 dark:text-amber-400">{item.note}</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <p className="text-sm text-slate-600 dark:text-slate-300">
-        FASE 3D: borradores y publicación vía fachada eBay aislada. Origen típico:{' '}
-        <Link to="/opportunities" className="text-primary-600 dark:text-primary-400 underline">
-          Oportunidades
-        </Link>
-        ,{' '}
-        <Link to="/product-research" className="text-primary-600 dark:text-primary-400 underline">
-          Product Research
-        </Link>{' '}
-        o{' '}
+        Drafts listos para publicar. Origen:{' '}
         <Link to="/cj-ebay/products" className="text-primary-600 dark:text-primary-400 underline">
           Productos CJ
         </Link>
-        .
+        {' '}→ Evaluar → Crear draft.
       </p>
       {listings.some((r) => r.status === 'ACCOUNT_POLICY_BLOCK') && (
         <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 space-y-1">
@@ -302,8 +332,19 @@ export default function CjEbayListingsPage() {
                             </pre>
                           )
                         )}
+                        {detail.qualityWarnings && detail.qualityWarnings.length > 0 && (
+                          <div className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-2 py-1.5 mb-2 space-y-0.5">
+                            <p className="font-medium text-amber-800 dark:text-amber-200 text-[11px] uppercase tracking-wide">Avisos de calidad</p>
+                            {detail.qualityWarnings.map((w) => (
+                              <p key={w.code} className="text-amber-700 dark:text-amber-300">
+                                <span className="font-mono text-[10px] mr-1 opacity-70">[{w.code}]</span>
+                                {w.message}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                         <details>
-                          <summary className="cursor-pointer text-slate-500">draftPayload (JSON)</summary>
+                          <summary className="cursor-pointer text-slate-500">Draft payload (JSON)</summary>
                           <pre className="mt-2 max-h-48 overflow-auto rounded bg-slate-100 dark:bg-slate-900 p-2">
                             {JSON.stringify(detail.draftPayload, null, 2)}
                           </pre>

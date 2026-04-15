@@ -1,6 +1,6 @@
 # CJ Dropshipping → eBay USA — Plan maestro y auditoría
 
-**Versión:** 2.13 (FASE 3D.GUARDRAIL — account policy block eBay overseas warehouse)  
+**Versión:** 2.14 (FASE 3D.QUALITY — calidad de draft: título, descripción, aspectos, guardrails, UX)  
 **Última actualización:** 2026-04-15  
 **Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block implementado** (ver §FASE 3D.GUARDRAIL); **FASE 3E + 3E.1 + 3E.2 + 3E.3** en código: tras create con **payType=3** el sistema modela **`confirmOrder`** y **`payBalance`** (manual o `AUTO_CONFIRM_PAY` en settings). **FASE 3E.4** incluye **protocolo**, **plantilla de evidencia**, **`GET …/system-readiness`** (sin CJ/eBay HTTP), **scripts** de migración y export, colección **`.http`**. La **corrida viva** la ejecuta solo el operador humano. **payBalanceV2** no está implementado (contrato distinto en doc). La postventa **sigue sin declararse “lista”** sin completar **3E.4 en cuenta real**. **FASE 3F–3G** (workers) **sin iniciar como implementación masiva** hasta criterio explícito tras 3E.4.
 
@@ -1447,6 +1447,80 @@ Con \(P\) = precio de lista (en la práctica el **suggested** = máximo entre m�
 - `backend/prisma/schema.prisma`, `backend/prisma/migrations/20260414203000_cj_ebay_phase3d_listing_draft/migration.sql`
 - `frontend/src/pages/cj-ebay/CjEbayProductsPage.tsx`, `CjEbayListingsPage.tsx`, `CjEbayLayout.tsx`
 - `docs/CJ_EBAY_USA_MASTER_PLAN.md`
+
+---
+
+## FASE 3D.QUALITY — Calidad del draft listing (2026-04-15)
+
+### Objetivo
+
+Mejorar la calidad del draft CJ→eBay en todos los campos que dependen del software, sin tocar el bloqueo de cuenta. El draft debe tener la mayor probabilidad de éxito cuando eBay autorice la cuenta.
+
+### Mejoras implementadas
+
+#### Título (`sanitizeCjTitle`)
+
+- Colapsa whitespace / tabs / saltos de línea → espacio
+- Reemplaza pipes `|` y backslashes `\` (ruido común en catálogo CJ) por espacio
+- Elimina caracteres de puntuación ruido al inicio y fin del título
+- Trunca en 80 caracteres (límite eBay)
+- Resultado: título más limpio sin modificar el contenido semántico
+
+#### Descripción (`buildListingDescriptionHtml`)
+
+- **Eliminado**: línea `Supplier shipping reference: X — internal freight estimate USD Y (for our cost planning; buyer pays per eBay checkout)` — exponía un detalle de coste interno al comprador
+- **Reemplazado por**: `Shipping method: X. Carrier and delivery window are confirmed at checkout under our eBay business policies.` — buyer-safe, profesional
+- El parámetro `shippingCostUsd` ya no se usa en la descripción (marcado `@deprecated` en la firma)
+- El resto de la estructura (ships from China, handling time, transit estimate, disclaimer) se mantiene sin cambios
+
+#### Imágenes (deduplicación)
+
+- `parseImages()` ahora deduplica vía `Set` antes de aplicar el límite de 12
+- CJ a veces devuelve URLs duplicadas; antes se ocupaban slots innecesarios
+
+#### Item specifics / Aspects (`buildAspectsFromVariant`)
+
+- Siempre incluye `Brand: ['Generic']`
+- Si la variante tiene atributos CJ (e.g. `Color`, `Size`, `Material`), los mapea directamente como eBay aspects
+- Limita cada valor a 65 chars (límite eBay por aspecto)
+- Fallback: `{ Brand: ['Generic'], Type: ['Product'] }` solo cuando no hay atributos
+- Los aspects se incluyen en el `draftPayload` y se recuperan y pasan a `EbayProduct.aspects` durante el publish
+
+#### Quality warnings (no bloqueantes)
+
+`buildDraftQualityWarnings()` genera avisos accionables para el operador:
+
+| Código | Condición | Mensaje |
+|--------|-----------|---------|
+| `TITLE_TOO_SHORT` | título < 20 chars | Recomienda 30+ para visibilidad |
+| `TITLE_SANITIZED` | título fue modificado por sanitizeCjTitle | Indica revisar el título limpio |
+| `SINGLE_IMAGE` | solo 1 imagen disponible | 3+ imágenes convierten mejor |
+| `NO_VARIANT_ATTRIBUTES` | no hay atributos de variante | Item specifics reducidos a Brand=Generic |
+| `DESCRIPTION_BODY_EMPTY` | descripción CJ vacía/muy corta | Considerar enriquecer tras publish |
+
+Los warnings se devuelven en la respuesta del `POST /listings/draft`, se muestran en la página Products tras crear el draft, y se muestran en el panel de detalle de Listings.
+
+### Cambios en UX
+
+#### Productos CJ
+
+- El recuadro debug `productId: X · variantId: Y` (verde, main flow) fue reemplazado por una línea legible: atributos de la variante + costo + stock + ID entre corchetes en pequeño
+- El mensaje tras crear el draft ya no dice "Ir a Listings → Publicar" sino "Draft listo — Ver en Listings" + nota sobre el bloqueo de cuenta
+- Los quality warnings del draft se muestran en un bloque ámbar justo debajo del mensaje de éxito
+
+#### Listings CJ
+
+- Nuevo banner de estado del módulo en la parte superior: lista los 7 componentes del pipeline con su estado (✓ listo / ○ pendiente) — incluye nota de por qué publish y postventa están pendientes
+- Descripción de la página simplificada (eliminado texto interno "FASE 3D:")
+- Panel de detalle: muestra quality warnings si existen, antes del JSON del payload
+- "draftPayload (JSON)" renombrado a "Draft payload (JSON)"
+
+### Qué no se tocó
+
+- Motor de pricing, qualify, evaluate — sin cambios
+- Account policy block guardrail — sin cambios
+- Cualquier lógica de órdenes — sin cambios
+- Esquema Prisma — sin cambios (no se requiere migración)
 
 ---
 

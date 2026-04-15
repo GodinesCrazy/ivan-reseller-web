@@ -866,6 +866,7 @@ router.post('/listings/draft', async (req: Request, res: Response, next: NextFun
       breakdown: out.breakdown,
       draftPayload: out.draftPayload,
       policyNote: out.policyNote,
+      qualityWarnings: out.qualityWarnings,
     });
   } catch (e) {
     next(e);

@@ -548,6 +548,7 @@ export default function CjEbayProductsPage() {
   const [loadingEvaluate, setLoadingEvaluate] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [draftListingId, setDraftListingId] = useState<number | null>(null);
+  const [draftQualityWarnings, setDraftQualityWarnings] = useState<Array<{ code: string; message: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewOk | null>(null);
   const [evaluate, setEvaluate] = useState<EvaluateOk | null>(null);
@@ -779,13 +780,19 @@ export default function CjEbayProductsPage() {
   async function runDraft() {
     setError(null);
     setDraftListingId(null);
+    setDraftQualityWarnings([]);
     setLoadingDraft(true);
     try {
-      const res = await api.post<{ ok: boolean; listingId: number; policyNote?: string }>(
-        '/api/cj-ebay/listings/draft',
-        body(),
-      );
-      if (res.data?.ok && typeof res.data.listingId === 'number') setDraftListingId(res.data.listingId);
+      const res = await api.post<{
+        ok: boolean;
+        listingId: number;
+        policyNote?: string;
+        qualityWarnings?: Array<{ code: string; message: string }>;
+      }>('/api/cj-ebay/listings/draft', body());
+      if (res.data?.ok && typeof res.data.listingId === 'number') {
+        setDraftListingId(res.data.listingId);
+        setDraftQualityWarnings(res.data.qualityWarnings ?? []);
+      }
     } catch (e) {
       setError(extractApiError(e, 'Error al crear draft.'));
     } finally {
@@ -1322,9 +1329,15 @@ export default function CjEbayProductsPage() {
             </p>
           )}
 
-          {canRunPipeline && (
-            <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 px-3 py-2 text-xs font-mono text-emerald-800 dark:text-emerald-200">
-              productId: {productId} · variantId: {variantId}
+          {canRunPipeline && selectedVariant && (
+            <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200">
+              <span className="font-medium">{variantLabel(selectedVariant)}</span>
+              <span className="text-emerald-600 dark:text-emerald-400 ml-2">
+                · {fmtUsd(selectedVariant.unitCostUsd)} · {selectedVariant.stock} en stock
+              </span>
+              <span className="text-emerald-500 dark:text-emerald-500 ml-2 font-mono text-[11px]">
+                [{variantId}]
+              </span>
             </div>
           )}
 
@@ -1359,12 +1372,33 @@ export default function CjEbayProductsPage() {
           </div>
 
           {draftListingId != null && (
-            <p className="text-sm text-emerald-700 dark:text-emerald-300">
-              Draft guardado: listing local #{draftListingId}.{' '}
-              <Link to="/cj-ebay/listings" className="underline font-medium">
-                Ir a Listings → Publicar
-              </Link>
-            </p>
+            <div className="space-y-2">
+              <div className="rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
+                <p className="font-medium">Draft listo — listing local #{draftListingId}</p>
+                <p className="text-xs mt-0.5 text-emerald-700 dark:text-emerald-300">
+                  El draft está guardado.{' '}
+                  <Link to="/cj-ebay/listings" className="underline font-medium">
+                    Ver en Listings
+                  </Link>
+                  {' '}· La publicación real en eBay requiere aprobación de cuenta (overseas warehouse).
+                </p>
+              </div>
+              {draftQualityWarnings.length > 0 && (
+                <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 space-y-1">
+                  <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                    Avisos de calidad del draft ({draftQualityWarnings.length})
+                  </p>
+                  <ul className="space-y-1">
+                    {draftQualityWarnings.map((w) => (
+                      <li key={w.code} className="text-xs text-amber-700 dark:text-amber-300">
+                        <span className="font-mono text-[10px] mr-1 opacity-70">[{w.code}]</span>
+                        {w.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -1375,7 +1409,7 @@ export default function CjEbayProductsPage() {
           type="button"
           className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
           onClick={() => setAdvancedOpen((o) => !o)}
-          aria-expanded={advancedOpen}
+          aria-expanded={advancedOpen ? 'true' : 'false'}
         >
           <span>Modo avanzado / entrada manual de IDs</span>
           <span className="text-slate-400 text-xs">{advancedOpen ? '▲' : '▼'}</span>

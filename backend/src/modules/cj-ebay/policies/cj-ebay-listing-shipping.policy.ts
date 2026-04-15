@@ -39,17 +39,14 @@ export function buildListingDescriptionHtml(params: {
   shippingMinDays: number | null;
   shippingMaxDays: number | null;
   quoteConfidence: string;
-  shippingCostUsd: number;
+  /** @deprecated No longer shown in buyer-facing description. Retained for call-site compatibility. */
+  shippingCostUsd?: number;
   shippingMethod: string | null;
 }): string {
   const origin = escapeHtml(CJ_LISTING_ORIGIN_LABEL);
   const handling = escapeHtml(String(params.handlingTimeDays));
   const conf = escapeHtml(String(params.quoteConfidence || 'unknown'));
-  const method = params.shippingMethod ? escapeHtml(params.shippingMethod) : 'supplier logistics';
-  const cost =
-    Number.isFinite(params.shippingCostUsd) && params.shippingCostUsd >= 0
-      ? escapeHtml(params.shippingCostUsd.toFixed(2))
-      : 'n/a';
+  const method = params.shippingMethod ? escapeHtml(params.shippingMethod) : 'international carrier';
 
   let transitBlock: string;
   if (
@@ -68,10 +65,10 @@ export function buildListingDescriptionHtml(params: {
 
   return `<div>
 <p><strong>Ships from ${origin}.</strong> International dropshipping — not US domestic same-day delivery.</p>
-<p><strong>Handling time:</strong> up to ${handling} business days before we dispatch your order (includes configured operational buffer).</p>
+<p><strong>Handling time:</strong> up to ${handling} business days before we dispatch your order.</p>
 ${transitBlock}
-<p><strong>Supplier shipping reference:</strong> ${method} — internal freight estimate USD ${cost} (for our cost planning; buyer pays per eBay checkout).</p>
-<p><strong>Disclaimer:</strong> Dates are estimates only. Customs, weather, or carrier delays may apply.</p>
+<p><strong>Shipping method:</strong> ${method}. Carrier and delivery window are confirmed at checkout under our eBay business policies.</p>
+<p><strong>Disclaimer:</strong> Transit times are estimates only. Customs clearance, weather, or carrier delays may extend delivery.</p>
 <hr/>
 <p>${bodyEscaped.replace(/\n/g, '<br/>')}</p>
 </div>`;
