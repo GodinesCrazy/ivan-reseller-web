@@ -529,13 +529,21 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
     const title = String(mainRow.productNameEn || mainRow.productName || '').trim() || resolvedPid;
     const desc = typeof mainRow.description === 'string' ? mainRow.description : undefined;
     const imgRaw = mainRow.productImage;
-    const imageUrls =
-      typeof imgRaw === 'string'
-        ? imgRaw
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : [];
+    let imageUrls: string[] = [];
+    if (typeof imgRaw === 'string' && imgRaw.trim()) {
+      // CJ often returns productImage as a JSON array string e.g. '["url1","url2"]'.
+      // Try JSON.parse first; fall back to comma-split for plain CSV format.
+      try {
+        const parsed = JSON.parse(imgRaw) as unknown;
+        if (Array.isArray(parsed)) {
+          imageUrls = parsed.map((u) => String(u).trim()).filter(Boolean);
+        } else {
+          imageUrls = [String(parsed).trim()].filter(Boolean);
+        }
+      } catch {
+        imageUrls = imgRaw.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    }
 
     return {
       cjProductId: resolvedPid,

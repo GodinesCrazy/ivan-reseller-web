@@ -263,7 +263,7 @@ El modo avanzado no se degrada: cuando el usuario expande el panel, los campos `
 - [x] El modo manual sigue disponible como fallback (Sección E)
 - [x] La documentación .md fue creada
 - [x] El plan maestro fue actualizado
-- [ ] Validación con cuenta CJ real en producción (pendiente — depende de credenciales activas)
+- [x] Validación con cuenta CJ real en producción ejecutada 2026-04-15: search ✅ · product detail ✅ · preview pricing ✅ · bug imageUrls corregido ✅
 
 ---
 

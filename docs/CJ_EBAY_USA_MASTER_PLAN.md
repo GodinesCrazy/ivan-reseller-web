@@ -1955,8 +1955,14 @@ Nuevo documento de diseño: `docs/CJ_EBAY_USA_PRODUCT_SEARCH_PLAN.md`
 
 ### Estado
 
-- **FASE 3F:** **COMPLETA** — buscador implementado; modo manual como fallback; documentación creada; sin cambios backend; sin romper el resto del módulo.
-- Pendiente de validación con cuenta CJ real en producción (misma condición que FASE 3B–3D).
+- **UX de entrada en Products:** implementada en código y desplegada en producción (commit `3ff579d`).
+- **Validación real ejecutada (2026-04-15):**
+  - `POST /cj/search` → retorna productos reales CJ ✅
+  - `GET /cj/product/:id` → retorna variantes reales con `cjVid` ✅
+  - `POST /pricing/preview` con `cjVid` real → retorna breakdown completo, sin error 500 ✅
+  - Bug `imageUrls` (JSON array string) corregido en adapter (commit siguiente) ✅
+- **No es FASE 3F completa.** La FASE 3F del plan maestro comprende workers BullMQ, sistema de alertas y dashboard de profit. Eso sigue pendiente.
+- Esta mejora es la **entrada usable al ciclo** — reemplaza el flujo de IDs manuales por búsqueda visual — sin ampliar el alcance de las demás fases.
 
 ---
 
