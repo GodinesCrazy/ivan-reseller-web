@@ -1,9 +1,9 @@
 # CJ → eBay USA — Plan: Buscador de Productos en Products
 
-**Versión:** 1.0  
-**Fecha:** 2026-04-14  
+**Versión:** 1.2  
+**Fecha:** 2026-04-14 / actualizado 2026-04-15  
 **Autor:** Principal Product Architect + Staff Full-Stack  
-**Estado:** Implementado
+**Estado:** Implementado — ranking operativo activo (§17)
 
 ---
 
@@ -370,3 +370,98 @@ Fix: extracción explícita de `inventoryNum → inventory → inventoryQuantity
 - **Sección B (resultados):** cards con stock conocido y positivo muestran badge verde "En stock (N)"; sin stock conocido muestran badge amber; sin datos no muestran badge. Resultados con stock > 0 aparecen primero.
 - **Sección C (variante picker):** cada variante muestra label de color: emerald "N en stock" o amber "Sin stock". Variantes con stock 0 quedan dimmed pero seleccionables. Si todas las variantes tienen stock 0, aparece banner de advertencia.
 - **Sección C (variante única):** badge verde cuando stock > 0, amber cuando stock = 0.
+
+---
+
+## 17. Ranking operativo — 2026-04-15 (commit `e9f083f`)
+
+### Objetivo
+
+Ordenar los resultados de búsqueda CJ para que los productos más prometedores para el ciclo `preview → evaluate → draft` aparezcan primero, sin eliminar resultados y sin llamadas extra a la API CJ.
+
+### Señales reales disponibles para ranking
+
+| Señal | Fuente | Fiabilidad | Usado en ranking |
+|---|---|---|---|
+| `inventoryTotal` | `product/listV2` `inventoryNum/inventory` | Media — muchos productos sin dato | Sí — señal A |
+| `listPriceUsd` | `product/listV2` `nowPrice/discountPrice/sellPrice` | Buena cuando presente | Sí — señal B |
+| `mainImageUrl` | `product/listV2` `productImage/bigImage` | Alta | Sí — señal C |
+| `title` / longitud | `product/listV2` `productNameEn` | Alta | Sí — señal D |
+| `cjProductId` | `product/listV2` `pid/id` | Siempre | No — identidad, no ranking |
+
+### Señales descartadas (no disponibles en listV2 sin calls extra)
+
+| Señal | Por qué descartada |
+|---|---|
+| Variant count | Requiere `product/variant/query` — 20 calls para 20 resultados = ~22s de latencia |
+| `unitCostUsd` por variante | Ídem — necesita variant detail |
+| `cjVid` disponibilidad | Ídem |
+| Stock real por variante | Requiere `product/stock/queryByVid` por cada variante |
+| Shipping a USA | Requiere `freightCalculate` — call extra prohibitiva en búsqueda |
+| Categoría del producto | No expuesta en listV2 |
+
+### Heurística final — `cjSearchRankScore()` (0–100)
+
+```
+A. Stock presence     0–45 pts
+   inventoryTotal > 0      → 40 pts  (producto activamente reabastecido)
+   inventoryTotal ≥ 50     → +5 pts  (profundidad: proveedor confiable)
+   inventoryTotal undefined → 20 pts  (neutro — no penalizar dato ausente)
+   inventoryTotal = 0       →  0 pts  (probable producto muerto)
+
+B. Price viability    0–30 pts   (margen viable eBay USA: ~16% fees + $3-$8 shipping)
+   $1–$25    → 30 pts  sweet spot: precio cubre fees con margen real
+   $25–$50   → 20 pts  aceptable pero margen más ajustado
+   < $1      →  8 pts  demasiado barato: envío solo > costo producto
+   > $50     →  8 pts  capital intensivo, baja rotación eBay
+   ausente   → 15 pts  neutro
+
+C. Image present      0–15 pts
+   URL http válida   → 15 pts  (requerida para listing eBay)
+   ausente           →  0 pts
+
+D. Title depth        0–10 pts
+   ≥ 40 chars → 10 pts
+   ≥ 20 chars →  6 pts
+   ≥ 10 chars →  3 pts
+   < 10 chars →  0 pts
+
+Total máximo: 100 (45+30+15+10)
+Umbral "Operable": ≥ 70 pts (stock>0 + sweet spot price)
+```
+
+### Dónde se implementó
+
+- **Backend** — `cjSearchRankScore()` en `backend/src/modules/cj-ebay/cj-ebay.routes.ts`
+- Ejecutado sobre resultados de `product/listV2` antes de devolver respuesta
+- **Cero calls extra** a CJ API (sin impacto en latencia)
+- Frontend consume el orden ya calculado
+
+### UX añadida
+
+- Badge **"Operable"** (azul) en cards donde `isTopCandidate() === true`:
+  `inventoryTotal > 0 AND listPriceUsd >= 1 AND listPriceUsd <= 25`
+- Función `isTopCandidate()` en frontend refleja el umbral del tier superior del ranking
+- Cards siguen siendo todas visibles y seleccionables (no hay exclusión)
+
+### Impacto de performance
+
+Ninguno. Todo el scoring ocurre sobre datos ya obtenidos de `product/listV2`.
+La función `cjSearchRankScore()` es O(n) sobre el array de resultados (n ≤ pageSize, default 20).
+
+### Limitaciones conocidas
+
+1. `inventoryTotal` de listV2 puede no estar disponible para todos los productos → ~30-50% de items pueden tener `undefined` → van al tier de 20 pts (neutro, no penalizados).
+2. La señal de precio (`listPriceUsd`) puede ser la cota baja de un rango (`"0.55 -- 7.18"` → 0.55) — subestima precio real para algunos productos.
+3. No sabemos cuántas variantes tiene el producto ni si tiene `cjVid` hasta cargar detalle — la señal de precio no garantiza que exista una variante con unitCostUsd usable.
+4. El ranking no es causal: un producto bien rankeado puede fallar en preview si `unitCostUsd = 0` (error `NO_UNIT_COST`). El ranking maximiza probabilidad pero no la garantiza.
+
+### Cómo ayuda al operador
+
+Un operador que busca "phone holder" verá primero los productos que:
+- Tienen stock confirmado (reduciendo el riesgo de seleccionar algo agotado)
+- Tienen precio en el rango operativo ($1–$25)
+- Tienen imagen (prerequisito para listing eBay)
+- Tienen datos de título completos
+
+Los productos muertos (stock=0, sin imagen, sin precio) quedan al fondo sin ser eliminados — el operador puede acceder a ellos si los necesita.
