@@ -54,7 +54,23 @@ type OperationalFlow = {
 
 type EvidenceSummary = Record<string, unknown>;
 
-// ── Status badge ─────────────────────────────────────────────────────────────
+// ── Status display ────────────────────────────────────────────────────────────
+
+const STATUS_LABELS: Record<string, string> = {
+  DETECTED:              'Detectada',
+  VALIDATED:             'Validada',
+  CJ_ORDER_CREATED:      'Orden CJ creada',
+  CJ_ORDER_CONFIRMING:   'Confirmando',
+  CJ_PAYMENT_PENDING:    'Pago pendiente',
+  CJ_PAYMENT_PROCESSING: 'Procesando pago',
+  CJ_PAYMENT_COMPLETED:  'Pago completado',
+  CJ_FULFILLING:         'En fulfillment',
+  CJ_SHIPPED:            'Enviada por CJ',
+  TRACKING_ON_EBAY:      'Tracking en eBay',
+  COMPLETED:             'Completada',
+  FAILED:                'Fallida',
+  NEEDS_MANUAL:          'Intervención manual',
+};
 
 const STATUS_COLORS: Record<string, string> = {
   DETECTED:                'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
@@ -76,9 +92,10 @@ function StatusBadge({ status }: { status: string }) {
   const cls =
     STATUS_COLORS[status] ??
     'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+  const label = STATUS_LABELS[status] ?? status;
   return (
     <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ${cls}`}>
-      {status}
+      {label}
     </span>
   );
 }
@@ -187,22 +204,26 @@ export default function CjEbayOrderDetailPage() {
     setActionMsg(null);
     setError(null);
     try {
-      const res = await fn() as { data?: { needsManual?: boolean; skipped?: boolean; stub?: boolean; message?: string; checkoutNote?: string } };
+      const res = await fn() as {
+        data?: { needsManual?: boolean; skipped?: boolean; stub?: boolean; message?: string; checkoutNote?: string };
+      };
       const d = (res as { data?: Record<string, unknown> })?.data ?? {};
       if (d.needsManual) {
         setActionMsg(
-          String(d.checkoutNote || 'Place completado (needsManual). Revisa eventos y lastError.')
+          String(
+            d.checkoutNote || 'Orden enviada a CJ con aviso. Revisa los eventos y el último error.'
+          )
         );
       } else if (d.skipped) {
-        setActionMsg(`Acción omitida — ya procesada anteriormente.`);
+        setActionMsg('Acción omitida — ya procesada anteriormente.');
       } else if (d.stub) {
-        setActionMsg(String(d.message || `${action}: stub / no disponible aún.`));
+        setActionMsg(String(d.message || 'No disponible aún desde CJ.'));
       } else {
-        setActionMsg(`${action} ejecutado correctamente.`);
+        setActionMsg('Acción ejecutada correctamente.');
       }
       await loadOrder();
     } catch (e) {
-      setError(axiosMsg(e, `Error en acción ${action}.`));
+      setError(axiosMsg(e, 'Error al ejecutar la acción.'));
     } finally {
       setBusyAction(null);
     }
@@ -241,6 +262,9 @@ export default function CjEbayOrderDetailPage() {
   const canPay     = !!order.cjOrderId && order.status === 'CJ_PAYMENT_PENDING';
   const canSync    = !!order.cjOrderId && order.status !== 'COMPLETED';
 
+  // suggestedNext from operational flow (shown prominently)
+  const suggestedNext = flow?.suggestedNext ?? null;
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -264,8 +288,7 @@ export default function CjEbayOrderDetailPage() {
             <StatusBadge status={order.status} />
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            ID interno: <span className="font-mono">{order.id}</span>
-            {' · '}actualizado {new Date(order.updatedAt).toLocaleString()}
+            Actualizado {new Date(order.updatedAt).toLocaleString()}
           </p>
         </div>
         <button
@@ -292,7 +315,7 @@ export default function CjEbayOrderDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* ── Datos base + mapping ─────────────────────────────────────── */}
+        {/* ── Datos base ───────────────────────────────────────────────── */}
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             Datos de la orden
@@ -315,20 +338,17 @@ export default function CjEbayOrderDetailPage() {
               {order.totalUsd != null ? `$${order.totalUsd.toFixed(2)}` : '—'}
             </dd>
 
-            <dt className="text-slate-500 dark:text-slate-400 whitespace-nowrap">Listing ID (local)</dt>
-            <dd className="text-slate-800 dark:text-slate-200">{order.listingId ?? '—'}</dd>
-
             <dt className="text-slate-500 dark:text-slate-400 whitespace-nowrap">eBay listing ID</dt>
             <dd className="font-mono text-slate-800 dark:text-slate-200">
               {order.listing?.ebayListingId || '—'}
             </dd>
 
-            <dt className="text-slate-500 dark:text-slate-400 whitespace-nowrap">CJ confirmado</dt>
+            <dt className="text-slate-500 dark:text-slate-400 whitespace-nowrap">Confirmado en CJ</dt>
             <dd className="text-slate-800 dark:text-slate-200">
               {order.cjConfirmedAt ? new Date(order.cjConfirmedAt).toLocaleString() : '—'}
             </dd>
 
-            <dt className="text-slate-500 dark:text-slate-400 whitespace-nowrap">CJ pagado</dt>
+            <dt className="text-slate-500 dark:text-slate-400 whitespace-nowrap">Pagado en CJ</dt>
             <dd className="text-slate-800 dark:text-slate-200">
               {order.cjPaidAt ? new Date(order.cjPaidAt).toLocaleString() : '—'}
             </dd>
@@ -348,16 +368,27 @@ export default function CjEbayOrderDetailPage() {
 
         {/* ── Acciones del ciclo postventa ──────────────────────────────── */}
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Acciones del ciclo postventa
-          </h3>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Solo las acciones disponibles para el estado actual están activas.
-          </p>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Acciones del ciclo postventa
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Solo las acciones disponibles para el estado actual están habilitadas.
+            </p>
+          </div>
+
+          {/* Próxima acción sugerida */}
+          {suggestedNext && (
+            <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-xs text-blue-900 dark:text-blue-100">
+              Próxima acción:{' '}
+              <strong className="font-semibold">{suggestedNext}</strong>
+            </div>
+          )}
+
           <div className="space-y-2">
             <ActionButton
-              label="Place CJ"
-              description="Crea la orden en CJ (createOrderV2 payType=3)"
+              label="Ordenar en CJ"
+              description="Crea la orden de compra con el proveedor CJ"
               color="emerald"
               disabled={!canPlace || busyAction !== null}
               busy={busyAction === 'place'}
@@ -368,8 +399,8 @@ export default function CjEbayOrderDetailPage() {
               }
             />
             <ActionButton
-              label="Confirmar CJ"
-              description="Confirma la orden creada en CJ (confirmOrder)"
+              label="Confirmar orden"
+              description="Confirma la orden con CJ para proceder al pago"
               color="indigo"
               disabled={!canConfirm || busyAction !== null}
               busy={busyAction === 'confirm'}
@@ -380,8 +411,8 @@ export default function CjEbayOrderDetailPage() {
               }
             />
             <ActionButton
-              label="Pagar balance CJ"
-              description="Paga con balance de cuenta CJ (payBalance)"
+              label="Pagar balance"
+              description="Aplica el pago usando el balance disponible en la cuenta CJ"
               color="violet"
               disabled={!canPay || busyAction !== null}
               busy={busyAction === 'pay'}
@@ -392,8 +423,8 @@ export default function CjEbayOrderDetailPage() {
               }
             />
             <ActionButton
-              label="Actualizar estado CJ"
-              description="Consulta el estado actualizado desde la API de CJ"
+              label="Actualizar estado"
+              description="Consulta el estado actualizado desde CJ"
               color="slate"
               disabled={!canSync || busyAction !== null}
               busy={busyAction === 'status'}
@@ -405,7 +436,7 @@ export default function CjEbayOrderDetailPage() {
             />
             <ActionButton
               label="Sincronizar tracking"
-              description="Obtiene tracking desde CJ y lo actualiza localmente"
+              description="Obtiene el número de seguimiento desde CJ y lo actualiza en la orden"
               color="slate"
               disabled={!canSync || busyAction !== null}
               busy={busyAction === 'tracking'}
@@ -429,7 +460,7 @@ export default function CjEbayOrderDetailPage() {
             <div>
               <dt className="inline text-slate-500 dark:text-slate-400">Estado: </dt>
               <dd className="inline font-medium text-slate-800 dark:text-slate-200">
-                {order.tracking.status}
+                {STATUS_LABELS[order.tracking.status] ?? order.tracking.status}
               </dd>
             </div>
             {order.tracking.trackingNumber && (
@@ -442,7 +473,7 @@ export default function CjEbayOrderDetailPage() {
             )}
             {order.tracking.carrierCode && (
               <div>
-                <dt className="inline text-slate-500 dark:text-slate-400">Carrier: </dt>
+                <dt className="inline text-slate-500 dark:text-slate-400">Transportista: </dt>
                 <dd className="inline text-slate-800 dark:text-slate-200">
                   {order.tracking.carrierCode}
                 </dd>
@@ -455,7 +486,7 @@ export default function CjEbayOrderDetailPage() {
       {/* ── Timeline de eventos ───────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">
-          Timeline de eventos
+          Historial de eventos
         </h3>
         {order.events.length === 0 ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">Sin eventos registrados.</p>
@@ -477,24 +508,14 @@ export default function CjEbayOrderDetailPage() {
       </div>
 
       {/* ── Flujo operacional ─────────────────────────────────────────────── */}
-      {flow && (
+      {flow && (flow.gates?.length ?? 0) > 0 && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Flujo operacional
+            Estado del flujo
           </h3>
-
-          {flow.suggestedNext && (
-            <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-xs text-blue-900 dark:text-blue-100">
-              Siguiente paso sugerido:{' '}
-              <strong className="font-semibold">{flow.suggestedNext}</strong>
-            </div>
-          )}
 
           {flow.gates && flow.gates.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Gates del flujo
-              </p>
               {flow.gates.map((gate, i) => (
                 <div key={i} className="flex items-start gap-2 text-xs">
                   <span
@@ -526,7 +547,7 @@ export default function CjEbayOrderDetailPage() {
           {flow.lastTraces && flow.lastTraces.length > 0 && (
             <details className="text-xs">
               <summary className="cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 select-none">
-                Últimas trazas ({flow.lastTraces.length})
+                Trazas recientes ({flow.lastTraces.length})
               </summary>
               <ul className="mt-2 space-y-1 border-l-2 border-slate-200 dark:border-slate-700 pl-3">
                 {flow.lastTraces.map((t, i) => (
@@ -550,7 +571,7 @@ export default function CjEbayOrderDetailPage() {
       {evidence && (
         <details className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
           <summary className="text-sm font-semibold text-slate-900 dark:text-slate-100 cursor-pointer select-none">
-            Evidencia resumida (audit trail)
+            Auditoría — evidencia resumida
           </summary>
           <pre className="mt-3 text-[11px] text-slate-600 dark:text-slate-400 max-h-72 overflow-auto rounded bg-slate-50 dark:bg-slate-950 p-3 whitespace-pre-wrap break-all">
             {JSON.stringify(evidence, null, 2)}
@@ -561,7 +582,7 @@ export default function CjEbayOrderDetailPage() {
       {/* ── Raw eBay summary ─────────────────────────────────────────────── */}
       <details className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
         <summary className="text-sm font-semibold text-slate-900 dark:text-slate-100 cursor-pointer select-none">
-          Raw eBay summary
+          Datos raw eBay (avanzado)
         </summary>
         <pre className="mt-3 text-[11px] text-slate-600 dark:text-slate-400 max-h-64 overflow-auto rounded bg-slate-50 dark:bg-slate-950 p-3 whitespace-pre-wrap break-all">
           {JSON.stringify(order.rawEbaySummary, null, 2)}

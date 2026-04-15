@@ -1,6 +1,6 @@
 # CJ Dropshipping → eBay USA — Plan maestro y auditoría
 
-**Versión:** 2.14 (FASE 3D.QUALITY — calidad de draft: título, descripción, aspectos, guardrails, UX)  
+**Versión:** 2.15 (FASE 3E.UI — rediseño profesional Orders: panel postventa, badges humanos, filtros, próximo paso, sin texto dev)  
 **Última actualización:** 2026-04-15  
 **Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block implementado** (ver §FASE 3D.GUARDRAIL); **FASE 3E + 3E.1 + 3E.2 + 3E.3** en código: tras create con **payType=3** el sistema modela **`confirmOrder`** y **`payBalance`** (manual o `AUTO_CONFIRM_PAY` en settings). **FASE 3E.4** incluye **protocolo**, **plantilla de evidencia**, **`GET …/system-readiness`** (sin CJ/eBay HTTP), **scripts** de migración y export, colección **`.http`**. La **corrida viva** la ejecuta solo el operador humano. **payBalanceV2** no está implementado (contrato distinto en doc). La postventa **sigue sin declararse “lista”** sin completar **3E.4 en cuenta real**. **FASE 3F–3G** (workers) **sin iniciar como implementación masiva** hasta criterio explícito tras 3E.4.
 

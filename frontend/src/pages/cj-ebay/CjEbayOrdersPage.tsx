@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
@@ -19,7 +19,23 @@ type OrderRow = {
   updatedAt: string;
 };
 
-// ── Status badge ──────────────────────────────────────────────────────────────
+// ── Status display ────────────────────────────────────────────────────────────
+
+const STATUS_LABELS: Record<string, string> = {
+  DETECTED:              'Detectada',
+  VALIDATED:             'Validada',
+  CJ_ORDER_CREATED:      'Orden CJ creada',
+  CJ_ORDER_CONFIRMING:   'Confirmando',
+  CJ_PAYMENT_PENDING:    'Pago pendiente',
+  CJ_PAYMENT_PROCESSING: 'Procesando pago',
+  CJ_PAYMENT_COMPLETED:  'Pago completado',
+  CJ_FULFILLING:         'En fulfillment',
+  CJ_SHIPPED:            'Enviada por CJ',
+  TRACKING_ON_EBAY:      'Tracking en eBay',
+  COMPLETED:             'Completada',
+  FAILED:                'Fallida',
+  NEEDS_MANUAL:          'Intervención manual',
+};
 
 const STATUS_COLORS: Record<string, string> = {
   DETECTED:              'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
@@ -37,13 +53,37 @@ const STATUS_COLORS: Record<string, string> = {
   NEEDS_MANUAL:          'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
 };
 
+const NEXT_STEP: Record<string, string> = {
+  DETECTED:              'Pendiente de validación',
+  VALIDATED:             'Ordenar en CJ',
+  CJ_ORDER_CREATED:      'Confirmar con CJ',
+  CJ_ORDER_CONFIRMING:   'Esperando confirmación',
+  CJ_PAYMENT_PENDING:    'Pagar balance CJ',
+  CJ_PAYMENT_PROCESSING: 'Procesando pago',
+  CJ_PAYMENT_COMPLETED:  'Esperando fulfillment',
+  CJ_FULFILLING:         'CJ preparando envío',
+  CJ_SHIPPED:            'Sincronizar tracking',
+  TRACKING_ON_EBAY:      'Tracking subido a eBay',
+  COMPLETED:             '—',
+  FAILED:                'Revisar error',
+  NEEDS_MANUAL:          'Intervención requerida',
+};
+
+const ALL_FILTER_STATUSES = [
+  'DETECTED', 'VALIDATED', 'CJ_ORDER_CREATED', 'CJ_ORDER_CONFIRMING',
+  'CJ_PAYMENT_PENDING', 'CJ_PAYMENT_PROCESSING', 'CJ_PAYMENT_COMPLETED',
+  'CJ_FULFILLING', 'CJ_SHIPPED', 'TRACKING_ON_EBAY', 'COMPLETED',
+  'FAILED', 'NEEDS_MANUAL',
+];
+
 function StatusBadge({ status }: { status: string }) {
   const cls =
     STATUS_COLORS[status] ??
     'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+  const label = STATUS_LABELS[status] ?? status;
   return (
-    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${cls}`}>
-      {status}
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${cls}`}>
+      {label}
     </span>
   );
 }
@@ -59,6 +99,13 @@ function axiosMsg(e: unknown, fallback: string): string {
   return fallback;
 }
 
+const ATTENTION_STATUSES = new Set(['FAILED', 'NEEDS_MANUAL', 'DETECTED']);
+const ACTIVE_STATUSES = new Set([
+  'VALIDATED', 'CJ_ORDER_CREATED', 'CJ_ORDER_CONFIRMING',
+  'CJ_PAYMENT_PENDING', 'CJ_PAYMENT_PROCESSING', 'CJ_PAYMENT_COMPLETED',
+  'CJ_FULFILLING', 'CJ_SHIPPED', 'TRACKING_ON_EBAY',
+]);
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CjEbayOrdersPage() {
@@ -70,6 +117,11 @@ export default function CjEbayOrdersPage() {
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Filters
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterAttention, setFilterAttention] = useState(false);
+  const [filterSearch, setFilterSearch] = useState('');
+
   const loadList = useCallback(async () => {
     setError(null);
     setLoadingList(true);
@@ -79,7 +131,7 @@ export default function CjEbayOrdersPage() {
         setOrders(res.data.orders);
       }
     } catch (e: unknown) {
-      setError(axiosMsg(e, 'No se pudieron cargar órdenes.'));
+      setError(axiosMsg(e, 'No se pudieron cargar las órdenes.'));
     } finally {
       setLoadingList(false);
     }
@@ -88,6 +140,39 @@ export default function CjEbayOrdersPage() {
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  // ── KPIs ──────────────────────────────────────────────────────────────────
+
+  const kpis = useMemo(() => ({
+    total:        orders.length,
+    active:       orders.filter((o) => ACTIVE_STATUSES.has(o.status)).length,
+    attention:    orders.filter((o) => ATTENTION_STATUSES.has(o.status)).length,
+    completed:    orders.filter((o) => o.status === 'COMPLETED').length,
+  }), [orders]);
+
+  // ── Filtered list ─────────────────────────────────────────────────────────
+
+  const filtered = useMemo(() => {
+    let list = orders;
+    if (filterStatus) {
+      list = list.filter((o) => o.status === filterStatus);
+    }
+    if (filterAttention) {
+      list = list.filter((o) => ATTENTION_STATUSES.has(o.status));
+    }
+    if (filterSearch.trim()) {
+      const q = filterSearch.trim().toLowerCase();
+      list = list.filter(
+        (o) =>
+          o.ebayOrderId.toLowerCase().includes(q) ||
+          (o.cjOrderId ?? '').toLowerCase().includes(q) ||
+          (o.ebaySku ?? '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [orders, filterStatus, filterAttention, filterSearch]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
 
   async function runImport() {
     const id = ebayOrderId.trim();
@@ -99,7 +184,7 @@ export default function CjEbayOrdersPage() {
       setEbayOrderId('');
       await loadList();
     } catch (e: unknown) {
-      setError(axiosMsg(e, 'Error al importar.'));
+      setError(axiosMsg(e, 'Error al importar la orden.'));
     } finally {
       setLoadingImport(false);
     }
@@ -109,20 +194,18 @@ export default function CjEbayOrdersPage() {
     setBusyOrderId(orderId);
     setError(null);
     try {
-      const res = await api.post<{
-        ok: boolean;
-        needsManual?: boolean;
-        checkoutNote?: string;
-      }>(`/api/cj-ebay/orders/${orderId}/place`);
+      const res = await api.post<{ ok: boolean; needsManual?: boolean; checkoutNote?: string }>(
+        `/api/cj-ebay/orders/${orderId}/place`
+      );
       if (res.data?.needsManual) {
         setError(
           res.data.checkoutNote ||
-            'Place/checkout automático incompleto (needsManual). Abre el detalle para revisar eventos y lastError.'
+            'Orden enviada a CJ con aviso. Abre el detalle para revisar los eventos.'
         );
       }
       await loadList();
     } catch (e: unknown) {
-      setError(axiosMsg(e, 'Error al colocar pedido CJ.'));
+      setError(axiosMsg(e, 'Error al colocar la orden en CJ.'));
       await loadList();
     } finally {
       setBusyOrderId(null);
@@ -136,7 +219,7 @@ export default function CjEbayOrdersPage() {
       await api.get(`/api/cj-ebay/orders/${orderId}/status`);
       await loadList();
     } catch (e: unknown) {
-      setError(axiosMsg(e, 'Error al consultar estado CJ.'));
+      setError(axiosMsg(e, 'Error al actualizar el estado desde CJ.'));
     } finally {
       setBusyOrderId(null);
     }
@@ -149,10 +232,10 @@ export default function CjEbayOrdersPage() {
       const res = await api.post<{ ok: boolean; skipped?: boolean }>(
         `/api/cj-ebay/orders/${orderId}/confirm`
       );
-      if (res.data?.skipped) setError('Confirm omitido (ya confirmada).');
+      if (res.data?.skipped) setError('La orden ya estaba confirmada.');
       await loadList();
     } catch (e: unknown) {
-      setError(axiosMsg(e, 'Error al confirmar en CJ.'));
+      setError(axiosMsg(e, 'Error al confirmar la orden en CJ.'));
     } finally {
       setBusyOrderId(null);
     }
@@ -165,10 +248,10 @@ export default function CjEbayOrdersPage() {
       const res = await api.post<{ ok: boolean; skipped?: boolean }>(
         `/api/cj-ebay/orders/${orderId}/pay`
       );
-      if (res.data?.skipped) setError('Pago omitido (ya pagado en sistema).');
+      if (res.data?.skipped) setError('El pago ya fue registrado anteriormente.');
       await loadList();
     } catch (e: unknown) {
-      setError(axiosMsg(e, 'Error al pagar con balance CJ.'));
+      setError(axiosMsg(e, 'Error al procesar el pago en CJ.'));
     } finally {
       setBusyOrderId(null);
     }
@@ -182,15 +265,17 @@ export default function CjEbayOrdersPage() {
         `/api/cj-ebay/orders/${orderId}/sync-tracking`
       );
       if (res.data?.stub) {
-        setError(res.data.message || 'Tracking no disponible (stub / no implementado).');
+        setError(res.data.message || 'Número de seguimiento no disponible aún desde CJ.');
       }
       await loadList();
     } catch (e: unknown) {
-      setError(axiosMsg(e, 'Error al sincronizar tracking.'));
+      setError(axiosMsg(e, 'Error al sincronizar el tracking.'));
     } finally {
       setBusyOrderId(null);
     }
   }
+
+  // ── Loading ───────────────────────────────────────────────────────────────
 
   if (loadingList) {
     return (
@@ -200,77 +285,95 @@ export default function CjEbayOrdersPage() {
     );
   }
 
-  const openCount = orders.filter(
-    (o) => o.status !== 'COMPLETED' && o.status !== 'FAILED'
-  ).length;
-  const failedCount = orders.filter((o) => o.status === 'FAILED' || o.status === 'NEEDS_MANUAL').length;
+  const hasActiveFilters = filterStatus || filterAttention || filterSearch.trim();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <CjEbayOperatorPathCallout variant="orders" />
 
-      {/* ── Readiness banner ─────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 px-4 py-3 text-xs text-slate-700 dark:text-slate-300 space-y-1">
-        <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-          Estado del ciclo postventa CJ → eBay USA
+      {/* ── Header ───────────────────────────────────────────────────────── */}
+      <div>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Órdenes CJ → eBay USA
+        </h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          Gestión postventa — importa, opera y hace seguimiento del ciclo completo de cada venta.
         </p>
-        <ul className="list-disc pl-5 space-y-0.5">
-          <li><span className="text-emerald-700 dark:text-emerald-400 font-medium">✓ Import orden eBay</span> — listo en código</li>
-          <li><span className="text-emerald-700 dark:text-emerald-400 font-medium">✓ Place CJ</span> — listo en código (<code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">createOrderV2</code> payType=3)</li>
-          <li><span className="text-emerald-700 dark:text-emerald-400 font-medium">✓ Confirm / Pay</span> — listo en código (<code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">confirmOrder</code> / <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">payBalance</code>). Modo automático: <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">cjPostCreateCheckoutMode=AUTO_CONFIRM_PAY</code></li>
-          <li><span className="text-emerald-700 dark:text-emerald-400 font-medium">✓ Tracking</span> — listo en código</li>
-          <li><span className="text-amber-700 dark:text-amber-400 font-medium">⏳ Validación viva</span> — pendiente hasta primera orden real con cuenta CJ activa</li>
-        </ul>
       </div>
 
-      {/* ── KPI strip ────────────────────────────────────────────────────── */}
-      {orders.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Total órdenes', count: orders.length, tone: 'slate' },
-            { label: 'En progreso', count: openCount, tone: openCount > 0 ? 'amber' : 'slate' },
-            { label: 'Fallo / manual', count: failedCount, tone: failedCount > 0 ? 'red' : 'slate' },
-          ].map(({ label, count, tone }) => (
-            <div
-              key={label}
-              className={`rounded-xl border p-3 ${
-                tone === 'amber'
-                  ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-900/10'
-                  : tone === 'red'
-                  ? 'border-red-200 dark:border-red-800/50 bg-red-50/40 dark:bg-red-900/10'
-                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40'
+      {/* ── KPIs ─────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          {
+            label: 'Total órdenes',
+            value: kpis.total,
+            tone: 'slate' as const,
+          },
+          {
+            label: 'En progreso',
+            value: kpis.active,
+            tone: kpis.active > 0 ? 'blue' as const : 'slate' as const,
+          },
+          {
+            label: 'Requieren atención',
+            value: kpis.attention,
+            tone: kpis.attention > 0 ? 'amber' as const : 'slate' as const,
+          },
+          {
+            label: 'Completadas',
+            value: kpis.completed,
+            tone: kpis.completed > 0 ? 'emerald' as const : 'slate' as const,
+          },
+        ].map(({ label, value, tone }) => (
+          <div
+            key={label}
+            className={`rounded-xl border p-3 ${
+              tone === 'blue'
+                ? 'border-blue-200 dark:border-blue-800/50 bg-blue-50/40 dark:bg-blue-900/10'
+                : tone === 'amber'
+                ? 'border-amber-200 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-900/10'
+                : tone === 'emerald'
+                ? 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/40 dark:bg-emerald-900/10'
+                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40'
+            }`}
+          >
+            <p
+              className={`text-2xl font-bold tabular-nums ${
+                tone === 'blue'
+                  ? 'text-blue-700 dark:text-blue-300'
+                  : tone === 'amber'
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : tone === 'emerald'
+                  ? 'text-emerald-700 dark:text-emerald-300'
+                  : 'text-slate-900 dark:text-white'
               }`}
             >
-              <p
-                className={`text-xl font-bold tabular-nums ${
-                  tone === 'amber'
-                    ? 'text-amber-700 dark:text-amber-300'
-                    : tone === 'red'
-                    ? 'text-red-700 dark:text-red-300'
-                    : 'text-slate-900 dark:text-white'
-                }`}
-              >
-                {count}
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{label}</p>
-            </div>
-          ))}
-        </div>
-      )}
+              {value}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{label}</p>
+          </div>
+        ))}
+      </div>
 
       {/* ── Import ───────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Importar orden eBay por ID
+          Importar orden eBay
         </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Ingresa el ID de la orden de eBay para iniciar el ciclo postventa con CJ.
+        </p>
         <div className="flex flex-wrap gap-2 items-end">
           <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 flex-1 min-w-[200px]">
-            ebayOrderId
+            ID de orden eBay
             <input
               className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
               value={ebayOrderId}
               onChange={(ev) => setEbayOrderId(ev.target.value)}
-              placeholder="Sell Fulfillment order id"
+              placeholder="Ej: 12-05678-90123"
+              onKeyDown={(ev) => {
+                if (ev.key === 'Enter') void runImport();
+              }}
             />
           </label>
           <button
@@ -284,156 +387,233 @@ export default function CjEbayOrdersPage() {
         </div>
       </div>
 
+      {/* ── Error banner ──────────────────────────────────────────────────── */}
       {error && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
           {error}
         </div>
       )}
 
+      {/* ── Filters ───────────────────────────────────────────────────────── */}
+      {orders.length > 0 && (
+        <div className="flex flex-wrap gap-3 items-center">
+          <select
+            aria-label="Filtrar por estado"
+            value={filterStatus}
+            onChange={(e) => {
+              setFilterStatus(e.target.value);
+              setFilterAttention(false);
+            }}
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-2.5 py-1.5 text-slate-700 dark:text-slate-300"
+          >
+            <option value="">Todos los estados</option>
+            {ALL_FILTER_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABELS[s] ?? s}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFilterAttention((v) => !v);
+              setFilterStatus('');
+            }}
+            className={`rounded-lg border text-xs px-2.5 py-1.5 font-medium transition-colors ${
+              filterAttention
+                ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'
+                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:border-amber-300'
+            }`}
+          >
+            Requieren atención
+          </button>
+
+          <input
+            type="text"
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+            placeholder="Buscar por ID eBay / ID CJ / SKU"
+            className="flex-1 min-w-[200px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-2.5 py-1.5 text-slate-700 dark:text-slate-300 placeholder:text-slate-400"
+          />
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterStatus('');
+                setFilterAttention(false);
+                setFilterSearch('');
+              }}
+              className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Orders table ─────────────────────────────────────────────────── */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-900/80 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            <tr>
-              <th className="px-3 py-2.5">eBay order</th>
-              <th className="px-3 py-2.5">Estado</th>
-              <th className="px-3 py-2.5">CJ order</th>
-              <th className="px-3 py-2.5">SKU</th>
-              <th className="px-3 py-2.5">Total</th>
-              <th className="px-3 py-2.5">Actualizado</th>
-              <th className="px-3 py-2.5">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.length === 0 ? (
+        {orders.length === 0 ? (
+          <div className="px-6 py-14 text-center space-y-2">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Esperando primera orden real
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+              Importa el ID de una orden eBay usando el formulario de arriba para iniciar el ciclo
+              postventa CJ.
+            </p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Sin órdenes para los filtros seleccionados.
+            </p>
+          </div>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-900/80 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-slate-500 dark:text-slate-400 text-sm">
-                  Sin órdenes importadas. Usa el formulario de arriba para importar la primera.
-                </td>
+                <th className="px-3 py-2.5">eBay order</th>
+                <th className="px-3 py-2.5">Estado</th>
+                <th className="px-3 py-2.5">Próximo paso</th>
+                <th className="px-3 py-2.5">CJ order</th>
+                <th className="px-3 py-2.5">SKU</th>
+                <th className="px-3 py-2.5">Total</th>
+                <th className="px-3 py-2.5">Actualizado</th>
+                <th className="px-3 py-2.5">Acciones</th>
               </tr>
-            ) : (
-              orders.map((row) => (
-                <tr
-                  key={row.id}
-                  className={`border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors ${
-                    row.status === 'FAILED' || row.status === 'NEEDS_MANUAL'
-                      ? 'bg-red-50/30 dark:bg-red-950/10'
-                      : ''
-                  }`}
-                >
-                  <td className="px-3 py-2.5 font-mono text-xs text-slate-700 dark:text-slate-300">
-                    {row.ebayOrderId}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StatusBadge status={row.status} />
-                    {row.lastError && (
-                      <p
-                        className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5 max-w-[160px] truncate"
-                        title={row.lastError}
-                      >
-                        {row.lastError}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-slate-600 dark:text-slate-400">
-                    {row.cjOrderId || '—'}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-slate-600 dark:text-slate-400">
-                    {row.ebaySku || '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-700 dark:text-slate-300 tabular-nums">
-                    {row.totalUsd != null ? `$${row.totalUsd.toFixed(2)}` : '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-[11px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                    {new Date(row.updatedAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap gap-x-2 gap-y-1 items-center whitespace-nowrap">
-                      {/* Detalle (full page) */}
-                      <button
-                        type="button"
-                        className="text-xs text-primary-600 dark:text-primary-400 underline font-medium"
-                        onClick={() => navigate(`/cj-ebay/orders/${row.id}`)}
-                      >
-                        Detalle
-                      </button>
+            </thead>
+            <tbody>
+              {filtered.map((row) => {
+                const canPlace =
+                  row.status === 'VALIDATED' ||
+                  (row.listingId != null &&
+                    (row.status === 'NEEDS_MANUAL' || row.status === 'FAILED'));
+                const canConfirm = !!row.cjOrderId && row.status === 'CJ_ORDER_CREATED';
+                const canPay = !!row.cjOrderId && row.status === 'CJ_PAYMENT_PENDING';
+                const canSync = !!row.cjOrderId && row.status !== 'COMPLETED';
 
-                      {/* Place CJ */}
-                      <button
-                        type="button"
-                        disabled={
-                          busyOrderId === row.id ||
-                          !(
-                            row.status === 'VALIDATED' ||
-                            (row.listingId != null &&
-                              (row.status === 'NEEDS_MANUAL' || row.status === 'FAILED'))
-                          )
-                        }
-                        className="text-xs font-medium text-emerald-700 dark:text-emerald-300 disabled:opacity-40"
-                        onClick={() => void runPlace(row.id)}
-                      >
-                        Place CJ
-                      </button>
-
-                      {/* CJ status */}
-                      <button
-                        type="button"
-                        disabled={busyOrderId === row.id || !row.cjOrderId || row.status === 'COMPLETED'}
-                        className="text-xs text-slate-600 dark:text-slate-400 disabled:opacity-40"
-                        onClick={() => void runSyncStatus(row.id)}
-                      >
-                        CJ status
-                      </button>
-
-                      {/* Sync tracking */}
-                      <button
-                        type="button"
-                        disabled={busyOrderId === row.id || !row.cjOrderId || row.status === 'COMPLETED'}
-                        className="text-xs text-slate-600 dark:text-slate-400 disabled:opacity-40"
-                        onClick={() => void runSyncTracking(row.id)}
-                      >
-                        Tracking
-                      </button>
-
-                      {/* Confirmar */}
-                      <button
-                        type="button"
-                        disabled={
-                          busyOrderId === row.id ||
-                          !row.cjOrderId ||
-                          row.status !== 'CJ_ORDER_CREATED'
-                        }
-                        className="text-xs font-medium text-indigo-700 dark:text-indigo-300 disabled:opacity-40"
-                        onClick={() => void runConfirm(row.id)}
-                      >
-                        Confirmar
-                      </button>
-
-                      {/* Pagar */}
-                      <button
-                        type="button"
-                        disabled={
-                          busyOrderId === row.id ||
-                          !row.cjOrderId ||
-                          row.status !== 'CJ_PAYMENT_PENDING'
-                        }
-                        className="text-xs font-medium text-violet-700 dark:text-violet-300 disabled:opacity-40"
-                        onClick={() => void runPay(row.id)}
-                      >
-                        Pagar
-                      </button>
-
-                      {/* Busy indicator */}
-                      {busyOrderId === row.id && (
-                        <span className="h-3 w-3 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" />
+                return (
+                  <tr
+                    key={row.id}
+                    className={`border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors ${
+                      row.status === 'FAILED' || row.status === 'NEEDS_MANUAL'
+                        ? 'bg-red-50/30 dark:bg-red-950/10'
+                        : ''
+                    }`}
+                  >
+                    <td className="px-3 py-2.5 font-mono text-xs text-slate-700 dark:text-slate-300">
+                      {row.ebayOrderId}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <StatusBadge status={row.status} />
+                      {row.lastError && (
+                        <p
+                          className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5 max-w-[160px] truncate"
+                          title={row.lastError}
+                        >
+                          {row.lastError}
+                        </p>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      {NEXT_STEP[row.status] ?? '—'}
+                    </td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-slate-600 dark:text-slate-400">
+                      {row.cjOrderId || '—'}
+                    </td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-slate-600 dark:text-slate-400">
+                      {row.ebaySku || '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-slate-700 dark:text-slate-300 tabular-nums">
+                      {row.totalUsd != null ? `$${row.totalUsd.toFixed(2)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-[11px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                      {new Date(row.updatedAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap gap-x-2 gap-y-1 items-center whitespace-nowrap">
+                        {/* Ver detalle */}
+                        <button
+                          type="button"
+                          className="text-xs text-primary-600 dark:text-primary-400 underline font-medium"
+                          onClick={() => navigate(`/cj-ebay/orders/${row.id}`)}
+                        >
+                          Ver detalle
+                        </button>
+
+                        {/* Ordenar en CJ */}
+                        {canPlace && (
+                          <button
+                            type="button"
+                            disabled={busyOrderId === row.id}
+                            className="text-xs font-medium text-emerald-700 dark:text-emerald-300 disabled:opacity-40"
+                            onClick={() => void runPlace(row.id)}
+                          >
+                            Ordenar en CJ
+                          </button>
+                        )}
+
+                        {/* Confirmar */}
+                        {canConfirm && (
+                          <button
+                            type="button"
+                            disabled={busyOrderId === row.id}
+                            className="text-xs font-medium text-indigo-700 dark:text-indigo-300 disabled:opacity-40"
+                            onClick={() => void runConfirm(row.id)}
+                          >
+                            Confirmar
+                          </button>
+                        )}
+
+                        {/* Pagar */}
+                        {canPay && (
+                          <button
+                            type="button"
+                            disabled={busyOrderId === row.id}
+                            className="text-xs font-medium text-violet-700 dark:text-violet-300 disabled:opacity-40"
+                            onClick={() => void runPay(row.id)}
+                          >
+                            Pagar
+                          </button>
+                        )}
+
+                        {/* Actualizar estado / Tracking */}
+                        {canSync && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={busyOrderId === row.id}
+                              className="text-xs text-slate-600 dark:text-slate-400 disabled:opacity-40"
+                              onClick={() => void runSyncStatus(row.id)}
+                            >
+                              Actualizar estado
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyOrderId === row.id}
+                              className="text-xs text-slate-600 dark:text-slate-400 disabled:opacity-40"
+                              onClick={() => void runSyncTracking(row.id)}
+                            >
+                              Tracking
+                            </button>
+                          </>
+                        )}
+
+                        {/* Busy indicator */}
+                        {busyOrderId === row.id && (
+                          <span className="h-3 w-3 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
