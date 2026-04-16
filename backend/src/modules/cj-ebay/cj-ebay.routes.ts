@@ -63,7 +63,7 @@ function httpStatusForCj(err: CjSupplierError): number {
 }
 
 /**
- * Operational ranking score for CJ search results (0–100).
+ * Operational ranking score for CJ search results (0–110).
  * Uses only signals available from product/listV2 — no extra CJ API calls.
  *
  * A  Stock presence      0–45 pts  Most predictive of pipeline success.
@@ -77,6 +77,10 @@ function httpStatusForCj(err: CjSupplierError): number {
  * C  Image present       0–15 pts  eBay listings require at least one quality image.
  *
  * D  Title depth         0–10 pts  Longer title = more complete CJ catalog data.
+ *
+ * E  US warehouse        0–10 pts  US warehouse confirmed by freight probe → faster ETA,
+ *                                  better eBay buyer experience, no overseas block risk.
+ *                                  Only populated when CJ_EBAY_WAREHOUSE_AWARE=true.
  *
  * Products are NOT excluded — only sorted. Score 0 = weak candidate, not removed.
  */
@@ -118,7 +122,12 @@ function cjSearchRankScore(item: import('./adapters/cj-supplier.adapter.interfac
   else if (titleLen >= 20) score += 6;
   else if (titleLen >= 10) score += 3;
 
-  return score; // max 100 (45+30+15+10), min 0
+  // E — US warehouse bonus (only when CJ_EBAY_WAREHOUSE_AWARE enrichment was performed)
+  if (item.fulfillmentOrigin === 'US') {
+    score += 10; // confirmed US warehouse = faster ETA, no overseas block risk
+  }
+
+  return score; // max 110 (45+30+15+10+10), min 0
 }
 
 type CjSearchOperabilityStatus = 'operable' | 'stock_unknown' | 'unavailable';
@@ -139,16 +148,28 @@ function cjSearchOperabilityStatus(
   return 'stock_unknown';
 }
 
-function cjSearchOperabilityPriority(status: CjSearchOperabilityStatus): number {
+/**
+ * 4-tier ranking priority (lower = better):
+ * 0 — operable + US warehouse confirmed
+ * 1 — operable + CN warehouse (or origin not yet probed)
+ * 2 — stock unknown
+ * 3 — unavailable
+ *
+ * Within each tier, items are ranked by `cjSearchRankScore` (descending).
+ */
+function cjSearchOperabilityPriority(
+  status: CjSearchOperabilityStatus,
+  fulfillmentOrigin?: 'US' | 'CN' | 'UNKNOWN'
+): number {
   switch (status) {
     case 'operable':
-      return 0;
+      return fulfillmentOrigin === 'US' ? 0 : 1;
     case 'stock_unknown':
-      return 1;
-    case 'unavailable':
       return 2;
-    default:
+    case 'unavailable':
       return 3;
+    default:
+      return 4;
   }
 }
 
@@ -1180,16 +1201,50 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
       }
     }
 
+    // WAREHOUSE-AWARE: probe US freight for top operable results when flag is on.
+    // Limit: CJ_EBAY_WAREHOUSE_PROBE_LIMIT items max (default 3) to contain QPS.
+    // Uses the first variant vid from product detail; skip if no vid available.
+    const fulfillmentOriginMap = new Map<string, 'US' | 'CN' | 'UNKNOWN'>();
+
+    if (env.CJ_EBAY_WAREHOUSE_AWARE) {
+      const probeLimit = env.CJ_EBAY_WAREHOUSE_PROBE_LIMIT;
+      const operableCandidates = ranked.filter(
+        (item) => (liveOperability.get(item.cjProductId) ?? cjSearchOperabilityStatus(item)) === 'operable'
+      );
+      for (const item of operableCandidates.slice(0, probeLimit)) {
+        try {
+          // Resolve first variant vid for this product
+          const detail = await adapter.getProductById(item.cjProductId);
+          const firstVid = detail.variants.find((v) => String(v.cjVid || '').trim())?.cjVid;
+          if (!firstVid) {
+            fulfillmentOriginMap.set(item.cjProductId, 'UNKNOWN');
+            continue;
+          }
+          const waResult = await adapter.quoteShippingToUsWarehouseAware({
+            variantId: firstVid,
+            quantity: 1,
+          });
+          fulfillmentOriginMap.set(item.cjProductId, waResult.fulfillmentOrigin);
+        } catch {
+          // Probe failure (auth/network) → mark as UNKNOWN, don't fail the whole search
+          fulfillmentOriginMap.set(item.cjProductId, 'UNKNOWN');
+        }
+      }
+    }
+
     const items = ranked
-      .map((item) => ({
-        ...item,
-        operabilityStatus:
-          liveOperability.get(item.cjProductId) ?? cjSearchOperabilityStatus(item),
-      }))
+      .map((item) => {
+        const operabilityStatus =
+          liveOperability.get(item.cjProductId) ?? cjSearchOperabilityStatus(item);
+        const fulfillmentOrigin: 'US' | 'CN' | 'UNKNOWN' =
+          fulfillmentOriginMap.get(item.cjProductId) ??
+          (env.CJ_EBAY_WAREHOUSE_AWARE ? 'UNKNOWN' : 'CN');
+        return { ...item, operabilityStatus, fulfillmentOrigin };
+      })
       .sort((a, b) => {
         const operabilityDelta =
-          cjSearchOperabilityPriority(a.operabilityStatus) -
-          cjSearchOperabilityPriority(b.operabilityStatus);
+          cjSearchOperabilityPriority(a.operabilityStatus, a.fulfillmentOrigin) -
+          cjSearchOperabilityPriority(b.operabilityStatus, b.fulfillmentOrigin);
         if (operabilityDelta !== 0) {
           return operabilityDelta;
         }
@@ -1201,6 +1256,14 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
     const unknownStock = items.filter((x) => x.inventoryTotal === undefined).length;
     const zeroStock = items.filter((x) => x.inventoryTotal === 0).length;
 
+    // Warehouse summary (only meaningful when CJ_EBAY_WAREHOUSE_AWARE=true)
+    const warehouseSummary = env.CJ_EBAY_WAREHOUSE_AWARE ? {
+      usWarehouseConfirmed: items.filter((x) => x.fulfillmentOrigin === 'US').length,
+      cnWarehouse: items.filter((x) => x.fulfillmentOrigin === 'CN').length,
+      originUnknown: items.filter((x) => x.fulfillmentOrigin === 'UNKNOWN').length,
+      probeLimit: env.CJ_EBAY_WAREHOUSE_PROBE_LIMIT,
+    } : null;
+
     await traceComplete(req, userId, 'POST /cj/search', { statusCode: 200 });
     res.json({
       ok: true,
@@ -1211,12 +1274,16 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
         stockUnknown: items.filter((x) => x.operabilityStatus === 'stock_unknown').length,
         unavailable: items.filter((x) => x.operabilityStatus === 'unavailable').length,
       },
+      warehouseSummary,
+      warehouseAwareEnabled: env.CJ_EBAY_WAREHOUSE_AWARE,
       liveProbeSummary: {
         enrichedTopResults: Math.min(ranked.length, CJ_SEARCH_OPERABILITY_ENRICH_LIMIT),
         variantProbeLimitPerProduct: CJ_SEARCH_VARIANT_LIVE_PROBE_LIMIT,
       },
       note:
-        'Results are segmented by live stock evidence first (operable > stock_unknown > unavailable) and ranked by operational score within each segment.',
+        env.CJ_EBAY_WAREHOUSE_AWARE
+          ? 'Results ranked by 4-tier: operable+US > operable+CN > stock_unknown > unavailable. US warehouse confirmed via freightCalculate probe.'
+          : 'Results segmented by live stock evidence (operable > stock_unknown > unavailable) and ranked by operational score. Set CJ_EBAY_WAREHOUSE_AWARE=true to enable US warehouse detection.',
     });
   } catch (e) {
     if (e instanceof CjSupplierError) {

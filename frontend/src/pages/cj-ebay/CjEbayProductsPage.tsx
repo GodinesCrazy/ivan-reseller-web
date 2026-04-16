@@ -18,6 +18,11 @@ type CjProductSummary = {
    * >0 = CJ reported available stock
    */
   inventoryTotal?: number;
+  /**
+   * Fulfillment origin from warehouse-aware probe (CJ_EBAY_WAREHOUSE_AWARE=true).
+   * US = US warehouse confirmed; CN = ships from China; UNKNOWN = no probe performed.
+   */
+  fulfillmentOrigin?: 'US' | 'CN' | 'UNKNOWN';
 };
 
 type CjVariantDetail = {
@@ -158,6 +163,12 @@ type SearchResponse = {
     stockUnknown: number;
     unavailable: number;
   };
+  warehouseAwareEnabled?: boolean;
+  warehouseSummary?: {
+    usConfirmed: number;
+    cnFallback: number;
+    notProbed: number;
+  };
 };
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -263,6 +274,22 @@ function OperabilityBadge({ status }: { status: SearchOperabilityStatus }) {
   return (
     <span className={`inline-block text-xs rounded-full px-2 py-0.5 font-medium ${styles[status]}`}>
       {labels[status]}
+    </span>
+  );
+}
+
+function FulfillmentOriginBadge({ origin }: { origin: 'US' | 'CN' | 'UNKNOWN' | undefined }) {
+  if (!origin || origin === 'UNKNOWN') return null;
+  if (origin === 'US') {
+    return (
+      <span className="inline-block text-xs rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 px-2 py-0.5 font-medium">
+        🇺🇸 Bodega USA
+      </span>
+    );
+  }
+  return (
+    <span className="inline-block text-xs rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 font-medium">
+      🇨🇳 Envío desde China
     </span>
   );
 }
@@ -494,6 +521,7 @@ function SearchResultCard({
         )}
         <StockBadge inv={item.inventoryTotal} />
         <OperabilityBadge status={status} />
+        <FulfillmentOriginBadge origin={item.fulfillmentOrigin} />
       </div>
       <span className="inline-block text-xs rounded-full bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 px-2 py-0.5 font-medium">
         {actionLabel}
@@ -510,6 +538,8 @@ export default function CjEbayProductsPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<CjProductSummary[] | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [warehouseAwareEnabled, setWarehouseAwareEnabled] = useState(false);
+  const [warehouseSummary, setWarehouseSummary] = useState<SearchResponse['warehouseSummary']>(undefined);
 
   // ─── Product selection ────────────────────────────────────────────────────────
   const [selectedProduct, setSelectedProduct] = useState<CjProductDetail | null>(null);
@@ -674,6 +704,8 @@ export default function CjEbayProductsPage() {
     setSearchError(null);
     setSearchLoading(true);
     setSearchResults(null);
+    setWarehouseAwareEnabled(false);
+    setWarehouseSummary(undefined);
     setSelectedProduct(null);
     setSelectedVariantKey('');
     setProductId('');
@@ -687,6 +719,8 @@ export default function CjEbayProductsPage() {
         { keyword: q, page: 1, pageSize: 20 },
       );
       setSearchResults(res.data?.items ?? []);
+      setWarehouseAwareEnabled(res.data?.warehouseAwareEnabled ?? false);
+      setWarehouseSummary(res.data?.warehouseSummary);
     } catch (e) {
       setSearchError(extractApiError(e, 'Error al buscar productos CJ.'));
     } finally {
@@ -860,6 +894,26 @@ export default function CjEbayProductsPage() {
             <p className="text-xs text-slate-500 dark:text-slate-400">
               El flujo principal solo muestra productos con stock confirmado en CJ. Los resultados con stock incierto o agotado quedan relegados a secciones secundarias.
             </p>
+            {warehouseAwareEnabled && warehouseSummary && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Origen (warehouse-aware):</span>
+                {warehouseSummary.usConfirmed > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 px-2 py-0.5 text-[11px] font-medium">
+                    🇺🇸 Bodega USA: {warehouseSummary.usConfirmed}
+                  </span>
+                )}
+                {warehouseSummary.cnFallback > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 text-[11px] font-medium">
+                    🇨🇳 China: {warehouseSummary.cnFallback}
+                  </span>
+                )}
+                {warehouseSummary.notProbed > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 text-[11px] font-medium">
+                    Sin probe: {warehouseSummary.notProbed}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           {searchResults.length === 0 ? (
             <p className="text-sm text-slate-500">

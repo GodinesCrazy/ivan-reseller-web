@@ -23,6 +23,14 @@ export interface CjProductSummary {
    * - `> 0`       = CJ reported this many units available
    */
   inventoryTotal?: number;
+  /**
+   * Fulfillment origin determined by warehouse-aware probing (CJ_EBAY_WAREHOUSE_AWARE=true).
+   * - `US`      — `freightCalculate(startCountryCode=US)` returned a valid quote → US warehouse confirmed
+   * - `CN`      — US probe failed or not attempted; ships from China
+   * - `UNKNOWN` — no probe performed (feature flag off or result not yet enriched)
+   * Only populated for items that received a warehouse probe in the search handler.
+   */
+  fulfillmentOrigin?: 'US' | 'CN' | 'UNKNOWN';
 }
 
 export interface CjSearchQuery {
@@ -172,6 +180,22 @@ export interface ICjSupplierAdapter {
     input: CjQuoteShippingToUsRealInput
   ): Promise<{
     quote: CjShippingQuoteNormalized;
+    requestPayload: Record<string, unknown>;
+    responseRaw: unknown;
+  }>;
+
+  /**
+   * WAREHOUSE-AWARE quoting (CJ_EBAY_WAREHOUSE_AWARE feature).
+   * Attempts `startCountryCode=US` first. If CJ returns a valid quote → fulfillmentOrigin=US
+   * (warehouseEvidence=freight_api_confirmed). If it fails with CJ_SHIPPING_UNAVAILABLE →
+   * falls back to CN (warehouseEvidence=freight_api_fallback).
+   * Any other error (auth, network) is propagated — not silenced as a warehouse miss.
+   */
+  quoteShippingToUsWarehouseAware(
+    input: CjQuoteShippingToUsRealInput
+  ): Promise<{
+    quote: CjShippingQuoteNormalized;
+    fulfillmentOrigin: 'US' | 'CN';
     requestPayload: Record<string, unknown>;
     responseRaw: unknown;
   }>;

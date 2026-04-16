@@ -636,8 +636,9 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
     });
     const body = { ...official } as Record<string, unknown>;
 
+    const resolvedStart = String(body.startCountryCode || 'CN').trim() || 'CN';
     const responseRaw = await this.authedWithNetworkRetry(CJ_FREIGHT_CALCULATE_PATH, body);
-    const quote = normalizeFreightCalculateData(responseRaw);
+    const quote = normalizeFreightCalculateData(responseRaw, resolvedStart, 'freight_api_confirmed');
     return { quote, requestPayload: body, responseRaw };
   }
 
@@ -650,6 +651,70 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
       startCountryCode: input.startCountryCode,
     });
     return normalizedToLegacyQuote(quote);
+  }
+
+  /**
+   * WAREHOUSE-AWARE quoting: tries US warehouse first, falls back to CN on
+   * CJ_SHIPPING_UNAVAILABLE. Other errors (auth, network, invalid SKU) are propagated.
+   *
+   * Logic:
+   * 1. Attempt `startCountryCode=US` → if CJ returns valid options: fulfillmentOrigin='US'
+   * 2. If CJ responds "no shipping options" (CJ_SHIPPING_UNAVAILABLE): silently fall back to CN
+   * 3. All other errors bubble up unchanged
+   */
+  async quoteShippingToUsWarehouseAware(
+    input: CjQuoteShippingToUsRealInput
+  ): Promise<{
+    quote: CjShippingQuoteNormalized;
+    fulfillmentOrigin: 'US' | 'CN';
+    requestPayload: Record<string, unknown>;
+    responseRaw: unknown;
+  }> {
+    const vid = await this.resolveVariantIdForFreight(input.variantId, input.productId);
+    const q = Math.floor(Number(input.quantity));
+    if (!Number.isFinite(q) || q < 1) {
+      throw new CjSupplierError('quantity must be an integer >= 1', { code: 'CJ_INVALID_SKU' });
+    }
+
+    // Step 1: probe US warehouse
+    const usPayload = { ...buildOfficialFreightCalculatePayload({
+      vid,
+      quantity: q,
+      endCountryCode: 'US',
+      startCountryCode: 'US',
+      zip: input.destPostalCode,
+    }) } as Record<string, unknown>;
+
+    try {
+      const usRaw = await this.authedWithNetworkRetry(CJ_FREIGHT_CALCULATE_PATH, usPayload);
+      const usQuote = normalizeFreightCalculateData(usRaw, 'US', 'freight_api_confirmed');
+      logger.info('[cj-supplier.adapter] warehouse-aware: US freight confirmed', {
+        vid,
+        cost: usQuote.cost,
+        method: usQuote.method,
+      });
+      return { quote: usQuote, fulfillmentOrigin: 'US', requestPayload: usPayload, responseRaw: usRaw };
+    } catch (e) {
+      // Only silently fall back on "no shipping options available" — all other errors propagate
+      if (e instanceof CjSupplierError && e.code === 'CJ_SHIPPING_UNAVAILABLE') {
+        logger.info('[cj-supplier.adapter] warehouse-aware: US probe unavailable, falling back to CN', { vid });
+      } else {
+        throw e;
+      }
+    }
+
+    // Step 2: fall back to CN
+    const cnPayload = { ...buildOfficialFreightCalculatePayload({
+      vid,
+      quantity: q,
+      endCountryCode: 'US',
+      startCountryCode: 'CN',
+      zip: input.destPostalCode,
+    }) } as Record<string, unknown>;
+
+    const cnRaw = await this.authedWithNetworkRetry(CJ_FREIGHT_CALCULATE_PATH, cnPayload);
+    const cnQuote = normalizeFreightCalculateData(cnRaw, 'CN', 'freight_api_fallback');
+    return { quote: cnQuote, fulfillmentOrigin: 'CN', requestPayload: cnPayload, responseRaw: cnRaw };
   }
 
   /**

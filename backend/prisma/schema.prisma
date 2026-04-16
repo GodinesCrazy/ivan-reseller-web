@@ -1624,6 +1624,10 @@ model CjEbayShippingQuote {
   estimatedMinDays  Int?
   estimatedMaxDays  Int?
   confidence        String    @default("unknown")
+  // FASE 3W — Warehouse-aware fulfillment: origin country used for this freight quote.
+  // "CN" = ships from China (default); "US" = ships from CJ US warehouse (confirmed by freight API).
+  // NULL = pre-feature quotes (treat as "CN" in logic).
+  originCountryCode String?   @default("CN")
   validFrom         DateTime  @default(now())
   validUntil        DateTime?
   createdAt         DateTime  @default(now())

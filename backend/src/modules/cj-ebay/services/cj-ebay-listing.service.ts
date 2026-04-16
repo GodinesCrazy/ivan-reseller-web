@@ -18,8 +18,7 @@ import {
 } from './cj-ebay-pricing.service';
 import {
   buildListingDescriptionHtml,
-  CJ_LISTING_ORIGIN_COUNTRY,
-  CJ_LISTING_ORIGIN_LABEL,
+  resolveListingOrigin,
   computeHandlingTimeDays,
 } from '../policies/cj-ebay-listing-shipping.policy';
 
@@ -336,6 +335,11 @@ export const cjEbayListingService = {
       quote.confidence || 'unknown'
     );
 
+    // WAREHOUSE-AWARE: use the origin stored in the shipping quote (populated by evaluation).
+    // Falls back to CN for pre-feature quotes (originCountryCode = null).
+    const quoteOrigin = (quote as Record<string, unknown>).originCountryCode as string | null | undefined;
+    const resolvedOrigin = resolveListingOrigin(quoteOrigin);
+
     const descriptionHtml = buildListingDescriptionHtml({
       productDescriptionPlain: product.description,
       handlingTimeDays,
@@ -343,6 +347,7 @@ export const cjEbayListingService = {
       shippingMaxDays: quote.estimatedMaxDays,
       quoteConfidence: quote.confidence || 'unknown',
       shippingMethod: quote.serviceName || quote.carrier || null,
+      originCountryCode: quoteOrigin,
     });
 
     const rawTitle = product.title;
@@ -382,14 +387,16 @@ export const cjEbayListingService = {
       quantity: listQty,
       handlingTimeDays,
       shipping: {
-        originCountryCode: CJ_LISTING_ORIGIN_COUNTRY,
-        originLabel: CJ_LISTING_ORIGIN_LABEL,
+        originCountryCode: resolvedOrigin.country,
+        originLabel: resolvedOrigin.label,
         minDays: quote.estimatedMinDays,
         maxDays: quote.estimatedMaxDays,
         confidence: quote.confidence,
         method: quote.serviceName || quote.carrier,
         policyNote:
-          'International shipment from China. Handling time is business days before dispatch; transit is separate and depends on carrier and customs.',
+          resolvedOrigin.country === 'US'
+            ? 'Ships from CJ US Warehouse (confirmed by freight API). Handling time is business days before dispatch; transit is domestic USA.'
+            : 'International shipment from China. Handling time is business days before dispatch; transit is separate and depends on carrier and customs.',
       },
       internalSku,
       breakdownSnapshot: pricingBreakdownForResponse(breakdown),

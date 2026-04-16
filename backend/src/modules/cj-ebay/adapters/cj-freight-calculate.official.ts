@@ -46,6 +46,18 @@ export interface CjShippingQuoteNormalized {
   cost: number;
   method: string;
   estimatedDays: number | null;
+  /**
+   * Country code used as origin in the freightCalculate call (e.g. "US" or "CN").
+   * Populated from `startCountryCode` passed to `buildOfficialFreightCalculatePayload`.
+   */
+  startCountryCode: string;
+  /**
+   * How the origin was determined:
+   * - `freight_api_confirmed` — CJ returned a valid quote for the requested origin
+   * - `freight_api_fallback`  — US probe was attempted but failed; fell back to CN
+   * - `assumed`               — no probe performed; startCountryCode was passed as-is (default: CN)
+   */
+  warehouseEvidence: 'freight_api_confirmed' | 'freight_api_fallback' | 'assumed';
   /** Respuesta completa del campo `data` de CJ (array de opciones de envío). */
   raw: unknown;
 }
@@ -114,8 +126,16 @@ export function buildOfficialFreightCalculatePayload(params: {
 /**
  * Normaliza `data` de CJ: debe ser un array no vacío de opciones. Elige la opción de menor coste USD
  * entre filas con `logisticPrice` / `totalPostageFee` válidos.
+ *
+ * @param data       Valor del campo `data` de la respuesta CJ (debe ser array).
+ * @param startCountryCode  País origen usado en la petición (default "CN"). Propagado al quote para trazabilidad.
+ * @param warehouseEvidence Cómo se obtuvo el origen (default "assumed").
  */
-export function normalizeFreightCalculateData(data: unknown): CjShippingQuoteNormalized {
+export function normalizeFreightCalculateData(
+  data: unknown,
+  startCountryCode = 'CN',
+  warehouseEvidence: CjShippingQuoteNormalized['warehouseEvidence'] = 'assumed',
+): CjShippingQuoteNormalized {
   if (!Array.isArray(data) || data.length === 0) {
     throw new CjSupplierError('CJ freightCalculate returned no shipping options (empty data array)', {
       code: 'CJ_SHIPPING_UNAVAILABLE',
@@ -152,6 +172,8 @@ export function normalizeFreightCalculateData(data: unknown): CjShippingQuoteNor
     estimatedDays: parseLogisticAgingToMaxDays(
       typeof best.logisticAging === 'string' ? best.logisticAging : undefined
     ),
+    startCountryCode: String(startCountryCode || 'CN').trim() || 'CN',
+    warehouseEvidence,
     raw: data,
   };
 }

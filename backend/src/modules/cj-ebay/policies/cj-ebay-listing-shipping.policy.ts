@@ -1,12 +1,28 @@
 /**
  * Política mínima y honesta CJ → eBay USA (FASE 3D).
- * - Origen China (dropshipping internacional), sin simular stock local USA.
+ * - Origen China por defecto (dropshipping internacional). Cuando CJ_EBAY_WAREHOUSE_AWARE=true
+ *   y se confirma warehouse USA vía freightCalculate, el origen pasa a ser US.
  * - Handling = días hábiles de preparación antes del envío (buffer de cuenta + suplemento si la cotización CJ no da plazo fiable).
  * - Tiempos de tránsito: solo si vienen en la cotización CJ; si no, texto explícito de “unknown” — sin ebay-us-delivery-estimate legacy.
+ * - REGLA DE VERACIDAD: si el origen no está confirmado, se declara China. Nunca prometer USA sin confirmación freight_api_confirmed.
  */
 
+/** Default (China-first). Dynamic value passed to buildListingDescriptionHtml when warehouse-aware. */
 export const CJ_LISTING_ORIGIN_COUNTRY = 'CN';
 export const CJ_LISTING_ORIGIN_LABEL = 'China';
+
+/** Resolve origin country code and label from the stored shipping quote origin. */
+export function resolveListingOrigin(originCountryCode: string | null | undefined): {
+  country: string;
+  label: string;
+} {
+  const code = String(originCountryCode || 'CN').trim().toUpperCase();
+  if (code === 'US') {
+    return { country: 'US', label: 'USA (CJ US Warehouse)' };
+  }
+  // Default: China. Any unrecognized code is treated as CN for safety.
+  return { country: 'CN', label: 'China' };
+}
 
 function escapeHtml(s: string): string {
   return s
@@ -42,8 +58,15 @@ export function buildListingDescriptionHtml(params: {
   /** @deprecated No longer shown in buyer-facing description. Retained for call-site compatibility. */
   shippingCostUsd?: number;
   shippingMethod: string | null;
+  /**
+   * Origin country from the shipping quote (e.g. "US" or "CN").
+   * When "US" and warehouseEvidence=freight_api_confirmed, ships from USA.
+   * Defaults to CJ_LISTING_ORIGIN_LABEL (China) if not provided.
+   */
+  originCountryCode?: string | null;
 }): string {
-  const origin = escapeHtml(CJ_LISTING_ORIGIN_LABEL);
+  const resolved = resolveListingOrigin(params.originCountryCode);
+  const origin = escapeHtml(resolved.label);
   const handling = escapeHtml(String(params.handlingTimeDays));
   const conf = escapeHtml(String(params.quoteConfidence || 'unknown'));
   const method = params.shippingMethod ? escapeHtml(params.shippingMethod) : 'international carrier';

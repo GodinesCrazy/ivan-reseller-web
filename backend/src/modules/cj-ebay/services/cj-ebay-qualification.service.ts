@@ -5,6 +5,7 @@
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
+import { env } from '../../../config/env';
 import { cjEbayTraceService } from './cj-ebay-trace.service';
 import { CJ_EBAY_TRACE_STEP } from '../cj-ebay.constants';
 import type { ICjSupplierAdapter } from '../adapters/cj-supplier.adapter.interface';
@@ -147,6 +148,7 @@ async function runCjDataAndShipping(
   variant: CjVariantDetail;
   stockLive: number;
   freight: Awaited<ReturnType<ICjSupplierAdapter['quoteShippingToUsReal']>>;
+  fulfillmentOrigin: 'US' | 'CN';
 }> {
   const detail = await adapter.getProductById(String(body.productId).trim());
   const variant = pickVariant(detail, body.variantId);
@@ -159,14 +161,28 @@ async function runCjDataAndShipping(
   const stockLive =
     fromApi !== undefined && Number.isFinite(fromApi) ? fromApi : Math.floor(variant.stock);
 
-  const freight = await adapter.quoteShippingToUsReal({
+  const freightInput = {
     variantId: String(body.variantId).trim(),
     productId: String(body.productId).trim(),
     quantity: body.quantity,
     destPostalCode: body.destPostalCode,
-  });
+  };
 
-  return { detail, variant, stockLive, freight };
+  // WAREHOUSE-AWARE: when flag is on, probe US first and fall back to CN.
+  // When off, use the standard China-first path (no behavioral change).
+  let freight: Awaited<ReturnType<ICjSupplierAdapter['quoteShippingToUsReal']>>;
+  let fulfillmentOrigin: 'US' | 'CN';
+
+  if (env.CJ_EBAY_WAREHOUSE_AWARE) {
+    const waResult = await adapter.quoteShippingToUsWarehouseAware(freightInput);
+    freight = { quote: waResult.quote, requestPayload: waResult.requestPayload, responseRaw: waResult.responseRaw };
+    fulfillmentOrigin = waResult.fulfillmentOrigin;
+  } else {
+    freight = await adapter.quoteShippingToUsReal(freightInput);
+    fulfillmentOrigin = 'CN';
+  }
+
+  return { detail, variant, stockLive, freight, fulfillmentOrigin };
 }
 
 function decideQualification(params: {
@@ -299,10 +315,12 @@ export const cjEbayQualificationService = {
     route?: string;
   }): Promise<{
     breakdown: CjPricingBreakdown;
-    shipping: { cost: number; method: string; estimatedDays: number | null; raw: unknown };
+    shipping: { cost: number; method: string; estimatedDays: number | null; raw: unknown; startCountryCode: string; warehouseEvidence: string };
     product: { cjProductId: string; title: string };
     variant: { cjSku: string; cjVid?: string; stockLive: number; unitCostUsd: number | null };
     riskScore: number;
+    fulfillmentOrigin: 'US' | 'CN';
+    warehouseAwareEnabled: boolean;
   }> {
     const adapter = createCjSupplierAdapter(input.userId);
     const settingsRow = await prisma.cjEbayAccountSettings.findUnique({
@@ -325,7 +343,7 @@ export const cjEbayQualificationService = {
     });
 
     try {
-      const { detail, variant, stockLive, freight } = await runCjDataAndShipping(
+      const { detail, variant, stockLive, freight, fulfillmentOrigin } = await runCjDataAndShipping(
         input.userId,
         input.body,
         adapter
@@ -370,12 +388,17 @@ export const cjEbayQualificationService = {
           suggestedPriceUsd: breakdown.suggestedPriceUsd,
           netMarginPct: breakdown.netMarginPct,
           netProfitUsd: breakdown.netProfitUsd,
+          fulfillmentOrigin,
         },
       });
 
       return {
         breakdown,
-        shipping: freight.quote,
+        shipping: {
+          ...freight.quote,
+          startCountryCode: freight.quote.startCountryCode,
+          warehouseEvidence: freight.quote.warehouseEvidence,
+        },
         product: { cjProductId: detail.cjProductId, title: detail.title },
         variant: {
           cjSku: variant.cjSku,
@@ -384,6 +407,8 @@ export const cjEbayQualificationService = {
           unitCostUsd: unitCost ?? null,
         },
         riskScore,
+        fulfillmentOrigin,
+        warehouseAwareEnabled: env.CJ_EBAY_WAREHOUSE_AWARE,
       };
     } catch (e) {
       await cjEbayTraceService.record({
@@ -405,10 +430,12 @@ export const cjEbayQualificationService = {
     route?: string;
   }): Promise<{
     breakdown: CjPricingBreakdown;
-    shipping: { cost: number; method: string; estimatedDays: number | null; raw: unknown };
+    shipping: { cost: number; method: string; estimatedDays: number | null; raw: unknown; startCountryCode: string; warehouseEvidence: string };
     decision: 'APPROVED' | 'REJECTED' | 'PENDING';
     reasons: QualificationReason[];
     riskScore: number;
+    fulfillmentOrigin: 'US' | 'CN';
+    warehouseAwareEnabled: boolean;
     ids: {
       productDbId: number;
       variantDbId: number;
@@ -440,7 +467,7 @@ export const cjEbayQualificationService = {
     });
 
     try {
-      const { detail, variant, stockLive, freight } = await runCjDataAndShipping(
+      const { detail, variant, stockLive, freight, fulfillmentOrigin } = await runCjDataAndShipping(
         input.userId,
         input.body,
         adapter
@@ -467,6 +494,8 @@ export const cjEbayQualificationService = {
           estimatedMinDays: freight.quote.estimatedDays ?? null,
           estimatedMaxDays: freight.quote.estimatedDays ?? null,
           confidence: freight.quote.estimatedDays != null ? 'known' : 'unknown',
+          // WAREHOUSE-AWARE: store actual origin used so the listing service can promise the correct ship-from country
+          originCountryCode: freight.quote.startCountryCode || 'CN',
         },
       });
 
@@ -552,15 +581,23 @@ export const cjEbayQualificationService = {
           evaluationId: evalRow.id,
           shippingQuoteId: quoteRow.id,
           reasonCodes: reasons.map((r) => r.code),
+          fulfillmentOrigin,
+          warehouseEvidence: freight.quote.warehouseEvidence,
         },
       });
 
       return {
         breakdown,
-        shipping: freight.quote,
+        shipping: {
+          ...freight.quote,
+          startCountryCode: freight.quote.startCountryCode,
+          warehouseEvidence: freight.quote.warehouseEvidence,
+        },
         decision,
         reasons,
         riskScore,
+        fulfillmentOrigin,
+        warehouseAwareEnabled: env.CJ_EBAY_WAREHOUSE_AWARE,
         ids: {
           productDbId: persisted.id,
           variantDbId: vRow.id,

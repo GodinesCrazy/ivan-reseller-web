@@ -512,6 +512,22 @@ const envSchema = z.object({
   BLOCK_NEW_PUBLICATIONS: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   /** When true, exposes /api/cj-ebay/* and enables CJ→eBay USA vertical (isolated module). */
   ENABLE_CJ_EBAY_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /**
+   * FASE 3G+ — Warehouse-aware fulfillment: when true, the CJ-eBay module probes US freight
+   * (`startCountryCode=US`) before falling back to CN. This is the only reliable signal for
+   * US warehouse availability (CJ catalog does not expose warehouse fields in listV2 / product/query).
+   * Additive improvement — default false until verified with real CJ account on live products.
+   * Set to true only after confirming CJ has US warehouse stock for products you actively list.
+   */
+  CJ_EBAY_WAREHOUSE_AWARE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /**
+   * Max CJ search results (operable items) that receive a US warehouse freight probe when
+   * CJ_EBAY_WAREHOUSE_AWARE=true. Limits CJ QPS in search. Default 3.
+   */
+  CJ_EBAY_WAREHOUSE_PROBE_LIMIT: z.string().default('3').transform((v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 0 && n <= 10 ? n : 3;
+  }),
 
   /**
    * CJ Dropshipping Open API 2.0 — canonical env key (preferred). Alias legacy: CJ_DROPSHIPPING_API_KEY.

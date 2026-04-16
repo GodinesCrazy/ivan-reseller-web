@@ -1,8 +1,8 @@
 # CJ Dropshipping → eBay USA — Plan maestro y auditoría
 
-**Versión:** 2.16 (FASE 3F — devoluciones/refunds, guardrail saldo CJ, consola financiera profesional, alertas reales)  
+**Versión:** 2.17 (FASE 3W — Warehouse-Aware Fulfillment: origen dinámico US/CN vía freight probe)  
 **Última actualización:** 2026-04-15  
-**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** implementado; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
+**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** implementado; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **FASE 3W** implementada: **warehouse-aware fulfillment** (feature flag `CJ_EBAY_WAREHOUSE_AWARE`, probe US→CN fallback, `warehouseEvidence`, `originCountryCode` en DB, badge UI, origin dinámico en listing/descripción). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
 
 Este documento es la **guía viva** para la vertical CJ → eBay USA. Debe actualizarse al confirmar hallazgos en código, al cerrar fases y al validar integraciones reales.
 
@@ -1016,6 +1016,7 @@ Parámetros numéricos viven en `CjEbayAccountSettings` (defaults en env).
 | **FASE 3E–3E.3** | **3E.1:** create/detail/tracking. **3E.2:** auditoría doc. **3E.3:** `confirmOrder`, `payBalance`, estados, endpoints, UI — §FASE 3E.3. |
 | **FASE 3E.4** | Protocolo; `system-readiness`; scripts migración/export; `.http`; checklist; `operational-flow`; plantilla; `evidence-summary` — §FASE 3E.4. |
 | **FASE 3F** | Workers BullMQ (`sync`, `tracking poll`, `price refresh`); `cj-ebay-alert`; frontend dashboard completo — **no** iniciar masivamente antes de cerrar 3E.4 operativamente. |
+| **FASE 3W** | **Warehouse-aware fulfillment** (feature flag `CJ_EBAY_WAREHOUSE_AWARE`): probe `freightCalculate(startCountryCode=US)` para detectar bodega USA vs China, `warehouseEvidence` enum, `originCountryCode` en DB, 4-tier ranking (operable+US > operable+CN > stock_unknown > unavailable), badge UI, origen dinámico en listing y descripción HTML. |
 | **FASE 3G** | Tests e2e sandbox/controlados; actualizar este documento con “real vs simulado”; checklist GO/NO-GO. |
 
 ---
@@ -2445,6 +2446,7 @@ Calcula KPIs desde:
 | Devoluciones / refunds | ✅ semi-manual | API CJ de returns (no disponible) |
 | Consola financiera | ✅ estimados | Integrar factura real CJ |
 | Alertas reales | ✅ | Poblar desde más eventos |
+| Warehouse-Aware Fulfillment (FASE 3W) | ✅ | `CJ_EBAY_WAREHOUSE_AWARE=false` default; activar en Railway para habilitar |
 | Workers BullMQ (FASE 3G) | ⏳ | Pendiente post-3E.4 en cuenta real |
 | payBalanceV2 | ⏳ | No implementado — contrato distinto |
 
