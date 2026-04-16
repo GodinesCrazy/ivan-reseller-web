@@ -1,7 +1,7 @@
 # CJ Dropshipping → eBay USA — Plan maestro y auditoría
 
-**Versión:** 2.17 (FASE 3W — Warehouse-Aware Fulfillment: origen dinámico US/CN vía freight probe)  
-**Última actualización:** 2026-04-15  
+**Versión:** 2.18 (Hotfix: evaluate Database error — migration no aplicada en Railway)  
+**Última actualización:** 2026-04-16  
 **Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** implementado; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **FASE 3W** implementada: **warehouse-aware fulfillment** (feature flag `CJ_EBAY_WAREHOUSE_AWARE`, probe US→CN fallback, `warehouseEvidence`, `originCountryCode` en DB, badge UI, origin dinámico en listing/descripción). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
 
 Este documento es la **guía viva** para la vertical CJ → eBay USA. Debe actualizarse al confirmar hallazgos en código, al cerrar fases y al validar integraciones reales.
@@ -2452,4 +2452,60 @@ Calcula KPIs desde:
 
 ---
 
-*Fin del documento v2.16 (actualizado 2026-04-15).*
+---
+
+## Hotfix 2026-04-16 — "Database error" en POST /evaluate (FASE 3W)
+
+### Causa raíz exacta
+
+`POST /api/cj-ebay/evaluate` fallaba con `PrismaClientKnownRequestError` ("Database error")
+al intentar `prisma.cjEbayShippingQuote.create` con el campo `originCountryCode` introducido por FASE 3W.
+
+La migración `20260416200000_cj_ebay_warehouse_aware_origin` (que añade la columna a
+`cj_ebay_shipping_quotes`) **nunca se aplicó en Railway** porque:
+
+- `railway.toml` tenía `startCommand = "npm run start"` → solo arranca el servidor, **sin `prisma migrate deploy`**.
+- El Release Command (`node scripts/railway-migrate-deploy.js`) estaba documentado como comentario
+  en `railway.toml` pero **no era un campo versionado** — dependía de configuración manual en Railway UI
+  que nunca se completó (o no persistió entre deploys).
+- Resultado: columna `originCountryCode` inexistente en producción → `PrismaClientKnownRequestError`.
+
+**Evidencia de que es FASE 3W y no un bug previo:** `preview` (sin DB writes) funcionaba; solo `evaluate`
+(que escribe `originCountryCode`) fallaba.
+
+### Tabla/columna afectada
+
+| Tabla | Columna | Tipo | Nullable | Default |
+|---|---|---|---|---|
+| `cj_ebay_shipping_quotes` | `originCountryCode` | `TEXT` | Sí | `'CN'` |
+
+### Fix aplicado (commit `43fc9c9`)
+
+| Archivo | Cambio |
+|---|---|
+| `railway.toml` | Añadido `releaseCommand = "node scripts/railway-migrate-deploy.js"` — ahora versiona la migración en el pipeline de deploy, no depende de UI |
+| `backend/Procfile` | Cambio a `npm run start:prod` (incluye `prisma migrate deploy`) como safety net |
+| `backend/src/middleware/error.middleware.ts` | Expone `prismaCode` / `prismaMeta` en details del error Database error para diagnóstico futuro |
+| `frontend/src/pages/cj-ebay/CjEbayProductsPage.tsx` | FASE 5 UX: badge de origen logístico (🇺🇸/🇨🇳) + ETA en la sección de producto seleccionado, visible **antes** de ejecutar Evaluar |
+
+### Flujo de Railway tras el fix
+
+```
+push → build (npm ci && npm run build → prisma generate + tsc)
+     → releaseCommand (node scripts/railway-migrate-deploy.js → prisma migrate deploy)
+     → startCommand (npm run start → node dist/server-bootstrap.js)
+```
+
+### Estado del pipeline post-fix
+
+| Flujo | Estado |
+|---|---|
+| search → preview | ✅ sin cambios |
+| search → preview → evaluate → persist | ✅ restaurado |
+| evaluate → draft listing | ✅ sin cambios |
+| warehouse-aware (originCountryCode) | ✅ persiste correctamente en DB |
+| UX: origen/ETA antes de Evaluar | ✅ nuevo (FASE 5) |
+
+---
+
+*Fin del documento v2.18 (actualizado 2026-04-16).*
