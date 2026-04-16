@@ -1,8 +1,8 @@
 # CJ Dropshipping → eBay USA — Plan maestro y auditoría
 
-**Versión:** 2.15 (FASE 3E.UI — rediseño profesional Orders: panel postventa, badges humanos, filtros, próximo paso, sin texto dev)  
+**Versión:** 2.16 (FASE 3F — devoluciones/refunds, guardrail saldo CJ, consola financiera profesional, alertas reales)  
 **Última actualización:** 2026-04-15  
-**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block implementado** (ver §FASE 3D.GUARDRAIL); **FASE 3E + 3E.1 + 3E.2 + 3E.3** en código: tras create con **payType=3** el sistema modela **`confirmOrder`** y **`payBalance`** (manual o `AUTO_CONFIRM_PAY` en settings). **FASE 3E.4** incluye **protocolo**, **plantilla de evidencia**, **`GET …/system-readiness`** (sin CJ/eBay HTTP), **scripts** de migración y export, colección **`.http`**. La **corrida viva** la ejecuta solo el operador humano. **payBalanceV2** no está implementado (contrato distinto en doc). La postventa **sigue sin declararse “lista”** sin completar **3E.4 en cuenta real**. **FASE 3F–3G** (workers) **sin iniciar como implementación masiva** hasta criterio explícito tras 3E.4.
+**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** implementado; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
 
 Este documento es la **guía viva** para la vertical CJ → eBay USA. Debe actualizarse al confirmar hallazgos en código, al cerrar fases y al validar integraciones reales.
 
@@ -2221,4 +2221,233 @@ Todos bajo el prefijo `/api/cj-ebay/`. **Cero dependencia de `/api/orders`.**
 
 ---
 
-*Fin del documento v2.14 (actualizado 2026-04-15).*
+---
+
+## FASE 3F — Devoluciones / Refunds · Guardrail pago proveedor · Consola financiera · Alertas reales
+
+**Fecha de implementación:** 2026-04-15  
+**Versión:** 2.16
+
+---
+
+### Auditoría previa (estado real antes de FASE 3F)
+
+| Área | Estado anterior |
+|---|---|
+| Devoluciones / refunds | **Inexistente** — sin modelo, sin estados, sin UI |
+| Guardrail saldo CJ insuficiente | **Inexistente** — `payCjOrder` trataba todos los errores igual (NEEDS_MANUAL genérico) |
+| Consola financiera `/cj-ebay/profit` | **Placeholder vacío** — `CjEbayProfitPage` solo mostraba texto estático |
+| Alertas `/cj-ebay/alerts` | **Placeholder vacío** — `CjEbayAlertsPage` solo mostraba texto estático |
+| Confusión CJ vs PayPal | **No presente** — la vertical usa `payBalance` CJ correctamente |
+
+---
+
+### FASE 3F.1 — Guardrail pago a proveedor (saldo CJ insuficiente)
+
+#### Problema resuelto
+
+`payCjOrder` capturaba todos los errores de `adapter.payBalance()` con un handler genérico que dejaba la orden en `CJ_PAYMENT_PENDING` + `NEEDS_MANUAL`. No distinguía saldo insuficiente de otros fallos.
+
+#### Solución implementada
+
+**Nuevo estado de orden:** `SUPPLIER_PAYMENT_BLOCKED`  
+**Nuevo campo en DB:** `paymentBlockReason` (texto) en `cj_ebay_orders`  
+**Nuevo error code:** `CJ_INSUFFICIENT_BALANCE` en `CjSupplierErrorCode`  
+**Constante:** `CJ_EBAY_PAYMENT_BLOCK_REASON.CJ_BALANCE_INSUFFICIENT`
+
+**Detección:** función `isCjBalanceInsufficientError(msg)` en `cj-ebay-cj-checkout.service.ts` — detecta patrones en el mensaje de error CJ:
+- `"insufficient balance"`, `"balance is not enough"`, `"insufficient funds"`, `"余额不足"`, `"no balance"`, código `1600001`.
+
+**Flujo:**
+1. `adapter.payBalance()` falla.
+2. `isCjBalanceInsufficientError()` → `true`.
+3. Orden pasa a `SUPPLIER_PAYMENT_BLOCKED` con `paymentBlockReason = CJ_BALANCE_INSUFFICIENT`.
+4. Evento registrado en `cj_ebay_order_events`.
+5. Trace `cj.order.pay.balance_blocked`.
+6. HTTP 402 con mensaje accionable para el operador.
+7. La UI (`CjEbayOrderDetailPage`) muestra un **banner rojo** con instrucción de recarga.
+8. El estado `SUPPLIER_PAYMENT_BLOCKED` está incluido en `PAY_FROM` → permite reintentar `/pay` después de recargar balance.
+
+**UI — Orders page:**  
+`SUPPLIER_PAYMENT_BLOCKED` aparece como badge rojo "Pago bloqueado" con `NEXT_STEP` = "Recargar balance CJ y reintentar".
+
+**payBalanceV2:** sigue sin implementarse. Documentado como pendiente. Si la cuenta real lo exige, la orden quedará bloqueada con el guardrail hasta que se implemente o se use `payBalance` estándar.
+
+---
+
+### FASE 3F.2 — Modelo de devoluciones / refunds (semi-manual)
+
+#### Contexto
+
+CJ Dropshipping **no expone una API formal de returns/refunds** en el flujo actual (`payType=3` / `payBalance`). El modelo implementado es **semi-manual con trazabilidad completa**: el operador registra y avanza los estados; la coordinación con CJ y eBay se realiza manualmente desde sus portales.
+
+#### Modelo de datos
+
+**Nueva tabla:** `cj_ebay_order_refunds` — modelo `CjEbayOrderRefund` en Prisma.
+
+| Campo | Descripción |
+|---|---|
+| `orderId` | FK a `cj_ebay_orders` |
+| `status` | Estado del ciclo (ver máquina de estados) |
+| `refundType` | `FULL` / `PARTIAL` |
+| `amountUsd` | Monto del reembolso (null = total de la orden) |
+| `reason` | Razón del retorno (texto libre) |
+| `ebayReturnId` | ID del caso eBay si el comprador abrió return request |
+| `cjRefundRef` | Referencia CJ manual si aplica |
+| `events` | Timeline append-only (JSON array) |
+| `notes` | Notas internas del operador |
+
+#### Máquina de estados (semi-manual)
+
+```
+RETURN_REQUESTED
+  ├──► RETURN_APPROVED ──► RETURN_IN_TRANSIT ──► RETURN_RECEIVED ──► REFUND_PENDING
+  │                                                                        │
+  ├──► RETURN_REJECTED                                                     ├──► REFUND_PARTIAL ──► REFUND_COMPLETED
+  │                                                                        ├──► REFUND_COMPLETED (terminal)
+  └──► NEEDS_MANUAL_REFUND ◄──────────────── (cualquier estado) ──────────└──► REFUND_FAILED ──► REFUND_PENDING (retry)
+```
+
+Transiciones inválidas son bloqueadas por el servicio con error 400.
+
+#### Endpoints
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/cj-ebay/orders/:orderId/refunds` | Crear refund (RETURN_REQUESTED) |
+| `GET` | `/api/cj-ebay/orders/:orderId/refunds` | Listar refunds de una orden |
+| `PATCH` | `/api/cj-ebay/orders/:orderId/refunds/:refundId` | Avanzar estado |
+
+#### UI
+
+- Sección **"Devoluciones / Reembolsos"** en `CjEbayOrderDetailPage` (después de Tracking, antes de Eventos).
+- Botón "+ Abrir devolución" abre formulario inline.
+- Lista de refunds existentes con timeline colapsable.
+- Nota de honestidad: "CJ no expone API formal de returns — flujo semi-manual".
+
+---
+
+### FASE 3F.3 — Consola financiera profesional (`/cj-ebay/profit`)
+
+#### Qué existía
+
+`CjEbayProfitPage` era un placeholder con texto estático. `CjEbayProfitSnapshot` existía en el schema pero no tenía datos ni servicio.
+
+#### Qué se implementó
+
+**Nuevo servicio:** `cj-ebay-profit.service.ts`
+
+Calcula KPIs desde:
+- `cj_ebay_orders` (totalUsd, status, cjPaidAt)
+- `cj_ebay_listings` → `cj_ebay_product_evaluations` (estimatedMarginPct)
+- `cj_ebay_order_refunds` (devoluciones activas y completadas)
+- `cj_ebay_profit_snapshots` (snapshots históricos cuando existan)
+
+**KPIs implementados:**
+
+| KPI | Tipo | Fuente |
+|---|---|---|
+| Ingresos brutos eBay | Real (sumado) | `totalUsd` de órdenes activas |
+| Costo proveedor CJ | **Estimado** | `totalUsd * (1 - marginPct)` |
+| Utilidad bruta | **Estimada** | `totalUsd * marginPct` |
+| Margen promedio | **Estimado** | Promedio de `estimatedMarginPct` |
+| Total / activas / completadas / atención / bloqueadas | Real | Conteo por status |
+| Refunds activos / completados / monto devuelto | Real | `cj_ebay_order_refunds` |
+
+**HONESTIDAD:** los campos estimados se marcan explícitamente en UI con nota. La utilidad realizada requiere la factura real de CJ (no disponible en este flujo).
+
+**Endpoint:** `GET /api/cj-ebay/profit?from=ISO&to=ISO`
+
+**UI:**
+- KPI cards (ingresos, costo, utilidad, margen)
+- KPI operativos (estados de órdenes, refunds)
+- Nota de honestidad en banner ámbar
+- Tabla de desglose por orden (con profit estimado por fila, highlight rojo si pérdida)
+- Filtros por fecha y búsqueda libre
+
+---
+
+### FASE 3F.4 — Motor de alertas real (`/cj-ebay/alerts`)
+
+#### Qué existía
+
+`CjEbayAlertsPage` era un placeholder. `CjEbayAlert` existía en schema pero sin creación ni resolución.
+
+#### Qué se implementó
+
+**Nuevo servicio:** `cj-ebay-alerts.service.ts`
+
+**Tipos de alerta implementados:**
+
+| Tipo | Severidad | Descripción |
+|---|---|---|
+| `REFUND_PENDING` | warning | Reembolso pendiente de emisión |
+| `RETURN_IN_PROGRESS` | warning | Devolución activa en seguimiento |
+| `SUPPLIER_PAYMENT_BLOCKED` | error | Balance CJ insuficiente — acción requerida |
+| `ORDER_FAILED` | error | Orden en estado FAILED |
+| `ORDER_NEEDS_MANUAL` | warning | Orden requiere intervención manual |
+| `TRACKING_MISSING` | warning | Orden enviada sin número de tracking |
+| `REFUND_COMPLETED` | info | Reembolso procesado exitosamente |
+| `REFUND_FAILED` | error | Reembolso fallido |
+| `ORDER_LOSS` | warning | Margen estimado negativo |
+
+**Creación automática:** las alertas de refund (`REFUND_PENDING`, `REFUND_COMPLETED`, `REFUND_FAILED`) se crean automáticamente desde `cj-ebay-refund.service.ts`. No se duplican si ya existe una OPEN para la misma orden.
+
+**Endpoints:**
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/cj-ebay/alerts?status=OPEN` | Listar alertas |
+| `POST` | `/api/cj-ebay/alerts/:id/acknowledge` | Marcar como vista |
+| `POST` | `/api/cj-ebay/alerts/:id/resolve` | Resolver (cerrar) |
+
+**UI:**
+- Lista de cards con color por severidad (rojo=error, ámbar=warning, azul=info)
+- Filtro por estado (Todas / Abiertas / Vistas / Resueltas)
+- Acciones: "Marcar vista" + "Resolver" por alerta
+- Estado vacío informativo cuando no hay alertas
+
+---
+
+### Archivos creados (FASE 3F)
+
+| Archivo | Descripción |
+|---|---|
+| `backend/src/modules/cj-ebay/services/cj-ebay-refund.service.ts` | Servicio de devoluciones/refunds |
+| `backend/src/modules/cj-ebay/services/cj-ebay-alerts.service.ts` | Servicio de alertas del módulo |
+| `backend/src/modules/cj-ebay/services/cj-ebay-profit.service.ts` | Servicio de KPIs financieros |
+| `backend/prisma/migrations/20260415180000_cj_ebay_phase3f_refunds_guardrail/migration.sql` | SQL de la migración |
+
+### Archivos modificados (FASE 3F)
+
+| Archivo | Cambio |
+|---|---|
+| `backend/src/modules/cj-ebay/cj-ebay.constants.ts` | `SUPPLIER_PAYMENT_BLOCKED`, `CJ_EBAY_PAYMENT_BLOCK_REASON`, `CJ_EBAY_REFUND_STATUS`, `CJ_EBAY_ALERT_TYPE`, nuevos trace steps |
+| `backend/src/modules/cj-ebay/adapters/cj-supplier.errors.ts` | `CJ_INSUFFICIENT_BALANCE` error code |
+| `backend/src/modules/cj-ebay/services/cj-ebay-cj-checkout.service.ts` | Guardrail balance: `isCjBalanceInsufficientError`, `SUPPLIER_PAYMENT_BLOCKED`, retry desde ese estado |
+| `backend/src/modules/cj-ebay/cj-ebay.routes.ts` | Rutas `/orders/:id/refunds`, `/alerts`, `/profit` |
+| `backend/prisma/schema.prisma` | `CjEbayOrderRefund` model, `paymentBlockReason` en `CjEbayOrder`, relación en `User` |
+| `frontend/src/pages/cj-ebay/CjEbayProfitPage.tsx` | Reescrito — implementación real con KPIs + tabla |
+| `frontend/src/pages/cj-ebay/CjEbayAlertsPage.tsx` | Reescrito — implementación real con lista + acknowledge |
+| `frontend/src/pages/cj-ebay/CjEbayOrderDetailPage.tsx` | Sección refunds, banner pago bloqueado, `canPay` expandido |
+| `frontend/src/pages/cj-ebay/CjEbayOrdersPage.tsx` | `SUPPLIER_PAYMENT_BLOCKED` en labels, colors, next step, filtros |
+
+---
+
+### Estado del ciclo postventa (2026-04-15, post-FASE 3F)
+
+| Componente | Estado | Pendiente |
+|---|---|---|
+| Import orden eBay | ✅ | — |
+| Place / Confirm / Pay CJ | ✅ | Validación con cuenta real |
+| Guardrail saldo CJ insuficiente | ✅ | Validar con error real de CJ |
+| Sync tracking | ✅ | — |
+| Devoluciones / refunds | ✅ semi-manual | API CJ de returns (no disponible) |
+| Consola financiera | ✅ estimados | Integrar factura real CJ |
+| Alertas reales | ✅ | Poblar desde más eventos |
+| Workers BullMQ (FASE 3G) | ⏳ | Pendiente post-3E.4 en cuenta real |
+| payBalanceV2 | ⏳ | No implementado — contrato distinto |
+
+---
+
+*Fin del documento v2.16 (actualizado 2026-04-15).*

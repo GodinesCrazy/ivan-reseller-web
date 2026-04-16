@@ -10,7 +10,33 @@ import { createCjSupplierAdapter } from '../adapters/cj-supplier.adapter';
 import { CjSupplierError } from '../adapters/cj-supplier.errors';
 import { cjEbayTraceService } from './cj-ebay-trace.service';
 import { appendOrderEvent } from './cj-ebay-order-ingest.service';
-import { CJ_EBAY_TRACE_STEP, CJ_EBAY_ORDER_STATUS } from '../cj-ebay.constants';
+import {
+  CJ_EBAY_TRACE_STEP,
+  CJ_EBAY_ORDER_STATUS,
+  CJ_EBAY_PAYMENT_BLOCK_REASON,
+} from '../cj-ebay.constants';
+
+/**
+ * FASE 3F — Detecta si el error de `payBalance` corresponde a saldo insuficiente CJ.
+ * CJ retorna mensajes como "Insufficient balance", "balance is not enough", "余额不足", etc.
+ * No confundir con PayPal: esta vertical no usa PayPal.
+ */
+function isCjBalanceInsufficientError(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes('insufficient balance') ||
+    lower.includes('balance is not enough') ||
+    lower.includes('insufficient funds') ||
+    lower.includes('balance insufficient') ||
+    lower.includes('余额不足') ||
+    lower.includes('not enough balance') ||
+    lower.includes('balance not enough') ||
+    // CJ API sometimes returns error code 1600001 or similar for balance issues
+    lower.includes('1600001') ||
+    lower.includes('balance_insufficient') ||
+    lower.includes('no balance')
+  );
+}
 
 const CONFIRM_FROM = new Set([
   CJ_EBAY_ORDER_STATUS.CJ_ORDER_CREATED,
@@ -21,6 +47,8 @@ const PAY_FROM = new Set([
   CJ_EBAY_ORDER_STATUS.CJ_ORDER_CONFIRMED,
   CJ_EBAY_ORDER_STATUS.CJ_PAYMENT_PENDING,
   CJ_EBAY_ORDER_STATUS.CJ_PAYMENT_PROCESSING,
+  // FASE 3F: permite reintentar después de recargar balance CJ
+  CJ_EBAY_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
 ]);
 
 export const cjEbayCjCheckoutService = {
@@ -201,6 +229,46 @@ export const cjEbayCjCheckoutService = {
       return { orderId: order.id, cjOrderId: order.cjOrderId };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      const isBalanceError =
+        (e instanceof CjSupplierError && e.code === 'CJ_INSUFFICIENT_BALANCE') ||
+        isCjBalanceInsufficientError(msg);
+
+      if (isBalanceError) {
+        // FASE 3F — Saldo CJ insuficiente: bloquear la orden con estado explícito.
+        // El operador debe recargar balance CJ y luego reintentar /pay.
+        await prisma.cjEbayOrder.update({
+          where: { id: order.id },
+          data: {
+            status: CJ_EBAY_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
+            paymentBlockReason: CJ_EBAY_PAYMENT_BLOCK_REASON.CJ_BALANCE_INSUFFICIENT,
+            lastError: msg.slice(0, 4000),
+          },
+        });
+        await appendOrderEvent(
+          order.id,
+          CJ_EBAY_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
+          'Pago bloqueado: balance CJ insuficiente. Recarga tu balance CJ y reintenta /pay.',
+          { step: 'CJ_PAY_BALANCE_BLOCKED', blockReason: CJ_EBAY_PAYMENT_BLOCK_REASON.CJ_BALANCE_INSUFFICIENT }
+        );
+        await cjEbayTraceService.record({
+          userId: input.userId,
+          correlationId: input.correlationId,
+          route: input.route,
+          step: CJ_EBAY_TRACE_STEP.CJ_ORDER_PAY_BALANCE_BLOCKED,
+          message: 'cj.order.pay.balance_blocked',
+          meta: {
+            orderId: order.id,
+            blockReason: CJ_EBAY_PAYMENT_BLOCK_REASON.CJ_BALANCE_INSUFFICIENT,
+            error: msg.slice(0, 400),
+          },
+        });
+        throw new AppError(
+          'Balance CJ insuficiente. Recarga tu balance en el portal CJ Dropshipping y reintenta el pago desde la consola de la orden.',
+          402
+        );
+      }
+
+      // Error genérico de pago
       await prisma.cjEbayOrder.update({
         where: { id: order.id },
         data: {

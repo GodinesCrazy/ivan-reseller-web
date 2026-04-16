@@ -88,6 +88,7 @@ model User {
   cjEbayAlerts            CjEbayAlert[]
   cjEbayProfitSnapshots   CjEbayProfitSnapshot[]
   cjEbayExecutionTraces   CjEbayExecutionTrace[]
+  cjEbayOrderRefunds      CjEbayOrderRefund[]
 
   @@index([email])
   @@index([username])
@@ -1722,6 +1723,8 @@ model CjEbayOrder {
   cjConfirmedAt DateTime?
   /// FASE 3E.3: `POST payBalance` CJ ejecutado correctamente.
   cjPaidAt      DateTime?
+  /// FASE 3F: razón del bloqueo de pago al proveedor (CJ_BALANCE_INSUFFICIENT, etc.) cuando status=SUPPLIER_PAYMENT_BLOCKED.
+  paymentBlockReason String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1731,6 +1734,7 @@ model CjEbayOrder {
   variant  CjEbayProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   events   CjEbayOrderEvent[]
   tracking CjEbayTracking?
+  refunds  CjEbayOrderRefund[]
 
   @@unique([userId, ebayOrderId])
   @@index([userId, status])
@@ -1751,6 +1755,41 @@ model CjEbayOrderEvent {
   @@index([orderId])
   @@index([createdAt])
   @@map("cj_ebay_order_events")
+}
+
+// FASE 3F — Devoluciones / refunds CJ → eBay USA.
+// CJ no expone API formal de returns; el flujo es semi-manual con trazabilidad completa.
+model CjEbayOrderRefund {
+  id           String    @id @default(cuid())
+  orderId      String
+  userId       Int
+  /// Estado del ciclo de devolución/reembolso (ver CJ_EBAY_REFUND_STATUS en constants).
+  status       String    @default("RETURN_REQUESTED")
+  /// FULL | PARTIAL
+  refundType   String    @default("FULL")
+  /// Monto del reembolso (null = total de la orden).
+  amountUsd    Decimal?  @db.Decimal(18, 2)
+  /// Razón del operador o del comprador eBay.
+  reason       String?   @db.Text
+  /// ID del caso/return en eBay (si el comprador abrió return request).
+  ebayReturnId String?
+  /// ID de referencia en CJ si aplica (coordinación manual).
+  cjRefundRef  String?
+  /// Notas internas del operador.
+  notes        String?   @db.Text
+  /// Timeline de eventos de este refund (append-only JSON array).
+  events       Json?
+  resolvedAt   DateTime?
+  lastError    String?   @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  order  CjEbayOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([userId, status])
+  @@map("cj_ebay_order_refunds")
 }
 
 model CjEbayTracking {

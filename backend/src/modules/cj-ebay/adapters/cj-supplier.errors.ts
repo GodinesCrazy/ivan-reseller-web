@@ -11,7 +11,13 @@ export type CjSupplierErrorCode =
   | 'CJ_NETWORK'
   | 'CJ_UNKNOWN'
   /** createOrder / order status / CJ tracking — not wired in FASE 3B (see master plan). */
-  | 'CJ_NOT_IMPLEMENTED';
+  | 'CJ_NOT_IMPLEMENTED'
+  /**
+   * FASE 3F — El balance CJ es insuficiente para cubrir el pago de la orden.
+   * Detectado en la respuesta de `payBalance` (mensaje: "Insufficient balance", "balance is not enough", etc.).
+   * La orden pasa a SUPPLIER_PAYMENT_BLOCKED. Requiere recarga manual del balance CJ por el operador.
+   */
+  | 'CJ_INSUFFICIENT_BALANCE';
 
 export class CjSupplierError extends Error {
   readonly code: CjSupplierErrorCode;

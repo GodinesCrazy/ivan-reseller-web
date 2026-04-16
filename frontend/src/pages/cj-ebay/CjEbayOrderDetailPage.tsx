@@ -26,6 +26,8 @@ type OrderDetail = {
   lastError: string | null;
   cjConfirmedAt: string | null;
   cjPaidAt: string | null;
+  /** FASE 3F: razón del bloqueo de pago (CJ_BALANCE_INSUFFICIENT, etc.) */
+  paymentBlockReason: string | null;
   updatedAt: string;
   buyerPayload: unknown;
   rawEbaySummary: unknown;
@@ -41,6 +43,24 @@ type OrderDetail = {
     status: string;
     ebayListingId: string | null;
   } | null;
+};
+
+type RefundEvent = { at: string; status: string; note: string };
+
+type RefundRecord = {
+  id: string;
+  orderId: string;
+  status: string;
+  refundType: string;
+  amountUsd: number | null;
+  reason: string | null;
+  ebayReturnId: string | null;
+  cjRefundRef: string | null;
+  notes: string | null;
+  events: RefundEvent[];
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type FlowGate = { name: string; met: boolean; note?: string };
@@ -164,18 +184,28 @@ export default function CjEbayOrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  // FASE 3F — refunds
+  const [refunds, setRefunds] = useState<RefundRecord[]>([]);
+  const [showRefundForm, setShowRefundForm] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundEbayId, setRefundEbayId] = useState('');
+  const [refundBusy, setRefundBusy] = useState(false);
+  const [refundMsg, setRefundMsg] = useState<string | null>(null);
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return;
     setError(null);
     try {
-      const [orderRes, flowRes, evidenceRes] = await Promise.allSettled([
+      const [orderRes, flowRes, evidenceRes, refundsRes] = await Promise.allSettled([
         api.get<{ ok: boolean; order: OrderDetail }>(`/api/cj-ebay/orders/${orderId}`),
         api.get<{ ok: boolean; snapshot: OperationalFlow }>(
           `/api/cj-ebay/orders/${orderId}/operational-flow`
         ),
         api.get<{ ok: boolean; summary: EvidenceSummary }>(
           `/api/cj-ebay/orders/${orderId}/evidence-summary`
+        ),
+        api.get<{ ok: boolean; refunds: RefundRecord[] }>(
+          `/api/cj-ebay/orders/${orderId}/refunds`
         ),
       ]);
 
@@ -189,6 +219,9 @@ export default function CjEbayOrderDetailPage() {
       }
       if (evidenceRes.status === 'fulfilled' && evidenceRes.value.data?.ok) {
         setEvidence(evidenceRes.value.data.summary);
+      }
+      if (refundsRes.status === 'fulfilled' && refundsRes.value.data?.ok) {
+        setRefunds(refundsRes.value.data.refunds ?? []);
       }
     } finally {
       setLoading(false);
@@ -259,8 +292,12 @@ export default function CjEbayOrderDetailPage() {
     (order.listingId != null &&
       (order.status === 'NEEDS_MANUAL' || order.status === 'FAILED'));
   const canConfirm = !!order.cjOrderId && order.status === 'CJ_ORDER_CREATED';
-  const canPay     = !!order.cjOrderId && order.status === 'CJ_PAYMENT_PENDING';
+  // FASE 3F: permite reintentar pago tras SUPPLIER_PAYMENT_BLOCKED (recargado el balance CJ)
+  const canPay =
+    !!order.cjOrderId &&
+    (order.status === 'CJ_PAYMENT_PENDING' || order.status === 'SUPPLIER_PAYMENT_BLOCKED');
   const canSync    = !!order.cjOrderId && order.status !== 'COMPLETED';
+  const isPaymentBlocked = order.status === 'SUPPLIER_PAYMENT_BLOCKED';
 
   // suggestedNext from operational flow (shown prominently)
   const suggestedNext = flow?.suggestedNext ?? null;
@@ -377,8 +414,22 @@ export default function CjEbayOrderDetailPage() {
             </p>
           </div>
 
+          {/* FASE 3F — Banner pago bloqueado por saldo CJ insuficiente */}
+          {isPaymentBlocked && (
+            <div className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-700 px-3 py-2.5 space-y-1">
+              <p className="text-xs font-semibold text-red-800 dark:text-red-200">
+                Pago bloqueado — balance CJ insuficiente
+              </p>
+              <p className="text-xs text-red-700 dark:text-red-300">
+                {order.paymentBlockReason === 'CJ_BALANCE_INSUFFICIENT'
+                  ? 'La cuenta CJ no tiene saldo suficiente para cubrir esta orden. Recarga tu balance en el portal CJ Dropshipping y luego usa "Pagar balance" para reintentar.'
+                  : 'Revisa el error y resuelve el bloqueo antes de reintentar el pago.'}
+              </p>
+            </div>
+          )}
+
           {/* Próxima acción sugerida */}
-          {suggestedNext && (
+          {suggestedNext && !isPaymentBlocked && (
             <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-2 text-xs text-blue-900 dark:text-blue-100">
               Próxima acción:{' '}
               <strong className="font-semibold">{suggestedNext}</strong>
@@ -482,6 +533,128 @@ export default function CjEbayOrderDetailPage() {
           </dl>
         </div>
       )}
+
+      {/* ── FASE 3F: Devoluciones / Refunds ─────────────────────────────── */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            Devoluciones / Reembolsos
+          </h3>
+          <button
+            type="button"
+            onClick={() => { setShowRefundForm((v) => !v); setRefundMsg(null); }}
+            className="text-xs px-2.5 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            {showRefundForm ? 'Cancelar' : '+ Abrir devolución'}
+          </button>
+        </div>
+
+        {/* Nota sobre modelo semi-manual */}
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          CJ no expone una API formal de returns en este flujo. El seguimiento es semi-manual:
+          registra el estado aquí y coordina directamente con CJ y eBay desde sus portales.
+        </p>
+
+        {/* Feedback refund */}
+        {refundMsg && (
+          <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+            {refundMsg}
+            <button type="button" onClick={() => setRefundMsg(null)} className="underline ml-2">Cerrar</button>
+          </div>
+        )}
+
+        {/* Formulario de creación */}
+        {showRefundForm && (
+          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-2">
+            <p className="text-xs font-medium text-amber-800 dark:text-amber-200">Nueva devolución</p>
+            <input
+              type="text"
+              placeholder="Razón (opcional)"
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs px-2.5 py-1.5"
+            />
+            <input
+              type="text"
+              placeholder="eBay Return ID (opcional)"
+              value={refundEbayId}
+              onChange={(e) => setRefundEbayId(e.target.value)}
+              className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs px-2.5 py-1.5"
+            />
+            <button
+              type="button"
+              disabled={refundBusy}
+              onClick={async () => {
+                setRefundBusy(true);
+                setRefundMsg(null);
+                try {
+                  await api.post(`/api/cj-ebay/orders/${order.id}/refunds`, {
+                    reason: refundReason || undefined,
+                    ebayReturnId: refundEbayId || undefined,
+                  });
+                  setRefundMsg('Devolución registrada.');
+                  setShowRefundForm(false);
+                  setRefundReason('');
+                  setRefundEbayId('');
+                  await loadOrder();
+                } catch (e) {
+                  setRefundMsg(axiosMsg(e, 'Error al crear la devolución.'));
+                } finally {
+                  setRefundBusy(false);
+                }
+              }}
+              className="text-xs px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-40 transition-colors"
+            >
+              {refundBusy ? 'Guardando…' : 'Registrar devolución'}
+            </button>
+          </div>
+        )}
+
+        {/* Lista de refunds */}
+        {refunds.length === 0 ? (
+          <p className="text-xs text-slate-400 dark:text-slate-500">Sin devoluciones registradas para esta orden.</p>
+        ) : (
+          <div className="space-y-2">
+            {refunds.map((r) => (
+              <div key={r.id} className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2.5 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    {r.refundType === 'PARTIAL' ? 'Parcial' : 'Total'}
+                  </span>
+                  <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                    {r.status}
+                  </span>
+                  {r.amountUsd != null && (
+                    <span className="text-xs text-slate-500 dark:text-slate-400">${r.amountUsd.toFixed(2)}</span>
+                  )}
+                </div>
+                {r.reason && <p className="text-xs text-slate-600 dark:text-slate-400">{r.reason}</p>}
+                {r.ebayReturnId && (
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    eBay Return ID: <span className="font-mono">{r.ebayReturnId}</span>
+                  </p>
+                )}
+                {r.events.length > 0 && (
+                  <details className="text-[11px]">
+                    <summary className="cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 select-none">
+                      Timeline ({r.events.length})
+                    </summary>
+                    <ul className="mt-1 space-y-0.5 pl-3 border-l border-slate-200 dark:border-slate-700">
+                      {r.events.map((ev, i) => (
+                        <li key={i} className="text-slate-500 dark:text-slate-400">
+                          <span className="font-mono text-[10px]">{new Date(ev.at).toLocaleString()}</span>
+                          {' · '}<strong className="text-slate-700 dark:text-slate-300">{ev.status}</strong>
+                          {ev.note ? ` — ${ev.note}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ── Timeline de eventos ───────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">

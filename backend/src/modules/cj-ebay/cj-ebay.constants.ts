@@ -1,5 +1,5 @@
 /**
- * CJ → eBay USA vertical — constants (FASE 3A).
+ * CJ → eBay USA vertical — constants (FASE 3A → 3F).
  * API credential name for CJ must match ApiCredential.apiName when implemented (FASE 3B).
  */
 export const CJ_EBAY_API_CREDENTIAL_NAME = 'cj-dropshipping' as const;
@@ -53,6 +53,14 @@ export const CJ_EBAY_TRACE_STEP = {
   CJ_ORDER_PAY_START: 'cj.order.pay.start',
   CJ_ORDER_PAY_SUCCESS: 'cj.order.pay.success',
   CJ_ORDER_PAY_ERROR: 'cj.order.pay.error',
+  /** FASE 3F — pago bloqueado por saldo CJ insuficiente */
+  CJ_ORDER_PAY_BALANCE_BLOCKED: 'cj.order.pay.balance_blocked',
+  /** FASE 3F — devoluciones / refunds */
+  REFUND_CREATED: 'refund.created',
+  REFUND_STATUS_UPDATED: 'refund.status.updated',
+  /** FASE 3F — alertas */
+  ALERT_CREATED: 'alert.created',
+  ALERT_RESOLVED: 'alert.resolved',
 } as const;
 
 /** Modo post-`createOrderV2` (payType=3): ver §FASE 3E.3 en plan maestro. */
@@ -86,6 +94,59 @@ export const CJ_EBAY_ORDER_STATUS = {
   COMPLETED: 'COMPLETED',
   FAILED: 'FAILED',
   NEEDS_MANUAL: 'NEEDS_MANUAL',
+  /**
+   * FASE 3F — Pago a proveedor CJ bloqueado (balance insuficiente u otro guardrail).
+   * La orden no puede continuar hasta que el operador recargue balance CJ o resuelva el método.
+   * Ver `paymentBlockReason` en la tabla `cj_ebay_orders` para el motivo exacto.
+   */
+  SUPPLIER_PAYMENT_BLOCKED: 'SUPPLIER_PAYMENT_BLOCKED',
+} as const;
+
+/** Estados `cj_ebay_orders.status` ampliados (FASE 3F). */
+export const CJ_EBAY_PAYMENT_BLOCK_REASON = {
+  /** Balance CJ insuficiente al ejecutar payBalance. Requiere recarga manual. */
+  CJ_BALANCE_INSUFFICIENT: 'CJ_BALANCE_INSUFFICIENT',
+  /** Método de pago no soportado por la cuenta CJ en este flujo. */
+  PAYMENT_METHOD_UNSUPPORTED: 'PAYMENT_METHOD_UNSUPPORTED',
+  /** payBalanceV2 requerido pero no implementado aún. */
+  PAY_BALANCE_V2_NOT_IMPLEMENTED: 'PAY_BALANCE_V2_NOT_IMPLEMENTED',
+} as const;
+
+/** Estados del ciclo de devoluciones/refunds (FASE 3F — semi-manual, CJ no expone API formal de returns). */
+export const CJ_EBAY_REFUND_STATUS = {
+  /** Comprador solicitó devolución en eBay o el operador abrió el caso. */
+  RETURN_REQUESTED: 'RETURN_REQUESTED',
+  /** Operador aprobó la devolución. Esperando envío de vuelta. */
+  RETURN_APPROVED: 'RETURN_APPROVED',
+  /** Operador rechazó la devolución. Requiere seguimiento con eBay. */
+  RETURN_REJECTED: 'RETURN_REJECTED',
+  /** Artículo en tránsito de vuelta (comprador envió). */
+  RETURN_IN_TRANSIT: 'RETURN_IN_TRANSIT',
+  /** Artículo recibido (por CJ o por el operador). */
+  RETURN_RECEIVED: 'RETURN_RECEIVED',
+  /** Reembolso a emitir al comprador (pendiente de acción en eBay). */
+  REFUND_PENDING: 'REFUND_PENDING',
+  /** Reembolso parcial emitido. */
+  REFUND_PARTIAL: 'REFUND_PARTIAL',
+  /** Reembolso total completado. */
+  REFUND_COMPLETED: 'REFUND_COMPLETED',
+  /** Reembolso fallido — requiere intervención manual. */
+  REFUND_FAILED: 'REFUND_FAILED',
+  /** Caso requiere resolución manual que no puede modelarse automáticamente. */
+  NEEDS_MANUAL_REFUND: 'NEEDS_MANUAL_REFUND',
+} as const;
+
+/** Tipos de alerta del módulo CJ → eBay USA (FASE 3F). */
+export const CJ_EBAY_ALERT_TYPE = {
+  REFUND_PENDING: 'REFUND_PENDING',
+  RETURN_IN_PROGRESS: 'RETURN_IN_PROGRESS',
+  SUPPLIER_PAYMENT_BLOCKED: 'SUPPLIER_PAYMENT_BLOCKED',
+  ORDER_FAILED: 'ORDER_FAILED',
+  ORDER_NEEDS_MANUAL: 'ORDER_NEEDS_MANUAL',
+  TRACKING_MISSING: 'TRACKING_MISSING',
+  REFUND_COMPLETED: 'REFUND_COMPLETED',
+  REFUND_FAILED: 'REFUND_FAILED',
+  ORDER_LOSS: 'ORDER_LOSS',
 } as const;
 
 /** Estados persistidos en `cj_ebay_listings.status` (FASE 3D). */

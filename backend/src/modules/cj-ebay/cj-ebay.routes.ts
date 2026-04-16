@@ -1,5 +1,5 @@
 /**
- * CJ → eBay USA — HTTP routes (FASE 3A).
+ * CJ → eBay USA — HTTP routes (FASE 3A → 3F).
  * No CJ HTTP, no eBay publish, no legacy Order/Product/Sale.
  */
 
@@ -38,6 +38,9 @@ import { CjSupplierError } from './adapters/cj-supplier.errors';
 import type { CjProductDetail } from './adapters/cj-supplier.adapter.interface';
 import { pricingBreakdownForResponse } from './services/cj-ebay-pricing.service';
 import { cjEbayOpportunityPipelineService } from './services/cj-ebay-opportunity-pipeline.service';
+import { cjEbayRefundService } from './services/cj-ebay-refund.service';
+import { cjEbayAlertsService } from './services/cj-ebay-alerts.service';
+import { cjEbayProfitService } from './services/cj-ebay-profit.service';
 
 const router = Router();
 
@@ -952,6 +955,129 @@ router.get('/listings/:listingId', async (req: Request, res: Response, next: Nex
   } catch (e) {
     next(e);
   }
+});
+
+// --- FASE 3F: Refunds (devoluciones semi-manuales) ---
+
+/**
+ * Crear registro de devolución para una orden.
+ * Body: { reason?, amountUsd?, refundType?, ebayReturnId?, notes? }
+ */
+router.post('/orders/:orderId/refunds', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const orderId = String(req.params.orderId || '').trim();
+    if (!orderId) throw new AppError('Invalid orderId', 400);
+    const { reason, amountUsd, refundType, ebayReturnId, notes } = req.body ?? {};
+    const record = await cjEbayRefundService.createRefund({
+      userId,
+      orderId,
+      reason: typeof reason === 'string' ? reason : undefined,
+      amountUsd: typeof amountUsd === 'number' ? amountUsd : undefined,
+      refundType: refundType === 'PARTIAL' ? 'PARTIAL' : 'FULL',
+      ebayReturnId: typeof ebayReturnId === 'string' ? ebayReturnId : undefined,
+      notes: typeof notes === 'string' ? notes : undefined,
+    });
+    await traceComplete(req, userId, 'POST /orders/:orderId/refunds', { refundId: record.id });
+    res.status(201).json({ ok: true, refund: record });
+  } catch (e) { next(e); }
+});
+
+/** Listar refunds de una orden. */
+router.get('/orders/:orderId/refunds', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const orderId = String(req.params.orderId || '').trim();
+    if (!orderId) throw new AppError('Invalid orderId', 400);
+    const refunds = await cjEbayRefundService.getRefundsForOrder(userId, orderId);
+    res.json({ ok: true, refunds });
+  } catch (e) { next(e); }
+});
+
+/**
+ * Avanzar estado de un refund.
+ * Body: { newStatus, note?, amountUsd?, cjRefundRef?, ebayReturnId? }
+ */
+router.patch('/orders/:orderId/refunds/:refundId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const { refundId } = req.params;
+    const { newStatus, note, amountUsd, cjRefundRef, ebayReturnId } = req.body ?? {};
+    if (!newStatus || typeof newStatus !== 'string') {
+      throw new AppError('newStatus requerido', 400);
+    }
+    const record = await cjEbayRefundService.updateStatus({
+      userId,
+      refundId: String(refundId),
+      newStatus,
+      note: typeof note === 'string' ? note : undefined,
+      amountUsd: typeof amountUsd === 'number' ? amountUsd : undefined,
+      cjRefundRef: typeof cjRefundRef === 'string' ? cjRefundRef : undefined,
+      ebayReturnId: typeof ebayReturnId === 'string' ? ebayReturnId : undefined,
+    });
+    await traceComplete(req, userId, 'PATCH /orders/:orderId/refunds/:refundId', {
+      refundId: record.id,
+      newStatus: record.status,
+    });
+    res.json({ ok: true, refund: record });
+  } catch (e) { next(e); }
+});
+
+// --- FASE 3F: Alerts ---
+
+/** Listar alertas del módulo. Query: ?status=OPEN|ACKNOWLEDGED|RESOLVED */
+router.get('/alerts', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const status = String(req.query.status || '').trim() || undefined;
+    const alerts = await cjEbayAlertsService.list(userId, {
+      status: (status as 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED') || undefined,
+    });
+    const withMeta = alerts.map((a) => ({
+      ...a,
+      meta: cjEbayAlertsService.getMeta(a.type),
+    }));
+    res.json({ ok: true, alerts: withMeta });
+  } catch (e) { next(e); }
+});
+
+/** Reconocer una alerta (marcarla como vista). */
+router.post('/alerts/:alertId/acknowledge', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const alertId = parseInt(String(req.params.alertId), 10);
+    if (!Number.isFinite(alertId)) throw new AppError('Invalid alertId', 400);
+    const alert = await cjEbayAlertsService.acknowledge(userId, alertId);
+    res.json({ ok: true, alert });
+  } catch (e) { next(e); }
+});
+
+/** Resolver (cerrar) una alerta. */
+router.post('/alerts/:alertId/resolve', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const alertId = parseInt(String(req.params.alertId), 10);
+    if (!Number.isFinite(alertId)) throw new AppError('Invalid alertId', 400);
+    const alert = await cjEbayAlertsService.resolve(userId, alertId);
+    res.json({ ok: true, alert });
+  } catch (e) { next(e); }
+});
+
+// --- FASE 3F: Profit / Finance ---
+
+/**
+ * Datos financieros del módulo CJ → eBay USA.
+ * Query: ?from=ISO_DATE&to=ISO_DATE (opcionales — sin filtro devuelve todo)
+ */
+router.get('/profit', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const from = typeof req.query.from === 'string' ? req.query.from : undefined;
+    const to = typeof req.query.to === 'string' ? req.query.to : undefined;
+    const data = await cjEbayProfitService.getFinancials(userId, from, to);
+    await traceComplete(req, userId, 'GET /profit', { statusCode: 200 });
+    res.json({ ok: true, ...data });
+  } catch (e) { next(e); }
 });
 
 // --- FASE 3B: CJ Open API probes (requires ApiCredential cj-dropshipping or CJ_DROPSHIPPING_API_KEY) ---
