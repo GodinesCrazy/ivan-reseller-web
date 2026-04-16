@@ -949,6 +949,28 @@ router.post('/listings/:listingId/pause', async (req: Request, res: Response, ne
   }
 });
 
+// OFFER_ALREADY_EXISTS reconcile: try to recover listingId from eBay getOffers by SKU.
+router.post('/listings/:listingId/reconcile', async (req: Request, res: Response, next: NextFunction) => {
+  const routePath = `${req.baseUrl}${req.path}`;
+  try {
+    const userId = req.user!.userId;
+    const listingDbId = parseInt(String(req.params.listingId || ''), 10);
+    if (!Number.isFinite(listingDbId) || listingDbId < 1) {
+      throw new AppError('Invalid listingId', 400);
+    }
+    const out = await cjEbayListingService.reconcile({
+      userId,
+      listingDbId,
+      correlationId: req.correlationId,
+      route: routePath,
+    });
+    await traceComplete(req, userId, 'POST /listings/:listingId/reconcile', { statusCode: 200, reconciled: out.reconciled });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get('/listings', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;

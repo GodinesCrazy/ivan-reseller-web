@@ -81,6 +81,29 @@ export default function CjEbayListingsPage() {
     }
   }
 
+  async function reconcile(id: number) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const res = await api.post<{ ok: boolean; reconciled: boolean; reason?: string; ebayListingId?: string; listingUrl?: string }>(`/api/cj-ebay/listings/${id}/reconcile`);
+      if (res.data?.reconciled) {
+        await load();
+      } else {
+        setError(res.data?.reason || 'Reconcile: listingId aún no disponible. Intenta de nuevo en unos minutos.');
+        await load();
+      }
+    } catch (e: unknown) {
+      let msg = 'Error al reconciliar.';
+      if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
+        const d = e.response.data as { message?: string; error?: string };
+        msg = d.message || d.error || msg;
+      } else if (e instanceof Error) msg = e.message;
+      setError(msg);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function pause(id: number) {
     setBusyId(id);
     setError(null);
@@ -174,6 +197,23 @@ export default function CjEbayListingsPage() {
         </Link>
         {' '}→ Evaluar → Crear draft.
       </p>
+      {listings.some((r) => r.status === 'OFFER_ALREADY_EXISTS') && (
+        <div className="rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 px-4 py-3 text-sm text-sky-900 dark:text-sky-100 space-y-1">
+          <p className="font-semibold">Oferta ya existente en eBay — pendiente de reconciliación</p>
+          <p>
+            Uno o más listings tienen estado <strong>OFFER_ALREADY_EXISTS</strong>. eBay confirmó que la oferta
+            (error 25002) ya existía, pero la respuesta no devolvió el <code>listingId</code> de inmediato.
+          </p>
+          <p>
+            <strong>Qué hacer:</strong> pulsar <strong>Reconciliar</strong> en la fila correspondiente.
+            El sistema consultará eBay para recuperar el listing real.
+            Si eBay aún no propagó el ID, espera 1–2 minutos y vuelve a intentarlo.
+          </p>
+          <p className="text-xs text-sky-700 dark:text-sky-300">
+            No pulsar Publicar — crearía un duplicado. La oferta ya existe en eBay.
+          </p>
+        </div>
+      )}
       {listings.some((r) => r.status === 'ACCOUNT_POLICY_BLOCK') && (
         <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 space-y-1">
           <p className="font-semibold">Publicación bloqueada — cuenta eBay no autorizada para ship-from China</p>
@@ -234,6 +274,13 @@ export default function CjEbayListingsPage() {
                         >
                           POLICY BLOCK
                         </span>
+                      ) : row.status === 'OFFER_ALREADY_EXISTS' ? (
+                        <span
+                          className="rounded bg-sky-100 dark:bg-sky-900/50 px-2 py-0.5 text-xs font-medium text-sky-800 dark:text-sky-200"
+                          title="Oferta ya existe en eBay (25002). Usa Reconciliar para recuperar el listingId."
+                        >
+                          OFFER EXISTS
+                        </span>
                       ) : (
                         <span className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs">
                           {row.status}
@@ -274,6 +321,16 @@ export default function CjEbayListingsPage() {
                         >
                           Bloqueado (política)
                         </span>
+                      ) : row.status === 'OFFER_ALREADY_EXISTS' ? (
+                        <button
+                          type="button"
+                          disabled={busyId === row.id}
+                          className="text-xs font-medium text-sky-600 dark:text-sky-400 disabled:opacity-40"
+                          title="Consultar eBay para recuperar el listingId de la oferta existente."
+                          onClick={() => void reconcile(row.id)}
+                        >
+                          {busyId === row.id ? '…' : 'Reconciliar'}
+                        </button>
                       ) : (
                         <button
                           type="button"
@@ -323,6 +380,29 @@ export default function CjEbayListingsPage() {
                               <strong>Acción requerida:</strong> esperar aprobación de eBay para el perfil
                               de vendedor global / overseas warehouse. Una vez aprobada, reintentar publish
                               desde este panel (primero cambiar el estado a DRAFT o contactar soporte).
+                            </p>
+                          </div>
+                        ) : detail.status === 'OFFER_ALREADY_EXISTS' ? (
+                          <div className="rounded border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 px-3 py-2 mb-2 space-y-1 text-sky-900 dark:text-sky-100">
+                            <p className="font-semibold">Oferta ya existente en eBay (error 25002)</p>
+                            <p>
+                              Durante el publish, eBay respondió que la oferta para este SKU ya existía
+                              (<em>Offer entity already exists</em>). El sistema intentó recuperar el{' '}
+                              <code>listingId</code> pero eBay no lo devolvió en ese momento (lag de propagación
+                              o inconsistencia temporal de la API).
+                            </p>
+                            <p>
+                              <strong>La oferta SÍ existe en eBay</strong> — el <code>offerId</code> está
+                              guardado. El listing puede estar activo en Seller Hub.
+                            </p>
+                            <p>
+                              <strong>Próximo paso:</strong> pulsa <strong>Reconciliar</strong> (fila arriba).
+                              El sistema consultará eBay para recuperar el <code>listingId</code> real y
+                              actualizar el estado a ACTIVE. Si eBay aún no propagó el ID, espera 1–2 minutos
+                              y vuelve a intentarlo.
+                            </p>
+                            <p className="text-xs text-sky-700 dark:text-sky-300">
+                              No pulsar Publicar — crearía un duplicado. La oferta ya existe en eBay.
                             </p>
                           </div>
                         ) : (

@@ -1,8 +1,8 @@
 # CJ Dropshipping → eBay USA — Plan maestro y auditoría
 
-**Versión:** 2.18 (Hotfix: evaluate Database error — migration no aplicada en Railway)  
+**Versión:** 2.19 (Hotfix: publish FAILED por eBay 25002 → nuevo estado OFFER_ALREADY_EXISTS + reconcile)  
 **Última actualización:** 2026-04-16  
-**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** implementado; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **FASE 3W** implementada: **warehouse-aware fulfillment** (feature flag `CJ_EBAY_WAREHOUSE_AWARE`, probe US→CN fallback, `warehouseEvidence`, `originCountryCode` en DB, badge UI, origin dinámico en listing/descripción). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
+**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** + **OFFER_ALREADY_EXISTS reconcile** implementados; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **FASE 3W** implementada: **warehouse-aware fulfillment** (feature flag `CJ_EBAY_WAREHOUSE_AWARE`, probe US→CN fallback, `warehouseEvidence`, `originCountryCode` en DB, badge UI, origin dinámico en listing/descripción). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
 
 Este documento es la **guía viva** para la vertical CJ → eBay USA. Debe actualizarse al confirmar hallazgos en código, al cerrar fases y al validar integraciones reales.
 
@@ -2508,4 +2508,54 @@ push → build (npm ci && npm run build → prisma generate + tsc)
 
 ---
 
-*Fin del documento v2.18 (actualizado 2026-04-16).*
+---
+
+## Hotfix 2026-04-16 — Publish FAILED por eBay 25002 "Offer entity already exists"
+
+### Causa raíz exacta
+
+`POST /api/cj-ebay/listings/publish` terminaba en estado `FAILED` con mensaje:
+
+```
+eBay listing creation error: La oferta ya existe en eBay (offerId: 152707440011).
+No se pudo obtener el listing; revisa en Seller Hub si ya está publicado...
+```
+
+**Secuencia real del fallo:**
+
+1. `createListing()` llama `cleanupUnpublishedOffersForSku(sku)` — sólo elimina offers sin `listingId`; la offer publicada (id 152707440011) no se toca.
+2. POST `/sell/inventory/v1/offer` → eBay devuelve **error 25002** "Offer entity already exists" (ya existe para SKU `CJE1P1V1`).
+3. `handleOfferAlreadyExists()` extrae `offerId = 152707440011`.
+4. GET `/sell/inventory/v1/offer/152707440011` → `listingId: null` (inconsistencia temporal de la API eBay).
+5. POST `/sell/inventory/v1/offer/152707440011/publish` → falla con 25002 "already published".
+6. Todos los reintentos agotados → catch genérico → **status = `FAILED`**.
+
+La oferta **sí existía en eBay**. El problema era la inconsistencia de la API eBay al devolver `listingId: null` y la ausencia de un estado diferenciado.
+
+### Fix (commit en main, 2026-04-16)
+
+| Archivo | Cambio |
+|---|---|
+| `ebay.service.ts` — `handleOfferAlreadyExists()` | Early-return si getOffers por SKU incluye `listingId`; final fallback GET por SKU; tagged error con `ebayOfferAlreadyExists=true` + `resolvedOfferId`; outer catch preserva el tag sin re-wrap |
+| `cj-ebay.constants.ts` | Nuevo status `OFFER_ALREADY_EXISTS`; trace steps `LISTING_PUBLISH_OFFER_ALREADY_EXISTS`, `LISTING_RECONCILE_*` |
+| `cj-ebay-listing.service.ts` | `publish()` detecta tag y guarda `OFFER_ALREADY_EXISTS` + offerId; guardrail bloquea re-publish; nuevo `reconcile()` |
+| `cj-ebay.routes.ts` | `POST /listings/:id/reconcile` |
+| `CjEbayListingsPage.tsx` | Badge `OFFER EXISTS`, banner informativo, botón Reconciliar, detalle explicativo |
+
+### Estados de listing post-fix
+
+| Estado | Causa | Acción |
+|---|---|---|
+| `DRAFT` | Creado, no publicado | Publicar |
+| `ACTIVE` | Publicado correctamente | — |
+| `FAILED` | Error genérico | Revisar log, reintentar |
+| `ACCOUNT_POLICY_BLOCK` | Error 25019 — cuenta no autorizada | Esperar aprobación eBay |
+| `OFFER_ALREADY_EXISTS` | Error 25002 — offer existe, listingId no recuperado aún | **Reconciliar** (no Publicar) |
+
+### Advertencia ENCRYPTION_SALT (independiente del incidente)
+
+Logs muestran `"Usando salt por defecto..."`. No es bloqueante. Acción post-incidente: configurar `ENCRYPTION_SALT` como variable de entorno Railway con valor aleatorio de 64 chars.
+
+---
+
+*Fin del documento v2.19 (actualizado 2026-04-16).*

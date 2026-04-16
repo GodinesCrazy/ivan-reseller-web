@@ -25,6 +25,14 @@ export const CJ_EBAY_TRACE_STEP = {
   LISTING_PUBLISH_ERROR: 'listing.publish.error',
   /** Publish bloqueado: cuenta eBay no autorizada para overseas warehouse / ship-from China. No es error de contenido. */
   LISTING_PUBLISH_ACCOUNT_POLICY_BLOCK: 'listing.publish.account_policy_block',
+  /** Publish devolvió eBay 25002: offer ya existe, listingId no recuperado → estado OFFER_ALREADY_EXISTS. */
+  LISTING_PUBLISH_OFFER_ALREADY_EXISTS: 'listing.publish.offer_already_exists',
+  /** Reconcile iniciado por operador desde OFFER_ALREADY_EXISTS. */
+  LISTING_RECONCILE_START: 'listing.reconcile.start',
+  /** Reconcile exitoso: listingId recuperado, estado → ACTIVE. */
+  LISTING_RECONCILE_SUCCESS: 'listing.reconcile.success',
+  /** Reconcile fallido: listingId aún no disponible, estado permanece OFFER_ALREADY_EXISTS. */
+  LISTING_RECONCILE_PENDING: 'listing.reconcile.pending',
   LISTING_PAUSE: 'listing.pause',
   /** FASE 3E — órdenes */
   ORDER_IMPORT_START: 'order.import.start',
@@ -165,4 +173,14 @@ export const CJ_EBAY_LISTING_STATUS = {
    * El draft se conserva; NO reintentar publish hasta que la cuenta esté autorizada.
    */
   ACCOUNT_POLICY_BLOCK: 'ACCOUNT_POLICY_BLOCK',
+  /**
+   * La oferta ya existe en eBay (error 25002) pero el sistema no pudo obtener el listingId.
+   * El offer SÍ existe en eBay (offerId guardado en ebayOfferId).
+   * Usar el botón Reconciliar: el sistema consulta getOffers por SKU y actualiza a ACTIVE si resuelve.
+   * NO pulsar Publicar — crearía otro intento ciego de offer duplicado.
+   */
+  OFFER_ALREADY_EXISTS: 'OFFER_ALREADY_EXISTS',
 } as const;
+
+/** Trace steps nuevos para reconciliación (FASE 3W+). */
+// Agregados en CJ_EBAY_TRACE_STEP arriba; documentados aquí para referencia cruzada.

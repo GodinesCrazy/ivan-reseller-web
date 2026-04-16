@@ -743,6 +743,13 @@ export class EbayService {
 
     const invHeaders = { 'Content-Language': 'en-US' };
 
+    const successResponse = (listingId: string): EbayListingResponse => ({
+      success: true as const,
+      itemId: listingId,
+      listingUrl: `https://www.ebay.com/itm/${listingId}`,
+      fees: { insertionFee: 0, finalValueFee: 0 },
+    });
+
     let offerId: string | null = null;
     const params = firstError?.parameters;
     if (Array.isArray(params)) {
@@ -768,6 +775,12 @@ export class EbayService {
           offerId = String(first.offerId).trim();
           logger.info('[EbayService] Resolved offerId via getOffers after 25002', { sku, offerId });
         }
+        // Short-circuit: if the offer already has a listingId, the item is live on eBay
+        if (first?.listingId) {
+          const resolvedListingId = String(first.listingId).trim();
+          logger.info('[EbayService] 25002 — recovered listingId from getOffers by SKU', { sku, offerId, listingId: resolvedListingId });
+          return successResponse(resolvedListingId);
+        }
       } catch (lookupErr: any) {
         logger.warn('[EbayService] getOffers after 25002 failed', { sku, message: lookupErr?.message });
       }
@@ -782,13 +795,6 @@ export class EbayService {
       });
       throw error;
     }
-
-    const successResponse = (listingId: string) => ({
-      success: true as const,
-      itemId: listingId,
-      listingUrl: `https://www.ebay.com/itm/${listingId}`,
-      fees: { insertionFee: 0, finalValueFee: 0 },
-    });
 
     const getOfferListingId = async (): Promise<string | null> => {
       const res = await this.apiClient.get(`/sell/inventory/v1/offer/${offerId}`, { headers: invHeaders });
@@ -882,8 +888,31 @@ export class EbayService {
       }
     }
 
-    const clearMessage = `La oferta ya existe en eBay (offerId: ${offerId}). No se pudo obtener el listing; revisa en Seller Hub si ya está publicado o intenta de nuevo en unos minutos.`;
-    throw new AppError(clearMessage, 400);
+    // Final fallback: one more GET by SKU — eBay Inventory API sometimes propagates listingId
+    // with a few seconds of lag after publish, so this catches transient cases.
+    if (sku) {
+      try {
+        const finalRes = await this.apiClient.get(`/sell/inventory/v1/offer`, {
+          headers: invHeaders,
+          params: { sku },
+        });
+        const finalOffers = finalRes.data?.offers || [];
+        const withId = finalOffers.find((o: any) => o?.listingId);
+        if (withId?.listingId) {
+          const finalListingId = String(withId.listingId).trim();
+          logger.info('[EbayService] 25002 final fallback — recovered listingId from getOffers by SKU', { sku, listingId: finalListingId });
+          return successResponse(finalListingId);
+        }
+      } catch (_) { /* ignore — best effort */ }
+    }
+
+    const clearMessage =
+      `La oferta ya existe en eBay (offerId: ${offerId}). No se pudo obtener el listing; ` +
+      `revisa en Seller Hub si ya está publicado o intenta Reconciliar en unos minutos.`;
+    const taggedErr = new AppError(clearMessage, 400);
+    (taggedErr as any).ebayOfferAlreadyExists = true;
+    (taggedErr as any).resolvedOfferId = offerId;
+    throw taggedErr;
   }
 
   /**
@@ -1030,6 +1059,11 @@ export class EbayService {
       try {
         return await this.handleOfferAlreadyExists(error, sku);
       } catch (handledError: any) {
+        // Preserve tagged alreadyPublished errors — cj-ebay-listing.service.ts uses the tag
+        // to set OFFER_ALREADY_EXISTS status instead of FAILED.
+        if ((handledError as any).ebayOfferAlreadyExists === true) {
+          throw handledError;
+        }
         /* If handleOfferAlreadyExists threw an AppError with clear message, use it */
         if (handledError?.message && typeof handledError.message === 'string') {
           const prefix = handledError.message.startsWith('eBay listing creation error:') ? '' : 'eBay listing creation error: ';
