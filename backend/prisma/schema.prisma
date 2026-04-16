@@ -1686,6 +1686,10 @@ model CjEbayListing {
   /// Días hábiles de handling comunicados al comprador (buffer cuenta + suplemento conservador si aplica).
   handlingTimeDays Int?
   publishedAt     DateTime?
+  /// Número de intentos de reconciliación ejecutados (se incrementa en cada llamada a reconcile).
+  reconcileAttempts    Int       @default(0)
+  /// Timestamp hasta el cual no tiene sentido volver a reconciliar (propagación eBay pendiente).
+  reconcileRetryAfter  DateTime?
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

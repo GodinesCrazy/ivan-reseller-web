@@ -1259,6 +1259,46 @@ export class EbayService {
   }
 
   /**
+   * Direct lookup of a single offer by offerId.
+   * More reliable than SKU lookup when offerId is known.
+   */
+  async getOfferByOfferId(offerId: string): Promise<{
+    offerId: string;
+    listingId: string | null;
+    status: string | null;
+  }> {
+    return await this.withAuthRetry(async () => {
+      const invHeaders = { 'Content-Language': 'en-US' };
+      const res = await this.apiClient.get(`/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`, {
+        headers: invHeaders,
+      });
+      return {
+        offerId: String(res.data?.offerId ?? offerId),
+        listingId: res.data?.listingId != null ? String(res.data.listingId) : null,
+        status: res.data?.status != null ? String(res.data.status) : null,
+      };
+    });
+  }
+
+  /**
+   * Publish an existing (unpublished) offer by offerId.
+   * Used during reconcile when offer exists but listingId was never returned.
+   */
+  async publishExistingOffer(offerId: string): Promise<{ listingId: string | null }> {
+    return await this.withAuthRetry(async () => {
+      const invHeaders = { 'Content-Language': 'en-US' };
+      const res = await this.apiClient.post(
+        `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}/publish`,
+        {},
+        { headers: invHeaders }
+      );
+      return {
+        listingId: res.data?.listingId != null ? String(res.data.listingId) : null,
+      };
+    });
+  }
+
+  /**
    * End/Delete eBay listing
    */
   async endListing(itemIdOrOfferId: string, reason: string = 'NotAvailable'): Promise<void> {

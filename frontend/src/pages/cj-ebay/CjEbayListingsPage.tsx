@@ -20,6 +20,8 @@ type ListingRow = {
   cjProductId: string;
   variantCjSku: string | null;
   variantCjVid: string | null;
+  reconcileAttempts: number | null;
+  reconcileRetryAfter: string | null;
 };
 
 export default function CjEbayListingsPage() {
@@ -32,6 +34,8 @@ export default function CjEbayListingsPage() {
     lastError: string | null;
     draftPayload: unknown;
     status: string;
+    reconcileAttempts?: number | null;
+    reconcileRetryAfter?: string | null;
     qualityWarnings?: Array<{ code: string; message: string }>;
   } | null>(null);
 
@@ -85,7 +89,16 @@ export default function CjEbayListingsPage() {
     setBusyId(id);
     setError(null);
     try {
-      const res = await api.post<{ ok: boolean; reconciled: boolean; reason?: string; ebayListingId?: string; listingUrl?: string }>(`/api/cj-ebay/listings/${id}/reconcile`);
+      const res = await api.post<{
+        ok: boolean;
+        reconciled: boolean;
+        reason?: string;
+        ebayListingId?: string;
+        listingUrl?: string;
+        status?: string;
+        retryAfter?: string;
+        attempts?: number;
+      }>(`/api/cj-ebay/listings/${id}/reconcile`);
       if (res.data?.reconciled) {
         await load();
       } else {
@@ -136,6 +149,8 @@ export default function CjEbayListingsPage() {
           lastError: string | null;
           draftPayload: unknown;
           status: string;
+          reconcileAttempts?: number | null;
+          reconcileRetryAfter?: string | null;
         };
       }>(`/api/cj-ebay/listings/${id}`);
       if (res.data?.ok && res.data.listing) {
@@ -144,6 +159,8 @@ export default function CjEbayListingsPage() {
           lastError: res.data.listing.lastError,
           draftPayload: dp,
           status: res.data.listing.status,
+          reconcileAttempts: res.data.listing.reconcileAttempts,
+          reconcileRetryAfter: res.data.listing.reconcileRetryAfter,
           qualityWarnings: Array.isArray(dp?.qualityWarnings)
             ? (dp.qualityWarnings as Array<{ code: string; message: string }>)
             : undefined,
@@ -157,6 +174,10 @@ export default function CjEbayListingsPage() {
   if (loading) {
     return <p className="text-sm text-slate-500">Cargando listings…</p>;
   }
+
+  const hasOfferAlreadyExists = listings.some((r) => r.status === 'OFFER_ALREADY_EXISTS');
+  const hasReconcilePending = listings.some((r) => r.status === 'RECONCILE_PENDING');
+  const hasAccountPolicyBlock = listings.some((r) => r.status === 'ACCOUNT_POLICY_BLOCK');
 
   return (
     <div className="space-y-4">
@@ -197,7 +218,9 @@ export default function CjEbayListingsPage() {
         </Link>
         {' '}→ Evaluar → Crear draft.
       </p>
-      {listings.some((r) => r.status === 'OFFER_ALREADY_EXISTS') && (
+
+      {/* OFFER_ALREADY_EXISTS banner */}
+      {hasOfferAlreadyExists && (
         <div className="rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 px-4 py-3 text-sm text-sky-900 dark:text-sky-100 space-y-1">
           <p className="font-semibold">Oferta ya existente en eBay — pendiente de reconciliación</p>
           <p>
@@ -206,15 +229,34 @@ export default function CjEbayListingsPage() {
           </p>
           <p>
             <strong>Qué hacer:</strong> pulsar <strong>Reconciliar</strong> en la fila correspondiente.
-            El sistema consultará eBay para recuperar el listing real.
-            Si eBay aún no propagó el ID, espera 1–2 minutos y vuelve a intentarlo.
+            El sistema intentará: 1) buscar por offerId, 2) publicar la oferta existente, 3) buscar por SKU.
           </p>
           <p className="text-xs text-sky-700 dark:text-sky-300">
             No pulsar Publicar — crearía un duplicado. La oferta ya existe en eBay.
           </p>
         </div>
       )}
-      {listings.some((r) => r.status === 'ACCOUNT_POLICY_BLOCK') && (
+
+      {/* RECONCILE_PENDING banner */}
+      {hasReconcilePending && (
+        <div className="rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/40 px-4 py-3 text-sm text-violet-900 dark:text-violet-100 space-y-1">
+          <p className="font-semibold">Reconciliación en espera — eBay propagación pendiente</p>
+          <p>
+            Uno o más listings tienen estado <strong>RECONCILE_PENDING</strong>. eBay confirmó la oferta
+            pero el <code>listingId</code> aún no está disponible en la API (lag de propagación típico: 1–5 min).
+          </p>
+          <p>
+            <strong>Qué hacer:</strong> esperar unos minutos y pulsar <strong>Reintentar reconciliar</strong>.
+            El sistema vuelve a ejecutar todas las estrategias de recuperación.
+          </p>
+          <p className="text-xs text-violet-700 dark:text-violet-300">
+            No pulsar Publicar — la oferta ya existe en eBay. Solo reintentar Reconciliar.
+          </p>
+        </div>
+      )}
+
+      {/* ACCOUNT_POLICY_BLOCK banner */}
+      {hasAccountPolicyBlock && (
         <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 space-y-1">
           <p className="font-semibold">Publicación bloqueada — cuenta eBay no autorizada para ship-from China</p>
           <p>
@@ -235,6 +277,7 @@ export default function CjEbayListingsPage() {
           </p>
         </div>
       )}
+
       {error && (
         <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 px-4 py-3 text-sm text-rose-900 dark:text-rose-100">
           {error}
@@ -281,6 +324,13 @@ export default function CjEbayListingsPage() {
                         >
                           OFFER EXISTS
                         </span>
+                      ) : row.status === 'RECONCILE_PENDING' ? (
+                        <span
+                          className="rounded bg-violet-100 dark:bg-violet-900/50 px-2 py-0.5 text-xs font-medium text-violet-800 dark:text-violet-200"
+                          title={`eBay confirmó la oferta pero listingId aún no disponible. Intentos: ${row.reconcileAttempts ?? 0}.`}
+                        >
+                          RECONCILE PENDING
+                        </span>
                       ) : (
                         <span className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs">
                           {row.status}
@@ -309,6 +359,10 @@ export default function CjEbayListingsPage() {
                         >
                           {row.ebayListingId}
                         </a>
+                      ) : row.ebayOfferId ? (
+                        <span className="font-mono text-xs text-slate-500" title="offerId guardado; listingId pendiente">
+                          offer:{row.ebayOfferId}
+                        </span>
                       ) : (
                         '—'
                       )}
@@ -330,6 +384,16 @@ export default function CjEbayListingsPage() {
                           onClick={() => void reconcile(row.id)}
                         >
                           {busyId === row.id ? '…' : 'Reconciliar'}
+                        </button>
+                      ) : row.status === 'RECONCILE_PENDING' ? (
+                        <button
+                          type="button"
+                          disabled={busyId === row.id}
+                          className="text-xs font-medium text-violet-600 dark:text-violet-400 disabled:opacity-40"
+                          title={`Reintentar reconciliar (intento #${(row.reconcileAttempts ?? 0) + 1}). eBay confirmó la oferta; esperando propagación del listingId.`}
+                          onClick={() => void reconcile(row.id)}
+                        >
+                          {busyId === row.id ? '…' : 'Reintentar reconciliar'}
                         </button>
                       ) : (
                         <button
@@ -387,22 +451,37 @@ export default function CjEbayListingsPage() {
                             <p className="font-semibold">Oferta ya existente en eBay (error 25002)</p>
                             <p>
                               Durante el publish, eBay respondió que la oferta para este SKU ya existía
-                              (<em>Offer entity already exists</em>). El sistema intentó recuperar el{' '}
-                              <code>listingId</code> pero eBay no lo devolvió en ese momento (lag de propagación
-                              o inconsistencia temporal de la API).
+                              (<em>Offer entity already exists</em>). El sistema guardó el <code>offerId</code>.
                             </p>
                             <p>
-                              <strong>La oferta SÍ existe en eBay</strong> — el <code>offerId</code> está
-                              guardado. El listing puede estar activo en Seller Hub.
-                            </p>
-                            <p>
-                              <strong>Próximo paso:</strong> pulsa <strong>Reconciliar</strong> (fila arriba).
-                              El sistema consultará eBay para recuperar el <code>listingId</code> real y
-                              actualizar el estado a ACTIVE. Si eBay aún no propagó el ID, espera 1–2 minutos
-                              y vuelve a intentarlo.
+                              <strong>La oferta SÍ existe en eBay.</strong> Pulsar <strong>Reconciliar</strong> para
+                              recuperar el <code>listingId</code>. El sistema intentará: buscar por offerId,
+                              publicar la oferta existente, y buscar por SKU.
                             </p>
                             <p className="text-xs text-sky-700 dark:text-sky-300">
-                              No pulsar Publicar — crearía un duplicado. La oferta ya existe en eBay.
+                              No pulsar Publicar — crearía un duplicado.
+                            </p>
+                          </div>
+                        ) : detail.status === 'RECONCILE_PENDING' ? (
+                          <div className="rounded border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 px-3 py-2 mb-2 space-y-1 text-violet-900 dark:text-violet-100">
+                            <p className="font-semibold">Reconciliación en espera — propagación eBay pendiente</p>
+                            <p>
+                              El sistema ejecutó todas las estrategias de reconciliación ({detail.reconcileAttempts ?? 0} intento{(detail.reconcileAttempts ?? 0) !== 1 ? 's' : ''}).
+                              eBay confirmó la oferta pero el <code>listingId</code> aún no está disponible
+                              en la API (lag de propagación típico: 1–5 min).
+                            </p>
+                            {detail.reconcileRetryAfter && (
+                              <p>
+                                <strong>Reintentar después de:</strong>{' '}
+                                {new Date(detail.reconcileRetryAfter).toLocaleTimeString('es-CL')}
+                              </p>
+                            )}
+                            <p>
+                              <strong>Próximo paso:</strong> pulsar <strong>Reintentar reconciliar</strong> en
+                              la fila. El sistema volverá a intentar GET por offerId, publish, y GET por SKU.
+                            </p>
+                            <p className="text-xs text-violet-700 dark:text-violet-300">
+                              No pulsar Publicar — la oferta ya existe en eBay.
                             </p>
                           </div>
                         ) : (

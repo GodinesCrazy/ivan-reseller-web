@@ -1,8 +1,8 @@
 # CJ Dropshipping → eBay USA — Plan maestro y auditoría
 
-**Versión:** 2.19 (Hotfix: publish FAILED por eBay 25002 → nuevo estado OFFER_ALREADY_EXISTS + reconcile)  
+**Versión:** 2.20 (Hotfix: reconcile OFFER_ALREADY_EXISTS no cerraba → nueva estrategia 4 pasos + estado RECONCILE_PENDING)  
 **Última actualización:** 2026-04-16  
-**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** + **OFFER_ALREADY_EXISTS reconcile** implementados; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **FASE 3W** implementada: **warehouse-aware fulfillment** (feature flag `CJ_EBAY_WAREHOUSE_AWARE`, probe US→CN fallback, `warehouseEvidence`, `originCountryCode` en DB, badge UI, origin dinámico en listing/descripción). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
+**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** + **OFFER_ALREADY_EXISTS reconcile robusta (4 estrategias)** + **RECONCILE_PENDING** implementados; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **FASE 3W** implementada: **warehouse-aware fulfillment** (feature flag `CJ_EBAY_WAREHOUSE_AWARE`, probe US→CN fallback, `warehouseEvidence`, `originCountryCode` en DB, badge UI, origin dinámico en listing/descripción). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
 
 Este documento es la **guía viva** para la vertical CJ → eBay USA. Debe actualizarse al confirmar hallazgos en código, al cerrar fases y al validar integraciones reales.
 
@@ -2558,4 +2558,73 @@ Logs muestran `"Usando salt por defecto..."`. No es bloqueante. Acción post-inc
 
 ---
 
-*Fin del documento v2.19 (actualizado 2026-04-16).*
+---
+
+## Hotfix 2026-04-16 — Reconciliar no cerraba el caso OFFER_ALREADY_EXISTS
+
+### Causa raíz exacta
+
+El botón **Reconciliar** ejecutaba `GET /sell/inventory/v1/offer?sku=CJE1P1V1&limit=20` (lookup por SKU). Si eBay no devolvía `listingId` en ese momento, el estado permanecía `OFFER_ALREADY_EXISTS` indefinidamente — sin estrategia de avance.
+
+**Gaps específicos:**
+
+1. El `offerId` (152707440011) estaba guardado en DB pero **nunca se usaba** en la reconciliación.
+2. No se intentaba `GET /sell/inventory/v1/offer/{offerId}` (lookup directo — más confiable).
+3. No se intentaba `POST /sell/inventory/v1/offer/{offerId}/publish` (la offer podría estar sin publicar).
+4. No existía un estado intermedio: el operador quedaba atrapado sin salida.
+
+### Estrategia de reconciliación nueva (4 pasos)
+
+```
+Reconcile(listing)
+  1. GET /sell/inventory/v1/offer/{offerId}     ← directo por offerId (más fiable)
+     → listingId encontrado → ACTIVE ✓
+  2. POST /sell/inventory/v1/offer/{offerId}/publish
+     → si publish OK → listingId → ACTIVE ✓
+     → si 25002 "already published" → retry GET → ACTIVE ✓
+  3. GET /sell/inventory/v1/offer?sku={sku}     ← fallback por SKU
+     → listingId encontrado → ACTIVE ✓
+  4. Ninguna estrategia resolvió → RECONCILE_PENDING
+     → reconcileAttempts++, reconcileRetryAfter = now + 5 min
+     → el operador puede reintentar (no queda atascado)
+```
+
+### Nuevo estado: RECONCILE_PENDING
+
+| Campo | Descripción |
+|---|---|
+| `status` | `RECONCILE_PENDING` — offer existe, listingId en propagación |
+| `reconcileAttempts` | Contador de intentos ejecutados |
+| `reconcileRetryAfter` | Timestamp para el próximo intento sugerido (now + 5 min) |
+
+### Fix (commit en main, 2026-04-16)
+
+| Archivo | Cambio |
+|---|---|
+| `ebay.service.ts` | Nuevos métodos `getOfferByOfferId()` + `publishExistingOffer()` |
+| `cj-ebay-ebay-facade.service.ts` | Nuevos métodos facade `getOfferSnapshotByOfferId()` + `publishExistingOffer()` |
+| `cj-ebay.constants.ts` | Nuevo status `RECONCILE_PENDING`; trace step `LISTING_RECONCILE_PUBLISHED` |
+| `cj-ebay-listing.service.ts` | Reconcile reescrito con 4 estrategias + helper `markActive()`; acepta `RECONCILE_PENDING` además de `OFFER_ALREADY_EXISTS`; expone `reconcileAttempts` y `reconcileRetryAfter` en list/detail |
+| `schema.prisma` + migración `20260416220000` | Nuevos campos `reconcileAttempts INT DEFAULT 0`, `reconcileRetryAfter TIMESTAMP` |
+| `CjEbayListingsPage.tsx` | Badge violeta `RECONCILE PENDING`; banner explicativo; botón "Reintentar reconciliar"; detalle con retryAfter; columna eBay muestra `offer:{offerId}` cuando no hay listingId |
+
+### Estados de listing (completos post-fix)
+
+| Estado | Causa | Acción operador |
+|---|---|---|
+| `DRAFT` | Creado, no publicado | Publicar |
+| `ACTIVE` | Publicado correctamente | — |
+| `FAILED` | Error genérico de publish | Revisar log, reintentar |
+| `ACCOUNT_POLICY_BLOCK` | Error 25019 — cuenta no autorizada | Esperar aprobación eBay |
+| `OFFER_ALREADY_EXISTS` | Error 25002 — primer intento reconciliar pendiente | **Reconciliar** |
+| `RECONCILE_PENDING` | Reconciliar ejecutado, listingId en propagación eBay | **Reintentar reconciliar** tras retryAfter |
+
+### Evidencia — caso real SKU CJE1P1V1 / offerId 152707440011
+
+- DB tenía: `status = OFFER_ALREADY_EXISTS`, `ebayOfferId = 152707440011`, `ebayListingId = null`
+- El viejo reconcile consultaba solo por SKU (`?sku=CJE1P1V1`) — eBay podía devolver la offer sin `listingId` en ese instante
+- Con el nuevo reconcile: paso 1 consulta `GET /offer/152707440011` directamente; si retorna `listingId` → ACTIVE; si no, paso 2 intenta publish; paso 3 fallback SKU; paso 4 RECONCILE_PENDING con retryAfter
+
+---
+
+*Fin del documento v2.20 (actualizado 2026-04-16).*

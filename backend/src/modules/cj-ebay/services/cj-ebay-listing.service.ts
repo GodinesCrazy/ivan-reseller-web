@@ -727,20 +727,27 @@ export const cjEbayListingService = {
   /**
    * Reconcile a listing in OFFER_ALREADY_EXISTS state.
    * Queries eBay getOffers by SKU to recover the real listingId.
-   * If found → status ACTIVE. If not found yet → stays OFFER_ALREADY_EXISTS (operator retries later).
+   * If found → status ACTIVE. If not found yet → status RECONCILE_PENDING with retryAfter.
+   * Strategy: 1) GET by offerId (direct), 2) POST publish offer, 3) GET by SKU, 4) RECONCILE_PENDING.
    */
   async reconcile(input: { userId: number; listingDbId: number; correlationId?: string; route?: string }) {
     const listing = await prisma.cjEbayListing.findFirst({
       where: { id: input.listingDbId, userId: input.userId },
     });
     if (!listing) throw new AppError('Listing not found.', 404);
-    if (listing.status !== CJ_EBAY_LISTING_STATUS.OFFER_ALREADY_EXISTS) {
+
+    const reconcilableStatuses = [
+      CJ_EBAY_LISTING_STATUS.OFFER_ALREADY_EXISTS,
+      CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING,
+    ] as string[];
+    if (!reconcilableStatuses.includes(listing.status)) {
       throw new AppError(
-        `Reconcile only applies to OFFER_ALREADY_EXISTS listings (current: ${listing.status}).`,
+        `Reconcile only applies to OFFER_ALREADY_EXISTS / RECONCILE_PENDING listings (current: ${listing.status}).`,
         400
       );
     }
-    if (!listing.ebaySku) throw new AppError('Listing missing internal SKU.', 400);
+
+    const newAttempts = (listing.reconcileAttempts ?? 0) + 1;
 
     await cjEbayTraceService.record({
       userId: input.userId,
@@ -748,35 +755,26 @@ export const cjEbayListingService = {
       route: input.route,
       step: CJ_EBAY_TRACE_STEP.LISTING_RECONCILE_START,
       message: 'listing.reconcile.start',
-      meta: { listingId: listing.id, sku: listing.ebaySku, offerId: listing.ebayOfferId },
+      meta: {
+        listingId: listing.id,
+        sku: listing.ebaySku,
+        offerId: listing.ebayOfferId,
+        attempt: newAttempts,
+      },
     });
 
-    let snapshot: { offerId: string | null; listingId: string | null; status: string | null };
-    try {
-      snapshot = await cjEbayEbayFacadeService.getOfferSnapshotBySku(input.userId, listing.ebaySku);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      await cjEbayTraceService.record({
-        userId: input.userId,
-        correlationId: input.correlationId,
-        route: input.route,
-        step: CJ_EBAY_TRACE_STEP.LISTING_RECONCILE_PENDING,
-        message: 'listing.reconcile.pending',
-        meta: { listingId: listing.id, error: msg.slice(0, 300) },
-      });
-      return { reconciled: false, reason: `eBay getOffers failed: ${msg.slice(0, 200)}` };
-    }
-
-    if (snapshot.listingId) {
+    const markActive = async (resolvedListingId: string, resolvedOfferId: string | null, via: string) => {
       await prisma.cjEbayListing.update({
         where: { id: listing.id },
         data: {
           status: CJ_EBAY_LISTING_STATUS.ACTIVE,
-          ebayListingId: snapshot.listingId,
-          ebayOfferId: snapshot.offerId ?? listing.ebayOfferId,
+          ebayListingId: resolvedListingId,
+          ebayOfferId: resolvedOfferId ?? listing.ebayOfferId,
           lastSyncedAt: new Date(),
           publishedAt: listing.publishedAt ?? new Date(),
           lastError: null,
+          reconcileAttempts: newAttempts,
+          reconcileRetryAfter: null,
         },
       });
       await cjEbayTraceService.record({
@@ -785,30 +783,112 @@ export const cjEbayListingService = {
         route: input.route,
         step: CJ_EBAY_TRACE_STEP.LISTING_RECONCILE_SUCCESS,
         message: 'listing.reconcile.success',
-        meta: { listingId: listing.id, ebayListingId: snapshot.listingId, offerId: snapshot.offerId },
+        meta: { listingId: listing.id, ebayListingId: resolvedListingId, offerId: resolvedOfferId, via },
       });
       return {
-        reconciled: true,
-        ebayListingId: snapshot.listingId,
-        listingUrl: `https://www.ebay.com/itm/${snapshot.listingId}`,
-        offerId: snapshot.offerId,
+        reconciled: true as const,
+        ebayListingId: resolvedListingId,
+        listingUrl: `https://www.ebay.com/itm/${resolvedListingId}`,
+        offerId: resolvedOfferId,
+        via,
       };
+    };
+
+    // ── STEP 1: Direct lookup by offerId (most reliable) ────────────────────
+    if (listing.ebayOfferId) {
+      try {
+        const snap = await cjEbayEbayFacadeService.getOfferSnapshotByOfferId(
+          input.userId,
+          listing.ebayOfferId
+        );
+        if (snap.listingId) {
+          return await markActive(snap.listingId, snap.offerId, 'GET_BY_OFFER_ID');
+        }
+
+        // ── STEP 2: Offer exists but no listingId → try to publish it ────────
+        try {
+          const pub = await cjEbayEbayFacadeService.publishExistingOffer(
+            input.userId,
+            listing.ebayOfferId
+          );
+          if (pub.listingId) {
+            return await markActive(pub.listingId, listing.ebayOfferId, 'PUBLISH_EXISTING_OFFER');
+          }
+        } catch (publishErr: unknown) {
+          const publishMsg = publishErr instanceof Error ? publishErr.message : String(publishErr);
+          const isAlreadyPublished = /already published|already exist|25002/i.test(publishMsg);
+          if (isAlreadyPublished) {
+            // Offer is published but listingId still not visible — retry GET
+            try {
+              const retry = await cjEbayEbayFacadeService.getOfferSnapshotByOfferId(
+                input.userId,
+                listing.ebayOfferId
+              );
+              if (retry.listingId) {
+                return await markActive(retry.listingId, retry.offerId, 'GET_AFTER_PUBLISH_CONFLICT');
+              }
+            } catch {
+              /* fall through */
+            }
+          }
+        }
+      } catch {
+        /* offerId lookup failed — fall through to SKU */
+      }
     }
 
+    // ── STEP 3: Fallback — lookup by SKU ────────────────────────────────────
+    if (listing.ebaySku) {
+      try {
+        const skuSnap = await cjEbayEbayFacadeService.getOfferSnapshotBySku(
+          input.userId,
+          listing.ebaySku
+        );
+        if (skuSnap.listingId) {
+          return await markActive(skuSnap.listingId, skuSnap.offerId, 'GET_BY_SKU');
+        }
+      } catch {
+        /* fall through to RECONCILE_PENDING */
+      }
+    }
+
+    // ── STEP 4: All strategies exhausted → RECONCILE_PENDING ────────────────
+    const retryAfter = new Date(Date.now() + 5 * 60 * 1000); // retry in 5 minutes
+    await prisma.cjEbayListing.update({
+      where: { id: listing.id },
+      data: {
+        status: CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING,
+        reconcileAttempts: newAttempts,
+        reconcileRetryAfter: retryAfter,
+        lastError:
+          `Reconcile intento #${newAttempts}: eBay confirmó offer (offerId: ${listing.ebayOfferId ?? 'N/A'}) ` +
+          `pero listingId aún no disponible. Próximo intento sugerido: ${retryAfter.toISOString()}.`,
+      },
+    });
     await cjEbayTraceService.record({
       userId: input.userId,
       correlationId: input.correlationId,
       route: input.route,
       step: CJ_EBAY_TRACE_STEP.LISTING_RECONCILE_PENDING,
       message: 'listing.reconcile.pending',
-      meta: { listingId: listing.id, sku: listing.ebaySku, offerStatus: snapshot.status },
+      meta: {
+        listingId: listing.id,
+        sku: listing.ebaySku,
+        offerId: listing.ebayOfferId,
+        attempt: newAttempts,
+        retryAfter: retryAfter.toISOString(),
+      },
     });
     return {
-      reconciled: false,
+      reconciled: false as const,
+      status: CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING,
       reason:
-        snapshot.offerId
-          ? `Offer ${snapshot.offerId} encontrado en eBay pero listingId aún no disponible (status: ${snapshot.status ?? 'unknown'}). Intenta de nuevo en unos minutos.`
-          : 'No se encontró ninguna oferta para este SKU en eBay. Puede que el publish aún no se haya propagado. Intenta de nuevo en unos minutos.',
+        `eBay confirmó la oferta (offerId: ${listing.ebayOfferId ?? listing.ebaySku}) pero el listingId ` +
+        `aún no está disponible (intento #${newAttempts}). ` +
+        `Intenta nuevamente después de las ${retryAfter.toLocaleTimeString('es-CL')}.`,
+      retryAfter: retryAfter.toISOString(),
+      attempts: newAttempts,
+      offerId: listing.ebayOfferId,
     };
   },
 
@@ -830,6 +910,8 @@ export const cjEbayListingService = {
       handlingTimeDays: r.handlingTimeDays,
       publishedAt: r.publishedAt,
       updatedAt: r.updatedAt,
+      reconcileAttempts: r.reconcileAttempts,
+      reconcileRetryAfter: r.reconcileRetryAfter,
       productTitle: r.product.title,
       cjProductId: r.product.cjProductId,
       variantCjSku: r.variant?.cjSku ?? null,
@@ -857,6 +939,8 @@ export const cjEbayListingService = {
       publishedAt: r.publishedAt,
       updatedAt: r.updatedAt,
       createdAt: r.createdAt,
+      reconcileAttempts: r.reconcileAttempts,
+      reconcileRetryAfter: r.reconcileRetryAfter,
       evaluationId: r.evaluationId,
       shippingQuoteId: r.shippingQuoteId,
       product: { id: r.product.id, title: r.product.title, cjProductId: r.product.cjProductId },

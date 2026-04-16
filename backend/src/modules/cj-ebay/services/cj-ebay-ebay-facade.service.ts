@@ -102,6 +102,22 @@ export const cjEbayEbayFacadeService = {
     return ebay.getInventoryOfferBySku(sku);
   },
 
+  async getOfferSnapshotByOfferId(
+    userId: number,
+    offerId: string
+  ): Promise<{ offerId: string; listingId: string | null; status: string | null }> {
+    const { ebay } = await buildEbayServiceForUser(userId);
+    return ebay.getOfferByOfferId(offerId);
+  },
+
+  async publishExistingOffer(
+    userId: number,
+    offerId: string
+  ): Promise<{ listingId: string | null }> {
+    const { ebay } = await buildEbayServiceForUser(userId);
+    return ebay.publishExistingOffer(offerId);
+  },
+
   /**
    * Orden Sell Fulfillment API (una línea). Fallback `orderIds=` si GET por id falla (formato legacy).
    */

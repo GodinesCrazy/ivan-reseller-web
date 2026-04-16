@@ -27,11 +27,13 @@ export const CJ_EBAY_TRACE_STEP = {
   LISTING_PUBLISH_ACCOUNT_POLICY_BLOCK: 'listing.publish.account_policy_block',
   /** Publish devolvió eBay 25002: offer ya existe, listingId no recuperado → estado OFFER_ALREADY_EXISTS. */
   LISTING_PUBLISH_OFFER_ALREADY_EXISTS: 'listing.publish.offer_already_exists',
-  /** Reconcile iniciado por operador desde OFFER_ALREADY_EXISTS. */
+  /** Reconcile iniciado por operador desde OFFER_ALREADY_EXISTS / RECONCILE_PENDING. */
   LISTING_RECONCILE_START: 'listing.reconcile.start',
   /** Reconcile exitoso: listingId recuperado, estado → ACTIVE. */
   LISTING_RECONCILE_SUCCESS: 'listing.reconcile.success',
-  /** Reconcile fallido: listingId aún no disponible, estado permanece OFFER_ALREADY_EXISTS. */
+  /** Reconcile publicó la offer existente y recuperó listingId → ACTIVE. */
+  LISTING_RECONCILE_PUBLISHED: 'listing.reconcile.published',
+  /** Reconcile: listingId aún no disponible, estado → RECONCILE_PENDING. */
   LISTING_RECONCILE_PENDING: 'listing.reconcile.pending',
   LISTING_PAUSE: 'listing.pause',
   /** FASE 3E — órdenes */
@@ -180,7 +182,12 @@ export const CJ_EBAY_LISTING_STATUS = {
    * NO pulsar Publicar — crearía otro intento ciego de offer duplicado.
    */
   OFFER_ALREADY_EXISTS: 'OFFER_ALREADY_EXISTS',
+  /**
+   * Reconcile ejecutado pero eBay aún no devuelve listingId (propagación pendiente).
+   * offerId guardado. El sistema intentó GET por offerId + POST publish + GET por SKU.
+   * Usar botón Reconciliar nuevamente después de reconcileRetryAfter.
+   * NO pulsar Publicar — la offer ya existe.
+   */
+  RECONCILE_PENDING: 'RECONCILE_PENDING',
 } as const;
 
-/** Trace steps nuevos para reconciliación (FASE 3W+). */
-// Agregados en CJ_EBAY_TRACE_STEP arriba; documentados aquí para referencia cruzada.
