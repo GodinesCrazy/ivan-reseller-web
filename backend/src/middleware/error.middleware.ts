@@ -117,6 +117,7 @@ export const errorHandler = (
     statusCode = 400;
     message = 'Database error';
     errorCode = ErrorCode.DATABASE_ERROR;
+    details = { prismaCode: (err as any).code, prismaMeta: (err as any).meta };
   } else if (err.name === 'ZodError') {
     statusCode = 400;
     message = 'Validation error';

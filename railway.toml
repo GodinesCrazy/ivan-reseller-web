@@ -9,6 +9,7 @@
 buildCommand = "npm ci && npm run build"
 
 [deploy]
+releaseCommand = "node scripts/railway-migrate-deploy.js"
 startCommand = "npm run start"
 healthcheckPath = "/health"
 healthcheckTimeout = 720

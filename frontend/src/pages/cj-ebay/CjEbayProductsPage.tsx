@@ -121,6 +121,8 @@ type ShippingSnippet = {
   cost: number;
   method: string;
   estimatedDays: number | null;
+  startCountryCode?: string;
+  warehouseEvidence?: string;
 };
 
 type QualificationReason = {
@@ -137,6 +139,8 @@ type PreviewOk = {
   product: { cjProductId: string; title: string };
   variant: { cjSku: string; cjVid?: string; stockLive: number; unitCostUsd: number | null };
   riskScore: number;
+  fulfillmentOrigin?: 'US' | 'CN';
+  warehouseAwareEnabled?: boolean;
 };
 
 type EvaluateOk = PreviewOk & {
@@ -543,6 +547,7 @@ export default function CjEbayProductsPage() {
 
   // ─── Product selection ────────────────────────────────────────────────────────
   const [selectedProduct, setSelectedProduct] = useState<CjProductDetail | null>(null);
+  const [selectedProductSummary, setSelectedProductSummary] = useState<CjProductSummary | null>(null);
   const [productDetailLoading, setProductDetailLoading] = useState(false);
   const [selectedVariantKey, setSelectedVariantKey] = useState<string>('');
 
@@ -732,6 +737,7 @@ export default function CjEbayProductsPage() {
   async function selectProduct(summary: CjProductSummary) {
     setProductDetailLoading(true);
     setSelectedProduct(null);
+    setSelectedProductSummary(null);
     setSelectedVariantKey('');
     setProductId('');
     setVariantId('');
@@ -749,6 +755,7 @@ export default function CjEbayProductsPage() {
       const firstOperableVariant = sortedVariants.find(isVariantOperable);
 
       setSelectedProduct(nextProduct);
+      setSelectedProductSummary(summary);
       setProductId(nextProduct.cjProductId);
       if (firstOperableVariant) {
         const vk = variantKey(firstOperableVariant);
@@ -1051,6 +1058,38 @@ export default function CjEbayProductsPage() {
                   ? `${availableVariants.length} variante${availableVariants.length !== 1 ? 's' : ''} operable${availableVariants.length !== 1 ? 's' : ''} con stock >= 1`
                   : 'Sin variantes operables en el detalle actual de CJ'}
               </p>
+              {/* Origin + ETA row — visible BEFORE preview/evaluate */}
+              {(() => {
+                const shippingOrigin = showBreakdown?.shipping?.startCountryCode
+                  ?? selectedProductSummary?.fulfillmentOrigin;
+                const etaDays = showBreakdown?.shipping?.estimatedDays;
+                const evidence = showBreakdown?.shipping?.warehouseEvidence;
+                if (!shippingOrigin || shippingOrigin === 'UNKNOWN') return null;
+                const isUS = shippingOrigin === 'US';
+                const etaLabel = etaDays != null
+                  ? ` · ETA ~${etaDays}d`
+                  : evidence === 'freight_api_confirmed' || evidence === 'freight_api_fallback'
+                    ? ' · ETA pendiente'
+                    : '';
+                const confidenceHint = evidence === 'freight_api_confirmed'
+                  ? ' (confirmado)'
+                  : evidence === 'freight_api_fallback'
+                    ? ' (estimado CN)'
+                    : evidence === 'assumed'
+                    ? ' (estimado)'
+                    : '';
+                return (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      isUS
+                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    }`}>
+                      {isUS ? '🇺🇸' : '🇨🇳'} {isUS ? 'Bodega USA' : 'Envío China'}{etaLabel}{confidenceHint}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
