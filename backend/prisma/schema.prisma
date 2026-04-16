@@ -1687,9 +1687,9 @@ model CjEbayListing {
   handlingTimeDays Int?
   publishedAt     DateTime?
   /// Número de intentos de reconciliación ejecutados (se incrementa en cada llamada a reconcile).
-  reconcileAttempts    Int       @default(0)
+  reconcileAttempts    Int       @default(0) @map("reconcile_attempts")
   /// Timestamp hasta el cual no tiene sentido volver a reconciliar (propagación eBay pendiente).
-  reconcileRetryAfter  DateTime?
+  reconcileRetryAfter  DateTime?             @map("reconcile_retry_after")
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
