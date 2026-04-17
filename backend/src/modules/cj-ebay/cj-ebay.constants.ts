@@ -35,6 +35,12 @@ export const CJ_EBAY_TRACE_STEP = {
   LISTING_RECONCILE_PUBLISHED: 'listing.reconcile.published',
   /** Reconcile: listingId aún no disponible, estado → RECONCILE_PENDING. */
   LISTING_RECONCILE_PENDING: 'listing.reconcile.pending',
+  /** Reconcile agotó MAX_RECONCILE_ATTEMPTS y no pudo recuperar listingId — estado RECONCILE_FAILED. */
+  LISTING_RECONCILE_FAILED: 'listing.reconcile.failed',
+  /** Diagnóstico eBay directo: snapshot del offer real (offerId + SKU). */
+  LISTING_EBAY_SNAPSHOT: 'listing.ebay.snapshot',
+  /** Operador forzó reset a DRAFT para republicar. */
+  LISTING_FORCE_RESET: 'listing.force.reset',
   LISTING_PAUSE: 'listing.pause',
   /** FASE 3E — órdenes */
   ORDER_IMPORT_START: 'order.import.start',
@@ -189,5 +195,15 @@ export const CJ_EBAY_LISTING_STATUS = {
    * NO pulsar Publicar — la offer ya existe.
    */
   RECONCILE_PENDING: 'RECONCILE_PENDING',
+  /**
+   * Reconcile agotó MAX_RECONCILE_ATTEMPTS sin recuperar listingId.
+   * eBay no ha devuelto listingId después de múltiples ciclos completos.
+   * Posibles causas: (A) offer eliminado/expirado en eBay, (B) inconsistencia eBay API.
+   * Acción del operador: 1) Verificar en Seller Hub si el listing existe.
+   *   - Si existe: anotar listingId y contactar soporte para diagnóstico.
+   *   - Si no existe: usar botón "Republicar" (force-reset a DRAFT) para reiniciar ciclo.
+   * NO pulsar Publicar directamente si la offer aún existe en eBay — crearía duplicado.
+   */
+  RECONCILE_FAILED: 'RECONCILE_FAILED',
 } as const;
 

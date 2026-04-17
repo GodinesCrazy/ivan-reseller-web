@@ -98,15 +98,69 @@ export default function CjEbayListingsPage() {
         status?: string;
         retryAfter?: string;
         attempts?: number;
+        maxAttempts?: number;
+        sellerHubAction?: string;
       }>(`/api/cj-ebay/listings/${id}/reconcile`);
       if (res.data?.reconciled) {
         await load();
       } else {
-        setError(res.data?.reason || 'Reconcile: listingId aún no disponible. Intenta de nuevo en unos minutos.');
+        const msg = res.data?.reason || 'Reconcile: listingId aún no disponible.';
+        setError(msg);
         await load();
       }
     } catch (e: unknown) {
       let msg = 'Error al reconciliar.';
+      if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
+        const d = e.response.data as { message?: string; error?: string };
+        msg = d.message || d.error || msg;
+      } else if (e instanceof Error) msg = e.message;
+      setError(msg);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function runEbaySnapshot(id: number) {
+    setBusyId(id);
+    setError(null);
+    try {
+      const res = await api.get<{
+        ok: boolean;
+        diagnosis: string;
+        offerByOfferId?: { listingId: string | null; status: string | null } | null;
+        offerBySku?: { listingId: string | null; status: string | null } | null;
+        localListing?: { status: string; ebayListingId: string | null };
+      }>(`/api/cj-ebay/listings/${id}/ebay-snapshot`);
+      if (res.data?.ok) {
+        const promoted = res.data.localListing?.ebayListingId != null;
+        if (promoted) {
+          await load();
+        } else {
+          setError(`Diagnóstico eBay: ${res.data.diagnosis}`);
+          await load();
+        }
+      }
+    } catch (e: unknown) {
+      let msg = 'Error al consultar eBay.';
+      if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
+        const d = e.response.data as { message?: string; error?: string };
+        msg = d.message || d.error || msg;
+      } else if (e instanceof Error) msg = e.message;
+      setError(msg);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function forceReset(id: number) {
+    if (!confirm('¿Confirmar reset a DRAFT? Esto borrará el offerId y listingId de eBay guardados localmente. Solo hacer si el listing NO existe en eBay Seller Hub.')) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      await api.post(`/api/cj-ebay/listings/${id}/force-reset`, { reason: 'operator_manual_reset' });
+      await load();
+    } catch (e: unknown) {
+      let msg = 'Error al resetear listing.';
       if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
         const d = e.response.data as { message?: string; error?: string };
         msg = d.message || d.error || msg;
@@ -177,6 +231,7 @@ export default function CjEbayListingsPage() {
 
   const hasOfferAlreadyExists = listings.some((r) => r.status === 'OFFER_ALREADY_EXISTS');
   const hasReconcilePending = listings.some((r) => r.status === 'RECONCILE_PENDING');
+  const hasReconcileFailed = listings.some((r) => r.status === 'RECONCILE_FAILED');
   const hasAccountPolicyBlock = listings.some((r) => r.status === 'ACCOUNT_POLICY_BLOCK');
 
   return (
@@ -233,6 +288,34 @@ export default function CjEbayListingsPage() {
           </p>
           <p className="text-xs text-sky-700 dark:text-sky-300">
             No pulsar Publicar — crearía un duplicado. La oferta ya existe en eBay.
+          </p>
+        </div>
+      )}
+
+      {/* RECONCILE_FAILED banner */}
+      {hasReconcileFailed && (
+        <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-100 space-y-1">
+          <p className="font-semibold">Reconciliación fallida — acción del operador requerida</p>
+          <p>
+            Uno o más listings tienen estado <strong>RECONCILE_FAILED</strong>. El sistema agotó
+            los intentos de recuperar el <code>listingId</code> de eBay.
+          </p>
+          <p><strong>Pasos a seguir:</strong></p>
+          <ol className="list-decimal pl-4 space-y-1">
+            <li>
+              Pulsar <strong>"Diagnóstico eBay"</strong> en la fila — consulta eBay directamente
+              para ver el estado real del offer. Si encuentra el listingId, lo aplica automáticamente.
+            </li>
+            <li>
+              Ir a <strong>eBay Seller Hub → Active Listings</strong> y buscar el producto por título o SKU.
+              <ul className="list-disc pl-4 mt-0.5 space-y-0.5 text-xs">
+                <li>Si el listing <strong>SÍ está en Seller Hub</strong>: inconsistencia eBay API — contactar soporte eBay con el offerId.</li>
+                <li>Si el listing <strong>NO está en Seller Hub</strong>: pulsar <strong>"Republicar desde cero"</strong> para resetear a DRAFT y volver a publicar.</li>
+              </ul>
+            </li>
+          </ol>
+          <p className="text-xs text-red-700 dark:text-red-300">
+            El draft se conserva. No perderás el trabajo previo de evaluate/pricing.
           </p>
         </div>
       )}
@@ -327,9 +410,16 @@ export default function CjEbayListingsPage() {
                       ) : row.status === 'RECONCILE_PENDING' ? (
                         <span
                           className="rounded bg-violet-100 dark:bg-violet-900/50 px-2 py-0.5 text-xs font-medium text-violet-800 dark:text-violet-200"
-                          title={`eBay confirmó la oferta pero listingId aún no disponible. Intentos: ${row.reconcileAttempts ?? 0}.`}
+                          title={`eBay confirmó la oferta pero listingId aún no disponible. Intentos: ${row.reconcileAttempts ?? 0}/10.`}
                         >
-                          RECONCILE PENDING
+                          RECONCILE PENDING ({row.reconcileAttempts ?? 0}/10)
+                        </span>
+                      ) : row.status === 'RECONCILE_FAILED' ? (
+                        <span
+                          className="rounded bg-red-100 dark:bg-red-900/50 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200"
+                          title={`Reconciliación agotó ${row.reconcileAttempts ?? 0} intentos. Verificar en Seller Hub.`}
+                        >
+                          RECONCILE FAILED
                         </span>
                       ) : (
                         <span className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs">
@@ -386,15 +476,56 @@ export default function CjEbayListingsPage() {
                           {busyId === row.id ? '…' : 'Reconciliar'}
                         </button>
                       ) : row.status === 'RECONCILE_PENDING' ? (
-                        <button
-                          type="button"
-                          disabled={busyId === row.id}
-                          className="text-xs font-medium text-violet-600 dark:text-violet-400 disabled:opacity-40"
-                          title={`Reintentar reconciliar (intento #${(row.reconcileAttempts ?? 0) + 1}). eBay confirmó la oferta; esperando propagación del listingId.`}
-                          onClick={() => void reconcile(row.id)}
-                        >
-                          {busyId === row.id ? '…' : 'Reintentar reconciliar'}
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            className="text-xs font-medium text-violet-600 dark:text-violet-400 disabled:opacity-40"
+                            title={`Reintentar reconciliar (intento #${(row.reconcileAttempts ?? 0) + 1}/10).`}
+                            onClick={() => void reconcile(row.id)}
+                          >
+                            {busyId === row.id ? '…' : 'Reintentar reconciliar'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            className="text-xs font-medium text-blue-600 dark:text-blue-400 disabled:opacity-40"
+                            title="Consultar eBay directamente para obtener estado real del offer."
+                            onClick={() => void runEbaySnapshot(row.id)}
+                          >
+                            {busyId === row.id ? '…' : 'Diagnóstico eBay'}
+                          </button>
+                        </>
+                      ) : row.status === 'RECONCILE_FAILED' ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            className="text-xs font-medium text-blue-600 dark:text-blue-400 disabled:opacity-40"
+                            title="Consultar eBay directamente. Si el listingId existe, lo aplica y marca como ACTIVE."
+                            onClick={() => void runEbaySnapshot(row.id)}
+                          >
+                            {busyId === row.id ? '…' : 'Diagnóstico eBay'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            className="text-xs font-medium text-orange-600 dark:text-orange-400 disabled:opacity-40"
+                            title="Reintentar reconciliar una vez más antes de republicar."
+                            onClick={() => void reconcile(row.id)}
+                          >
+                            {busyId === row.id ? '…' : 'Reconciliar'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            className="text-xs font-medium text-red-600 dark:text-red-400 disabled:opacity-40"
+                            title="Solo si el listing NO existe en Seller Hub. Resetea a DRAFT para volver a publicar."
+                            onClick={() => void forceReset(row.id)}
+                          >
+                            {busyId === row.id ? '…' : 'Republicar desde cero'}
+                          </button>
+                        </>
                       ) : (
                         <button
                           type="button"
@@ -466,7 +597,7 @@ export default function CjEbayListingsPage() {
                           <div className="rounded border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 px-3 py-2 mb-2 space-y-1 text-violet-900 dark:text-violet-100">
                             <p className="font-semibold">Reconciliación en espera — propagación eBay pendiente</p>
                             <p>
-                              El sistema ejecutó todas las estrategias de reconciliación ({detail.reconcileAttempts ?? 0} intento{(detail.reconcileAttempts ?? 0) !== 1 ? 's' : ''}).
+                              El sistema ejecutó todas las estrategias de reconciliación ({detail.reconcileAttempts ?? 0}/10 intentos).
                               eBay confirmó la oferta pero el <code>listingId</code> aún no está disponible
                               en la API (lag de propagación típico: 1–5 min).
                             </p>
@@ -477,12 +608,44 @@ export default function CjEbayListingsPage() {
                               </p>
                             )}
                             <p>
-                              <strong>Próximo paso:</strong> pulsar <strong>Reintentar reconciliar</strong> en
-                              la fila. El sistema volverá a intentar GET por offerId, publish, y GET por SKU.
+                              <strong>Próximo paso:</strong> pulsar <strong>Diagnóstico eBay</strong> o{' '}
+                              <strong>Reintentar reconciliar</strong>. El sistema volverá a intentar GET por offerId, publish, y GET por SKU.
                             </p>
                             <p className="text-xs text-violet-700 dark:text-violet-300">
                               No pulsar Publicar — la oferta ya existe en eBay.
                             </p>
+                          </div>
+                        ) : detail.status === 'RECONCILE_FAILED' ? (
+                          <div className="rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3 py-2 mb-2 space-y-1 text-red-900 dark:text-red-100">
+                            <p className="font-semibold">Reconciliación agotada — acción del operador requerida</p>
+                            <p>
+                              El sistema ejecutó {detail.reconcileAttempts ?? 0} ciclos completos de reconciliación
+                              sin recuperar el <code>listingId</code> de eBay.
+                            </p>
+                            <p><strong>Pasos recomendados:</strong></p>
+                            <ol className="list-decimal pl-4 text-xs space-y-1">
+                              <li>
+                                Pulsar <strong>"Diagnóstico eBay"</strong> en la fila — consulta eBay en tiempo real.
+                                Si el listing existe, se marca ACTIVE automáticamente.
+                              </li>
+                              <li>
+                                Ir a <strong>eBay Seller Hub → Active Listings</strong> y buscar por título o SKU.
+                              </li>
+                              <li>
+                                <strong>Si el listing SÍ está en Seller Hub:</strong> inconsistencia eBay API — reportar a soporte eBay con el offerId.
+                              </li>
+                              <li>
+                                <strong>Si el listing NO está en Seller Hub:</strong> pulsar{' '}
+                                <strong>"Republicar desde cero"</strong> — resetea a DRAFT y permite publicar nuevamente.
+                                El draft (título, precio, imágenes) se conserva.
+                              </li>
+                            </ol>
+                            {detail.lastError && (
+                              <details className="mt-1">
+                                <summary className="cursor-pointer text-xs text-red-600 dark:text-red-400">Ver mensaje completo</summary>
+                                <pre className="whitespace-pre-wrap text-xs mt-1">{detail.lastError}</pre>
+                              </details>
+                            )}
                           </div>
                         ) : (
                           detail.lastError && (

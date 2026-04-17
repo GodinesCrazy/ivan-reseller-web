@@ -949,6 +949,66 @@ router.post('/listings/:listingId/pause', async (req: Request, res: Response, ne
   }
 });
 
+/**
+ * GET /listings/:listingId/ebay-snapshot
+ * Queries eBay directly for offer state (offerId + SKU). Diagnoses RECONCILE_FAILED / RECONCILE_PENDING.
+ * If listingId is found in eBay, auto-promotes listing to ACTIVE.
+ */
+router.get('/listings/:listingId/ebay-snapshot', async (req: Request, res: Response, next: NextFunction) => {
+  const routePath = `${req.baseUrl}${req.path}`;
+  try {
+    const userId = req.user!.userId;
+    const listingDbId = parseInt(String(req.params.listingId || ''), 10);
+    if (!Number.isFinite(listingDbId) || listingDbId < 1) {
+      throw new AppError('Invalid listingId', 400);
+    }
+    const out = await cjEbayListingService.getEbaySnapshot({
+      userId,
+      listingDbId,
+      correlationId: req.correlationId,
+      route: routePath,
+    });
+    await traceComplete(req, userId, 'GET /listings/:listingId/ebay-snapshot', {
+      statusCode: 200,
+      resolvedListingId: out.offerByOfferId?.listingId ?? out.offerBySku?.listingId ?? null,
+    });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * POST /listings/:listingId/force-reset
+ * Force-reset a RECONCILE_FAILED / RECONCILE_PENDING listing to DRAFT for re-publication.
+ * Clears all eBay IDs and reconcile counters. Draft payload is preserved.
+ */
+router.post('/listings/:listingId/force-reset', async (req: Request, res: Response, next: NextFunction) => {
+  const routePath = `${req.baseUrl}${req.path}`;
+  try {
+    const userId = req.user!.userId;
+    const listingDbId = parseInt(String(req.params.listingId || ''), 10);
+    if (!Number.isFinite(listingDbId) || listingDbId < 1) {
+      throw new AppError('Invalid listingId', 400);
+    }
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : 'operator_manual';
+    const out = await cjEbayListingService.forceResetToDraft({
+      userId,
+      listingDbId,
+      correlationId: req.correlationId,
+      route: routePath,
+      reason,
+    });
+    await traceComplete(req, userId, 'POST /listings/:listingId/force-reset', {
+      statusCode: 200,
+      previousStatus: out.previousStatus,
+    });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // OFFER_ALREADY_EXISTS reconcile: try to recover listingId from eBay getOffers by SKU.
 router.post('/listings/:listingId/reconcile', async (req: Request, res: Response, next: NextFunction) => {
   const routePath = `${req.baseUrl}${req.path}`;
@@ -1415,6 +1475,159 @@ router.post('/cj/shipping-quote', async (req: Request, res: Response, next: Next
       });
       return;
     }
+    next(e);
+  }
+});
+
+// ====================================
+// FASE 3G — AI Opportunity Discovery
+// POST /opportunities/discover
+// GET  /opportunities/runs
+// GET  /opportunities/runs/:runId
+// GET  /opportunities/runs/:runId/candidates
+// GET  /opportunities/recommendations
+// POST /opportunities/candidates/:id/approve
+// POST /opportunities/candidates/:id/reject
+// POST /opportunities/candidates/:id/defer
+// GET  /opportunities/candidates/:id
+// ====================================
+
+import { cjEbayOpportunityShortlistService } from './services/cj-ebay-opportunity-shortlist.service';
+
+router.post('/opportunities/discover', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const body = req.body ?? {};
+    const result = await cjEbayOpportunityShortlistService.startDiscoveryRun(userId, {
+      mode: body.mode,
+      settings: body.settings,
+    });
+    res.status(202).json({ ok: true, ...result });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/opportunities/runs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const limit = Math.min(Number(req.query.limit ?? 10), 50);
+    const runs = await cjEbayOpportunityShortlistService.listRuns(userId, limit);
+    res.json({ ok: true, runs });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/opportunities/runs/:runId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const run = await cjEbayOpportunityShortlistService.getRunSummary(req.params.runId, userId);
+    if (!run) throw new AppError('Run not found', 404);
+    res.json({ ok: true, run });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/opportunities/runs/:runId/candidates', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const candidates = await cjEbayOpportunityShortlistService.getRunCandidates(req.params.runId, userId);
+    res.json({ ok: true, candidates });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/opportunities/recommendations', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const candidates = await cjEbayOpportunityShortlistService.getActiveRecommendations(userId);
+    const latestRun = await cjEbayOpportunityShortlistService.getLatestRunSummary(userId);
+    res.json({ ok: true, run: latestRun, candidates });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/opportunities/candidates/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const candidate = await cjEbayOpportunityShortlistService.getCandidate(req.params.id, userId);
+    if (!candidate) throw new AppError('Candidate not found', 404);
+    res.json({ ok: true, candidate });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/opportunities/candidates/:id/approve', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const candidate = await cjEbayOpportunityShortlistService.approveCandidate(
+      req.params.id,
+      userId,
+      req.body?.notes
+    );
+    res.json({ ok: true, candidate });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/opportunities/candidates/:id/reject', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const candidate = await cjEbayOpportunityShortlistService.rejectCandidate(
+      req.params.id,
+      userId,
+      req.body?.notes
+    );
+    res.json({ ok: true, candidate });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/opportunities/candidates/:id/defer', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const candidate = await cjEbayOpportunityShortlistService.deferCandidate(
+      req.params.id,
+      userId,
+      req.body?.notes
+    );
+    res.json({ ok: true, candidate });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /opportunities/candidates/:id/evidence
+// Returns the data quality breakdown + market price detail for a candidate.
+// Useful for the UI evidence panel and for programmatic auditing.
+router.get('/opportunities/candidates/:id/evidence', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const candidate = await cjEbayOpportunityShortlistService.getCandidate(req.params.id, userId);
+    if (!candidate) throw new AppError('Candidate not found', 404);
+
+    res.json({
+      ok: true,
+      candidateId: candidate.id,
+      seedKeyword: candidate.seedKeyword,
+      trendSourceType: candidate.trendSourceType,
+      marketPriceSourceType: candidate.marketPriceSourceType,
+      dataConfidenceScore: candidate.dataConfidenceScore,
+      recommendationConfidence: candidate.recommendationConfidence,
+      starterSuitability: candidate.starterSuitability,
+      evidenceSummary: candidate.evidenceSummary,
+      marketPriceDetail: candidate.marketPriceDetail ?? null,
+      pricingBreakdown: candidate.pricing,
+      scoreBreakdown: candidate.score,
+    });
+  } catch (e) {
     next(e);
   }
 });

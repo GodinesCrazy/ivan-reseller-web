@@ -1,8 +1,8 @@
 # CJ Dropshipping → eBay USA — Plan maestro y auditoría
 
-**Versión:** 2.21 (Diagnóstico completo CJE1P1V1: raíz real RECONCILE_PENDING = eBay 25019 Overseas Warehouse Block; reconcile detecta 25019 → ACCOUNT_POLICY_BLOCK; Type item specific corregido en eBay)  
-**Última actualización:** 2026-04-16  
-**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** + **OFFER_ALREADY_EXISTS reconcile robusta (4 estrategias)** + **RECONCILE_PENDING** implementados; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **FASE 3W** implementada: **warehouse-aware fulfillment** (feature flag `CJ_EBAY_WAREHOUSE_AWARE`, probe US→CN fallback, `warehouseEvidence`, `originCountryCode` en DB, badge UI, origin dinámico en listing/descripción). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
+**Versión:** 2.22 (RECONCILE_FAILED: estado terminal + escape MAX_RECONCILE_ATTEMPTS=10; diagnóstico eBay directo /ebay-snapshot; force-reset a DRAFT /force-reset; UX profesional por estado; caso CJE1P1V1/152707440011 documentado)  
+**Última actualización:** 2026-04-17  
+**Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** + **OFFER_ALREADY_EXISTS reconcile robusta (4 estrategias)** + **RECONCILE_PENDING** + **RECONCILE_FAILED (terminal, escape automático)** + **diagnóstico eBay directo** + **force-reset a DRAFT** implementados; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada. **FASE 3W** implementada: warehouse-aware. **payBalanceV2** no está implementado. **FASE 3G** (workers automáticos) pendiente.
 
 Este documento es la **guía viva** para la vertical CJ → eBay USA. Debe actualizarse al confirmar hallazgos en código, al cerrar fases y al validar integraciones reales.
 
@@ -2551,6 +2551,47 @@ La oferta **sí existía en eBay**. El problema era la inconsistencia de la API 
 | `FAILED` | Error genérico | Revisar log, reintentar |
 | `ACCOUNT_POLICY_BLOCK` | Error 25019 — cuenta no autorizada | Esperar aprobación eBay |
 | `OFFER_ALREADY_EXISTS` | Error 25002 — offer existe, listingId no recuperado aún | **Reconciliar** (no Publicar) |
+| `RECONCILE_PENDING` | Reconcile < 10 intentos, listingId no disponible aún | Esperar 5 min → **Reintentar reconciliar** o **Diagnóstico eBay** |
+| `RECONCILE_FAILED` | Reconcile ≥ 10 intentos, estado terminal | **Diagnóstico eBay** → si no hay listingId → **Republicar desde cero** |
+
+---
+
+## Fix v2.22 — 2026-04-17: RECONCILE_FAILED + escape + diagnóstico + force-reset
+
+### Causa raíz del RECONCILE_PENDING perpetuo (caso CJE1P1V1 / offerId 152707440011)
+
+El sistema ejecutaba correctamente las 4 estrategias de reconcile pero **no tenía límite de intentos ni estado terminal**. El ciclo quedaba en `RECONCILE_PENDING` indefinidamente sin dar instrucción al operador.
+
+Raíz técnica: eBay Inventory API tiene lag de propagación del `listingId`. Después de publicar una offer, `listingId` puede tardar segundos, minutos, o en casos de inconsistencia eBay — no aparecer en la API aunque el listing sea visible en Seller Hub.
+
+El offerId `152707440011` fue guardado del error 25002 durante el publish original (~2026-04-14). El offer existe en eBay con `status: PUBLISHED` pero el campo `listingId` regresa `null` en cada consulta a la Inventory API.
+
+### Lo que se implementó
+
+| Componente | Cambio |
+|---|---|
+| `cj-ebay.constants.ts` | Nuevo estado `RECONCILE_FAILED`; trace steps `LISTING_RECONCILE_FAILED`, `LISTING_EBAY_SNAPSHOT`, `LISTING_FORCE_RESET` |
+| `cj-ebay-listing.service.ts` | Escape `MAX_RECONCILE_ATTEMPTS=10` → `RECONCILE_FAILED`; `getEbaySnapshot()` consulta eBay directo con auto-promote; `forceResetToDraft()` reset a DRAFT con conservación del draft payload |
+| `cj-ebay.routes.ts` | `GET /listings/:id/ebay-snapshot`; `POST /listings/:id/force-reset`; `reconcile` acepta también `RECONCILE_FAILED` |
+| `CjEbayListingsPage.tsx` | Badge `RECONCILE_FAILED`; banner con instrucciones; botones "Diagnóstico eBay", "Republicar desde cero"; detalle explicativo con pasos exactos |
+
+### Flujo de resolución para el caso productivo
+
+```
+CJE1P1V1 / offerId 152707440011 / estado RECONCILE_PENDING / listing local ID 2
+
+1. Pulsar "Diagnóstico eBay" en la UI
+   → GET /listings/2/ebay-snapshot
+   → Consulta eBay: GET /offer/152707440011 + GET /offer?sku=CJE1P1V1
+   → Si listingId encontrado → ACTIVE automático ✅
+   → Si no encontrado → mostrar diagnosis al operador
+
+2. Operador verifica eBay Seller Hub → Active Listings
+   → Si listing existe en Seller Hub: contactar soporte eBay con offerId
+   → Si NO existe: pulsar "Republicar desde cero"
+     → POST /listings/2/force-reset → DRAFT (offerId/listingId borrados)
+     → Publicar normalmente desde la UI
+```
 
 ### Advertencia ENCRYPTION_SALT (independiente del incidente)
 

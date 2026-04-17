@@ -725,10 +725,10 @@ export const cjEbayListingService = {
   },
 
   /**
-   * Reconcile a listing in OFFER_ALREADY_EXISTS state.
+   * Reconcile a listing in OFFER_ALREADY_EXISTS / RECONCILE_PENDING state.
    * Queries eBay getOffers by SKU to recover the real listingId.
-   * If found → status ACTIVE. If not found yet → status RECONCILE_PENDING with retryAfter.
-   * Strategy: 1) GET by offerId (direct), 2) POST publish offer, 3) GET by SKU, 4) RECONCILE_PENDING.
+   * Strategy: 1) GET by offerId, 2) POST publish offer, 3) GET by SKU, 4) RECONCILE_PENDING.
+   * After MAX_RECONCILE_ATTEMPTS exhausted → RECONCILE_FAILED (terminal; operator must act).
    */
   async reconcile(input: { userId: number; listingDbId: number; correlationId?: string; route?: string }) {
     const listing = await prisma.cjEbayListing.findFirst({
@@ -739,14 +739,17 @@ export const cjEbayListingService = {
     const reconcilableStatuses = [
       CJ_EBAY_LISTING_STATUS.OFFER_ALREADY_EXISTS,
       CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING,
+      CJ_EBAY_LISTING_STATUS.RECONCILE_FAILED,
     ] as string[];
     if (!reconcilableStatuses.includes(listing.status)) {
       throw new AppError(
-        `Reconcile only applies to OFFER_ALREADY_EXISTS / RECONCILE_PENDING listings (current: ${listing.status}).`,
+        `Reconcile only applies to OFFER_ALREADY_EXISTS / RECONCILE_PENDING / RECONCILE_FAILED listings (current: ${listing.status}).`,
         400
       );
     }
 
+    /** After this many full-cycle attempts with no listingId, move to terminal RECONCILE_FAILED. */
+    const MAX_RECONCILE_ATTEMPTS = 10;
     const newAttempts = (listing.reconcileAttempts ?? 0) + 1;
 
     await cjEbayTraceService.record({
@@ -879,7 +882,53 @@ export const cjEbayListingService = {
       }
     }
 
-    // ── STEP 4: All strategies exhausted → RECONCILE_PENDING ────────────────
+    // ── STEP 4 / 5: All strategies exhausted ────────────────────────────────
+    // After MAX_RECONCILE_ATTEMPTS, move to terminal RECONCILE_FAILED so the operator
+    // receives a clear final state and actionable instruction (not an infinite loop).
+    if (newAttempts >= MAX_RECONCILE_ATTEMPTS) {
+      const failedMsg =
+        `RECONCILE_FAILED — ${newAttempts} intentos completos sin recuperar listingId. ` +
+        `offerId: ${listing.ebayOfferId ?? 'N/A'}. ` +
+        `Posibles causas: (A) offer eliminado/expirado en eBay, (B) inconsistencia en eBay Inventory API. ` +
+        `ACCIÓN REQUERIDA: 1) Ir a Seller Hub → Active Listings y buscar el producto por título/SKU. ` +
+        `  - Si el listing EXISTE en Seller Hub: el listing está live en eBay pero la API no devuelve listingId. ` +
+        `    Contactar soporte eBay con offerId ${listing.ebayOfferId ?? 'N/A'} y SKU ${listing.ebaySku ?? 'N/A'}. ` +
+        `  - Si el listing NO existe en Seller Hub: usar botón "Republicar desde cero" en este panel ` +
+        `    (force-reset a DRAFT) para reiniciar el ciclo completo de publicación.`;
+      await prisma.cjEbayListing.update({
+        where: { id: listing.id },
+        data: {
+          status: CJ_EBAY_LISTING_STATUS.RECONCILE_FAILED,
+          reconcileAttempts: newAttempts,
+          reconcileRetryAfter: null,
+          lastError: failedMsg,
+        },
+      });
+      await cjEbayTraceService.record({
+        userId: input.userId,
+        correlationId: input.correlationId,
+        route: input.route,
+        step: CJ_EBAY_TRACE_STEP.LISTING_RECONCILE_FAILED,
+        message: 'listing.reconcile.failed',
+        meta: {
+          listingId: listing.id,
+          sku: listing.ebaySku,
+          offerId: listing.ebayOfferId,
+          attempts: newAttempts,
+        },
+      });
+      return {
+        reconciled: false as const,
+        status: CJ_EBAY_LISTING_STATUS.RECONCILE_FAILED,
+        reason: failedMsg,
+        attempts: newAttempts,
+        offerId: listing.ebayOfferId,
+        sellerHubAction:
+          `Verificar en eBay Seller Hub → Active Listings. ` +
+          `SKU: ${listing.ebaySku ?? 'N/A'} | offerId: ${listing.ebayOfferId ?? 'N/A'}`,
+      };
+    }
+
     const retryAfter = new Date(Date.now() + 5 * 60 * 1000); // retry in 5 minutes
     await prisma.cjEbayListing.update({
       where: { id: listing.id },
@@ -911,11 +960,199 @@ export const cjEbayListingService = {
       status: CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING,
       reason:
         `eBay confirmó la oferta (offerId: ${listing.ebayOfferId ?? listing.ebaySku}) pero el listingId ` +
-        `aún no está disponible (intento #${newAttempts}). ` +
+        `aún no está disponible (intento #${newAttempts} de ${MAX_RECONCILE_ATTEMPTS} máx.). ` +
         `Intenta nuevamente después de las ${retryAfter.toLocaleTimeString('es-CL')}.`,
       retryAfter: retryAfter.toISOString(),
       attempts: newAttempts,
+      maxAttempts: MAX_RECONCILE_ATTEMPTS,
       offerId: listing.ebayOfferId,
+    };
+  },
+
+  /**
+   * Query eBay directly for the current state of this listing's offer and inventory item.
+   * Returns raw snapshot from eBay Inventory API: offer by offerId + offer by SKU + inventory item.
+   * Used by the operator to diagnose RECONCILE_FAILED / RECONCILE_PENDING without Seller Hub.
+   */
+  async getEbaySnapshot(input: { userId: number; listingDbId: number; correlationId?: string; route?: string }) {
+    const listing = await prisma.cjEbayListing.findFirst({
+      where: { id: input.listingDbId, userId: input.userId },
+    });
+    if (!listing) throw new AppError('Listing not found.', 404);
+
+    const result: {
+      offerByOfferId: { offerId: string; listingId: string | null; status: string | null } | null;
+      offerBySku: { offerId: string | null; listingId: string | null; status: string | null } | null;
+      offerByOfferIdError: string | null;
+      offerBySkuError: string | null;
+      localListing: { id: number; status: string; ebaySku: string | null; ebayOfferId: string | null; ebayListingId: string | null; reconcileAttempts: number | null };
+      diagnosis: string;
+    } = {
+      offerByOfferId: null,
+      offerBySku: null,
+      offerByOfferIdError: null,
+      offerBySkuError: null,
+      localListing: {
+        id: listing.id,
+        status: listing.status,
+        ebaySku: listing.ebaySku,
+        ebayOfferId: listing.ebayOfferId,
+        ebayListingId: listing.ebayListingId,
+        reconcileAttempts: listing.reconcileAttempts,
+      },
+      diagnosis: '',
+    };
+
+    if (listing.ebayOfferId) {
+      try {
+        result.offerByOfferId = await cjEbayEbayFacadeService.getOfferSnapshotByOfferId(input.userId, listing.ebayOfferId);
+      } catch (e) {
+        result.offerByOfferIdError = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+      }
+    }
+
+    if (listing.ebaySku) {
+      try {
+        result.offerBySku = await cjEbayEbayFacadeService.getOfferSnapshotBySku(input.userId, listing.ebaySku);
+      } catch (e) {
+        result.offerBySkuError = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+      }
+    }
+
+    // Build operator-facing diagnosis
+    const offerIdListingId = result.offerByOfferId?.listingId;
+    const skuListingId = result.offerBySku?.listingId;
+    const resolvedListingId = offerIdListingId || skuListingId;
+
+    if (resolvedListingId) {
+      result.diagnosis =
+        `✅ listingId ENCONTRADO: ${resolvedListingId}. ` +
+        `El listing está publicado en eBay. Ejecuta Reconciliar para actualizarlo a ACTIVE.`;
+    } else if (result.offerByOfferIdError?.includes('404') || result.offerByOfferIdError?.includes('not found')) {
+      result.diagnosis =
+        `⚠️ offerId ${listing.ebayOfferId} NO EXISTE en eBay (404). ` +
+        `La offer fue eliminada o nunca existió. ` +
+        `Acción: usar "Republicar desde cero" (force-reset a DRAFT) para reiniciar el ciclo.`;
+    } else if (result.offerByOfferId && !offerIdListingId && !skuListingId) {
+      result.diagnosis =
+        `⚠️ offerId ${listing.ebayOfferId} EXISTS en eBay con status=${result.offerByOfferId.status ?? 'unknown'} ` +
+        `pero listingId=null. eBay Inventory API aún no propagó el listingId. ` +
+        `Si persiste >24h: ir a Seller Hub → Active Listings y verificar si el listing está visible. ` +
+        `Si está en Seller Hub: inconsistencia eBay API — contactar soporte con offerId ${listing.ebayOfferId}.`;
+    } else if (!result.offerByOfferId && !result.offerBySku) {
+      result.diagnosis =
+        `❌ Sin datos de eBay (errores en ambas consultas). ` +
+        `Verificar credenciales eBay y estado de la API. ` +
+        `Errores: offerId=${result.offerByOfferIdError ?? 'N/A'} | SKU=${result.offerBySkuError ?? 'N/A'}`;
+    } else {
+      result.diagnosis =
+        `⚠️ Datos parciales de eBay. offerId=${listing.ebayOfferId} | SKU=${listing.ebaySku}. ` +
+        `Ver detalles en offerByOfferId y offerBySku.`;
+    }
+
+    await cjEbayTraceService.record({
+      userId: input.userId,
+      correlationId: input.correlationId,
+      route: input.route,
+      step: CJ_EBAY_TRACE_STEP.LISTING_EBAY_SNAPSHOT,
+      message: 'listing.ebay.snapshot',
+      meta: {
+        listingId: listing.id,
+        resolvedListingId: resolvedListingId ?? null,
+        offerByOfferIdStatus: result.offerByOfferId?.status ?? null,
+        offerBySkuStatus: result.offerBySku?.status ?? null,
+      },
+    });
+
+    // If we found a listingId here, auto-promote to ACTIVE
+    if (resolvedListingId) {
+      const resolvedOfferId = result.offerByOfferId?.offerId ?? result.offerBySku?.offerId ?? listing.ebayOfferId;
+      await prisma.cjEbayListing.update({
+        where: { id: listing.id },
+        data: {
+          status: CJ_EBAY_LISTING_STATUS.ACTIVE,
+          ebayListingId: resolvedListingId,
+          ebayOfferId: resolvedOfferId,
+          lastSyncedAt: new Date(),
+          publishedAt: listing.publishedAt ?? new Date(),
+          lastError: null,
+          reconcileRetryAfter: null,
+        },
+      });
+      result.localListing.status = CJ_EBAY_LISTING_STATUS.ACTIVE;
+      result.localListing.ebayListingId = resolvedListingId;
+    }
+
+    return result;
+  },
+
+  /**
+   * Force-reset listing to DRAFT for re-publication.
+   * Used when: (A) RECONCILE_FAILED + offer confirmed not in eBay, or (B) operator manual reset.
+   * Clears all eBay IDs, reconcile counters, and error message.
+   * The existing draftPayload is preserved so the operator can publish again immediately.
+   */
+  async forceResetToDraft(input: { userId: number; listingDbId: number; correlationId?: string; route?: string; reason?: string }) {
+    const listing = await prisma.cjEbayListing.findFirst({
+      where: { id: input.listingDbId, userId: input.userId },
+    });
+    if (!listing) throw new AppError('Listing not found.', 404);
+
+    const allowedStatuses = [
+      CJ_EBAY_LISTING_STATUS.RECONCILE_FAILED,
+      CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING,
+      CJ_EBAY_LISTING_STATUS.OFFER_ALREADY_EXISTS,
+      CJ_EBAY_LISTING_STATUS.FAILED,
+    ] as string[];
+    if (!allowedStatuses.includes(listing.status)) {
+      throw new AppError(
+        `Force-reset solo aplica a listings en RECONCILE_FAILED / RECONCILE_PENDING / OFFER_ALREADY_EXISTS / FAILED (actual: ${listing.status}).`,
+        400
+      );
+    }
+
+    const previousState = {
+      status: listing.status,
+      ebayOfferId: listing.ebayOfferId,
+      ebayListingId: listing.ebayListingId,
+      reconcileAttempts: listing.reconcileAttempts,
+    };
+
+    await prisma.cjEbayListing.update({
+      where: { id: listing.id },
+      data: {
+        status: CJ_EBAY_LISTING_STATUS.DRAFT,
+        ebayListingId: null,
+        ebayOfferId: null,
+        lastSyncedAt: null,
+        publishedAt: null,
+        lastError: null,
+        reconcileAttempts: 0,
+        reconcileRetryAfter: null,
+      },
+    });
+
+    await cjEbayTraceService.record({
+      userId: input.userId,
+      correlationId: input.correlationId,
+      route: input.route,
+      step: CJ_EBAY_TRACE_STEP.LISTING_FORCE_RESET,
+      message: 'listing.force.reset',
+      meta: {
+        listingId: listing.id,
+        previousStatus: previousState.status,
+        previousOfferId: previousState.ebayOfferId,
+        previousListingId: previousState.ebayListingId,
+        reason: input.reason ?? 'operator_manual',
+      },
+    });
+
+    return {
+      reset: true as const,
+      listingId: listing.id,
+      previousStatus: previousState.status,
+      newStatus: CJ_EBAY_LISTING_STATUS.DRAFT,
+      note: `Listing reseteado a DRAFT. El draft payload original se conserva. Puedes publicar nuevamente desde la UI.`,
     };
   },
 
