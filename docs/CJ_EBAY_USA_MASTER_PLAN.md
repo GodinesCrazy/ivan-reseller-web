@@ -1,6 +1,6 @@
 # CJ Dropshipping → eBay USA — Plan maestro y auditoría
 
-**Versión:** 2.20 (Hotfix: reconcile OFFER_ALREADY_EXISTS no cerraba → nueva estrategia 4 pasos + estado RECONCILE_PENDING)  
+**Versión:** 2.21 (Diagnóstico completo CJE1P1V1: raíz real RECONCILE_PENDING = eBay 25019 Overseas Warehouse Block; reconcile detecta 25019 → ACCOUNT_POLICY_BLOCK; Type item specific corregido en eBay)  
 **Última actualización:** 2026-04-16  
 **Estado global del programa:** FASE 0–2 documentales; **FASE 3A–3C** en código; **FASE 3D** en código (listings) — **guardrail account policy block** + **OFFER_ALREADY_EXISTS reconcile robusta (4 estrategias)** + **RECONCILE_PENDING** implementados; **FASE 3E + 3E.1–3E.4** en código (orders completo). **FASE 3F** implementada: **guardrail pago proveedor** (`SUPPLIER_PAYMENT_BLOCKED` / `CJ_BALANCE_INSUFFICIENT`), **modelo de devoluciones semi-manual** con estados y trazabilidad, **consola financiera profesional** (`/cj-ebay/profit`), **motor de alertas real** (`/cj-ebay/alerts`). **FASE 3W** implementada: **warehouse-aware fulfillment** (feature flag `CJ_EBAY_WAREHOUSE_AWARE`, probe US→CN fallback, `warehouseEvidence`, `originCountryCode` en DB, badge UI, origin dinámico en listing/descripción). **payBalanceV2** no está implementado. La postventa **sigue sin declararse “lista”** sin completar 3E.4 en cuenta real. **FASE 3G** (workers automáticos) pendiente.
 
@@ -2627,4 +2627,97 @@ Reconcile(listing)
 
 ---
 
-*Fin del documento v2.20 (actualizado 2026-04-16).*
+## HOTFIX v2.21 — Diagnóstico completo RECONCILE_PENDING → ACCOUNT_POLICY_BLOCK (2026-04-16)
+
+### Contexto
+
+Tras desplegar v2.20 y ejecutar reconcile 3 veces desde la UI, el listing CJE1P1V1 seguía en `RECONCILE_PENDING`. Se realizó un diagnóstico profundo contra la API real de eBay.
+
+### Diagnóstico eBay en tiempo real
+
+**GET /sell/inventory/v1/offer/152707440011:**
+```
+offerId: 152707440011
+status:  UNPUBLISHED      ← offer existe pero nunca publicada
+listingId: null
+```
+
+**POST /sell/inventory/v1/offer/152707440011/publish (1er intento):**
+```
+HTTP 400 — errorId 25002: "The item specific Type is missing."
+params: Type
+```
+
+**Fix aplicado — PUT /sell/inventory/v1/inventory_item/CJE1P1V1:**
+- Aspects actualizados: `{ Brand: ["Generic"], Type: ["Car Mount"] }`
+- Eliminado el aspect `label` (inválido para categoría 35190)
+- Resultado: ✅ inventory item actualizado
+
+**POST /sell/inventory/v1/offer/152707440011/publish (2do intento, tras fix Type):**
+```
+HTTP 400 — errorId 25019:
+"It appears you're listing a forward-deployed item in a country different
+from your registered address. These items can't be listed according to our
+Overseas Warehouse Block Policy."
+Reason code: SRM_HIS_WH_Location_Mismatch_Inventory_Block
+```
+
+### Causa raíz real
+
+**Error 25019 — Overseas Warehouse Block Policy.** eBay detecta que el listing tiene `originCountryCode = US` (CJ US Warehouse) pero la cuenta del seller no tiene autorización de "Global Seller / overseas warehouse" para forward-deploy. Este bloqueo ocurre a nivel de cuenta eBay, no a nivel de contenido del listing.
+
+El `Type` faltante era un error **secundario** que eBay mostraba primero. Al corregirlo, eBay devuelve el error 25019 subyacente.
+
+### ¿Influye la falta de Global Seller authorization?
+
+**SÍ, directamente.** La aprobación de Global Seller / overseas warehouse en eBay es el prerequisito para publicar listings con ship-from en un warehouse en país diferente al registrado del seller. Sin esa aprobación, todo intento de publish con `merchantLocationKey` de US warehouse (forward-deployed) retornará error 25019 y el listing no podrá activarse.
+
+Pasos del operador para desbloquear:
+1. Aplicar en `whappeals@ebay.com` con asunto "Overseas Warehouse Authorization Request"
+2. Referenciar: https://export.ebay.com/en/tc/overseas-warehouse-block-policy-authorization-requirements-for-forward-deployed-inventory/
+3. Alternativamente: publicar con `originCountryCode = CN` (ship-from China directo)
+
+### Fixes implementados (commit v2.21)
+
+**Bugs adicionales corregidos en el camino:**
+
+| # | Bug | Fix |
+|---|-----|-----|
+| 1 | `reconcileAttempts`/`reconcileRetryAfter` en schema Prisma sin `@map()` → columnas snake_case no encontradas (commit `bd624d0`) | Añadido `@map("reconcile_attempts")` y `@map("reconcile_retry_after")` |
+| 2 | `reconcile()` no detectaba error 25019 durante Step 2 → dejaba listing en `RECONCILE_PENDING` indefinidamente | Añadido check `isEbayOverseasWarehouseBlock(publishErr)` antes del catch de "already published"; si 25019 → `ACCOUNT_POLICY_BLOCK` |
+| 3 | Inventory item tenía aspect `label` (inválido) y faltaba `Type` requerido por categoría 35190 | Corregido manualmente en eBay: `{ Brand: Generic, Type: Car Mount }` |
+
+**Archivo modificado:** `backend/src/modules/cj-ebay/services/cj-ebay-listing.service.ts`  
+Función: `reconcile()` → Step 2 catch block — nuevo guard `isEbayOverseasWarehouseBlock` antes de "already published"
+
+### Estado final DB (producción)
+
+```
+id:                 2
+sku:                CJE1P1V1
+offerId:            152707440011
+status:             ACCOUNT_POLICY_BLOCK
+listingId:          null (no se puede obtener hasta autorización eBay)
+reconcileAttempts:  3
+lastError:          ACCOUNT_POLICY_BLOCK — eBay 25019 Overseas Warehouse Block...
+```
+
+### Estado en eBay
+
+```
+offerId 152707440011:  UNPUBLISHED (offer creada, inventory item corregido)
+listingId:             ninguno — publish bloqueado por 25019
+```
+
+### ¿Está el listing live en Seller Hub?
+
+**No.** El offer existe (UNPUBLISHED) y el inventory item está corregido (Type=Car Mount), pero eBay no permitió el publish. No hay listingId. El listing **no aparece en Seller Hub como activo**.
+
+### Siguiente acción del operador
+
+1. Solicitar autorización en `whappeals@ebay.com`
+2. Una vez aprobado, el operador puede resetear el listing a `DRAFT` desde la UI y republicar — el draft payload se conserva íntegro
+
+---
+
+*Fin del documento v2.21 (actualizado 2026-04-16).*

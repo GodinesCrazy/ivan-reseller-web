@@ -815,6 +815,33 @@ export const cjEbayListingService = {
             return await markActive(pub.listingId, listing.ebayOfferId, 'PUBLISH_EXISTING_OFFER');
           }
         } catch (publishErr: unknown) {
+          // ── ACCOUNT_POLICY_BLOCK: eBay 25019 / Overseas Warehouse Block — no retry ──
+          if (isEbayOverseasWarehouseBlock(publishErr)) {
+            await prisma.cjEbayListing.update({
+              where: { id: listing.id },
+              data: {
+                status: CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK,
+                reconcileAttempts: newAttempts,
+                reconcileRetryAfter: null,
+                lastError: ACCOUNT_POLICY_BLOCK_MESSAGE,
+              },
+            });
+            await cjEbayTraceService.record({
+              userId: input.userId,
+              correlationId: input.correlationId,
+              route: input.route,
+              step: CJ_EBAY_TRACE_STEP.LISTING_PUBLISH_ACCOUNT_POLICY_BLOCK,
+              message: 'listing.reconcile.account_policy_block',
+              meta: { listingId: listing.id, offerId: listing.ebayOfferId, attempt: newAttempts },
+            });
+            return {
+              reconciled: false as const,
+              status: CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK,
+              reason: ACCOUNT_POLICY_BLOCK_MESSAGE,
+              offerId: listing.ebayOfferId,
+            } as any;
+          }
+
           const publishMsg = publishErr instanceof Error ? publishErr.message : String(publishErr);
           const isAlreadyPublished = /already published|already exist|25002/i.test(publishMsg);
           if (isAlreadyPublished) {
