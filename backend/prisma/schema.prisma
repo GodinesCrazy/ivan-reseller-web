@@ -85,10 +85,23 @@ model User {
   cjEbayProductEvaluations CjEbayProductEvaluation[]
   cjEbayListings          CjEbayListing[]
   cjEbayOrders            CjEbayOrder[]
-  cjEbayAlerts            CjEbayAlert[]
-  cjEbayProfitSnapshots   CjEbayProfitSnapshot[]
-  cjEbayExecutionTraces   CjEbayExecutionTrace[]
-  cjEbayOrderRefunds      CjEbayOrderRefund[]
+  cjEbayAlerts              CjEbayAlert[]
+  cjEbayProfitSnapshots     CjEbayProfitSnapshot[]
+  cjEbayExecutionTraces     CjEbayExecutionTrace[]
+  cjEbayOrderRefunds        CjEbayOrderRefund[]
+  cjEbayOpportunityRuns     CjEbayOpportunityRun[]
+  cjEbayOpportunityCandidates CjEbayOpportunityCandidate[]
+
+  // CJ → ML Chile vertical (isolated module; FASE 1+)
+  cjMlChileAccountSettings    CjMlChileAccountSettings?
+  cjMlChileProducts           CjMlChileProduct[]
+  cjMlChileShippingQuotes     CjMlChileShippingQuote[]
+  cjMlChileProductEvaluations CjMlChileProductEvaluation[]
+  cjMlChileListings           CjMlChileListing[]
+  cjMlChileOrders             CjMlChileOrder[]
+  cjMlChileAlerts             CjMlChileAlert[]
+  cjMlChileProfitSnapshots    CjMlChileProfitSnapshot[]
+  cjMlChileExecutionTraces    CjMlChileExecutionTrace[]
 
   @@index([email])
   @@index([username])
@@ -1868,4 +1881,423 @@ model CjEbayExecutionTrace {
   @@index([userId, createdAt])
   @@index([correlationId])
   @@map("cj_ebay_execution_traces")
+}
+
+// ====================================
+// CJ → eBay USA — AI Opportunity Discovery (FASE 3G)
+// Flujo: trend discovery → CJ match → pricing → scoring → shortlist → human review → handoff
+// No contamina tablas legacy; totalmente independiente del flujo de evaluación.
+// ====================================
+
+model CjEbayOpportunityRun {
+  id                String    @id @default(cuid())
+  userId            Int
+  /// PENDING | RUNNING | COMPLETED | FAILED
+  status            String    @default("PENDING")
+  /// STARTER (restricted, account-new safe) | STANDARD
+  mode              String    @default("STARTER")
+  seedCount         Int       @default(0)
+  candidateCount    Int       @default(0)
+  shortlistedCount  Int       @default(0)
+  approvedCount     Int       @default(0)
+  rejectedCount     Int       @default(0)
+  deferredCount     Int       @default(0)
+  /// Scoring weights + filter settings used for this run (snapshot for auditability).
+  settings          Json?
+  errorMessage      String?   @db.Text
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user       User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidates CjEbayOpportunityCandidate[]
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@map("cj_ebay_opportunity_runs")
+}
+
+model CjEbayOpportunityCandidate {
+  id                    String   @id @default(cuid())
+  runId                 String
+  userId                Int
+  /// Keyword or concept that originated this candidate.
+  seedKeyword           String
+  seedCategory          String?
+  /// 0.0–1.0 confidence from the trend provider.
+  seedTrendConfidence   Decimal  @default(0.5) @db.Decimal(4, 3)
+  /// MOCK_TREND | EBAY_RESEARCH | MANUAL
+  seedSource            String   @default("MOCK_TREND")
+  cjProductId           String
+  cjProductTitle        String
+  cjVariantSku          String
+  cjVariantVid          String?
+  images                Json?
+  supplierCostUsd       Decimal  @db.Decimal(18, 2)
+  shippingUsd           Decimal  @db.Decimal(18, 2)
+  /// KNOWN | ESTIMATED | UNKNOWN
+  shippingConfidence    String   @default("UNKNOWN")
+  shippingDaysMin       Int?
+  shippingDaysMax       Int?
+  stockCount            Int?
+  /// Observed competing price on eBay market (null = not fetched).
+  marketObservedPriceUsd Decimal? @db.Decimal(18, 2)
+  /// Full pricing breakdown (JSON snapshot of CjOpportunityPricingResult).
+  pricingBreakdown      Json?
+  /// Full score breakdown (JSON snapshot of OpportunityScoreBreakdown).
+  scoreBreakdown        Json?
+  totalScore            Decimal  @default(0) @db.Decimal(6, 3)
+  /// Human-readable explanation of recommendation.
+  recommendationReason  String?  @db.Text
+  /// SHORTLISTED | APPROVED | REJECTED | DEFERRED
+  status                String   @default("SHORTLISTED")
+  reviewNotes           String?  @db.Text
+  reviewedAt            DateTime?
+  /// Set when candidate is handed off to evaluation pipeline.
+  handedOffAt           DateTime?
+  /// evaluationId from cj_ebay_product_evaluations if handoff completed.
+  linkedEvaluationId    Int?
+  // ---- FASE 3G.1: data quality & market reality ----
+  /// REAL | ESTIMATED | HYBRID | MOCK — origin of the trend signal.
+  trendSourceType       String   @default("MOCK")
+  /// REAL | ESTIMATED | HYBRID | MOCK — origin of the market price data.
+  marketPriceSourceType String   @default("ESTIMATED")
+  /// 0–100: composite quality of all underlying data signals.
+  dataConfidenceScore   Decimal  @default(30) @db.Decimal(5, 2)
+  /// HIGH | MEDIUM | LOW
+  recommendationConfidence String @default("LOW")
+  /// GOOD_FOR_STARTER | CAUTION_FOR_STARTER | NOT_RECOMMENDED_FOR_STARTER
+  starterSuitability    String   @default("CAUTION_FOR_STARTER")
+  /// Human-readable evidence summary (market + trend + shipping sources).
+  evidenceSummary       String?  @db.Text
+  /// Full MarketObservedPriceResult snapshot (JSON).
+  marketPriceDetail     Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  run  CjEbayOpportunityRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  user User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([userId, status])
+  @@index([userId, totalScore])
+  @@map("cj_ebay_opportunity_candidates")
+}
+
+// ====================================
+// CJ → ML Chile — módulo aislado (MVP)
+// Vertical completamente independiente de CJ→eBay USA y legacy ML.
+// Tabla prefix: cj_ml_chile_*
+// ====================================
+
+model CjMlChileAccountSettings {
+  id                    Int       @id @default(autoincrement())
+  userId                Int       @unique
+  /// Margen neto mínimo sobre precio venta (%). null = no configurado.
+  minMarginPct          Decimal?  @db.Decimal(8, 4)
+  /// Ganancia neta mínima en USD. null = no configurado.
+  minProfitUsd          Decimal?  @db.Decimal(18, 2)
+  /// Stock mínimo requerido para APPROVED.
+  minStock              Int       @default(1)
+  /// Costo de shipping máximo permitido (USD). null = sin límite.
+  maxShippingUsd        Decimal?  @db.Decimal(18, 2)
+  /// % comisión ML Chile. Default 12 (MLC estándar). Sobre precio venta.
+  mlcFeePct             Decimal   @default(12) @db.Decimal(8, 4)
+  /// % fee Mercado Pago (procesamiento de pago). Default 5.18%.
+  mpPaymentFeePct       Decimal   @default(5.18) @db.Decimal(8, 4)
+  /// % buffer incidentes sobre (costo + envío). Default 2%.
+  incidentBufferPct     Decimal   @default(2) @db.Decimal(8, 4)
+  /// Si true, rechaza productos sin shipping Chile confirmado (MVP: siempre true).
+  requireChileWarehouse Boolean   @default(true)
+  /// Si true, rechaza productos si no hay ETA de envío conocida.
+  rejectOnUnknownShipping Boolean @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cj_ml_chile_account_settings")
+}
+
+model CjMlChileProduct {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  cjProductId  String
+  title        String    @db.Text
+  description  String?   @db.Text
+  images       Json?
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user     User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variants CjMlChileProductVariant[]
+  shippingQuotes CjMlChileShippingQuote[]
+  evaluations    CjMlChileProductEvaluation[]
+  listings       CjMlChileListing[]
+
+  @@unique([userId, cjProductId])
+  @@index([userId])
+  @@map("cj_ml_chile_products")
+}
+
+model CjMlChileProductVariant {
+  id             Int       @id @default(autoincrement())
+  productId      Int
+  cjSku          String
+  cjVid          String?
+  /// Costo unitario CJ en USD (precio neto del proveedor).
+  unitCostUsd    Decimal?  @db.Decimal(18, 2)
+  stockLastKnown Int       @default(0)
+  stockCheckedAt DateTime?
+  attributes     Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  product        CjMlChileProduct             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shippingQuotes CjMlChileShippingQuote[]
+  evaluations    CjMlChileProductEvaluation[]
+  listings       CjMlChileListing[]
+
+  @@unique([productId, cjSku])
+  @@index([productId])
+  @@index([productId, cjVid])
+  @@map("cj_ml_chile_product_variants")
+}
+
+model CjMlChileShippingQuote {
+  id                    Int       @id @default(autoincrement())
+  userId                Int
+  productId             Int
+  variantId             Int?
+  quantity              Int       @default(1)
+  amountUsd             Decimal   @db.Decimal(18, 2)
+  currency              String    @default("USD")
+  serviceName           String?
+  carrier               String?
+  estimatedMinDays      Int?
+  estimatedMaxDays      Int?
+  /// CONFIRMED | ESTIMATED | UNKNOWN — certeza del warehouse Chile.
+  confidence            String    @default("UNKNOWN")
+  /// Código del país de origen CJ para este envío (CL = confirmado Chile warehouse, CN = cross-border).
+  originCountryCode     String?   @default("CN")
+  validFrom             DateTime  @default(now())
+  validUntil            DateTime?
+  createdAt             DateTime  @default(now())
+
+  user        User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product     CjMlChileProduct             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant     CjMlChileProductVariant?     @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  evaluations CjMlChileProductEvaluation[]
+  listings    CjMlChileListing[]
+
+  @@index([userId])
+  @@index([productId])
+  @@map("cj_ml_chile_shipping_quotes")
+}
+
+model CjMlChileProductEvaluation {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  productId          Int
+  variantId          Int?
+  shippingQuoteId    Int?
+  /// APPROVED | REJECTED | PENDING | NOT_VIABLE
+  decision           String
+  reasons            Json?
+  estimatedMarginPct Decimal? @db.Decimal(8, 4)
+  /// Costo aterrizado estimado (costo + envío + IVA 19%) en USD.
+  landedCostUsd      Decimal? @db.Decimal(18, 2)
+  /// Precio sugerido de lista en CLP (entero, sin decimales).
+  suggestedPriceCLP  Decimal? @db.Decimal(18, 0)
+  /// Tasa FX usada en la evaluación (CLP por USD).
+  fxRateUsed         Decimal? @db.Decimal(12, 4)
+  /// Timestamp de la tasa FX usada.
+  fxRateAt           DateTime?
+  evaluatedAt        DateTime @default(now())
+
+  user          User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product       CjMlChileProduct              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant       CjMlChileProductVariant?      @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  shippingQuote CjMlChileShippingQuote?       @relation(fields: [shippingQuoteId], references: [id], onDelete: SetNull)
+  listings      CjMlChileListing[]
+
+  @@index([userId])
+  @@index([userId, decision])
+  @@index([productId])
+  @@map("cj_ml_chile_product_evaluations")
+}
+
+model CjMlChileListing {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  productId       Int
+  variantId       Int?
+  evaluationId    Int?
+  shippingQuoteId Int?
+  /// ID del listing en Mercado Libre Chile (MLC...).
+  mlListingId     String?
+  /// ID de la publicación/item en ML (puede coincidir con mlListingId).
+  mlItemId        String?
+  /// SKU interno usado en la publicación ML.
+  mlSku           String?
+  /// DRAFT | PUBLISHING | ACTIVE | FAILED | PAUSED | ARCHIVED | NOT_VIABLE
+  status          String    @default("DRAFT")
+  /// Precio de lista en CLP (entero). Fuente de verdad para ML.
+  listedPriceCLP  Decimal?  @db.Decimal(18, 0)
+  /// Precio de lista en USD (referencia para P&L).
+  listedPriceUsd  Decimal?  @db.Decimal(18, 2)
+  /// Tasa FX usada al fijar precio (CLP/USD).
+  fxRateUsed      Decimal?  @db.Decimal(12, 4)
+  quantity        Int?
+  lastSyncedAt    DateTime?
+  /// Snapshot del borrador (título, categoría, atributos, imágenes, pricing breakdown, SKU).
+  draftPayload    Json?
+  lastError       String?   @db.Text
+  /// Si el footer legal ML Chile fue añadido (Ley 19.496, IVA, garantía).
+  legalTextsAppended Boolean @default(false)
+  handlingTimeDays   Int?
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user          User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product       CjMlChileProduct              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant       CjMlChileProductVariant?      @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  evaluation    CjMlChileProductEvaluation?   @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
+  shippingQuote CjMlChileShippingQuote?       @relation(fields: [shippingQuoteId], references: [id], onDelete: SetNull)
+  orders        CjMlChileOrder[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([mlListingId])
+  @@map("cj_ml_chile_listings")
+}
+
+model CjMlChileOrder {
+  id          String   @id @default(cuid())
+  userId      Int
+  /// ID de la orden en Mercado Libre Chile.
+  mlOrderId   String
+  cjOrderId   String?
+  listingId   Int?
+  mlSku       String?
+  lineQuantity Int     @default(1)
+  /// DETECTED | VALIDATED | CJ_ORDER_PLACING | CJ_ORDER_CREATED | CJ_ORDER_CONFIRMED | CJ_PAYMENT_PENDING | CJ_PAYMENT_COMPLETED | CJ_FULFILLING | CJ_SHIPPED | TRACKING_ON_ML | COMPLETED | FAILED | NEEDS_MANUAL | SUPPLIER_PAYMENT_BLOCKED
+  status      String   @default("DETECTED")
+  rawMlSummary Json?
+  buyerPayload Json?
+  /// Total de la orden en CLP (moneda ML Chile).
+  totalCLP    Decimal? @db.Decimal(18, 0)
+  /// Total de la orden en USD (referencia).
+  totalUsd    Decimal? @db.Decimal(18, 2)
+  currency    String   @default("CLP")
+  lastError   String?  @db.Text
+  cjConfirmedAt DateTime?
+  cjPaidAt      DateTime?
+  paymentBlockReason String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing  CjMlChileListing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  events   CjMlChileOrderEvent[]
+  tracking CjMlChileTracking?
+
+  @@unique([userId, mlOrderId])
+  @@index([userId, status])
+  @@index([listingId])
+  @@map("cj_ml_chile_orders")
+}
+
+model CjMlChileOrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  step      String
+  message   String?  @db.Text
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  order CjMlChileOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("cj_ml_chile_order_events")
+}
+
+model CjMlChileTracking {
+  id                   Int       @id @default(autoincrement())
+  orderId              String    @unique
+  carrierCode          String?
+  trackingNumber       String?
+  status               String    @default("NOT_AVAILABLE")
+  rawPayload           Json?
+  submittedToMlAt      DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  order CjMlChileOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("cj_ml_chile_tracking")
+}
+
+model CjMlChileAlert {
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  type           String
+  severity       String    @default("warning")
+  /// OPEN | ACKNOWLEDGED | RESOLVED
+  status         String    @default("OPEN")
+  payload        Json?
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, severity])
+  @@map("cj_ml_chile_alerts")
+}
+
+model CjMlChileProfitSnapshot {
+  id                     Int      @id @default(autoincrement())
+  userId                 Int
+  snapshotDate           DateTime @db.Date
+  estimatedRevenueCLP    Decimal  @default(0) @db.Decimal(18, 0)
+  estimatedRevenueUsd    Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedFeesCLP       Decimal  @default(0) @db.Decimal(18, 0)
+  estimatedFeesUsd       Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedCjCostUsd     Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedLandedCostUsd Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedProfitCLP     Decimal  @default(0) @db.Decimal(18, 0)
+  estimatedProfitUsd     Decimal  @default(0) @db.Decimal(18, 2)
+  fxRateUsed             Decimal? @db.Decimal(12, 4)
+  metadata               Json?
+  createdAt              DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, snapshotDate])
+  @@index([userId])
+  @@map("cj_ml_chile_profit_snapshots")
+}
+
+model CjMlChileExecutionTrace {
+  id            String   @id @default(cuid())
+  userId        Int
+  correlationId String?
+  route         String?
+  step          String
+  message       String   @db.Text
+  meta          Json?
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([correlationId])
+  @@map("cj_ml_chile_execution_traces")
 }

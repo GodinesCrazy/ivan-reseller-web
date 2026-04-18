@@ -512,6 +512,8 @@ const envSchema = z.object({
   BLOCK_NEW_PUBLICATIONS: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   /** When true, exposes /api/cj-ebay/* and enables CJ→eBay USA vertical (isolated module). */
   ENABLE_CJ_EBAY_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /** When true, exposes /api/cj-ml-chile/* and enables CJ→ML Chile vertical (isolated module). */
+  ENABLE_CJ_ML_CHILE_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   /**
    * FASE 3G+ — Warehouse-aware fulfillment: when true, the CJ-eBay module probes US freight
    * (`startCountryCode=US`) before falling back to CN. This is the only reliable signal for

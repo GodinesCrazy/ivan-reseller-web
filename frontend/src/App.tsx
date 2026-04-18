@@ -58,6 +58,17 @@ const CjEbayOrderDetailPage = lazy(() => import('@pages/cj-ebay/CjEbayOrderDetai
 const CjEbayAlertsPage = lazy(() => import('@pages/cj-ebay/CjEbayAlertsPage'));
 const CjEbayProfitPage = lazy(() => import('@pages/cj-ebay/CjEbayProfitPage'));
 const CjEbayLogsPage = lazy(() => import('@pages/cj-ebay/CjEbayLogsPage'));
+const CjEbayOpportunityPage = lazy(() => import('@pages/cj-ebay/CjEbayOpportunityPage'));
+// CJ → ML Chile
+const CjMlChileModuleGate = lazy(() => import('@pages/cj-ml-chile/CjMlChileModuleGate'));
+const CjMlChileLayout = lazy(() => import('@pages/cj-ml-chile/CjMlChileLayout'));
+const CjMlChileOverviewPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileOverviewPage'));
+const CjMlChileProductsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileProductsPage'));
+const CjMlChileListingsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileListingsPage'));
+const CjMlChileOrdersPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileOrdersPage'));
+const CjMlChileAlertsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileAlertsPage'));
+const CjMlChileProfitPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileProfitPage'));
+const CjMlChileLogsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileLogsPage'));
 const Listings = lazy(() => import('@pages/Listings'));
 const ControlCenter = lazy(() => import('@pages/ControlCenter'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
@@ -259,8 +270,24 @@ function AppContent() {
             <Route path="alerts" element={<CjEbayAlertsPage />} />
             <Route path="profit" element={<CjEbayProfitPage />} />
             <Route path="logs" element={<CjEbayLogsPage />} />
+            <Route path="discover" element={<CjEbayOpportunityPage />} />
           </Route>
         </Route>
+
+        {/* CJ → ML Chile (feature-flagged; gate muestra aviso si VITE_ENABLE_CJ_ML_CHILE_MODULE no es true) */}
+        <Route path="cj-ml-chile" element={<CjMlChileModuleGate />}>
+          <Route element={<CjMlChileLayout />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<CjMlChileOverviewPage />} />
+            <Route path="products" element={<CjMlChileProductsPage />} />
+            <Route path="listings" element={<CjMlChileListingsPage />} />
+            <Route path="orders" element={<CjMlChileOrdersPage />} />
+            <Route path="alerts" element={<CjMlChileAlertsPage />} />
+            <Route path="profit" element={<CjMlChileProfitPage />} />
+            <Route path="logs" element={<CjMlChileLogsPage />} />
+          </Route>
+        </Route>
+
         <Route path="control-center" element={<ControlCenter />} />
         
         {/* Opportunities System */}
