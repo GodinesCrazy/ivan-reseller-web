@@ -14,6 +14,8 @@ export const EXPECTED_CJ_EBAY_MIGRATION_NAMES = [
   '20260414203000_cj_ebay_phase3d_listing_draft',
   '20260415120000_cj_ebay_phase3e_orders',
   '20260416120000_cj_ebay_phase3e3_checkout',
+  '20260416240000_cj_ebay_phase3g_opportunity_discovery',
+  '20260417100000_cj_ebay_phase3g1_market_reality',
 ] as const;
 
 export type CjEbayReadinessCheck = {

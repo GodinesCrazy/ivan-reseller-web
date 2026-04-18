@@ -30,7 +30,7 @@ import {
   LineChart,
   ScrollText,
 } from 'lucide-react';
-import { isCjEbayModuleEnabled } from '@/config/feature-flags';
+import { isCjEbayModuleEnabled, isCjMlChileModuleEnabled } from '@/config/feature-flags';
 
 interface NavItem {
   path: string;
@@ -55,6 +55,19 @@ const cjEbayNavGroup: NavGroup = {
     { path: '/cj-ebay/alerts', label: 'Alertas', icon: Bell },
     { path: '/cj-ebay/profit', label: 'Profit', icon: LineChart },
     { path: '/cj-ebay/logs', label: 'Logs', icon: ScrollText },
+  ],
+};
+
+const cjMlChileNavGroup: NavGroup = {
+  title: 'CJ → ML Chile',
+  items: [
+    { path: '/cj-ml-chile/overview', label: 'Resumen', icon: LayoutDashboard },
+    { path: '/cj-ml-chile/products', label: 'Productos CJ', icon: Package },
+    { path: '/cj-ml-chile/listings', label: 'Listings', icon: List },
+    { path: '/cj-ml-chile/orders', label: 'Órdenes', icon: Truck },
+    { path: '/cj-ml-chile/alerts', label: 'Alertas', icon: Bell },
+    { path: '/cj-ml-chile/profit', label: 'Profit', icon: LineChart },
+    { path: '/cj-ml-chile/logs', label: 'Logs', icon: ScrollText },
   ],
 };
 
@@ -117,9 +130,11 @@ export default function Sidebar() {
   const userRole = user?.role?.toUpperCase() || 'USER';
   const { pendingPurchasesCount, productsPending } = useInventoryBadges();
 
-  const allNavGroups: NavGroup[] = isCjEbayModuleEnabled()
-    ? [cjEbayNavGroup, ...navGroups]
-    : navGroups;
+  const allNavGroups: NavGroup[] = [
+    ...(isCjEbayModuleEnabled() ? [cjEbayNavGroup] : []),
+    ...(isCjMlChileModuleEnabled() ? [cjMlChileNavGroup] : []),
+    ...navGroups,
+  ];
 
   const visibleGroups = allNavGroups.filter((group) => {
     if (group.roles && !group.roles.includes(userRole)) return false;

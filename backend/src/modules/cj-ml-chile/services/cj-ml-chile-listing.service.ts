@@ -43,10 +43,11 @@ export const cjMlChileListingService = {
 
     if (body.listPriceCLP) {
       listPriceCLP = body.listPriceCLP;
-      // Reverse-compute USD for records (approximate)
-      const fxApprox = evalRow.fxRateUsed ? Number(evalRow.fxRateUsed) : 950;
-      listPriceUsd = Math.round((listPriceCLP / fxApprox) * 100) / 100;
-      fxRateUsed = fxApprox;
+      // Reverse-compute USD from the persisted FX rate used at evaluation time
+      const fxAtEval = evalRow.fxRateUsed ? Number(evalRow.fxRateUsed) : null;
+      if (!fxAtEval) throw new Error('FX_RATE_MISSING: La evaluación no tiene tasa FX guardada. Re-evalúa el producto.');
+      listPriceUsd = Math.round((listPriceCLP / fxAtEval) * 100) / 100;
+      fxRateUsed = fxAtEval;
     } else if (evalRow.suggestedPriceCLP != null) {
       listPriceCLP = Number(evalRow.suggestedPriceCLP);
       fxRateUsed = evalRow.fxRateUsed ? Number(evalRow.fxRateUsed) : undefined;
@@ -70,7 +71,7 @@ export const cjMlChileListingService = {
       pricingSnapshot = { ...pricingResult.breakdown };
     }
 
-    if (!listPriceCLP || !listPriceCLP) throw new Error('No se pudo determinar el precio en CLP.');
+    if (!listPriceCLP || !listPriceUsd) throw new Error('No se pudo determinar el precio en CLP/USD.');
 
     // Build legal footer
     const legalFooter = buildMLChileImportFooter ? buildMLChileImportFooter() : '';
@@ -172,14 +173,18 @@ export const cjMlChileListingService = {
         currency_id: 'CLP',
         available_quantity: Number(draft.quantity ?? 10),
         buying_mode: 'buy_it_now',
-        listing_type_id: 'gold_special',
+        // gold_pro is the standard paid type for MLC; gold_special requires seller level.
+        // Operator can override via categoryId/title but listing_type_id is fixed here for MVP.
+        listing_type_id: 'gold_pro',
         condition: 'new',
         description: { plain_text: String(draft.description ?? '').slice(0, 50000) },
         pictures: listing.product.images
           ? (listing.product.images as string[]).slice(0, 10).map((url) => ({ source: url }))
           : [],
         shipping: {
-          mode: 'me2',
+          // not_specified: seller sets custom shipping after publish. me2 (Mercado Envíos Full)
+          // requires pre-shipment to ML warehouse — incompatible with direct CJ→buyer dropshipping.
+          mode: 'not_specified',
           free_shipping: false,
           local_pick_up: false,
         },

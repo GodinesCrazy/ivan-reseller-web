@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 const links = [
+  { to: '/cj-ebay/discover', label: '✦ Descubrir' },
   { to: '/cj-ebay/overview', label: 'Overview' },
   { to: '/cj-ebay/products', label: 'Products' },
   { to: '/cj-ebay/listings', label: 'Listings' },

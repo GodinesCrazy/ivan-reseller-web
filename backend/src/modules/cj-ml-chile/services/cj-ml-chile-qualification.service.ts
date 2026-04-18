@@ -203,7 +203,9 @@ export const cjMlChileQualificationService = {
         destPostalCode: CJ_CHILE_PROBE_POSTAL,
       });
 
-      warehouseChileConfirmed = chileFreight.quote.startCountryCode === 'CL' || chileFreight.quote.cost > 0;
+      // Only startCountryCode=CL confirms Chile warehouse. cost>0 alone is insufficient
+      // (CJ also returns cost>0 for CN-origin quotes).
+      warehouseChileConfirmed = chileFreight.quote.startCountryCode === 'CL';
 
       await cjMlChileTraceService.record({
         userId: input.userId,
@@ -303,7 +305,7 @@ export const cjMlChileQualificationService = {
         quantity: input.quantity,
         destPostalCode: CJ_CHILE_PROBE_POSTAL,
       });
-      warehouseChileConfirmed = chileFreight.quote.startCountryCode === 'CL' || chileFreight.quote.cost > 0;
+      warehouseChileConfirmed = chileFreight.quote.startCountryCode === 'CL';
     } catch {
       warehouseChileConfirmed = false;
     }

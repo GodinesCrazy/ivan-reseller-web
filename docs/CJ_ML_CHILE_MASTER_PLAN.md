@@ -125,3 +125,38 @@ listPriceCLP   = round(listPriceUsd × fxRate)             // entero, sin decima
 - `buildMLChileImportFooter()` — footer legal desde `ml-chile-import-compliance.service.ts`.
 - `api_credentials` — tabla compartida (ML token por `apiName='mercadolibre'`).
 - `authenticate` middleware — mismo JWT.
+
+---
+
+## Auditoría final — 2026-04-17
+
+### Correcciones aplicadas
+
+| # | Severidad | Bug | Corrección |
+|---|-----------|-----|-----------|
+| 1 | CRÍTICO | Sidebar sin entrada CJ → ML Chile — módulo solo accesible por URL directa | Agregado `cjMlChileNavGroup` + `isCjMlChileModuleEnabled()` en `Sidebar.tsx` y `feature-flags.ts` |
+| 2 | BUG | Warehouse Chile detection: `startCountryCode === 'CL' \|\| cost > 0` confirmaba CUALQUIER envío incluyendo CN | Corregido a solo `startCountryCode === 'CL'` en `cj-ml-chile-qualification.service.ts` (ambas ocurrencias) |
+| 3 | BUG | Draft service: fallback FX hardcodeado `950` cuando la evaluación no tenía tasa guardada | Lanza error `FX_RATE_MISSING` explícito — fuerza re-evaluación del producto |
+| 4 | BUG menor | Duplicate null-check `!listPriceCLP \|\| !listPriceCLP` (línea 73) | Corregido a `!listPriceCLP \|\| !listPriceUsd` |
+| 5 | RIESGO | `listing_type_id: 'gold_special'` — requiere nivel de vendedor alto, fallará en cuentas nuevas | Cambiado a `'gold_pro'` (tipo estándar accesible en MLC) |
+| 6 | RIESGO | `shipping.mode: 'me2'` — incompatible con dropshipping directo CJ→comprador | Cambiado a `'not_specified'` — el vendedor configura envío post-publicación |
+| 7 | INFRA | Prisma client no regenerado tras agregar modelos `cj_ml_chile_*` | Ejecutado `prisma generate` — 0 errores TypeScript confirmados |
+
+### Estado real del MVP — post-auditoría
+
+**Estado: B — MVP técnico funcional con pricing/logística estimados**
+
+- Arquitectura aislada: ✅ tablas `cj_ml_chile_*`, rutas `/api/cj-ml-chile/*`, páginas `/cj-ml-chile/*`
+- Type-check backend: ✅ 0 errores
+- Type-check frontend: ✅ 0 errores
+- Prisma validate: ✅ schema válido
+- No rompe CJ→eBay USA: ✅ cero contaminación
+- No rompe legacy ML: ✅ re-usa solo adaptadores, no flujo de negocio
+
+### Lo que sigue antes de publish real
+
+1. **notification_url** en portal ML Chile para webhooks de órdenes (manual, no código)
+2. **categoryId real** al crear draft — el operador debe investigar la categoría MLC correcta
+3. **Shipping mode** — decidir si usar `me2` (requiere envío a ML) o gestión custom post-publicación
+4. **Sincronización precio** si FX cambia más de X% — aún manual
+5. **Fulfillment automático** — hoy las órdenes se importan manualmente por ID
