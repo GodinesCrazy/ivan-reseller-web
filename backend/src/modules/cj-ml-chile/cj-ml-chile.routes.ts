@@ -17,6 +17,8 @@ import { cjMlChileQualificationService } from './services/cj-ml-chile-qualificat
 import { cjMlChileListingService } from './services/cj-ml-chile-listing.service';
 import { cjMlChileAlertsService } from './services/cj-ml-chile-alerts.service';
 import { cjMlChileProfitService } from './services/cj-ml-chile-profit.service';
+import { cjMlChileFulfillmentService } from './services/cj-ml-chile-fulfillment.service';
+import { cjMlChileCjCheckoutService } from './services/cj-ml-chile-cj-checkout.service';
 import { cjMlChileSystemReadinessService } from './services/cj-ml-chile-system-readiness.service';
 import { CJ_ML_CHILE_TRACE_STEP } from './cj-ml-chile.constants';
 import { computeMlChilePricing, pricingBreakdownForResponse } from './services/cj-ml-chile-pricing.service';
@@ -143,16 +145,13 @@ router.get('/health', async (req: Request, res: Response, next: NextFunction): P
   try {
     const userId = req.user!.userId;
     const readiness = await cjMlChileSystemReadinessService.check(userId);
+    const checksMap: Record<string, boolean> = {};
+    for (const c of readiness.checks) checksMap[c.id] = c.ok;
     res.json({
       ok: readiness.ok,
       module: 'cj-ml-chile',
       timestamp: new Date().toISOString(),
-      checks: {
-        cjCredentials: readiness.checks.cjCredentials?.ok ?? false,
-        mlCredentials: readiness.checks.mlCredentials?.ok ?? false,
-        fxService: readiness.checks.fxService?.ok ?? false,
-        dbMigrated: readiness.checks.dbMigrated?.ok ?? false,
-      },
+      checks: checksMap,
     });
   } catch (err) { next(err); }
 });
@@ -206,12 +205,14 @@ router.get('/config', async (req: Request, res: Response, next: NextFunction): P
     const userId = req.user!.userId;
     const settings = await cjMlChileConfigService.getOrCreate(userId);
     const readiness = await cjMlChileSystemReadinessService.check(userId);
+    const checksMap: Record<string, boolean> = {};
+    for (const c of readiness.checks) checksMap[c.id] = c.ok;
     res.json({
       settings: cjMlChileConfigService.toApiShape(settings),
       systemReadiness: {
-        cjConnected: readiness.checks.cjCredentials?.ok ?? false,
-        mlConnected: readiness.checks.mlCredentials?.ok ?? false,
-        fxAvailable: readiness.checks.fxService?.ok ?? false,
+        cjConnected: checksMap['credentials.cj_dropshipping'] ?? false,
+        mlConnected: checksMap['credentials.mercadolibre_oauth'] ?? false,
+        fxAvailable: checksMap['fx_service.usd_clp'] ?? false,
       },
     });
   } catch (err) { next(err); }
@@ -689,6 +690,73 @@ router.post('/orders/:id/fetch-ml', async (req: Request, res: Response, next: Ne
   } catch (err) { next(err); }
 });
 
+router.post('/orders/:id/place', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const correlationId = (req as Request & { correlationId?: string }).correlationId;
+    const result = await cjMlChileFulfillmentService.placeCjOrder({
+      userId,
+      orderId: req.params.id,
+      correlationId,
+      route: 'POST /orders/:id/place',
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) { next(err); }
+});
+
+router.post('/orders/:id/confirm', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const correlationId = (req as Request & { correlationId?: string }).correlationId;
+    const result = await cjMlChileCjCheckoutService.confirmCjOrder({
+      userId,
+      orderId: req.params.id,
+      correlationId,
+      route: 'POST /orders/:id/confirm',
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) { next(err); }
+});
+
+router.post('/orders/:id/pay', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const correlationId = (req as Request & { correlationId?: string }).correlationId;
+    const result = await cjMlChileCjCheckoutService.payCjOrder({
+      userId,
+      orderId: req.params.id,
+      correlationId,
+      route: 'POST /orders/:id/pay',
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) { next(err); }
+});
+
+router.post('/orders/:id/sync-tracking', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const correlationId = (req as Request & { correlationId?: string }).correlationId;
+    const result = await cjMlChileFulfillmentService.syncTracking({
+      userId,
+      orderId: req.params.id,
+      correlationId,
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) { next(err); }
+});
+
+router.post('/orders/:id/status', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    // For parity, just poll tracking updates
+    const result = await cjMlChileFulfillmentService.syncTracking({
+      userId,
+      orderId: req.params.id,
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) { next(err); }
+});
+
 router.post('/orders/import', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.user!.userId;
@@ -721,7 +789,11 @@ router.get('/alerts', async (req: Request, res: Response, next: NextFunction): P
   try {
     const userId = req.user!.userId;
     const status = req.query.status as string | undefined;
-    const alerts = await cjMlChileAlertsService.list(userId, status);
+    const severity = req.query.severity as string | undefined;
+    const alerts = await cjMlChileAlertsService.list(userId, {
+      status: status as any,
+      severity: severity as any,
+    });
     res.json({ ok: true, alerts });
   } catch (err) { next(err); }
 });
@@ -752,8 +824,16 @@ router.post('/alerts/:id/resolve', async (req: Request, res: Response, next: Nex
 router.get('/profit', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = req.user!.userId;
-    const summary = await cjMlChileProfitService.getSummary(userId);
-    res.json({ ok: true, ...summary });
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    // Full financials if date params present or 'full' mode, otherwise backwards-compat summary
+    if (from || to || req.query.mode === 'full') {
+      const data = await cjMlChileProfitService.getFinancials(userId, from, to);
+      res.json({ ok: true, ...data });
+    } else {
+      const summary = await cjMlChileProfitService.getSummary(userId);
+      res.json({ ok: true, ...summary });
+    }
   } catch (err) { next(err); }
 });
 

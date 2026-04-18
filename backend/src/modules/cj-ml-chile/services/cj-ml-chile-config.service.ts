@@ -65,4 +65,9 @@ export const cjMlChileConfigService = {
       rejectOnUnknownShipping: row.rejectOnUnknownShipping,
     };
   },
+
+  async getPostCreateCheckoutMode(_userId: number) {
+    // For now, default to MANUAL for ML Chile until we confirm balance usage auto-flow
+    return 'MANUAL';
+  },
 };
