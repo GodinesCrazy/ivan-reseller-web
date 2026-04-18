@@ -58,7 +58,7 @@ function withTrace(req: Request, _res: Response, next: NextFunction): void {
 // ─────────────────────────────────────────────
 router.get('/system-readiness', authenticate, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user?.id ?? 0;
+    const userId = req.user?.userId ?? 0;
     const result = await cjMlChileSystemReadinessService.check(userId);
     res.json(result);
   } catch (err) { next(err); }
@@ -139,7 +139,7 @@ router.use(withTrace);
 // ─────────────────────────────────────────────
 router.get('/health', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const readiness = await cjMlChileSystemReadinessService.check(userId);
     res.json({
       ok: readiness.ok,
@@ -157,7 +157,7 @@ router.get('/health', async (req: Request, res: Response, next: NextFunction): P
 
 router.get('/overview', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const [products, listings, orders, alerts, profit] = await Promise.all([
       prisma.cjMlChileProduct.count({ where: { userId } }),
       prisma.cjMlChileListing.groupBy({ by: ['status'], where: { userId }, _count: true }),
@@ -201,7 +201,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction):
 // ─────────────────────────────────────────────
 router.get('/config', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const settings = await cjMlChileConfigService.getOrCreate(userId);
     const readiness = await cjMlChileSystemReadinessService.check(userId);
     res.json({
@@ -217,7 +217,7 @@ router.get('/config', async (req: Request, res: Response, next: NextFunction): P
 
 router.post('/config', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const parsed = cjMlChileUpdateConfigSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
     const updated = await cjMlChileConfigService.update(userId, parsed.data);
@@ -248,7 +248,7 @@ router.get('/ml/categories/suggest', async (req: Request, res: Response, next: N
 // ─────────────────────────────────────────────
 router.post('/pricing/preview', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const { supplierCostUsd, shippingUsd, listPriceUsdOverride } = req.body as Record<string, number | undefined>;
     if (!supplierCostUsd || !shippingUsd) { res.status(400).json({ error: 'supplierCostUsd and shippingUsd required' }); return; }
     const settings = await cjMlChileConfigService.getOrCreate(userId);
@@ -274,7 +274,7 @@ router.post('/pricing/preview', async (req: Request, res: Response, next: NextFu
 // ─────────────────────────────────────────────
 router.post('/cj/test-connection', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const adapter = createCjMlChileSupplierAdapter(userId);
     const results = await adapter.searchProducts({ keyword: 'test', page: 1, pageSize: 1 });
     res.json({ ok: true, itemsReturned: results.length });
@@ -286,7 +286,7 @@ router.post('/cj/test-connection', async (req: Request, res: Response, next: Nex
 
 router.post('/cj/search', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const parsed = cjMlChileSearchBodySchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
     const adapter = createCjMlChileSupplierAdapter(userId);
@@ -300,7 +300,7 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
 
 router.get('/cj/product/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const adapter = createCjMlChileSupplierAdapter(userId);
     const detail = await adapter.getProductById(req.params.id);
     res.json({ ok: true, product: detail });
@@ -312,7 +312,7 @@ router.get('/cj/product/:id', async (req: Request, res: Response, next: NextFunc
 
 router.post('/cj/shipping-quote', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const parsed = cjMlChileShippingQuoteBodySchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
     const adapter = createCjMlChileSupplierAdapter(userId);
@@ -335,7 +335,7 @@ router.post('/cj/shipping-quote', async (req: Request, res: Response, next: Next
 // ─────────────────────────────────────────────
 router.post('/preview', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const correlationId = (req as Request & { correlationId?: string }).correlationId;
     const parsed = cjMlChileEvaluateBodySchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
@@ -350,7 +350,7 @@ router.post('/preview', async (req: Request, res: Response, next: NextFunction):
 
 router.post('/evaluate', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const correlationId = (req as Request & { correlationId?: string }).correlationId;
     const parsed = cjMlChileEvaluateBodySchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
@@ -368,7 +368,7 @@ router.post('/evaluate', async (req: Request, res: Response, next: NextFunction)
 // ─────────────────────────────────────────────
 router.post('/listings/draft', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const correlationId = (req as Request & { correlationId?: string }).correlationId;
     const parsed = cjMlChileListingDraftBodySchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
@@ -380,7 +380,7 @@ router.post('/listings/draft', async (req: Request, res: Response, next: NextFun
 
 router.post('/listings/:id/publish', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const correlationId = (req as Request & { correlationId?: string }).correlationId;
     const listingId = parseInt(req.params.id, 10);
     if (isNaN(listingId)) { res.status(400).json({ error: 'Invalid listing id' }); return; }
@@ -399,7 +399,7 @@ function computeFxAge(fxRateAt: Date | string | null | undefined): { fxStale: bo
 
 router.get('/listings', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const status = req.query.status as string | undefined;
     const listings = await cjMlChileListingService.list(userId, status);
     const now = Date.now();
@@ -416,7 +416,7 @@ router.get('/listings', async (req: Request, res: Response, next: NextFunction):
 
 router.get('/listings/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const listingId = parseInt(req.params.id, 10);
     if (isNaN(listingId)) { res.status(400).json({ error: 'Invalid listing id' }); return; }
     const listing = await cjMlChileListingService.getById(userId, listingId);
@@ -430,7 +430,7 @@ router.get('/listings/:id', async (req: Request, res: Response, next: NextFuncti
 
 router.post('/listings/:id/pause', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const correlationId = (req as Request & { correlationId?: string }).correlationId;
     const listingId = parseInt(req.params.id, 10);
     if (isNaN(listingId)) { res.status(400).json({ error: 'Invalid listing id' }); return; }
@@ -441,7 +441,7 @@ router.post('/listings/:id/pause', async (req: Request, res: Response, next: Nex
 
 router.post('/listings/:id/force-reset', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const correlationId = (req as Request & { correlationId?: string }).correlationId;
     const listingId = parseInt(req.params.id, 10);
     if (isNaN(listingId)) { res.status(400).json({ error: 'Invalid listing id' }); return; }
@@ -452,7 +452,7 @@ router.post('/listings/:id/force-reset', async (req: Request, res: Response, nex
 
 router.post('/listings/:id/reprice', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const correlationId = (req as Request & { correlationId?: string }).correlationId;
     const listingId = parseInt(req.params.id, 10);
     if (isNaN(listingId)) { res.status(400).json({ error: 'Invalid listing id' }); return; }
@@ -533,7 +533,7 @@ router.post('/listings/:id/reprice', async (req: Request, res: Response, next: N
 // ─────────────────────────────────────────────
 router.get('/orders', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const orders = await prisma.cjMlChileOrder.findMany({
       where: { userId },
       include: { events: { orderBy: { createdAt: 'desc' }, take: 5 }, tracking: true },
@@ -546,7 +546,7 @@ router.get('/orders', async (req: Request, res: Response, next: NextFunction): P
 
 router.get('/orders/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const order = await prisma.cjMlChileOrder.findFirst({
       where: { id: req.params.id, userId },
       include: { events: { orderBy: { createdAt: 'desc' } }, tracking: true, listing: true },
@@ -558,7 +558,7 @@ router.get('/orders/:id', async (req: Request, res: Response, next: NextFunction
 
 router.post('/orders/:id/fetch-ml', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const correlationId = (req as Request & { correlationId?: string }).correlationId;
     const order = await prisma.cjMlChileOrder.findFirst({
       where: { id: req.params.id, userId },
@@ -618,7 +618,7 @@ router.post('/orders/:id/fetch-ml', async (req: Request, res: Response, next: Ne
 
 router.post('/orders/import', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const correlationId = (req as Request & { correlationId?: string }).correlationId;
     const parsed = cjMlChileOrderImportBodySchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
@@ -646,7 +646,7 @@ router.post('/orders/import', async (req: Request, res: Response, next: NextFunc
 // ─────────────────────────────────────────────
 router.get('/alerts', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const status = req.query.status as string | undefined;
     const alerts = await cjMlChileAlertsService.list(userId, status);
     res.json({ ok: true, alerts });
@@ -655,7 +655,7 @@ router.get('/alerts', async (req: Request, res: Response, next: NextFunction): P
 
 router.post('/alerts/:id/acknowledge', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const alertId = parseInt(req.params.id, 10);
     if (isNaN(alertId)) { res.status(400).json({ error: 'Invalid alert id' }); return; }
     const alert = await cjMlChileAlertsService.acknowledge(userId, alertId);
@@ -665,7 +665,7 @@ router.post('/alerts/:id/acknowledge', async (req: Request, res: Response, next:
 
 router.post('/alerts/:id/resolve', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const alertId = parseInt(req.params.id, 10);
     if (isNaN(alertId)) { res.status(400).json({ error: 'Invalid alert id' }); return; }
     const alert = await cjMlChileAlertsService.resolve(userId, alertId);
@@ -678,7 +678,7 @@ router.post('/alerts/:id/resolve', async (req: Request, res: Response, next: Nex
 // ─────────────────────────────────────────────
 router.get('/profit', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const summary = await cjMlChileProfitService.getSummary(userId);
     res.json({ ok: true, ...summary });
   } catch (err) { next(err); }
@@ -696,7 +696,7 @@ router.get('/fx/rate', async (_req: Request, res: Response, next: NextFunction):
 // ─────────────────────────────────────────────
 router.get('/logs', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const userId = req.user!.userId;
     const limit = Math.min(parseInt(String(req.query.limit ?? '50'), 10), 200);
     const correlationId = req.query.correlationId as string | undefined;
     const traces = await prisma.cjMlChileExecutionTrace.findMany({
