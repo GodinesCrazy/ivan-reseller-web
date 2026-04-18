@@ -119,6 +119,10 @@ function WarehousePendingBadge() {
   return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">🏭 WH Chile: verificar</span>;
 }
 
+function NoViableBadge() {
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-600">NO VIABLE</span>;
+}
+
 function WarehouseConfirmedBadge({ confirmed }: { confirmed: boolean }) {
   return confirmed
     ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">🇨🇱 Chile ✓</span>
@@ -157,6 +161,7 @@ function ProductCard({
   onSelect: () => void;
 }) {
   const status = operabilityOf(item);
+  const isUnavailable = status === 'unavailable';
   const estimatedCLP = item.listPriceUsd != null && fxRate != null ? Math.round(item.listPriceUsd * fxRate) : null;
 
   const borderClass = isSelected
@@ -165,7 +170,7 @@ function ProductCard({
       ? 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 hover:border-slate-400 dark:hover:border-slate-500'
       : status === 'stock_unknown'
         ? 'border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/20 hover:border-slate-300 dark:hover:border-slate-600'
-        : 'border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/10 opacity-80 hover:opacity-100';
+        : 'border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-900/10 opacity-70 hover:opacity-90';
 
   return (
     <button
@@ -179,7 +184,7 @@ function ProductCard({
           src={item.mainImageUrl}
           alt={item.title}
           loading="lazy"
-          className="w-full aspect-square object-contain rounded-lg bg-slate-50 dark:bg-slate-800"
+          className={`w-full aspect-square object-contain rounded-lg bg-slate-50 dark:bg-slate-800 ${isUnavailable ? 'grayscale' : ''}`}
         />
       ) : (
         <div className="w-full aspect-square rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 text-xs">
@@ -196,11 +201,11 @@ function ProductCard({
       <div className="space-y-1">
         {item.listPriceUsd != null && (
           <div className="flex items-center gap-1.5">
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{usdFmt(item.listPriceUsd)}</span>
-            <RealBadge />
+            <span className={`text-sm font-semibold ${isUnavailable ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-slate-800 dark:text-slate-100'}`}>{usdFmt(item.listPriceUsd)}</span>
+            {!isUnavailable && <RealBadge />}
           </div>
         )}
-        {estimatedCLP != null && (
+        {estimatedCLP != null && !isUnavailable && (
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-emerald-700 dark:text-emerald-300 font-medium">{clpFmt(estimatedCLP)}</span>
             <EstimatedBadge />
@@ -211,7 +216,7 @@ function ProductCard({
       {/* Badges */}
       <div className="flex flex-wrap gap-1">
         <StockBadge inv={item.inventoryTotal} />
-        <WarehousePendingBadge />
+        {isUnavailable ? <NoViableBadge /> : <WarehousePendingBadge />}
       </div>
 
       {/* Action label */}
@@ -220,9 +225,11 @@ function ProductCard({
           ? 'bg-emerald-600 text-white'
           : status === 'operable'
             ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900'
-            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+            : isUnavailable
+              ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
+              : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
       }`}>
-        {isSelected ? '✓ Seleccionado' : status === 'operable' ? 'Seleccionar' : status === 'stock_unknown' ? 'Revisar stock' : 'Ver detalle'}
+        {isSelected ? '✓ Seleccionado' : status === 'operable' ? 'Seleccionar' : status === 'stock_unknown' ? 'Revisar stock' : 'Sin stock'}
       </span>
     </button>
   );
@@ -268,6 +275,18 @@ export default function CjMlChileProductsPage() {
   const operableVariants = productDetail?.variants.filter((v) => v.stock >= 1) ?? [];
   const unavailableVariants = productDetail?.variants.filter((v) => v.stock < 1) ?? [];
   const variantId = selectedVariant ? (selectedVariant.cjVid ?? selectedVariant.cjSku) : '';
+
+  // Stock gating
+  // productIsNoViable: detail loaded, has variants, ALL have stock=0
+  const productIsNoViable =
+    productDetail !== null &&
+    productDetail.variants.length > 0 &&
+    operableVariants.length === 0;
+  // selectedVariantIsZeroStock: a specific zero-stock variant was explicitly chosen
+  const selectedVariantIsZeroStock = selectedVariant !== null && selectedVariant.stock < 1;
+  // Pipeline blocked when: no variant selected, OR variant confirmed zero stock
+  // (manual SKU fallback: selectedVariant is null → only blocked when variantId empty)
+  const pipelineBlocked = !variantId || selectedVariantIsZeroStock;
 
   async function search() {
     if (!query.trim()) return;
@@ -513,9 +532,11 @@ export default function CjMlChileProductsPage() {
                   </span>
                 )}
                 <StockBadge inv={selectedSummary.inventoryTotal} />
-                {warehouseResult
-                  ? <WarehouseConfirmedBadge confirmed={warehouseResult.warehouseChileConfirmed} />
-                  : <WarehousePendingBadge />}
+                {productIsNoViable
+                  ? <NoViableBadge />
+                  : warehouseResult
+                    ? <WarehouseConfirmedBadge confirmed={warehouseResult.warehouseChileConfirmed} />
+                    : <WarehousePendingBadge />}
               </div>
             </div>
           </div>
@@ -555,28 +576,38 @@ export default function CjMlChileProductsPage() {
                     })}
                   </div>
                 )}
+                {/* NO VIABLE banner when all variants are stock=0 */}
+                {productIsNoViable && (
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 flex items-center gap-2">
+                    <NoViableBadge />
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Todas las variantes tienen stock 0. Este producto no se puede evaluar.</span>
+                  </div>
+                )}
                 {unavailableVariants.length > 0 && (
-                  <details>
-                    <summary className="text-[11px] text-slate-400 dark:text-slate-500 uppercase tracking-wide cursor-pointer">
-                      Sin stock ({unavailableVariants.length})
+                  <details open={operableVariants.length === 0}>
+                    <summary className="text-[11px] text-slate-400 dark:text-slate-500 uppercase tracking-wide cursor-pointer select-none">
+                      Sin stock — no evaluables ({unavailableVariants.length})
                     </summary>
                     <div className="space-y-1 mt-1">
                       {unavailableVariants.map((v) => {
                         const k = variantKey(v);
+                        const isChosen = selectedVariantKey === k;
                         return (
                           <button
                             key={k}
                             type="button"
                             onClick={() => setSelectedVariantKey(k)}
-                            className={`w-full text-left px-3 py-2 rounded-lg border text-xs opacity-60 transition-colors ${
-                              selectedVariantKey === k
-                                ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 opacity-100'
-                                : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 bg-slate-50 dark:bg-slate-700/50'
+                            title="Variante sin stock — Preview/Evaluate bloqueados"
+                            className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition-colors ${
+                              isChosen
+                                ? 'border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20'
+                                : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/40 opacity-60 hover:opacity-80'
                             }`}
                           >
-                            <span className="font-medium text-slate-900 dark:text-slate-100">{variantLabel(v)}</span>
-                            <span className="ml-2 text-slate-500">{usdFmt(v.unitCostUsd)}</span>
-                            <span className="ml-2 text-amber-600 dark:text-amber-400">Stock: 0</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-300">{variantLabel(v)}</span>
+                            <span className="ml-2 text-slate-400">{usdFmt(v.unitCostUsd)}</span>
+                            <span className="ml-2 font-semibold text-slate-400 dark:text-slate-500">Stock: 0</span>
+                            <span className="ml-2 text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wide">· no evaluable</span>
                           </button>
                         );
                       })}
@@ -605,16 +636,28 @@ export default function CjMlChileProductsPage() {
 
             {/* Selected variant summary */}
             {selectedVariant && (
-              <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-600 p-2.5 text-xs space-y-0.5">
-                <p className="font-semibold text-slate-800 dark:text-slate-200">Variante seleccionada</p>
+              <div className={`rounded-lg border p-2.5 text-xs space-y-0.5 ${
+                selectedVariantIsZeroStock
+                  ? 'border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/10'
+                  : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/40'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-slate-800 dark:text-slate-200">Variante seleccionada</p>
+                  {selectedVariantIsZeroStock && <NoViableBadge />}
+                </div>
                 <p className="text-slate-600 dark:text-slate-400">{variantLabel(selectedVariant)}</p>
-                <div className="flex gap-3 mt-1">
+                <div className="flex flex-wrap gap-3 mt-1">
                   <span className="text-slate-700 dark:text-slate-300">Costo: <strong>{usdFmt(selectedVariant.unitCostUsd)}</strong> <RealBadge /></span>
-                  <span className={selectedVariant.stock >= 1 ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-400'}>
+                  <span className={selectedVariant.stock >= 1 ? 'text-emerald-700 dark:text-emerald-300' : 'font-semibold text-amber-600 dark:text-amber-400'}>
                     Stock: {selectedVariant.stock}
                   </span>
                   <span className="text-slate-400 font-mono text-[10px]">{selectedVariant.cjVid ?? selectedVariant.cjSku}</span>
                 </div>
+                {selectedVariantIsZeroStock && (
+                  <p className="text-amber-600 dark:text-amber-400 font-medium pt-1">
+                    Sin stock — Preview y Evaluate están bloqueados para esta variante.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -631,10 +674,20 @@ export default function CjMlChileProductsPage() {
                 onChange={(e) => setQty(parseInt(e.target.value) || 1)}
                 className="px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm text-slate-900 dark:text-slate-100 w-20"
               />
-              {!variantId && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">Selecciona una variante para continuar</p>
-              )}
             </div>
+
+            {/* Pipeline gate messages */}
+            {productIsNoViable && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <NoViableBadge /> Producto sin stock en todas sus variantes — no se puede evaluar.
+              </p>
+            )}
+            {!productIsNoViable && !variantId && !loadingDetail && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">Selecciona una variante para continuar</p>
+            )}
+            {selectedVariantIsZeroStock && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">Variante con stock 0 — selecciona una variante con stock para evaluar.</p>
+            )}
 
             {actionErr && <p className="text-sm text-red-600 dark:text-red-400">{actionErr}</p>}
 
@@ -642,16 +695,16 @@ export default function CjMlChileProductsPage() {
               <button
                 type="button"
                 onClick={doPreview}
-                disabled={!variantId || previewing}
-                className="px-4 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-sm font-medium hover:bg-emerald-50 dark:hover:bg-emerald-900/20 disabled:opacity-50 transition-colors"
+                disabled={pipelineBlocked || previewing}
+                className="px-4 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-sm font-medium hover:bg-emerald-50 dark:hover:bg-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {previewing ? 'Calculando…' : 'Preview pricing'}
               </button>
               <button
                 type="button"
                 onClick={doEvaluate}
-                disabled={!variantId || evaluating}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-50 transition-colors"
+                disabled={pipelineBlocked || evaluating}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {evaluating ? 'Evaluando…' : 'Evaluate (persistir)'}
               </button>
