@@ -3,12 +3,15 @@ import { api } from '@/services/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+type OperabilityStatus = 'operable' | 'stock_unknown' | 'unavailable';
+
 interface CjProductSummary {
   cjProductId: string;
   title: string;
   mainImageUrl?: string;
   listPriceUsd?: number;
   inventoryTotal?: number;
+  operabilityStatus?: OperabilityStatus;
 }
 
 interface CjVariantDetail {
@@ -79,7 +82,8 @@ function variantKey(v: CjVariantDetail): string {
   return v.cjVid ?? v.cjSku;
 }
 
-function operabilityOf(item: CjProductSummary): 'operable' | 'stock_unknown' | 'unavailable' {
+function operabilityOf(item: CjProductSummary): OperabilityStatus {
+  if (item.operabilityStatus) return item.operabilityStatus;
   if (item.inventoryTotal !== undefined && item.inventoryTotal > 0) return 'operable';
   if (item.inventoryTotal === 0) return 'unavailable';
   return 'stock_unknown';
@@ -139,11 +143,25 @@ function DecisionBadge({ d }: { d: string }) {
   return <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${map[d] ?? map['PENDING']}`}>{d}</span>;
 }
 
-function SectionHeader({ label, count, subtitle }: { label: string; count: number; subtitle?: string }) {
+function OperabilityBadge({ status }: { status: OperabilityStatus }) {
+  if (status === 'operable') return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700">● Operable</span>;
+  if (status === 'stock_unknown') return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600">● Stock por confirmar</span>;
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-700">● Sin disponibilidad</span>;
+}
+
+type SectionTier = 'main' | 'secondary' | 'reference';
+function SectionHeader({ label, count, subtitle, tier }: { label: string; count: number; subtitle?: string; tier?: SectionTier }) {
+  const tierBadge: Record<SectionTier, string> = {
+    main: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700',
+    secondary: 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600',
+    reference: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-700',
+  };
+  const tierLabel: Record<SectionTier, string> = { main: 'Flujo principal', secondary: 'Secundario', reference: 'Referencia' };
   return (
     <div className="flex items-center gap-2 py-1">
       <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">{label}</span>
       <span className="px-1.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{count}</span>
+      {tier && <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${tierBadge[tier]}`}>{tierLabel[tier]}</span>}
       {subtitle && <span className="text-xs text-slate-400 dark:text-slate-500">{subtitle}</span>}
     </div>
   );
@@ -215,7 +233,7 @@ function ProductCard({
 
       {/* Badges */}
       <div className="flex flex-wrap gap-1">
-        <StockBadge inv={item.inventoryTotal} />
+        <OperabilityBadge status={status} />
         {isUnavailable ? <NoViableBadge /> : <WarehousePendingBadge />}
       </div>
 
@@ -447,10 +465,10 @@ export default function CjMlChileProductsPage() {
       {grouped && (
         <div className="space-y-5">
 
-          {/* Operables */}
+          {/* Operables — Flujo principal */}
           {grouped.operable.length > 0 && (
-            <div className="space-y-2">
-              <SectionHeader label="Con stock confirmado" count={grouped.operable.length} subtitle="Listos para evaluar" />
+            <div className="space-y-2 rounded-xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/40 dark:bg-emerald-900/10 p-3">
+              <SectionHeader label="Con stock confirmado" count={grouped.operable.length} subtitle="Listos para evaluar" tier="main" />
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 {grouped.operable.map((item) => (
                   <ProductCard
@@ -465,11 +483,18 @@ export default function CjMlChileProductsPage() {
             </div>
           )}
 
-          {/* Stock unknown */}
+          {/* Sin operables: aviso explícito */}
+          {grouped.operable.length === 0 && (grouped.stockUnknown.length > 0 || grouped.unavailable.length > 0) && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 px-1">
+              Sin productos con stock confirmado en esta búsqueda. Los resultados de abajo requieren verificación o están sin stock.
+            </p>
+          )}
+
+          {/* Stock unknown — Secundario */}
           {grouped.stockUnknown.length > 0 && (
-            <details className="group" open={grouped.operable.length === 0}>
+            <details className="group rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/20 p-3" open={grouped.operable.length === 0}>
               <summary className="cursor-pointer list-none">
-                <SectionHeader label="Stock por confirmar" count={grouped.stockUnknown.length} subtitle="Revisar en evaluate" />
+                <SectionHeader label="Stock por confirmar" count={grouped.stockUnknown.length} subtitle="Verificar en evaluate" tier="secondary" />
               </summary>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-2">
                 {grouped.stockUnknown.map((item) => (
@@ -485,13 +510,13 @@ export default function CjMlChileProductsPage() {
             </details>
           )}
 
-          {/* Unavailable */}
+          {/* Unavailable — Referencia */}
           {grouped.unavailable.length > 0 && (
-            <details className="group">
+            <details className="group rounded-xl border border-amber-100 dark:border-amber-900/30 bg-amber-50/30 dark:bg-amber-900/5 p-3">
               <summary className="cursor-pointer list-none">
-                <SectionHeader label="Sin stock" count={grouped.unavailable.length} subtitle="No recomendados" />
+                <SectionHeader label="Sin stock / no operables" count={grouped.unavailable.length} subtitle="No recomendados" tier="reference" />
               </summary>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-2 opacity-70">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-2 opacity-60">
                 {grouped.unavailable.map((item) => (
                   <ProductCard
                     key={item.cjProductId}

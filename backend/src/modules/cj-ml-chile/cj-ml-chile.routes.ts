@@ -290,13 +290,25 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
     const parsed = cjMlChileSearchBodySchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
     const adapter = createCjMlChileSupplierAdapter(userId);
-    const items = await adapter.searchProducts({ keyword: parsed.data.query, page: parsed.data.page, pageSize: parsed.data.pageSize });
+    const rawItems = await adapter.searchProducts({ keyword: parsed.data.query, page: parsed.data.page, pageSize: parsed.data.pageSize });
+
+    // Classify + sort: operable → stock_unknown → unavailable
+    type OperabilityStatus = 'operable' | 'stock_unknown' | 'unavailable';
+    const RANK: Record<OperabilityStatus, number> = { operable: 0, stock_unknown: 1, unavailable: 2 };
+    function classifyInv(inv: number | undefined): OperabilityStatus {
+      if (inv !== undefined && inv > 0) return 'operable';
+      if (inv === 0) return 'unavailable';
+      return 'stock_unknown';
+    }
+    const items = rawItems
+      .map(item => ({ ...item, operabilityStatus: classifyInv(item.inventoryTotal) }))
+      .sort((a, b) => RANK[a.operabilityStatus] - RANK[b.operabilityStatus]);
 
     // Compute operability summary for UI grouping
     let operable = 0, stockUnknown = 0, unavailable = 0;
     for (const item of items) {
-      if (item.inventoryTotal !== undefined && item.inventoryTotal > 0) operable++;
-      else if (item.inventoryTotal === 0) unavailable++;
+      if (item.operabilityStatus === 'operable') operable++;
+      else if (item.operabilityStatus === 'unavailable') unavailable++;
       else stockUnknown++;
     }
 
