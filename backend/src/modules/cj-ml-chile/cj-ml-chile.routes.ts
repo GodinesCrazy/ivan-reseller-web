@@ -33,6 +33,7 @@ import {
 } from './schemas/cj-ml-chile.schemas';
 import { createCjMlChileSupplierAdapter, CJ_CHILE_PROBE_POSTAL } from './adapters/cj-ml-chile-supplier.adapter';
 import { CjSupplierError } from '../cj-ebay/adapters/cj-supplier.errors';
+import { rankMlChileSearchResults } from './services/cj-ml-chile-search-ranking';
 
 const router = Router();
 
@@ -292,25 +293,18 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
     const adapter = createCjMlChileSupplierAdapter(userId);
     const rawItems = await adapter.searchProducts({ keyword: parsed.data.query, page: parsed.data.page, pageSize: parsed.data.pageSize });
 
-    // Classify + sort: operable → stock_unknown → unavailable
-    type OperabilityStatus = 'operable' | 'stock_unknown' | 'unavailable';
-    const RANK: Record<OperabilityStatus, number> = { operable: 0, stock_unknown: 1, unavailable: 2 };
-    function classifyInv(inv: number | undefined): OperabilityStatus {
-      if (inv !== undefined && inv > 0) return 'operable';
-      if (inv === 0) return 'unavailable';
-      return 'stock_unknown';
-    }
-    const items = rawItems
-      .map(item => ({ ...item, operabilityStatus: classifyInv(item.inventoryTotal) }))
-      .sort((a, b) => RANK[a.operabilityStatus] - RANK[b.operabilityStatus]);
+    // Rank: operability tier → textRelevanceScore → operationalScore
+    const { rankedItems, query: expandedQuery } = rankMlChileSearchResults(parsed.data.query, rawItems);
 
-    // Compute operability summary for UI grouping
-    let operable = 0, stockUnknown = 0, unavailable = 0;
-    for (const item of items) {
-      if (item.operabilityStatus === 'operable') operable++;
-      else if (item.operabilityStatus === 'unavailable') unavailable++;
-      else stockUnknown++;
-    }
+    // Operability summary for UI stats banner
+    const operable = rankedItems.filter(i => i.operabilityStatus === 'operable').length;
+    const stockUnknown = rankedItems.filter(i => i.operabilityStatus === 'stock_unknown').length;
+    const unavailable = rankedItems.filter(i => i.operabilityStatus === 'unavailable').length;
+
+    // Relevance summary
+    const altaCount = rankedItems.filter(i => i.relevanceTier === 'alta').length;
+    const mediaCount = rankedItems.filter(i => i.relevanceTier === 'media').length;
+    const bajaCount = rankedItems.filter(i => i.relevanceTier === 'baja').length;
 
     // FX rate for estimated CLP display in search cards
     let fxRateCLPperUSD: number | null = null;
@@ -322,11 +316,13 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
 
     res.json({
       ok: true,
-      items,
+      items: rankedItems,
       operabilitySummary: { operable, stockUnknown, unavailable },
+      relevanceSummary: { alta: altaCount, media: mediaCount, baja: bajaCount },
+      queryExpansions: expandedQuery.expansions,
       fxRateCLPperUSD,
       fxRateAt,
-      note: 'Warehouse Chile se verifica en preview/evaluate. CLP es estimado con FX actual.',
+      note: 'Resultados rankeados: tier operabilidad → relevancia textual → score operacional. Warehouse Chile se verifica en preview/evaluate.',
     });
   } catch (err) {
     if (err instanceof CjSupplierError) { res.status(httpStatusForCj(err)).json({ ok: false, error: err.message, code: err.code }); return; }

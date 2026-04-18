@@ -4,6 +4,7 @@ import { api } from '@/services/api';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type OperabilityStatus = 'operable' | 'stock_unknown' | 'unavailable';
+type RelevanceTier = 'alta' | 'media' | 'baja';
 
 interface CjProductSummary {
   cjProductId: string;
@@ -12,6 +13,8 @@ interface CjProductSummary {
   listPriceUsd?: number;
   inventoryTotal?: number;
   operabilityStatus?: OperabilityStatus;
+  relevanceScore?: number;
+  relevanceTier?: RelevanceTier;
 }
 
 interface CjVariantDetail {
@@ -34,6 +37,8 @@ interface SearchResult {
   ok: boolean;
   items: CjProductSummary[];
   operabilitySummary?: { operable: number; stockUnknown: number; unavailable: number };
+  relevanceSummary?: { alta: number; media: number; baja: number };
+  queryExpansions?: string[];
   fxRateCLPperUSD?: number | null;
   fxRateAt?: string | null;
   note?: string;
@@ -149,6 +154,13 @@ function OperabilityBadge({ status }: { status: OperabilityStatus }) {
   return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-700">● Sin disponibilidad</span>;
 }
 
+function RelevanceBadge({ tier, score }: { tier: RelevanceTier | undefined; score: number | undefined }) {
+  if (tier === 'alta') return <span title={`Relevancia: ${score ?? '?'}/100`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700 uppercase tracking-wide">▲ Alta</span>;
+  if (tier === 'media') return <span title={`Relevancia: ${score ?? '?'}/100`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-700 uppercase tracking-wide">▶ Media</span>;
+  if (tier === 'baja') return <span title={`Relevancia: ${score ?? '?'}/100`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-600 uppercase tracking-wide">▼ Baja</span>;
+  return null;
+}
+
 type SectionTier = 'main' | 'secondary' | 'reference';
 function SectionHeader({ label, count, subtitle, tier }: { label: string; count: number; subtitle?: string; tier?: SectionTier }) {
   const tierBadge: Record<SectionTier, string> = {
@@ -234,6 +246,7 @@ function ProductCard({
       {/* Badges */}
       <div className="flex flex-wrap gap-1">
         <OperabilityBadge status={status} />
+        <RelevanceBadge tier={item.relevanceTier} score={item.relevanceScore} />
         {isUnavailable ? <NoViableBadge /> : <WarehousePendingBadge />}
       </div>
 
@@ -286,9 +299,18 @@ export default function CjMlChileProductsPage() {
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftOk, setDraftOk] = useState(false);
 
+  // Relevance filter
+  const [onlyHighRelevance, setOnlyHighRelevance] = useState(false);
+
   // Derived
   const fxRate = searchResult?.fxRateCLPperUSD ?? null;
-  const grouped = searchResult ? groupItems(searchResult.items) : null;
+  const filteredItems = searchResult
+    ? onlyHighRelevance
+      ? searchResult.items.filter(i => i.relevanceTier === 'alta')
+      : searchResult.items
+    : null;
+  const grouped = filteredItems ? groupItems(filteredItems) : null;
+  const totalHighRelevance = searchResult?.relevanceSummary?.alta ?? 0;
   const selectedVariant = productDetail?.variants.find((v) => variantKey(v) === selectedVariantKey) ?? null;
   const operableVariants = productDetail?.variants.filter((v) => v.stock >= 1) ?? [];
   const unavailableVariants = productDetail?.variants.filter((v) => v.stock < 1) ?? [];
@@ -448,15 +470,52 @@ export default function CjMlChileProductsPage() {
 
       {/* ── B. SEARCH STATS BANNER ──────────────────────────────────────── */}
       {searchResult && searchResult.operabilitySummary && (
-        <div className="flex flex-wrap gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
-          <span className="text-slate-500 dark:text-slate-400 font-medium">{searchResult.items.length} resultados</span>
-          <span className="text-emerald-700 dark:text-emerald-300">● {searchResult.operabilitySummary.operable} con stock</span>
-          <span className="text-slate-500 dark:text-slate-400">● {searchResult.operabilitySummary.stockUnknown} stock por confirmar</span>
-          <span className="text-amber-600 dark:text-amber-400">● {searchResult.operabilitySummary.unavailable} sin stock</span>
-          {fxRate != null && (
-            <span className="ml-auto text-slate-400 dark:text-slate-500">
-              FX: 1 USD = {clpFmt(fxRate)} <EstimatedBadge />
-            </span>
+        <div className="space-y-2">
+          {/* Stock + FX row */}
+          <div className="flex flex-wrap gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">{searchResult.items.length} resultados</span>
+            <span className="text-emerald-700 dark:text-emerald-300">● {searchResult.operabilitySummary.operable} con stock</span>
+            <span className="text-slate-500 dark:text-slate-400">● {searchResult.operabilitySummary.stockUnknown} por confirmar</span>
+            <span className="text-amber-600 dark:text-amber-400">● {searchResult.operabilitySummary.unavailable} sin stock</span>
+            {searchResult.relevanceSummary && (
+              <>
+                <span className="w-px bg-slate-200 dark:bg-slate-600 self-stretch" />
+                <span className="text-emerald-600 dark:text-emerald-400">▲ {searchResult.relevanceSummary.alta} alta</span>
+                <span className="text-amber-600 dark:text-amber-400">▶ {searchResult.relevanceSummary.media} media</span>
+                <span className="text-slate-400">▼ {searchResult.relevanceSummary.baja} baja coincidencia</span>
+              </>
+            )}
+            {fxRate != null && (
+              <span className="ml-auto text-slate-400 dark:text-slate-500 shrink-0">
+                FX: 1 USD = {clpFmt(fxRate)} <EstimatedBadge />
+              </span>
+            )}
+          </div>
+          {/* Query expansions + high-relevance filter */}
+          <div className="flex flex-wrap items-center gap-3 px-1">
+            {searchResult.queryExpansions && searchResult.queryExpansions.length > 0 && (
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                Búsqueda expandida con: <span className="text-slate-500 dark:text-slate-400 italic">{searchResult.queryExpansions.slice(0, 5).join(', ')}{searchResult.queryExpansions.length > 5 ? '…' : ''}</span>
+              </p>
+            )}
+            <label className="ml-auto flex items-center gap-1.5 cursor-pointer select-none text-xs text-slate-600 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={onlyHighRelevance}
+                onChange={e => setOnlyHighRelevance(e.target.checked)}
+                className="rounded border-slate-300 dark:border-slate-600 accent-emerald-600"
+              />
+              Solo alta coincidencia
+              {totalHighRelevance > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">{totalHighRelevance}</span>
+              )}
+            </label>
+          </div>
+          {/* Empty state when filter is on but no high-relevance items */}
+          {onlyHighRelevance && totalHighRelevance === 0 && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 px-1">
+              Sin resultados de alta coincidencia para esta búsqueda. Desactiva el filtro para ver todos los resultados.
+            </p>
           )}
         </div>
       )}
