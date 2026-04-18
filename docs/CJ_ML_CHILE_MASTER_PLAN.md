@@ -219,3 +219,60 @@ listPriceCLP   = round(listPriceUsd × fxRate)             // entero, sin decima
 | Fulfillment CJ automático | FASE FUTURA | Hoy manual; órdenes requieren intervención para colocar en CJ |
 | Multi-variante batch | FASE FUTURA | Hoy 1 variante por evaluación |
 | Stock sync automático | FASE FUTURA | No hay sync de stock post-venta |
+
+---
+
+## Fase D — Products Screen Enrichment (2026-04-18)
+
+**Estado: IMPLEMENTADO — pantalla Products elevada a panel de decisión comercial**
+
+### Problema resuelto
+
+La pantalla `CJ → ML Chile / Products` era un listado plano sin contexto visual, sin señal de stock clara, sin variante picker, sin estimado CLP y sin organización por viabilidad. Era claramente inferior al módulo `CJ → eBay USA / Products`.
+
+### Qué se implementó
+
+#### Backend (`/cj/search`)
+- Ahora devuelve `operabilitySummary: { operable, stockUnknown, unavailable }` calculado en backend
+- Ahora devuelve `fxRateCLPperUSD` y `fxRateAt` para estimado CLP en cards de búsqueda
+
+#### Frontend (`CjMlChileProductsPage.tsx`)
+- **Fix crítico**: campo imagen era `imageUrls` (incorrecto) → `mainImageUrl` (campo real del backend). Las imágenes no aparecían antes.
+- **Grid de cards** 2–4 columnas reemplaza lista plana
+- **Grouping por operabilidad**: "Con stock confirmado" / "Stock por confirmar" / "Sin stock" (collapsible)
+- **Banner de estadísticas**: total de resultados por categoría + FX rate actual
+- **Cards enriquecidas**: imagen lazy, título, precio USD (REAL), precio CLP estimado (ESTIMATED), StockBadge, badge WH Chile pendiente
+- **Variant picker**: auto-fetch de `/cj/product/:id` al seleccionar producto, lista variantes operables primero, sin-stock collapsible, auto-selección de la primera variante con stock
+- **Selected product panel**: imagen, título, precio USD+CLP, todos los badges, summary de variante seleccionada (label, costo REAL, stock, SKU)
+- **Badges REAL / ESTIMATED / PENDING** en cada dato según su origen:
+  - Precio CJ USD: REAL
+  - CLP: ESTIMATED (FX)
+  - Costo de variante: REAL
+  - Envío CJ: REAL
+  - ETA: REAL si warehouse CL confirmado, ESTIMATED si no
+  - Warehouse Chile: PENDING en search, REAL/confirmado post-preview
+- **ShippingRow**: costo USD, método, ETA con badge, país origen
+- **PricingTable mejorada**: columna CLP con header ESTIMATED, filas bold en totales, FX line con badge
+
+### Paridad con CJ → eBay USA
+
+| Eje | eBay USA | ML Chile ANTES | ML Chile AHORA |
+|-----|----------|----------------|----------------|
+| Layout resultados | Grid cards | Lista plana | Grid cards ✅ |
+| Grouping por stock | 3 tiers | Ninguno | 3 tiers ✅ |
+| Imágenes en cards | ✅ | ✗ (bug de campo) | ✅ |
+| Precio estimado en card | USD only | USD only | USD + CLP estimado ✅ |
+| Variant picker | ✅ Auto | Manual SKU | ✅ Auto ✅ |
+| Badges REAL/EST | ✅ | Parcial | ✅ Sistema completo |
+| Stats banner | ✅ | ✗ | ✅ |
+| WH badge en card | ✅ US/CN | ✗ | PENDING → REAL post-preview ✅ |
+| Pricing breakdown | ✅ | ✅ | ✅ + CLP column |
+| Risk score | ✅ | ✗ | ✗ (no aplica en MVP) |
+
+**Paridad alcanzada en**: layout, variant picker, grouping, imágenes, badges, stats.
+
+**Diferencias intencionales** (no son gaps, son correctas para ML Chile):
+- WH no se detecta en search (sería una call por producto — demasiado caro); se muestra PENDING y se resuelve en preview
+- Precios en CLP son siempre ESTIMATED (dependen de FX)
+- Risk score numérico no implementado — la decisión es binaria APPROVED/REJECTED/NOT_VIABLE
+
