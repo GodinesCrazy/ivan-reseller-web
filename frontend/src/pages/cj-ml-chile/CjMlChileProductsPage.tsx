@@ -32,6 +32,12 @@ interface EvaluateResult extends PreviewResult {
   ids?: { evaluationId: number };
 }
 
+interface CategoryCandidate {
+  id: string;
+  name: string;
+  probability: number;
+}
+
 function clpFormat(n: number) {
   return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n);
 }
@@ -66,6 +72,13 @@ export default function CjMlChileProductsPage() {
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [evalResult, setEvalResult] = useState<EvaluateResult | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
+
+  // Category selection state
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [categorySuggesting, setCategorySuggesting] = useState(false);
+  const [categoryCandidates, setCategoryCandidates] = useState<CategoryCandidate[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<CategoryCandidate | null>(null);
+  const [categoryErr, setCategoryErr] = useState<string | null>(null);
 
   const [draftingEvalId, setDraftingEvalId] = useState<number | null>(null);
   const [draftLoading, setDraftLoading] = useState(false);
@@ -106,6 +119,8 @@ export default function CjMlChileProductsPage() {
     setEvaluating(true);
     setEvalResult(null);
     setActionErr(null);
+    // Pre-populate category search with product title
+    if (selected.title && !categoryQuery) setCategoryQuery(selected.title.slice(0, 60));
     try {
       const res = await api.post('/api/cj-ml-chile/evaluate', { productId: selected.cjProductId, variantId, quantity: qty });
       setEvalResult(res.data);
@@ -114,12 +129,36 @@ export default function CjMlChileProductsPage() {
     } finally { setEvaluating(false); }
   }
 
+  async function suggestCategories() {
+    const q = categoryQuery.trim();
+    if (!q) return;
+    setCategorySuggesting(true);
+    setCategoryErr(null);
+    setCategoryCandidates([]);
+    setSelectedCategory(null);
+    try {
+      const res = await api.get(`/api/cj-ml-chile/ml/categories/suggest?q=${encodeURIComponent(q)}`);
+      setCategoryCandidates(res.data.candidates ?? []);
+      if ((res.data.candidates ?? []).length === 0) setCategoryErr('Sin sugerencias. Intenta con otro título.');
+    } catch (e: unknown) {
+      setCategoryErr((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? String(e));
+    } finally { setCategorySuggesting(false); }
+  }
+
   async function doDraft(evaluationId: number) {
+    if (!selectedCategory) {
+      setActionErr('Selecciona una categoría ML Chile antes de crear el draft.');
+      return;
+    }
     setDraftingEvalId(evaluationId);
     setDraftLoading(true);
     setDraftOk(false);
+    setActionErr(null);
     try {
-      await api.post('/api/cj-ml-chile/listings/draft', { evaluationId });
+      await api.post('/api/cj-ml-chile/listings/draft', {
+        evaluationId,
+        categoryId: selectedCategory.id,
+      });
       setDraftOk(true);
     } catch (e: unknown) {
       setActionErr((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? String(e));
@@ -157,7 +196,16 @@ export default function CjMlChileProductsPage() {
             {results.items.map((item) => (
               <div
                 key={item.cjProductId}
-                onClick={() => { setSelected(item); setPreviewResult(null); setEvalResult(null); setVariantId(''); }}
+                onClick={() => {
+                  setSelected(item);
+                  setPreviewResult(null);
+                  setEvalResult(null);
+                  setVariantId('');
+                  setCategoryQuery(item.title.slice(0, 60));
+                  setCategoryCandidates([]);
+                  setSelectedCategory(null);
+                  setDraftOk(false);
+                }}
                 className={`flex gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected?.cjProductId === item.cjProductId ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800'}`}
               >
                 {item.imageUrls?.[0] && (
@@ -262,16 +310,61 @@ export default function CjMlChileProductsPage() {
                 ))}
               </div>
               {pricing && <PricingTable p={pricing} />}
+
               {evalResult.decision === 'APPROVED' && evalResult.ids?.evaluationId && !draftOk && (
-                <button
-                  onClick={() => doDraft(evalResult.ids!.evaluationId)}
-                  disabled={draftLoading || draftingEvalId === evalResult.ids?.evaluationId}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-300 disabled:opacity-50 transition-colors"
-                >
-                  {draftLoading ? 'Creando draft…' : 'Crear draft listing'}
-                </button>
+                <div className="space-y-3 pt-1 border-t border-slate-100 dark:border-slate-700">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Paso 2: Selecciona categoría ML Chile</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={categoryQuery}
+                      onChange={(e) => setCategoryQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && suggestCategories()}
+                      placeholder="Título del producto para buscar categoría"
+                      className="flex-1 px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-sm text-slate-900 dark:text-slate-100"
+                    />
+                    <button
+                      onClick={suggestCategories}
+                      disabled={categorySuggesting || !categoryQuery.trim()}
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+                    >
+                      {categorySuggesting ? 'Buscando…' : 'Sugerir'}
+                    </button>
+                  </div>
+                  {categoryErr && <p className="text-xs text-amber-600 dark:text-amber-400">{categoryErr}</p>}
+                  {categoryCandidates.length > 0 && (
+                    <div className="space-y-1">
+                      {categoryCandidates.map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => setSelectedCategory(c)}
+                          className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${selectedCategory?.id === c.id ? 'border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800'}`}
+                        >
+                          <span className="font-medium text-slate-900 dark:text-slate-100">{c.name}</span>
+                          <span className="ml-2 text-xs text-slate-500">{c.id} · {(c.probability * 100).toFixed(0)}%</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {selectedCategory && (
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300 font-medium">
+                      ✓ Categoría seleccionada: {selectedCategory.name} ({selectedCategory.id})
+                    </p>
+                  )}
+
+                  <button
+                    onClick={() => doDraft(evalResult.ids!.evaluationId)}
+                    disabled={draftLoading || !selectedCategory || draftingEvalId === evalResult.ids?.evaluationId}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-300 disabled:opacity-50 transition-colors"
+                  >
+                    {draftLoading ? 'Creando draft…' : selectedCategory ? `Crear draft (${selectedCategory.id})` : 'Crear draft listing'}
+                  </button>
+                  {!selectedCategory && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">Selecciona una categoría antes de crear el draft.</p>
+                  )}
+                </div>
               )}
-              {draftOk && <p className="text-sm text-green-600 dark:text-green-400 font-medium">Draft creado. Ve a Listings para publicar.</p>}
+              {draftOk && <p className="text-sm text-green-600 dark:text-green-400 font-medium">Draft creado con categoría {selectedCategory?.id ?? ''}. Ve a Listings para publicar.</p>}
             </div>
           )}
         </div>

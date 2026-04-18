@@ -5,10 +5,10 @@
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { authenticate } from '../../middleware/auth.middleware';
 import { env } from '../../config/env';
 import { prisma } from '../../config/database';
-import { AppError } from '../../middleware/error.middleware';
 
 
 import { cjMlChileTraceService } from './services/cj-ml-chile-trace.service';
@@ -73,6 +73,62 @@ router.use((req: Request, res: Response, next: NextFunction): void => {
     return;
   }
   next();
+});
+
+// ─────────────────────────────────────────────
+// Webhooks ML Chile — sin autenticación JWT (ML llama a esta URL)
+// notification_url a configurar en portal ML: {BASE_URL}/api/cj-ml-chile/webhooks/ml
+// ─────────────────────────────────────────────
+router.post('/webhooks/ml', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const topic = String(body.topic ?? '');
+    const resource = String(body.resource ?? '');
+
+    if (topic !== 'orders_v2' && topic !== 'orders') {
+      res.status(200).json({ ok: true, ignored: true, topic });
+      return;
+    }
+
+    // Extraer orderId de resource: "/orders/1234567890"
+    const match = resource.match(/\/orders\/(\d+)/);
+    if (!match) { res.status(200).json({ ok: true, ignored: true, reason: 'no order id in resource' }); return; }
+    const mlOrderId = match[1];
+
+    // Resolver userId del seller (webhook global: buscar credencial ML por user_id)
+    const mlSellerId = body.user_id != null ? String(body.user_id) : null;
+    let userId: number | null = null;
+    if (mlSellerId) {
+      const cred = await prisma.apiCredential.findFirst({ where: { apiName: 'mercadolibre' } });
+      if (cred) userId = cred.userId;
+    }
+    if (!userId) {
+      const cred = await prisma.apiCredential.findFirst({ where: { apiName: 'mercadolibre' } });
+      userId = cred?.userId ?? null;
+    }
+    if (!userId) { res.status(200).json({ ok: true, ignored: true, reason: 'no ml credential found' }); return; }
+
+    // Auto-import orden si no existe
+    const existing = await prisma.cjMlChileOrder.findFirst({ where: { userId, mlOrderId } });
+    if (!existing) {
+      const { createId } = await import('@paralleldrive/cuid2');
+      await prisma.cjMlChileOrder.create({
+        data: { id: createId(), userId, mlOrderId, status: 'DETECTED', currency: 'CLP' },
+      });
+    }
+
+    await cjMlChileTraceService.record({
+      userId,
+      step: CJ_ML_CHILE_TRACE_STEP.ORDER_IMPORT_SUCCESS,
+      message: `ML webhook: order ${mlOrderId} auto-imported`,
+      meta: { topic, resource, alreadyExisted: Boolean(existing) },
+    });
+
+    res.status(200).json({ ok: true, mlOrderId, alreadyExisted: Boolean(existing) });
+  } catch (err) {
+    console.error('[CJ_ML_CHILE_WEBHOOK]', err);
+    res.status(200).json({ ok: false, error: String(err) }); // Siempre 200 para ML
+  }
 });
 
 router.use(authenticate);
@@ -170,6 +226,24 @@ router.post('/config', async (req: Request, res: Response, next: NextFunction): 
 });
 
 // ─────────────────────────────────────────────
+// ML Chile — categorías (usa API pública ML, sin auth ML)
+// ─────────────────────────────────────────────
+router.get('/ml/categories/suggest', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const q = String(req.query.q ?? '').trim();
+    if (!q) { res.status(400).json({ error: 'q param required (product title or keyword)' }); return; }
+    const url = `https://api.mercadolibre.com/sites/MLC/category_predictor/predict?title=${encodeURIComponent(q)}&limit=5`;
+    const mlResp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!mlResp.ok) { res.status(mlResp.status).json({ error: `ML API error ${mlResp.status}` }); return; }
+    const predictions = await mlResp.json() as Array<{ id: string; name: string; probability: number }>;
+    const candidates = Array.isArray(predictions)
+      ? predictions.slice(0, 5).map((p) => ({ id: p.id, name: p.name, probability: p.probability }))
+      : [];
+    res.json({ ok: true, candidates, query: q });
+  } catch (err) { next(err); }
+});
+
+// ─────────────────────────────────────────────
 // Pricing preview (sin persistir)
 // ─────────────────────────────────────────────
 router.post('/pricing/preview', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -248,7 +322,7 @@ router.post('/cj/shipping-quote', async (req: Request, res: Response, next: Next
       quantity: parsed.data.quantity,
       destPostalCode: CJ_CHILE_PROBE_POSTAL,
     });
-    const warehouseChileConfirmed = freight.quote.startCountryCode === 'CL' || freight.quote.cost > 0;
+    const warehouseChileConfirmed = freight.quote.startCountryCode === 'CL';
     res.json({ ok: true, quote: freight.quote, warehouseChileConfirmed, mvpViable: warehouseChileConfirmed });
   } catch (err) {
     if (err instanceof CjSupplierError) { res.status(httpStatusForCj(err)).json({ ok: false, error: err.message, code: err.code }); return; }
@@ -315,12 +389,28 @@ router.post('/listings/:id/publish', async (req: Request, res: Response, next: N
   } catch (err) { next(err); }
 });
 
+const FX_STALE_HOURS = 24;
+function computeFxAge(fxRateAt: Date | string | null | undefined): { fxStale: boolean; fxAgeHours: number | null } {
+  if (!fxRateAt) return { fxStale: false, fxAgeHours: null };
+  const ageMs = Date.now() - new Date(fxRateAt).getTime();
+  const fxAgeHours = Math.round(ageMs / 3_600_000);
+  return { fxStale: fxAgeHours > FX_STALE_HOURS, fxAgeHours };
+}
+
 router.get('/listings', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const userId = (req as Request & { user?: { id: number } }).user!.id;
     const status = req.query.status as string | undefined;
     const listings = await cjMlChileListingService.list(userId, status);
-    res.json({ ok: true, listings });
+    const now = Date.now();
+    const augmented = listings.map((l) => {
+      const ev = l.evaluation as Record<string, unknown> | null;
+      const fxRateAt = ev?.fxRateAt as Date | null | undefined;
+      const fxAgeHours = fxRateAt ? Math.round((now - new Date(fxRateAt).getTime()) / 3_600_000) : null;
+      const fxStale = fxAgeHours != null && fxAgeHours > FX_STALE_HOURS;
+      return Object.assign({}, l, { fxStale, fxAgeHours });
+    });
+    res.json({ ok: true, listings: augmented });
   } catch (err) { next(err); }
 });
 
@@ -331,7 +421,10 @@ router.get('/listings/:id', async (req: Request, res: Response, next: NextFuncti
     if (isNaN(listingId)) { res.status(400).json({ error: 'Invalid listing id' }); return; }
     const listing = await cjMlChileListingService.getById(userId, listingId);
     if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
-    res.json({ ok: true, listing });
+    const ev = listing.evaluation as Record<string, unknown> | null;
+    const fxRateAt = ev?.fxRateAt as Date | null | undefined;
+    const { fxStale, fxAgeHours } = computeFxAge(fxRateAt);
+    res.json({ ok: true, listing: Object.assign({}, listing, { fxStale, fxAgeHours }) });
   } catch (err) { next(err); }
 });
 
@@ -354,6 +447,84 @@ router.post('/listings/:id/force-reset', async (req: Request, res: Response, nex
     if (isNaN(listingId)) { res.status(400).json({ error: 'Invalid listing id' }); return; }
     const result = await cjMlChileListingService.forceReset(userId, listingId, correlationId);
     res.json({ ok: true, ...result });
+  } catch (err) { next(err); }
+});
+
+router.post('/listings/:id/reprice', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const correlationId = (req as Request & { correlationId?: string }).correlationId;
+    const listingId = parseInt(req.params.id, 10);
+    if (isNaN(listingId)) { res.status(400).json({ error: 'Invalid listing id' }); return; }
+
+    const listing = await cjMlChileListingService.getById(userId, listingId);
+    if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
+    if (listing.status !== 'DRAFT' && listing.status !== 'ACTIVE') {
+      res.status(400).json({ error: `No se puede repreciar un listing en estado ${listing.status}` }); return;
+    }
+
+    const draft = listing.draftPayload as Record<string, unknown> | null;
+    const snapshot = draft?.pricingSnapshot as Record<string, unknown> | null;
+    const supplierCostUsd = snapshot?.supplierCostUsd != null ? Number(snapshot.supplierCostUsd) : null;
+    const shippingUsd = snapshot?.shippingUsd != null ? Number(snapshot.shippingUsd) : 0;
+    if (supplierCostUsd == null) {
+      res.status(400).json({ error: 'Sin datos de costo en pricingSnapshot. Re-evalúa el producto.' }); return;
+    }
+
+    const settings = await cjMlChileConfigService.getOrCreate(userId);
+    const result = await computeMlChilePricing({
+      supplierCostUsd,
+      shippingUsd,
+      feesInput: {
+        mlcFeePct: Number(settings.mlcFeePct),
+        mpPaymentFeePct: Number(settings.mpPaymentFeePct),
+        incidentBufferPct: Number(settings.incidentBufferPct),
+      },
+      minMarginPct: settings.minMarginPct != null ? Number(settings.minMarginPct) : null,
+      minProfitUsd: settings.minProfitUsd != null ? Number(settings.minProfitUsd) : null,
+    });
+    if (!result.ok || !result.breakdown) {
+      res.status(400).json({ error: result.error ?? 'Pricing computation failed' }); return;
+    }
+
+    const newPriceCLP = result.breakdown.suggestedPriceCLP;
+    const newFxRate = result.breakdown.fxRateCLPperUSD;
+
+    await prisma.cjMlChileListing.update({
+      where: { id: listingId },
+      data: {
+        listedPriceCLP: new Prisma.Decimal(newPriceCLP),
+        listedPriceUsd: new Prisma.Decimal(result.breakdown.suggestedPriceUsd),
+        fxRateUsed: new Prisma.Decimal(newFxRate),
+        draftPayload: { ...(draft ?? {}), price: newPriceCLP, pricingSnapshot: result.breakdown } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    // Si el listing está ACTIVE en ML, actualizar precio allá también
+    let mlUpdated = false;
+    if (listing.status === 'ACTIVE' && listing.mlListingId) {
+      try {
+        const mlCred = await prisma.apiCredential.findFirst({ where: { userId, apiName: 'mercadolibre' } });
+        const token = (mlCred as Record<string, unknown> | null)?.accessToken as string | undefined;
+        if (token) {
+          const mlResp = await fetch(`https://api.mercadolibre.com/items/${listing.mlListingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ price: newPriceCLP }),
+          });
+          mlUpdated = mlResp.ok;
+        }
+      } catch { /* best-effort */ }
+    }
+
+    await cjMlChileTraceService.record({
+      userId, correlationId,
+      step: CJ_ML_CHILE_TRACE_STEP.LISTING_REPRICED,
+      message: `Reprice listing ${listingId}: CLP=${newPriceCLP}, FX=${newFxRate}`,
+      meta: { listingId, newPriceCLP, newFxRate, mlUpdated },
+    });
+
+    res.json({ ok: true, newPriceCLP, newFxRate, mlUpdated, breakdown: pricingBreakdownForResponse(result.breakdown) });
   } catch (err) { next(err); }
 });
 
@@ -382,6 +553,66 @@ router.get('/orders/:id', async (req: Request, res: Response, next: NextFunction
     });
     if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
     res.json({ ok: true, order });
+  } catch (err) { next(err); }
+});
+
+router.post('/orders/:id/fetch-ml', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = (req as Request & { user?: { id: number } }).user!.id;
+    const correlationId = (req as Request & { correlationId?: string }).correlationId;
+    const order = await prisma.cjMlChileOrder.findFirst({
+      where: { id: req.params.id, userId },
+    });
+    if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
+
+    const mlCred = await prisma.apiCredential.findFirst({ where: { userId, apiName: 'mercadolibre' } });
+    const token = (mlCred as Record<string, unknown> | null)?.accessToken as string | undefined
+      ?? (mlCred as Record<string, unknown> | null)?.encryptedData as string | undefined;
+    if (!token) { res.status(400).json({ error: 'ML_CREDENTIALS_NOT_FOUND: Conecta tu cuenta ML primero.' }); return; }
+
+    const mlResp = await fetch(`https://api.mercadolibre.com/orders/${order.mlOrderId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!mlResp.ok) {
+      const errBody = await mlResp.json().catch(() => ({})) as Record<string, unknown>;
+      res.status(mlResp.status).json({ error: `ML API error ${mlResp.status}`, detail: errBody }); return;
+    }
+    const mlOrder = await mlResp.json() as Record<string, unknown>;
+
+    const totalAmount = (mlOrder.total_amount as number) ?? null;
+    const currencyId = (mlOrder.currency_id as string) ?? 'CLP';
+    const mlStatus = (mlOrder.status as string) ?? null;
+
+    // Intentar vincular listing si vino con items
+    const items = (mlOrder.order_items as Array<Record<string, unknown>>) ?? [];
+    const firstItemId = items[0]
+      ? String((items[0].item as Record<string, unknown>)?.id ?? '')
+      : null;
+    const listing = firstItemId
+      ? await prisma.cjMlChileListing.findFirst({ where: { userId, mlListingId: firstItemId } })
+      : null;
+
+    const newStatus = order.status === 'DETECTED' ? 'VALIDATED' : order.status;
+    const updated = await prisma.cjMlChileOrder.update({
+      where: { id: order.id },
+      data: {
+        totalCLP: totalAmount && currencyId === 'CLP' ? new Prisma.Decimal(totalAmount) : undefined,
+        totalUsd: totalAmount && currencyId !== 'CLP' ? new Prisma.Decimal(totalAmount) : undefined,
+        listingId: listing?.id ?? undefined,
+        rawMlSummary: mlOrder as Prisma.InputJsonValue,
+        status: newStatus,
+      },
+      include: { events: { orderBy: { createdAt: 'desc' }, take: 3 }, tracking: true, listing: true },
+    });
+
+    await cjMlChileTraceService.record({
+      userId, correlationId,
+      step: CJ_ML_CHILE_TRACE_STEP.ORDER_IMPORT_SUCCESS,
+      message: `ML fetch order ${order.mlOrderId}: status=${mlStatus}, total=${totalAmount} ${currencyId}`,
+      meta: { orderId: order.id, mlStatus, totalAmount, listingLinked: Boolean(listing) },
+    });
+
+    res.json({ ok: true, order: updated, mlStatus, totalAmount, currencyId });
   } catch (err) { next(err); }
 });
 

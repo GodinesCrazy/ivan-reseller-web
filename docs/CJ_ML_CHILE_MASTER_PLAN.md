@@ -126,9 +126,28 @@ listPriceCLP   = round(listPriceUsd × fxRate)             // entero, sin decima
 - `api_credentials` — tabla compartida (ML token por `apiName='mercadolibre'`).
 - `authenticate` middleware — mismo JWT.
 
+## Endpoints — actualizado 2026-04-17 (Fase C)
+
+| Método | Path                                      | Descripción                                        |
+|--------|-------------------------------------------|----------------------------------------------------|
+| GET    | /api/cj-ml-chile/system-readiness         | Health (sin module gate)                           |
+| GET    | /api/cj-ml-chile/overview                 | Conteos + KPIs                                     |
+| POST   | /api/cj-ml-chile/cj/search                | Buscar productos CJ                                |
+| POST   | /api/cj-ml-chile/preview                  | Evaluar sin persistir                              |
+| POST   | /api/cj-ml-chile/evaluate                 | Evaluar + persistir en DB                          |
+| GET    | /api/cj-ml-chile/ml/categories/suggest    | Sugerir categorías ML Chile por texto (ML API pública) |
+| POST   | /api/cj-ml-chile/listings/draft           | Crear listing DRAFT (con categoryId real)          |
+| POST   | /api/cj-ml-chile/listings/:id/publish     | Publicar en ML Chile (bloquea si categoryId=MLC9999) |
+| POST   | /api/cj-ml-chile/listings/:id/reprice     | Recalcular precio con FX actual (actualiza ML si ACTIVE) |
+| POST   | /api/cj-ml-chile/orders/import            | Import manual por ID                               |
+| POST   | /api/cj-ml-chile/orders/:id/fetch-ml      | Fetch datos reales desde ML API                    |
+| POST   | /api/cj-ml-chile/webhooks/ml              | Webhook ML (sin auth JWT — configurar en portal ML)|
+| GET    | /api/cj-ml-chile/profit                   | KPIs financieros                                   |
+| GET    | /api/cj-ml-chile/logs                     | Traces por correlationId                           |
+
 ---
 
-## Auditoría final — 2026-04-17
+## Auditoría fase B — 2026-04-17 (correcciones iniciales)
 
 ### Correcciones aplicadas
 
@@ -142,21 +161,61 @@ listPriceCLP   = round(listPriceUsd × fxRate)             // entero, sin decima
 | 6 | RIESGO | `shipping.mode: 'me2'` — incompatible con dropshipping directo CJ→comprador | Cambiado a `'not_specified'` — el vendedor configura envío post-publicación |
 | 7 | INFRA | Prisma client no regenerado tras agregar modelos `cj_ml_chile_*` | Ejecutado `prisma generate` — 0 errores TypeScript confirmados |
 
-### Estado real del MVP — post-auditoría
+---
 
-**Estado: B — MVP técnico funcional con pricing/logística estimados**
+## Auditoría fase C — 2026-04-17 (elevación a pruebas controladas reales)
 
-- Arquitectura aislada: ✅ tablas `cj_ml_chile_*`, rutas `/api/cj-ml-chile/*`, páginas `/cj-ml-chile/*`
-- Type-check backend: ✅ 0 errores
-- Type-check frontend: ✅ 0 errores
-- Prisma validate: ✅ schema válido
-- No rompe CJ→eBay USA: ✅ cero contaminación
-- No rompe legacy ML: ✅ re-usa solo adaptadores, no flujo de negocio
+### Correcciones y funcionalidades añadidas
 
-### Lo que sigue antes de publish real
+| # | Severidad | Cambio | Detalle |
+|---|-----------|--------|---------|
+| 1 | BUG CRÍTICO | `warehouseChileConfirmed` en routes.ts usaba `\|\| freight.quote.cost > 0` | Corregido a solo `=== 'CL'` — consistente con qualification.service.ts |
+| 2 | GUARDRAIL | Publish bloqueado si `categoryId === 'MLC9999'` | Error claro: usar `/ml/categories/suggest` antes de publicar |
+| 3 | FEATURE | Endpoint `GET /ml/categories/suggest?q=TITULO` | Llama ML Category Predictor API (no auth) — devuelve hasta 5 candidatos con probabilidad |
+| 4 | FEATURE | UI category picker en Products page | El operador selecciona categoría antes de crear draft — categoryId pasa al draft automáticamente |
+| 5 | FEATURE | Endpoint `POST /webhooks/ml` (sin auth JWT) | Recibe notificaciones ML → auto-importa orderId → trazable por correlationId |
+| 6 | FEATURE | FX staleness en GET /listings y GET /listings/:id | Campos `fxStale: bool`, `fxAgeHours: number` — umbral 24h |
+| 7 | UI | Badge "FX stale Nh" en ListingsPage | Listings con FX > 24h muestran badge amber + botón "Re-evaluar precio" destacado |
+| 8 | FEATURE | Endpoint `POST /listings/:id/reprice` | Recalcula precio con FX actual, actualiza DB, actualiza ML API si ACTIVE |
+| 9 | FEATURE | Endpoint `POST /orders/:id/fetch-ml` | Trae datos reales de la orden desde ML API — vincula listing, actualiza totalCLP |
+| 10 | UI | OrdersPage mejorada | Botón "Fetch de ML", timeline expandible, next-step por status, webhook URL visible |
+| 11 | CONSTANTE | `LISTING_REPRICED` trace step | Trazabilidad completa del reprice |
 
-1. **notification_url** en portal ML Chile para webhooks de órdenes (manual, no código)
-2. **categoryId real** al crear draft — el operador debe investigar la categoría MLC correcta
-3. **Shipping mode** — decidir si usar `me2` (requiere envío a ML) o gestión custom post-publicación
-4. **Sincronización precio** si FX cambia más de X% — aún manual
-5. **Fulfillment automático** — hoy las órdenes se importan manualmente por ID
+### Decisiones de diseño confirmadas
+
+**`shipping.mode: 'not_specified'`** — DEFINITIVO para MVP CJ→ML Chile:
+- `me2` (Mercado Envíos Full) requiere pre-shipment de stock al depósito ML → incompatible con dropshipping CJ directo al comprador.
+- Con `not_specified`, el vendedor configura el envío en el portal ML post-publicación (envío personalizado / acuerdo con comprador).
+- Esta es la única opción coherente para dropshipping directo en el MVP.
+
+**categoryId** — RESUELTO operacionalmente:
+- El operador usa `/ml/categories/suggest` para obtener sugerencias del ML Category Predictor (gratuito, sin auth).
+- Selecciona la categoría antes de crear el draft.
+- La categoría se persiste en `draftPayload.categoryId`.
+- Publish bloquea si `categoryId === 'MLC9999'` (comodín vacío).
+
+### Estado real del módulo — post-fase C
+
+**Estado: C — Listo para pruebas controladas reales**
+
+- ✅ Bug warehouseChileConfirmed corregido en routes.ts
+- ✅ categoryId: selección guiada con ML Category Predictor, guardrail en publish
+- ✅ shipping.mode: `not_specified` — decisión final documentada
+- ✅ FX staleness: badge + guardrail + reprice action (sin auto-reprice)
+- ✅ Webhook ML: endpoint listo, URL documentada para portal
+- ✅ Orders: fetch-ml real, timeline, vinculación automática de listing
+- ✅ Type-check backend: 0 errores
+- ✅ Type-check frontend: 0 errores
+- ✅ Prisma validate: ✅
+- ✅ No rompe CJ→eBay USA ni legacy ML
+
+### Limitaciones remanentes del MVP (honesto)
+
+| Pendiente | Tipo | Qué falta |
+|-----------|------|-----------|
+| notification_url en portal ML | PORTAL — no código | Operador debe configurar en https://vendedores.mercadolibre.cl/notifications |
+| shipping config post-publish | OPERACIONAL | Operador debe configurar envío en el listing ML luego de publicar |
+| ML fee real por categoría | DATO | Hoy 12% default; fee real varía por categoría — verificar en ML fee table |
+| Fulfillment CJ automático | FASE FUTURA | Hoy manual; órdenes requieren intervención para colocar en CJ |
+| Multi-variante batch | FASE FUTURA | Hoy 1 variante por evaluación |
+| Stock sync automático | FASE FUTURA | No hay sync de stock post-venta |

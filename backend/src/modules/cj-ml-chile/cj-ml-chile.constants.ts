@@ -38,6 +38,7 @@ export const CJ_ML_CHILE_TRACE_STEP = {
   LISTING_PUBLISH_ERROR: 'listing.publish.error',
   LISTING_PAUSE: 'listing.pause',
   LISTING_FORCE_RESET: 'listing.force.reset',
+  LISTING_REPRICED: 'listing.repriced',
   ORDER_IMPORT_START: 'order.import.start',
   ORDER_IMPORT_SUCCESS: 'order.import.success',
   ORDER_IMPORT_ERROR: 'order.import.error',

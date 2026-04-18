@@ -13,8 +13,11 @@ interface Listing {
   publishedAt: string | null;
   lastError: string | null;
   legalTextsAppended: boolean;
+  fxStale: boolean;
+  fxAgeHours: number | null;
   product: { title: string; cjProductId: string };
   variant: { cjSku: string } | null;
+  evaluation: { fxRateAt?: string | null } | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -38,6 +41,8 @@ export default function CjMlChileListingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [actionMsg, setActionMsg] = useState<{ id: number; msg: string; ok: boolean } | null>(null);
+  const [repriceLoading, setRepriceLoading] = useState<number | null>(null);
+  const [repriceMsg, setRepriceMsg] = useState<{ id: number; msg: string; ok: boolean } | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -70,8 +75,26 @@ export default function CjMlChileListingsPage() {
     } finally { setActionLoading(null); }
   }
 
+  async function doReprice(id: number) {
+    setRepriceLoading(id);
+    setRepriceMsg(null);
+    try {
+      const r = await api.post(`/api/cj-ml-chile/listings/${id}/reprice`);
+      const msg = `Precio actualizado: ${new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(r.data.newPriceCLP)} · FX=${r.data.newFxRate}${r.data.mlUpdated ? ' · ML actualizado' : ''}`;
+      setRepriceMsg({ id, msg, ok: true });
+      load();
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string; error?: string } } })?.response?.data?.message
+        ?? (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? String(e);
+      setRepriceMsg({ id, msg, ok: false });
+    } finally { setRepriceLoading(null); }
+  }
+
   if (loading) return <div className="text-sm text-slate-500">Cargando listings…</div>;
   if (error) return <div className="text-sm text-red-600">{error}</div>;
+
+  const staleCount = listings.filter((l) => l.fxStale && (l.status === 'DRAFT' || l.status === 'ACTIVE')).length;
 
   return (
     <div className="space-y-4">
@@ -79,6 +102,12 @@ export default function CjMlChileListingsPage() {
         <p className="text-sm text-slate-500">{listings.length} listing{listings.length !== 1 ? 's' : ''}</p>
         <button onClick={load} className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">Actualizar</button>
       </div>
+
+      {staleCount > 0 && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          ⚠ {staleCount} listing{staleCount !== 1 ? 's' : ''} con precio posiblemente desactualizado (FX &gt; 24h). Usa "Re-evaluar precio" para actualizar.
+        </div>
+      )}
 
       {listings.length === 0 && (
         <div className="text-center py-12 text-slate-500 text-sm">
@@ -88,27 +117,41 @@ export default function CjMlChileListingsPage() {
 
       <div className="space-y-3">
         {listings.map((l) => (
-          <div key={l.id} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 space-y-3">
+          <div key={l.id} className={`rounded-xl border bg-white dark:bg-slate-800 p-4 space-y-3 ${l.fxStale && (l.status === 'DRAFT' || l.status === 'ACTIVE') ? 'border-amber-200 dark:border-amber-800' : 'border-slate-200 dark:border-slate-700'}`}>
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-1">{l.product.title}</p>
                 <p className="text-xs text-slate-500 mt-0.5">{l.mlSku} · {l.mlListingId ? `ML: ${l.mlListingId}` : 'Sin ID ML aún'}</p>
               </div>
-              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${STATUS_COLORS[l.status] ?? STATUS_COLORS.DRAFT}`}>
-                {l.status}
-              </span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {l.fxStale && (l.status === 'DRAFT' || l.status === 'ACTIVE') && (
+                  <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700">
+                    FX stale {l.fxAgeHours != null ? `${l.fxAgeHours}h` : ''}
+                  </span>
+                )}
+                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${STATUS_COLORS[l.status] ?? STATUS_COLORS.DRAFT}`}>
+                  {l.status}
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-4 text-xs text-slate-600 dark:text-slate-400">
               <span>Precio: <span className="font-semibold text-emerald-700 dark:text-emerald-300">{clpFormat(l.listedPriceCLP)}</span></span>
               {l.listedPriceUsd && <span>≈ ${Number(l.listedPriceUsd).toFixed(2)} USD</span>}
-              {l.fxRateUsed && <span>FX: {Number(l.fxRateUsed).toFixed(0)} CLP/USD</span>}
+              {l.fxRateUsed && (
+                <span className={l.fxStale ? 'text-amber-600 dark:text-amber-400' : ''}>
+                  FX: {Number(l.fxRateUsed).toFixed(0)} CLP/USD{l.fxAgeHours != null ? ` (${l.fxAgeHours}h)` : ''}
+                </span>
+              )}
               {l.legalTextsAppended && <span className="text-emerald-600 dark:text-emerald-400">Footer legal ✓</span>}
               {l.publishedAt && <span>Publicado: {new Date(l.publishedAt).toLocaleDateString('es-CL')}</span>}
             </div>
 
             {l.lastError && <p className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">{l.lastError}</p>}
 
+            {repriceMsg?.id === l.id && (
+              <p className={`text-xs ${repriceMsg.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{repriceMsg.msg}</p>
+            )}
             {actionMsg?.id === l.id && (
               <p className={`text-xs ${actionMsg.ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{actionMsg.msg}</p>
             )}
@@ -139,6 +182,16 @@ export default function CjMlChileListingsPage() {
                   className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
                 >
                   Resetear a Draft
+                </button>
+              )}
+              {(l.status === 'DRAFT' || l.status === 'ACTIVE') && (
+                <button
+                  onClick={() => doReprice(l.id)}
+                  disabled={repriceLoading === l.id}
+                  title="Recalcular precio con FX actual"
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium disabled:opacity-50 transition-colors ${l.fxStale ? 'border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                >
+                  {repriceLoading === l.id ? 'Actualizando…' : l.fxStale ? '⚠ Re-evaluar precio' : 'Re-evaluar precio'}
                 </button>
               )}
             </div>

@@ -165,10 +165,15 @@ export const cjMlChileListingService = {
 
       if (!decryptedToken) throw new Error('ML_TOKEN_MISSING: Token de acceso ML no disponible.');
 
+      const categoryId = String(draft.categoryId ?? 'MLC9999');
+      if (categoryId === 'MLC9999') {
+        throw new Error('CATEGORY_NOT_SET: El draft usa la categoría comodín MLC9999. Re-crea el draft con un categoryId real de ML Chile. Usa GET /api/cj-ml-chile/ml/categories/suggest?q=TITULO para sugerencias.');
+      }
+
       // Build ML item payload
       const mlPayload = {
         title: String(draft.title ?? '').slice(0, 60),
-        category_id: String(draft.categoryId ?? 'MLC9999'),
+        category_id: categoryId,
         price: Number(draft.price ?? 0),
         currency_id: 'CLP',
         available_quantity: Number(draft.quantity ?? 10),
