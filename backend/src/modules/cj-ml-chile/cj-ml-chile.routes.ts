@@ -30,6 +30,7 @@ import {
   cjMlChileListingDraftBodySchema,
   cjMlChileListingPublishBodySchema,
   cjMlChileOrderImportBodySchema,
+  cjMlChileBatchVerifyBodySchema,
 } from './schemas/cj-ml-chile.schemas';
 import { createCjMlChileSupplierAdapter, CJ_CHILE_PROBE_POSTAL } from './adapters/cj-ml-chile-supplier.adapter';
 import { CjSupplierError } from '../cj-ebay/adapters/cj-supplier.errors';
@@ -336,6 +337,46 @@ router.get('/cj/product/:id', async (req: Request, res: Response, next: NextFunc
     const adapter = createCjMlChileSupplierAdapter(userId);
     const detail = await adapter.getProductById(req.params.id);
     res.json({ ok: true, product: detail });
+  } catch (err) {
+    if (err instanceof CjSupplierError) { res.status(httpStatusForCj(err)).json({ ok: false, error: err.message, code: err.code }); return; }
+    next(err);
+  }
+});
+
+/**
+ * Fast inventory verify — calls product/variant/query for up to 10 products in parallel.
+ * Used by the frontend to reclassify stock_unknown cards immediately after search.
+ * Avoids the full evaluate flow (no freight calculation, no warehouse check).
+ */
+router.post('/cj/products/batch-verify', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const parsed = cjMlChileBatchVerifyBodySchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
+
+    const adapter = createCjMlChileSupplierAdapter(userId);
+    const results = await Promise.allSettled(
+      parsed.data.productIds.map(async (pid) => {
+        const variants = await adapter.getVariantsForProduct(pid);
+        const maxStock = variants.length > 0 ? Math.max(...variants.map(v => v.stock)) : 0;
+        const operableCount = variants.filter(v => v.stock > 0).length;
+        return {
+          cjProductId: pid,
+          hasAnyStock: maxStock > 0,
+          maxStock,
+          variantCount: variants.length,
+          operableVariantCount: operableCount,
+        };
+      })
+    );
+
+    const out = results.map((r, i) =>
+      r.status === 'fulfilled'
+        ? r.value
+        : { cjProductId: parsed.data.productIds[i]!, hasAnyStock: false, maxStock: 0, variantCount: 0, operableVariantCount: 0, error: 'verify_failed' }
+    );
+
+    res.json({ ok: true, results: out, verified: out.filter(r => !('error' in r)).length });
   } catch (err) {
     if (err instanceof CjSupplierError) { res.status(httpStatusForCj(err)).json({ ok: false, error: err.message, code: err.code }); return; }
     next(err);

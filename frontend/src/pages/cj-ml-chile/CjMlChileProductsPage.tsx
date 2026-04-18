@@ -6,6 +6,21 @@ import { api } from '@/services/api';
 type OperabilityStatus = 'operable' | 'stock_unknown' | 'unavailable';
 type RelevanceTier = 'alta' | 'media' | 'baja';
 
+/** Result of fast inventory verify per product. */
+type VerifyStatus = 'pending' | 'has_stock' | 'no_stock' | 'error';
+
+interface BatchVerifyEntry {
+  cjProductId: string;
+  hasAnyStock: boolean;
+  maxStock: number;
+  variantCount: number;
+  operableVariantCount: number;
+  error?: string;
+}
+
+/** How many stock_unknown cards to auto-verify after search. */
+const FAST_VERIFY_LIMIT = 8;
+
 interface CjProductSummary {
   cjProductId: string;
   title: string;
@@ -94,17 +109,28 @@ function operabilityOf(item: CjProductSummary): OperabilityStatus {
   return 'stock_unknown';
 }
 
-function groupItems(items: CjProductSummary[]) {
-  return items.reduce<{ operable: CjProductSummary[]; stockUnknown: CjProductSummary[]; unavailable: CjProductSummary[] }>(
-    (acc, item) => {
-      const s = operabilityOf(item);
-      if (s === 'operable') acc.operable.push(item);
-      else if (s === 'stock_unknown') acc.stockUnknown.push(item);
-      else acc.unavailable.push(item);
-      return acc;
-    },
-    { operable: [], stockUnknown: [], unavailable: [] },
-  );
+function groupItems(items: CjProductSummary[], verifyMap: Map<string, VerifyStatus>) {
+  const readyToEvaluate: CjProductSummary[] = [];
+  const stockUncertain: CjProductSummary[] = [];
+  const noViable: CjProductSummary[] = [];
+
+  for (const item of items) {
+    const op = operabilityOf(item);
+    const vs = verifyMap.get(item.cjProductId);
+
+    if (op === 'operable') {
+      readyToEvaluate.push(item);
+    } else if (op === 'unavailable') {
+      noViable.push(item);
+    } else {
+      // stock_unknown — reclassify based on fast-verify result
+      if (vs === 'has_stock') readyToEvaluate.push(item);
+      else if (vs === 'no_stock') noViable.push(item);
+      else stockUncertain.push(item); // pending, error, or not yet verified
+    }
+  }
+
+  return { readyToEvaluate, stockUncertain, noViable };
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -179,26 +205,43 @@ function SectionHeader({ label, count, subtitle, tier }: { label: string; count:
   );
 }
 
+function VerifiedBadge() {
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-600">✓ Verificado</span>;
+}
+
+function VerifyingBadge() {
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 animate-pulse">⟳ Verificando…</span>;
+}
+
 function ProductCard({
   item,
   isSelected,
   fxRate,
+  verifyStatus,
   onSelect,
 }: {
   item: CjProductSummary;
   isSelected: boolean;
   fxRate: number | null;
+  verifyStatus: VerifyStatus | undefined;
   onSelect: () => void;
 }) {
   const status = operabilityOf(item);
-  const isUnavailable = status === 'unavailable';
+  // After verification, stock_unknown with has_stock behaves like operable
+  const effectiveStatus: OperabilityStatus =
+    status === 'stock_unknown' && verifyStatus === 'has_stock' ? 'operable'
+    : status === 'stock_unknown' && verifyStatus === 'no_stock' ? 'unavailable'
+    : status;
+  const isUnavailable = effectiveStatus === 'unavailable';
+  const isVerifiedOperable = status === 'stock_unknown' && verifyStatus === 'has_stock';
+  const isVerifying = verifyStatus === 'pending';
   const estimatedCLP = item.listPriceUsd != null && fxRate != null ? Math.round(item.listPriceUsd * fxRate) : null;
 
   const borderClass = isSelected
     ? 'border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 ring-1 ring-emerald-400 dark:ring-emerald-500'
-    : status === 'operable'
-      ? 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/30 hover:border-slate-400 dark:hover:border-slate-500'
-      : status === 'stock_unknown'
+    : effectiveStatus === 'operable'
+      ? 'border-emerald-200 dark:border-emerald-800/60 bg-white dark:bg-slate-900/30 hover:border-emerald-400 dark:hover:border-emerald-600'
+      : effectiveStatus === 'stock_unknown'
         ? 'border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/20 hover:border-slate-300 dark:hover:border-slate-600'
         : 'border-slate-200 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-900/10 opacity-70 hover:opacity-90';
 
@@ -245,22 +288,28 @@ function ProductCard({
 
       {/* Badges */}
       <div className="flex flex-wrap gap-1">
-        <OperabilityBadge status={status} />
+        <OperabilityBadge status={effectiveStatus} />
         <RelevanceBadge tier={item.relevanceTier} score={item.relevanceScore} />
-        {isUnavailable ? <NoViableBadge /> : <WarehousePendingBadge />}
+        {isVerifying
+          ? <VerifyingBadge />
+          : isVerifiedOperable
+            ? <VerifiedBadge />
+            : isUnavailable
+              ? <NoViableBadge />
+              : <WarehousePendingBadge />}
       </div>
 
       {/* Action label */}
       <span className={`inline-block text-xs rounded-full px-2 py-0.5 font-medium ${
         isSelected
           ? 'bg-emerald-600 text-white'
-          : status === 'operable'
+          : effectiveStatus === 'operable'
             ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900'
             : isUnavailable
               ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
               : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
       }`}>
-        {isSelected ? '✓ Seleccionado' : status === 'operable' ? 'Seleccionar' : status === 'stock_unknown' ? 'Revisar stock' : 'Sin stock'}
+        {isSelected ? '✓ Seleccionado' : effectiveStatus === 'operable' ? 'Seleccionar' : isUnavailable ? 'Sin stock' : isVerifying ? 'Verificando…' : 'Por confirmar'}
       </span>
     </button>
   );
@@ -273,6 +322,10 @@ export default function CjMlChileProductsPage() {
   const [searching, setSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [searchErr, setSearchErr] = useState<string | null>(null);
+
+  // Fast inventory verify state
+  const [verifyMap, setVerifyMap] = useState<Map<string, VerifyStatus>>(new Map());
+  const [verifyingBatch, setVerifyingBatch] = useState(false);
 
   // Product selection + detail
   const [selectedSummary, setSelectedSummary] = useState<CjProductSummary | null>(null);
@@ -309,7 +362,7 @@ export default function CjMlChileProductsPage() {
       ? searchResult.items.filter(i => i.relevanceTier === 'alta')
       : searchResult.items
     : null;
-  const grouped = filteredItems ? groupItems(filteredItems) : null;
+  const grouped = filteredItems ? groupItems(filteredItems, verifyMap) : null;
   const totalHighRelevance = searchResult?.relevanceSummary?.alta ?? 0;
   const selectedVariant = productDetail?.variants.find((v) => variantKey(v) === selectedVariantKey) ?? null;
   const operableVariants = productDetail?.variants.filter((v) => v.stock >= 1) ?? [];
@@ -333,16 +386,53 @@ export default function CjMlChileProductsPage() {
     setSearching(true);
     setSearchErr(null);
     setSearchResult(null);
+    setVerifyMap(new Map());
     setSelectedSummary(null);
     setProductDetail(null);
     setPreviewResult(null);
     setEvalResult(null);
     try {
       const res = await api.post('/api/cj-ml-chile/cj/search', { query, pageSize: 20 });
-      setSearchResult(res.data);
+      const data: SearchResult = res.data;
+      setSearchResult(data);
+      // Auto-trigger fast inventory verify for top N stock_unknown results
+      const toVerify = (data.items ?? [])
+        .filter(i => (i.operabilityStatus ?? 'stock_unknown') === 'stock_unknown')
+        .slice(0, FAST_VERIFY_LIMIT)
+        .map(i => i.cjProductId);
+      if (toVerify.length > 0) void batchVerify(toVerify);
     } catch (e: unknown) {
       setSearchErr((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? String(e));
     } finally { setSearching(false); }
+  }
+
+  async function batchVerify(productIds: string[]) {
+    setVerifyMap(prev => {
+      const m = new Map(prev);
+      for (const id of productIds) m.set(id, 'pending');
+      return m;
+    });
+    setVerifyingBatch(true);
+    try {
+      const res = await api.post('/api/cj-ml-chile/cj/products/batch-verify', { productIds });
+      const entries: BatchVerifyEntry[] = res.data.results ?? [];
+      setVerifyMap(prev => {
+        const m = new Map(prev);
+        for (const entry of entries) {
+          if (entry.error) m.set(entry.cjProductId, 'error');
+          else m.set(entry.cjProductId, entry.hasAnyStock ? 'has_stock' : 'no_stock');
+        }
+        return m;
+      });
+    } catch {
+      setVerifyMap(prev => {
+        const m = new Map(prev);
+        for (const id of productIds) {
+          if (m.get(id) === 'pending') m.set(id, 'error');
+        }
+        return m;
+      });
+    } finally { setVerifyingBatch(false); }
   }
 
   async function selectProduct(item: CjProductSummary) {
@@ -474,9 +564,16 @@ export default function CjMlChileProductsPage() {
           {/* Stock + FX row */}
           <div className="flex flex-wrap gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs">
             <span className="text-slate-500 dark:text-slate-400 font-medium">{searchResult.items.length} resultados</span>
-            <span className="text-emerald-700 dark:text-emerald-300">● {searchResult.operabilitySummary.operable} con stock</span>
-            <span className="text-slate-500 dark:text-slate-400">● {searchResult.operabilitySummary.stockUnknown} por confirmar</span>
-            <span className="text-amber-600 dark:text-amber-400">● {searchResult.operabilitySummary.unavailable} sin stock</span>
+            {grouped && (
+              <>
+                <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
+                  ● {grouped.readyToEvaluate.length} listos para evaluar
+                  {verifyingBatch && <span className="ml-1 animate-pulse">⟳</span>}
+                </span>
+                <span className="text-slate-500 dark:text-slate-400">● {grouped.stockUncertain.length} por confirmar</span>
+                <span className="text-amber-600 dark:text-amber-400">● {grouped.noViable.length} sin stock</span>
+              </>
+            )}
             {searchResult.relevanceSummary && (
               <>
                 <span className="w-px bg-slate-200 dark:bg-slate-600 self-stretch" />
@@ -524,17 +621,23 @@ export default function CjMlChileProductsPage() {
       {grouped && (
         <div className="space-y-5">
 
-          {/* Operables — Flujo principal */}
-          {grouped.operable.length > 0 && (
+          {/* READY TO EVALUATE — Flujo principal */}
+          {grouped.readyToEvaluate.length > 0 && (
             <div className="space-y-2 rounded-xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/40 dark:bg-emerald-900/10 p-3">
-              <SectionHeader label="Con stock confirmado" count={grouped.operable.length} subtitle="Listos para evaluar" tier="main" />
+              <SectionHeader
+                label="Listos para evaluar"
+                count={grouped.readyToEvaluate.length}
+                subtitle={verifyingBatch ? 'verificando inventario…' : 'stock confirmado o verificado'}
+                tier="main"
+              />
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {grouped.operable.map((item) => (
+                {grouped.readyToEvaluate.map((item) => (
                   <ProductCard
                     key={item.cjProductId}
                     item={item}
                     isSelected={selectedSummary?.cjProductId === item.cjProductId}
                     fxRate={fxRate}
+                    verifyStatus={verifyMap.get(item.cjProductId)}
                     onSelect={() => selectProduct(item)}
                   />
                 ))}
@@ -542,26 +645,40 @@ export default function CjMlChileProductsPage() {
             </div>
           )}
 
-          {/* Sin operables: aviso explícito */}
-          {grouped.operable.length === 0 && (grouped.stockUnknown.length > 0 || grouped.unavailable.length > 0) && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 px-1">
-              Sin productos con stock confirmado en esta búsqueda. Los resultados de abajo requieren verificación o están sin stock.
-            </p>
+          {/* Sin candidatos evaluables: aviso explícito */}
+          {grouped.readyToEvaluate.length === 0 && !verifyingBatch && (grouped.stockUncertain.length > 0 || grouped.noViable.length > 0) && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-4 space-y-1">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Sin candidatos con stock verificable en esta búsqueda</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Prueba un término más amplio o diferente. Los resultados de abajo tienen stock incierto o nulo.</p>
+            </div>
           )}
 
-          {/* Stock unknown — Secundario */}
-          {grouped.stockUnknown.length > 0 && (
-            <details className="group rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/20 p-3" open={grouped.operable.length === 0}>
+          {/* Verificando — estado transitorio */}
+          {grouped.readyToEvaluate.length === 0 && verifyingBatch && (
+            <div className="rounded-xl border border-blue-200 dark:border-blue-800/50 bg-blue-50/40 dark:bg-blue-900/10 p-4">
+              <p className="text-sm text-blue-700 dark:text-blue-300 animate-pulse">Verificando inventario de candidatos…</p>
+            </div>
+          )}
+
+          {/* STOCK UNCERTAIN — Secundario */}
+          {grouped.stockUncertain.length > 0 && (
+            <details className="group rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/20 p-3" open={grouped.readyToEvaluate.length === 0}>
               <summary className="cursor-pointer list-none">
-                <SectionHeader label="Stock por confirmar" count={grouped.stockUnknown.length} subtitle="Verificar en evaluate" tier="secondary" />
+                <SectionHeader
+                  label="Stock por confirmar"
+                  count={grouped.stockUncertain.length}
+                  subtitle="pendiente de verificación automática"
+                  tier="secondary"
+                />
               </summary>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-2">
-                {grouped.stockUnknown.map((item) => (
+                {grouped.stockUncertain.map((item) => (
                   <ProductCard
                     key={item.cjProductId}
                     item={item}
                     isSelected={selectedSummary?.cjProductId === item.cjProductId}
                     fxRate={fxRate}
+                    verifyStatus={verifyMap.get(item.cjProductId)}
                     onSelect={() => selectProduct(item)}
                   />
                 ))}
@@ -569,19 +686,20 @@ export default function CjMlChileProductsPage() {
             </details>
           )}
 
-          {/* Unavailable — Referencia */}
-          {grouped.unavailable.length > 0 && (
+          {/* NO VIABLE — Referencia */}
+          {grouped.noViable.length > 0 && (
             <details className="group rounded-xl border border-amber-100 dark:border-amber-900/30 bg-amber-50/30 dark:bg-amber-900/5 p-3">
               <summary className="cursor-pointer list-none">
-                <SectionHeader label="Sin stock / no operables" count={grouped.unavailable.length} subtitle="No recomendados" tier="reference" />
+                <SectionHeader label="Sin stock / no viables" count={grouped.noViable.length} subtitle="descartados" tier="reference" />
               </summary>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-2 opacity-60">
-                {grouped.unavailable.map((item) => (
+                {grouped.noViable.map((item) => (
                   <ProductCard
                     key={item.cjProductId}
                     item={item}
                     isSelected={selectedSummary?.cjProductId === item.cjProductId}
                     fxRate={fxRate}
+                    verifyStatus={verifyMap.get(item.cjProductId)}
                     onSelect={() => selectProduct(item)}
                   />
                 ))}

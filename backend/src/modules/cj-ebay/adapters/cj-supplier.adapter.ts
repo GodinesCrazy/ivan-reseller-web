@@ -594,6 +594,20 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
     };
   }
 
+  async getVariantsForProduct(cjProductId: string): Promise<CjVariantDetail[]> {
+    const pid = String(cjProductId || '').trim();
+    if (!pid) return [];
+    try {
+      const varData = await this.authedGet(`product/variant/query?pid=${encodeURIComponent(pid)}`);
+      const rows = readListOrArray(varData).map(parseVariantRow).filter((x): x is CjVariantDetail => x !== null);
+      if (rows.length > 0) return rows;
+      // Fallback: single synthetic zero-stock variant so caller knows the product exists
+      return [{ cjSku: pid, cjVid: undefined, attributes: {}, unitCostUsd: 0, stock: 0 }];
+    } catch {
+      return [];
+    }
+  }
+
   /**
    * CJ path `product/stock/queryByVid` — real-time stock per variant id.
    * The response `data` field can be either a single object or an array (CJ API is inconsistent).

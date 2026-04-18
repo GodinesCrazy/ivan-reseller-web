@@ -169,6 +169,13 @@ export interface ICjSupplierAdapter {
 
   getProductById(cjProductId: string): Promise<CjProductDetail>;
 
+  /**
+   * Light variant fetch — only calls `product/variant/query`.
+   * Returns variant stock without fetching full product metadata.
+   * Used by fast inventory verify to avoid the extra `product/query` call.
+   */
+  getVariantsForProduct(cjProductId: string): Promise<CjVariantDetail[]>;
+
   getStockForSkus(skus: string[]): Promise<Map<string, number>>;
 
   quoteShippingToUs(input: CjShippingQuoteInput): Promise<CjShippingQuoteResult>;

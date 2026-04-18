@@ -49,6 +49,10 @@ export const cjMlChileOrderImportBodySchema = z.object({
   mlOrderId: z.string().min(1),
 });
 
+export const cjMlChileBatchVerifyBodySchema = z.object({
+  productIds: z.array(z.string().min(1)).min(1).max(10),
+});
+
 export type CjMlChileUpdateConfigBody = z.infer<typeof cjMlChileUpdateConfigSchema>;
 export type CjMlChileSearchBody = z.infer<typeof cjMlChileSearchBodySchema>;
 export type CjMlChileShippingQuoteBody = z.infer<typeof cjMlChileShippingQuoteBodySchema>;
