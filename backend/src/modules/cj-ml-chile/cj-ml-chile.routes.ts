@@ -290,8 +290,32 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
     const parsed = cjMlChileSearchBodySchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
     const adapter = createCjMlChileSupplierAdapter(userId);
-    const results = await adapter.searchProducts({ keyword: parsed.data.query, page: parsed.data.page, pageSize: parsed.data.pageSize });
-    res.json({ ok: true, items: results, note: 'MVP: warehouse Chile se verifica en evaluate/preview, no en search.' });
+    const items = await adapter.searchProducts({ keyword: parsed.data.query, page: parsed.data.page, pageSize: parsed.data.pageSize });
+
+    // Compute operability summary for UI grouping
+    let operable = 0, stockUnknown = 0, unavailable = 0;
+    for (const item of items) {
+      if (item.inventoryTotal !== undefined && item.inventoryTotal > 0) operable++;
+      else if (item.inventoryTotal === 0) unavailable++;
+      else stockUnknown++;
+    }
+
+    // FX rate for estimated CLP display in search cards
+    let fxRateCLPperUSD: number | null = null;
+    let fxRateAt: string | null = null;
+    try {
+      fxRateCLPperUSD = fxService.convert(1, 'USD', 'CLP');
+      fxRateAt = new Date().toISOString();
+    } catch { /* FX not available — frontend will skip CLP estimate */ }
+
+    res.json({
+      ok: true,
+      items,
+      operabilitySummary: { operable, stockUnknown, unavailable },
+      fxRateCLPperUSD,
+      fxRateAt,
+      note: 'Warehouse Chile se verifica en preview/evaluate. CLP es estimado con FX actual.',
+    });
   } catch (err) {
     if (err instanceof CjSupplierError) { res.status(httpStatusForCj(err)).json({ ok: false, error: err.message, code: err.code }); return; }
     next(err);
