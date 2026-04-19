@@ -116,6 +116,20 @@ model User {
   cjMlChileProfitSnapshots    CjMlChileProfitSnapshot[]
   cjMlChileExecutionTraces    CjMlChileExecutionTrace[]
 
+  // CJ → Shopify USA vertical (isolated module)
+  cjShopifyUsaAccountSettings   CjShopifyUsaAccountSettings?
+  cjShopifyUsaProducts          CjShopifyUsaProduct[]
+  cjShopifyUsaShippingQuotes    CjShopifyUsaShippingQuote[]
+  cjShopifyUsaProductEvaluations CjShopifyUsaProductEvaluation[]
+  cjShopifyUsaListings          CjShopifyUsaListing[]
+  cjShopifyUsaOrders            CjShopifyUsaOrder[]
+  cjShopifyUsaOrderRefunds      CjShopifyUsaOrderRefund[]
+  cjShopifyUsaAlerts            CjShopifyUsaAlert[]
+  cjShopifyUsaProfitSnapshots   CjShopifyUsaProfitSnapshot[]
+  cjShopifyUsaExecutionTraces   CjShopifyUsaExecutionTrace[]
+  cjShopifyUsaOpportunityRuns   CjShopifyUsaOpportunityRun[]
+  cjShopifyUsaOpportunityCandidates CjShopifyUsaOpportunityCandidate[]
+
   @@index([email])
   @@index([username])
   @@index([role, isActive])
@@ -2691,4 +2705,403 @@ model CjMlChileExecutionTrace {
   @@index([userId, createdAt])
   @@index([correlationId])
   @@map("cj_ml_chile_execution_traces")
+}
+
+// ====================================
+// CJ → Shopify USA vertical (cj_shopify_usa_*)
+// Mirror of CJ→eBay USA architecture; destination = Shopify USA.
+// Key differences: Shopify API Custom App token storage, REST/GraphQL based.
+// ====================================
+
+model CjShopifyUsaAccountSettings {
+  id                         Int      @id @default(autoincrement())
+  userId                     Int      @unique
+  minMarginPct               Decimal? @db.Decimal(6, 4)
+  minProfitUsd               Decimal? @db.Decimal(18, 2)
+  maxShippingUsd             Decimal? @db.Decimal(18, 2)
+  handlingBufferDays         Int      @default(3)
+  minStock                   Int      @default(1)
+  rejectOnUnknownShipping    Boolean  @default(true)
+  maxRiskScore               Int?
+  priceChangePctReevaluate   Decimal? @db.Decimal(6, 4)
+  incidentBufferPct          Decimal? @db.Decimal(6, 4)
+  
+  // Shopify specific credentials and settings
+  shopifyStoreUrl            String?  @db.Text
+  shopifyAccessToken         String?  @db.Text // Should be a custom app token
+  shopifyLocationId          String?  // The explicit Shopify location ID for inventory
+
+  defaultPaymentFeePct       Decimal? @db.Decimal(6, 4)
+  defaultPaymentFixedFeeUsd  Decimal? @db.Decimal(18, 2)
+  cjPostCreateCheckoutMode   String   @default("MANUAL")
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cj_shopify_usa_account_settings")
+}
+
+model CjShopifyUsaProduct {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  cjProductId      String
+  title            String    @db.Text
+  description      String?   @db.Text
+  images           Json?
+  rawPayloadHash   String?
+  snapshotStatus   String    @default("SYNCED")
+  lastSyncedAt     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variants         CjShopifyUsaProductVariant[]
+  shippingQuotes   CjShopifyUsaShippingQuote[]
+  evaluations      CjShopifyUsaProductEvaluation[]
+  listings         CjShopifyUsaListing[]
+  orders           CjShopifyUsaOrder[]
+
+  @@unique([userId, cjProductId])
+  @@index([userId])
+  @@index([userId, snapshotStatus])
+  @@map("cj_shopify_usa_products")
+}
+
+model CjShopifyUsaProductVariant {
+  id             Int       @id @default(autoincrement())
+  productId      Int
+  cjSku          String
+  cjVid          String?
+  attributes     Json?
+  unitCostUsd    Decimal?  @db.Decimal(18, 2)
+  stockLastKnown Int?
+  stockCheckedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  product        CjShopifyUsaProduct              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shippingQuotes CjShopifyUsaShippingQuote[]
+  evaluations    CjShopifyUsaProductEvaluation[]
+  listings       CjShopifyUsaListing[]
+  orders         CjShopifyUsaOrder[]
+
+  @@unique([productId, cjSku])
+  @@index([productId])
+  @@index([productId, cjVid])
+  @@map("cj_shopify_usa_product_variants")
+}
+
+model CjShopifyUsaShippingQuote {
+  id                Int       @id @default(autoincrement())
+  userId            Int
+  productId         Int
+  variantId         Int?
+  quantity          Int       @default(1)
+  amountUsd         Decimal   @db.Decimal(18, 2)
+  currency          String    @default("USD")
+  serviceName       String?
+  carrier           String?
+  estimatedMinDays  Int?
+  estimatedMaxDays  Int?
+  confidence        String    @default("unknown")
+  originCountryCode String?   @default("CN")
+  validFrom         DateTime  @default(now())
+  validUntil        DateTime?
+  createdAt         DateTime  @default(now())
+
+  user        User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product     CjShopifyUsaProduct              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant     CjShopifyUsaProductVariant?      @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  evaluations CjShopifyUsaProductEvaluation[]
+  listings    CjShopifyUsaListing[]
+
+  @@index([userId])
+  @@index([productId])
+  @@map("cj_shopify_usa_shipping_quotes")
+}
+
+model CjShopifyUsaProductEvaluation {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  productId          Int
+  variantId          Int?
+  shippingQuoteId    Int?
+  decision           String
+  reasons            Json?
+  estimatedMarginPct Decimal? @db.Decimal(8, 4)
+  evaluatedAt        DateTime @default(now())
+
+  user          User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product       CjShopifyUsaProduct            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant       CjShopifyUsaProductVariant?    @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  shippingQuote CjShopifyUsaShippingQuote?     @relation(fields: [shippingQuoteId], references: [id], onDelete: SetNull)
+  listings      CjShopifyUsaListing[]
+
+  @@index([userId])
+  @@index([userId, decision])
+  @@index([productId])
+  @@map("cj_shopify_usa_product_evaluations")
+}
+
+model CjShopifyUsaListing {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  productId       Int
+  variantId       Int?
+  
+  // Shopify specific fields
+  shopifyProductId String?   @db.Text
+  shopifyVariantId String?   @db.Text
+  shopifyHandle    String?   @db.Text
+  
+  shopifySku         String?
+  status          String    @default("DRAFT")
+  listedPriceUsd  Decimal?  @db.Decimal(18, 2)
+  quantity        Int?
+  lastSyncedAt    DateTime?
+  draftPayload    Json?
+  lastError       String?   @db.Text
+  evaluationId    Int?
+  shippingQuoteId Int?
+  handlingTimeDays Int?
+  publishedAt     DateTime?
+  reconcileAttempts    Int       @default(0)
+  reconcileRetryAfter  DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user          User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product       CjShopifyUsaProduct            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant       CjShopifyUsaProductVariant?    @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  evaluation    CjShopifyUsaProductEvaluation? @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
+  shippingQuote CjShopifyUsaShippingQuote?     @relation(fields: [shippingQuoteId], references: [id], onDelete: SetNull)
+  orders        CjShopifyUsaOrder[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([shopifyProductId])
+  @@map("cj_shopify_usa_listings")
+}
+
+model CjShopifyUsaOrder {
+  id               String   @id @default(cuid())
+  userId           Int
+  shopifyOrderId   String
+  cjOrderId        String?
+  status           String   @default("DETECTED")
+  lineItemRef      String?
+  productId        Int?
+  variantId        Int?
+  listingId        Int?
+  shopifySku       String?
+  lineQuantity     Int      @default(1)
+  rawShopifySummary Json?
+  buyerPayload     Json?
+  totalUsd         Decimal? @db.Decimal(18, 2)
+  currency         String   @default("USD")
+  lastError        String?  @db.Text
+  cjConfirmedAt    DateTime?
+  cjPaidAt         DateTime?
+  paymentBlockReason String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user     User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing  CjShopifyUsaListing?           @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  product  CjShopifyUsaProduct?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant  CjShopifyUsaProductVariant?    @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  events   CjShopifyUsaOrderEvent[]
+  tracking CjShopifyUsaTracking?
+  refunds  CjShopifyUsaOrderRefund[]
+
+  @@unique([userId, shopifyOrderId])
+  @@index([userId, status])
+  @@index([listingId])
+  @@map("cj_shopify_usa_orders")
+}
+
+model CjShopifyUsaOrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  step      String
+  message   String?  @db.Text
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  order CjShopifyUsaOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("cj_shopify_usa_order_events")
+}
+
+model CjShopifyUsaOrderRefund {
+  id           String    @id @default(cuid())
+  orderId      String
+  userId       Int
+  status       String    @default("RETURN_REQUESTED")
+  refundType   String    @default("FULL")
+  amountUsd    Decimal?  @db.Decimal(18, 2)
+  reason       String?   @db.Text
+  shopifyReturnId String?
+  cjRefundRef  String?
+  notes        String?   @db.Text
+  events       Json?
+  resolvedAt   DateTime?
+  lastError    String?   @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  order  CjShopifyUsaOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([userId, status])
+  @@map("cj_shopify_usa_order_refunds")
+}
+
+model CjShopifyUsaTracking {
+  id                  Int       @id @default(autoincrement())
+  orderId             String    @unique
+  carrierCode         String?
+  trackingNumber      String?
+  status              String    @default("NOT_AVAILABLE")
+  rawPayload          Json?
+  submittedToShopifyAt   DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  order CjShopifyUsaOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("cj_shopify_usa_tracking")
+}
+
+model CjShopifyUsaAlert {
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  type           String
+  severity       String    @default("warning")
+  status         String    @default("OPEN")
+  payload        Json?
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, severity])
+  @@map("cj_shopify_usa_alerts")
+}
+
+model CjShopifyUsaProfitSnapshot {
+  id                   Int      @id @default(autoincrement())
+  userId               Int
+  snapshotDate         DateTime @db.Date
+  estimatedRevenueUsd  Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedFeesUsd     Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedCjCostUsd   Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedProfitUsd   Decimal  @default(0) @db.Decimal(18, 2)
+  metadata             Json?
+  createdAt            DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, snapshotDate])
+  @@index([userId])
+  @@map("cj_shopify_usa_profit_snapshots")
+}
+
+model CjShopifyUsaExecutionTrace {
+  id             String   @id @default(cuid())
+  userId         Int
+  correlationId  String?
+  route          String?
+  step           String
+  message        String   @db.Text
+  meta           Json?
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([correlationId])
+  @@map("cj_shopify_usa_execution_traces")
+}
+
+model CjShopifyUsaOpportunityRun {
+  id                String    @id @default(cuid())
+  userId            Int
+  status            String    @default("PENDING")
+  mode              String    @default("STARTER")
+  seedCount         Int       @default(0)
+  candidateCount    Int       @default(0)
+  shortlistedCount  Int       @default(0)
+  approvedCount     Int       @default(0)
+  rejectedCount     Int       @default(0)
+  deferredCount     Int       @default(0)
+  settings          Json?
+  errorMessage      String?   @db.Text
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user       User                               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidates CjShopifyUsaOpportunityCandidate[]
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@map("cj_shopify_usa_opportunity_runs")
+}
+
+model CjShopifyUsaOpportunityCandidate {
+  id                    String   @id @default(cuid())
+  runId                 String
+  userId                Int
+  seedKeyword           String
+  seedCategory          String?
+  seedTrendConfidence   Decimal  @default(0.5) @db.Decimal(4, 3)
+  seedSource            String   @default("MOCK_TREND")
+  cjProductId           String
+  cjProductTitle        String
+  cjVariantSku          String
+  cjVariantVid          String?
+  images                Json?
+  supplierCostUsd       Decimal  @db.Decimal(18, 2)
+  shippingUsd           Decimal  @db.Decimal(18, 2)
+  shippingConfidence    String   @default("UNKNOWN")
+  shippingDaysMin       Int?
+  shippingDaysMax       Int?
+  stockCount            Int?
+  marketObservedPriceUsd Decimal? @db.Decimal(18, 2)
+  pricingBreakdown      Json?
+  scoreBreakdown        Json?
+  totalScore            Decimal  @default(0) @db.Decimal(6, 3)
+  recommendationReason  String?  @db.Text
+  status                String   @default("SHORTLISTED")
+  reviewNotes           String?  @db.Text
+  reviewedAt            DateTime?
+  handedOffAt           DateTime?
+  linkedEvaluationId    Int?
+  trendSourceType       String   @default("MOCK")
+  marketPriceSourceType String   @default("ESTIMATED")
+  dataConfidenceScore   Decimal  @default(30) @db.Decimal(5, 2)
+  recommendationConfidence String @default("LOW")
+  starterSuitability    String   @default("CAUTION_FOR_STARTER")
+  evidenceSummary       String?  @db.Text
+  marketPriceDetail     Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  run  CjShopifyUsaOpportunityRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  user User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([userId, status])
+  @@index([userId, totalScore])
+  @@map("cj_shopify_usa_opportunity_candidates")
 }

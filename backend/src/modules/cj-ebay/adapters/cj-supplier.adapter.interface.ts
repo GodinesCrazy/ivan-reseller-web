@@ -82,6 +82,7 @@ export interface CjQuoteShippingToUsRealInput {
   quantity: number;
   destPostalCode?: string;
   startCountryCode?: string;
+  destCountryCode?: string;
 }
 
 export interface CjShippingQuoteResult {

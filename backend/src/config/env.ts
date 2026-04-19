@@ -6,7 +6,6 @@ dotenv.config();
 dotenv.config({ path: '.env.local', override: true });
 if (portFromShell) process.env.PORT = portFromShell;
 
-// Debug: Mostrar información sobre DATABASE_URL antes de validar
 function getDatabaseUrl(): string {
   // Intentar múltiples nombres de variables comunes en Railway
   // Railway puede usar diferentes nombres según la configuración
@@ -40,14 +39,14 @@ function getDatabaseUrl(): string {
     );
     
     if (dbRelatedVars.length > 0) {
-      console.log(`⚠️  DATABASE_URL no encontrada, pero se encontraron variables relacionadas: ${dbRelatedVars.join(', ')}`);
+      console.warn(`⚠️  DATABASE_URL no encontrada, pero se encontraron variables relacionadas: ${dbRelatedVars.join(', ')}`);
       // Intentar usar la primera que parezca válida
       for (const varName of dbRelatedVars) {
         const value = process.env[varName];
         if (value && (value.startsWith('postgresql://') || value.startsWith('postgres://'))) {
           dbUrl = value;
           foundName = varName;
-          console.log(`   → Usando ${varName} como DATABASE_URL`);
+          console.warn(`   → Usando ${varName} como DATABASE_URL`);
           break;
         }
       }
@@ -58,7 +57,7 @@ function getDatabaseUrl(): string {
     // Verificar si es una referencia de Railway sin resolver
     if (dbUrl.startsWith('{{') && dbUrl.endsWith('}}')) {
       console.error('❌ ERROR: Variable Reference no resuelta por Railway');
-      console.error(`   Valor recibido: ${dbUrl}`);
+      console.error(`   Variable: ${foundName || 'desconocida'}`);
       console.error('   Railway debería resolver automáticamente las referencias {{Service.Variable}}');
       console.error('   Solución: Copia el valor real de la variable en lugar de usar la referencia');
       console.error('');
@@ -69,7 +68,7 @@ function getDatabaseUrl(): string {
       // Verificar si la URL está incompleta o mal formada
       if (dbUrl.includes('://:@') || dbUrl.endsWith('://') || dbUrl === 'postgresql://' || dbUrl === 'postgres://') {
         console.error('❌ ERROR: DATABASE_URL está incompleta o mal formada');
-        console.error(`   Valor recibido: ${dbUrl}`);
+        console.error(`   Variable: ${foundName || 'desconocida'}`);
         console.error('   La URL debe tener el formato completo:');
         console.error('   postgresql://usuario:contraseña@host:puerto/base_de_datos');
         console.error('');
@@ -98,36 +97,11 @@ function getDatabaseUrl(): string {
         return '';
       }
       
-      const maskedPassword = url.password ? 
-        (url.password.substring(0, 4) + '***' + url.password.substring(url.password.length - 4)) : 
-        '***';
-      const maskedUrl = `${url.protocol}//${url.username}:${maskedPassword}@${url.host}${url.pathname}`;
-      
-      // Detectar tipo de URL (interna vs pública)
-      const isInternalUrl = url.hostname.includes('railway.internal');
-      const isPublicUrl = url.hostname.includes('proxy.rlwy.net') || url.hostname.includes('railway.app');
-      
-      console.log('🔍 DATABASE_URL encontrada:');
-      console.log(`   Variable: ${foundName}`);
-      console.log(`   ${maskedUrl}`);
-      console.log(`   Host: ${url.hostname}`);
-      console.log(`   Port: ${url.port || '5432'}`);
-      console.log(`   Database: ${url.pathname.replace('/', '')}`);
-      console.log(`   User: ${url.username}`);
-      
-      if (isInternalUrl) {
-        console.log('   ✅ Tipo: URL INTERNA (correcta para servicios dentro de Railway)');
-        console.log('   💡 Esta es la URL recomendada para servicios en Railway');
-      } else if (isPublicUrl) {
-        console.log('   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)');
-        console.log('   💡 Si estás en Railway, considera usar DATABASE_URL con postgres.railway.internal');
-        console.log('   💡 La URL pública funciona pero puede ser más lenta');
-      } else {
-        console.log('   ℹ️  Tipo: URL personalizada o local');
-      }
+      // Parse succeeds: keep validation quiet so credentials and connection metadata never
+      // leak into runtime logs or test output.
     } catch (e) {
       console.error('⚠️  No se pudo parsear DATABASE_URL:', e);
-      console.error(`   Valor recibido: ${dbUrl}`);
+      console.error(`   Variable: ${foundName || 'desconocida'}`);
       console.error('');
       console.error('🔧 SOLUCIÓN:');
       console.error('   1. Ve a Railway Dashboard → Postgres → Variables');
@@ -198,24 +172,6 @@ function getRedisUrl(): string {
       // Verificar formato básico
       if (!redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
         console.warn('⚠️  REDIS_URL no tiene formato estándar (debe empezar con redis:// o rediss://)');
-      }
-
-      // Detectar tipo de URL (interna vs pública)
-      const isInternalUrl = redisUrl.includes('railway.internal');
-      const isPublicUrl = redisUrl.includes('proxy.rlwy.net') || redisUrl.includes('railway.app');
-
-      console.log('🔍 REDIS_URL encontrada:');
-      console.log(`   Variable: ${foundName}`);
-      console.log(`   ${redisUrl.replace(/:[^:@]+@/, ':****@')}`); // Ocultar contraseña
-      
-      if (isInternalUrl) {
-        console.log('   ✅ Tipo: URL INTERNA (correcta para servicios dentro de Railway)');
-        console.log('   💡 Esta es la URL recomendada para servicios en Railway');
-      } else if (isPublicUrl) {
-        console.log('   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)');
-        console.log('   💡 Si estás en Railway, considera usar REDIS_URL con redis.railway.internal');
-      } else {
-        console.log('   ℹ️  Tipo: URL local o personalizada');
       }
     } catch (e) {
       console.warn('⚠️  No se pudo parsear REDIS_URL:', e);

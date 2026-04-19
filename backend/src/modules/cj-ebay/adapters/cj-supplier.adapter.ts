@@ -644,7 +644,7 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
     const official = buildOfficialFreightCalculatePayload({
       vid,
       quantity: q,
-      endCountryCode: 'US',
+      endCountryCode: String(input.destCountryCode || 'US').trim() || 'US',
       startCountryCode: input.startCountryCode,
       zip: input.destPostalCode,
     });
@@ -694,7 +694,7 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
     const usPayload = { ...buildOfficialFreightCalculatePayload({
       vid,
       quantity: q,
-      endCountryCode: 'US',
+      endCountryCode: String(input.destCountryCode || 'US').trim() || 'US',
       startCountryCode: 'US',
       zip: input.destPostalCode,
     }) } as Record<string, unknown>;
@@ -721,7 +721,7 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
     const cnPayload = { ...buildOfficialFreightCalculatePayload({
       vid,
       quantity: q,
-      endCountryCode: 'US',
+      endCountryCode: String(input.destCountryCode || 'US').trim() || 'US',
       startCountryCode: 'CN',
       zip: input.destPostalCode,
     }) } as Record<string, unknown>;
