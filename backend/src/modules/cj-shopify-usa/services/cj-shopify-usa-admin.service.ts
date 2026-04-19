@@ -317,11 +317,28 @@ export class CjShopifyUsaAdminService {
   async probeConnection(userId: number) {
     const token = await this.getAccessToken(userId);
 
-    // Phase 1: core probe — shop, scopes, locations, webhooks. Always required.
-    const coreData = await this.graphql<Omit<ShopifyProbeData, 'publications'>>({
+    // Use scopes from the token exchange response — available without any extra GraphQL call.
+    // This is the most reliable source of granted scopes for client_credentials apps.
+    const grantedScopesFromToken = token.scope;
+
+    // Phase 1: minimal shop info + currentAppInstallation scopes. These fields are accessible
+    // with any authenticated Shopify token regardless of granted scopes.
+    type ShopBasicData = {
+      shop: {
+        name: string;
+        currencyCode: string;
+        billingAddress?: { countryCodeV2?: string | null } | null;
+        primaryDomain?: { url?: string | null } | null;
+      };
+      currentAppInstallation?: {
+        accessScopes?: Array<{ handle: string }>;
+      } | null;
+    };
+
+    const shopData = await this.graphql<ShopBasicData>({
       userId,
       query: `
-        query CjShopifyUsaProbeCore {
+        query CjShopifyUsaProbeShop {
           shop {
             name
             currencyCode
@@ -337,31 +354,42 @@ export class CjShopifyUsaAdminService {
               handle
             }
           }
-          locations(first: 20) {
-            nodes {
-              id
-              name
-              isActive
-              fulfillsOnlineOrders
-            }
-          }
-          webhookSubscriptions(first: 20) {
-            nodes {
-              id
-              topic
-              uri
-            }
-          }
         }
       `,
     });
 
-    const grantedScopes =
-      coreData.currentAppInstallation?.accessScopes?.map((scope) => trimOrEmpty(scope.handle)).filter(Boolean) ?? [];
+    // Merge scopes: prefer GraphQL-reported scopes; fall back to token exchange scopes.
+    const graphqlScopes =
+      shopData.currentAppInstallation?.accessScopes?.map((s) => trimOrEmpty(s.handle)).filter(Boolean) ?? [];
+    const grantedScopes = graphqlScopes.length > 0 ? graphqlScopes : grantedScopesFromToken;
     const missingScopes = CJ_SHOPIFY_USA_REQUIRED_SCOPES.filter((scope) => !grantedScopes.includes(scope));
 
-    // Phase 2: publications — optional; requires read_publications scope.
-    // If the scope is missing the query is skipped gracefully (does not fail the probe).
+    // Phase 2: locations — requires read_locations scope.
+    let locations: NonNullable<ShopifyProbeData['locations']>['nodes'] = [];
+    if (grantedScopes.includes('read_locations')) {
+      try {
+        const locData = await this.graphql<Pick<ShopifyProbeData, 'locations'>>({
+          userId,
+          query: `
+            query CjShopifyUsaProbeLocations {
+              locations(first: 20) {
+                nodes {
+                  id
+                  name
+                  isActive
+                  fulfillsOnlineOrders
+                }
+              }
+            }
+          `,
+        });
+        locations = locData.locations?.nodes ?? [];
+      } catch {
+        // Non-fatal: location data is informational for the probe
+      }
+    }
+
+    // Phase 3: publications — requires read_publications scope.
     let publications: NonNullable<ShopifyProbeData['publications']>['nodes'] = [];
     if (grantedScopes.includes('read_publications')) {
       try {
@@ -386,20 +414,42 @@ export class CjShopifyUsaAdminService {
       }
     }
 
+    // Phase 4: webhookSubscriptions — requires write_webhooks or similar; try optimistically.
+    let webhookSubscriptions: NonNullable<ShopifyProbeData['webhookSubscriptions']>['nodes'] = [];
+    try {
+      const whData = await this.graphql<Pick<ShopifyProbeData, 'webhookSubscriptions'>>({
+        userId,
+        query: `
+          query CjShopifyUsaProbeWebhooks {
+            webhookSubscriptions(first: 20) {
+              nodes {
+                id
+                topic
+                uri
+              }
+            }
+          }
+        `,
+      });
+      webhookSubscriptions = whData.webhookSubscriptions?.nodes ?? [];
+    } catch {
+      // Non-fatal: webhook data is informational for the probe
+    }
+
     return {
       shopDomain: token.shopDomain,
       accessTokenExpiresAt: new Date(token.expiresAtMs).toISOString(),
       shop: {
-        name: trimOrEmpty(coreData.shop?.name),
-        currencyCode: trimOrEmpty(coreData.shop?.currencyCode),
-        countryCode: trimOrEmpty(coreData.shop?.billingAddress?.countryCodeV2),
-        primaryDomainUrl: trimOrEmpty(coreData.shop?.primaryDomain?.url),
+        name: trimOrEmpty(shopData.shop?.name),
+        currencyCode: trimOrEmpty(shopData.shop?.currencyCode),
+        countryCode: trimOrEmpty(shopData.shop?.billingAddress?.countryCodeV2),
+        primaryDomainUrl: trimOrEmpty(shopData.shop?.primaryDomain?.url),
       },
       grantedScopes,
       missingScopes,
-      locations: coreData.locations?.nodes ?? [],
+      locations,
       publications,
-      webhookSubscriptions: coreData.webhookSubscriptions?.nodes ?? [],
+      webhookSubscriptions,
     };
   }
 
