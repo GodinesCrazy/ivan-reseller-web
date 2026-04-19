@@ -1,14 +1,56 @@
 # CJ -> Shopify USA - Readiness
 
 ## Purpose
-The readiness model for `CJ -> Shopify USA` now reflects the real Shopify Dev Dashboard app flow instead of a legacy manual access-token setup.
-
-It is intentionally fail-closed:
+The readiness model for `CJ -> Shopify USA` reflects the real Shopify Dev Dashboard app flow
+using `client_credentials` grant. It is intentionally fail-closed:
 
 - no fake Shopify readiness
 - no green status without real token exchange
 - no silent fallback to DB-stored Shopify tokens
 - no assumption that Chile operators can use Shopify Payments
+
+## Current Live State (audited 2026-04-19)
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Module Flag | **PASS** | `ENABLE_CJ_SHOPIFY_USA_MODULE=true` in Railway |
+| Database | **PASS** | Prisma connected |
+| Pricing Settings | **PASS** | Default margins present |
+| CJ Credentials | **PASS** | `cj-dropshipping` apiKey available |
+| Shopify Config | **PASS** | `SHOPIFY_SHOP=ivanreseller-2.myshopify.com` set in Railway |
+| Shopify Auth | **FAIL** | Token exchange works; shop name resolved to "IvanReseller"; **missing 5 scopes** — see below |
+| Frontend visibility | **FIXED** | `VITE_ENABLE_CJ_SHOPIFY_USA_MODULE=true` in `.env.production` |
+| Webhook registration | **PASS** | Both topics registered on Shopify |
+
+### Shopify Token Exchange — WORKS
+- Shop domain: `ivanreseller-2.myshopify.com`
+- Store name: **IvanReseller** (confirmed live)
+- Currency: **USD** ✓
+- Country: CL (Chile operator)
+- Auth mode: `client_credentials`
+
+### Granted scopes (current app installation)
+```
+read_fulfillments, write_fulfillments, write_inventory, read_inventory,
+read_orders, read_products, write_products
+```
+
+### Missing scopes (external action required in Shopify Partners)
+```
+read_locations
+read_publications
+write_publications
+read_merchant_managed_fulfillment_orders
+write_merchant_managed_fulfillment_orders
+```
+
+### Webhooks registered (2026-04-19)
+```
+ORDERS_CREATE  → https://ivanreseller.com/api/cj-shopify-usa/webhooks/orders-create
+APP_UNINSTALLED → https://ivanreseller.com/api/cj-shopify-usa/webhooks/app-uninstalled
+```
+
+---
 
 ## Readiness Checks
 
@@ -24,61 +66,70 @@ It is intentionally fail-closed:
 ### 4. Shopify config
 - `SHOPIFY_CLIENT_ID` must exist
 - `SHOPIFY_CLIENT_SECRET` must exist
-- store domain must exist through:
-  - `SHOPIFY_SHOP`, or
-  - `shopifyStoreUrl`
+- store domain must exist via `SHOPIFY_SHOP` env var or `shopifyStoreUrl` in DB settings
 
 ### 5. Live Shopify auth
-- Backend exchanges the app client credentials against:
+- Backend exchanges credentials against:
   - `https://{shop}.myshopify.com/admin/oauth/access_token`
-- This proves the app is installed on the store and the credentials are valid for that store
+- Probe is now split into independent phase queries — each scope-gated field is tested separately
+- A missing scope for one field does not prevent the probe from completing
 
 ### 6. Scopes
-- The backend checks granted scopes against the vertical requirements:
-  - `read_products`
-  - `write_products`
-  - `read_orders`
-  - `read_inventory`
-  - `write_inventory`
-  - `read_locations`
-  - `read_publications`
-  - `write_publications`
-  - `read_merchant_managed_fulfillment_orders`
-  - `write_merchant_managed_fulfillment_orders`
+Required:
+- `read_products`, `write_products`
+- `read_orders`
+- `read_inventory`, `write_inventory`
+- `read_locations`
+- `read_publications`, `write_publications`
+- `read_merchant_managed_fulfillment_orders`, `write_merchant_managed_fulfillment_orders`
 
 ### 7. Store currency
-- Store currency must be `USD`
+- Must be `USD`
 
 ### 8. Inventory location
-- At least one usable Shopify location must exist for inventory sync
+- At least one active Shopify location for inventory sync
 
 ### 9. Publication target
-- At least one Shopify publication must exist
-- Online Store publication is the preferred publish target
+- At least one Shopify publication for product publishing
 
 ### 10. Webhook automation
-- Required topics:
-  - `ORDERS_CREATE`
-  - `APP_UNINSTALLED`
-- Missing webhooks are a warning, not a fake success
+- Required topics: `ORDERS_CREATE`, `APP_UNINSTALLED`
 
 ### 11. Payment reality
-- If the operator context is Chile (`CL`), readiness warns that Shopify Payments should not be assumed
-- Third-party gateway setup remains an operator responsibility
+- Chile operator: third-party gateway required; Shopify Payments not available
 
-## Current Blocking Condition
-During this implementation pass, the real Shopify client credentials were found and stored securely, but the store `*.myshopify.com` domain was not found in:
+---
 
-- `API2.txt` exact path
-- fallback local credential file
-- Railway vars
-- DB settings
+## Remaining External Blocker to Full `ready: true`
 
-Because of that, readiness is expected to fail specifically on the Shopify config / auth checks until the store domain is supplied.
+The Shopify app at [partners.shopify.com](https://partners.shopify.com) must be updated to request
+the missing scopes, a new app version published, and the store must approve the updated scope set.
 
-## Operator Runbook
-1. Provide the store myshopify domain as `SHOPIFY_SHOP`, or save it in `shopifyStoreUrl`.
-2. Run `POST /api/cj-shopify-usa/auth/test`.
-3. Run `POST /api/cj-shopify-usa/webhooks/register`.
-4. Re-check `GET /api/cj-shopify-usa/system-readiness`.
-5. Only after readiness passes, publish a controlled listing and sync the next Shopify order.
+**Exact scopes to add in Shopify Partners → App → App setup → Configuration:**
+```
+read_locations
+read_publications
+write_publications
+read_merchant_managed_fulfillment_orders
+write_merchant_managed_fulfillment_orders
+```
+
+**Steps:**
+1. Go to Shopify Partners → ivan-reseller app → Configuration
+2. Add the 5 missing scopes listed above
+3. Save and create a new app version (Release)
+4. In the store (ivanreseller-2.myshopify.com) → Apps → approve updated permissions
+5. Run `POST /api/cj-shopify-usa/auth/test` — expect `ok: true`
+6. Run `GET /api/cj-shopify-usa/system-readiness` — expect `ready: true`
+
+---
+
+## What Was Fixed in This Session (2026-04-19)
+
+| Item | Change |
+|------|--------|
+| `SHOPIFY_SHOP` was missing | Set to `ivanreseller-2.myshopify.com` in Railway and `.env.local` |
+| Backend routes were never registered | Added `app.use('/api/cj-shopify-usa', ...)` in `app.ts` — committed and pushed |
+| Frontend flag missing in production | Added `VITE_ENABLE_CJ_SHOPIFY_USA_MODULE=true` to `frontend/.env.production` |
+| Probe hard-failed on any missing scope | Redesigned probe into independent phases — each scope-gated field isolated |
+| Webhooks not registered | Registered via `POST /webhooks/register` — both topics confirmed on Shopify |

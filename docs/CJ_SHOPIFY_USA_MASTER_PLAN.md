@@ -1,12 +1,17 @@
 # CJ -> Shopify USA - Master Plan
 
-## Current State
+## Current State (updated 2026-04-19)
 `CJ -> Shopify USA` is now wired around the correct Shopify Dev Dashboard app model for a same-org, single-store integration:
 
 - Shopify app credentials live in backend env / Railway only.
 - The backend exchanges `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET` for a short-lived Admin API token using `client_credentials`.
 - The module no longer depends on a manually stored Shopify admin access token in DB.
-- The remaining external blocker for live auth proof is the shop's `*.myshopify.com` domain, which was not present in the local credential source file, DB, or Railway variables during this implementation pass.
+- **`SHOPIFY_SHOP=ivanreseller-2.myshopify.com` is now set in Railway and `.env.local`.**
+- Token exchange is live and confirmed working — store "IvanReseller" resolved, currency USD.
+- Frontend sidebar and routes are now registered and visible when `VITE_ENABLE_CJ_SHOPIFY_USA_MODULE=true`.
+- Both Shopify webhooks (`ORDERS_CREATE`, `APP_UNINSTALLED`) are registered.
+- Remaining external blocker: 5 Shopify scopes need to be added in the Shopify Partners dashboard
+  and the store must approve the updated app version. See `CJ_SHOPIFY_USA_READINESS.md`.
 
 ## Architecture Decisions
 
