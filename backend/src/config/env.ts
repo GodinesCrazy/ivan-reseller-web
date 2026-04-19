@@ -403,6 +403,14 @@ const envSchema = z.object({
   MERCADOLIBRE_REFRESH_TOKEN: z.string().optional(),
   MERCADOLIBRE_SITE_ID: z.string().default('MLC'),
   MERCADOLIBRE_REDIRECT_URI: z.string().optional(),
+  SHOPIFY_CLIENT_ID: z.string().optional(),
+  SHOPIFY_CLIENT_SECRET: z.string().optional(),
+  /**
+   * Single-store Shopify target for Dev Dashboard app auth.
+   * Accepts store handle, full myshopify domain, or https://{shop}.myshopify.com URL.
+   */
+  SHOPIFY_SHOP: z.string().optional(),
+  SHOPIFY_API_VERSION: z.string().regex(/^\d{4}-\d{2}$/).default('2026-04'),
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_WEBHOOK_ID: z.string().optional(),
@@ -426,9 +434,11 @@ const envSchema = z.object({
   WEBHOOK_VERIFY_SIGNATURE_EBAY: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
   WEBHOOK_VERIFY_SIGNATURE_MERCADOLIBRE: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
   WEBHOOK_VERIFY_SIGNATURE_AMAZON: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+  WEBHOOK_VERIFY_SIGNATURE_SHOPIFY: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
   WEBHOOK_SECRET_EBAY: z.string().optional(),
   WEBHOOK_SECRET_MERCADOLIBRE: z.string().optional(),
   WEBHOOK_SECRET_AMAZON: z.string().optional(),
+  WEBHOOK_SECRET_SHOPIFY: z.string().optional(),
   WEBHOOK_ALLOW_INVALID_SIGNATURE: z.enum(['true', 'false']).default('false').transform(val => val === 'true'), // Solo dev
   
   // Allow purchase when PayPal balance is low but user has linked card (PayPal will use card as backup)
@@ -512,6 +522,8 @@ const envSchema = z.object({
   BLOCK_NEW_PUBLICATIONS: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   /** When true, exposes /api/cj-ebay/* and enables CJ→eBay USA vertical (isolated module). */
   ENABLE_CJ_EBAY_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /** When true, exposes /api/cj-shopify-usa/* and enables CJ→Shopify USA vertical (isolated module). */
+  ENABLE_CJ_SHOPIFY_USA_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   /** When true, exposes /api/cj-ml-chile/* and enables CJ→ML Chile vertical (isolated module). */
   ENABLE_CJ_ML_CHILE_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   /** When true, exposes /api/cj-ebay-uk/* and enables CJ→eBay UK vertical (isolated module). */

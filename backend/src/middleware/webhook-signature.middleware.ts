@@ -10,7 +10,7 @@ import { env } from '../config/env';
 import { CredentialsManager } from '../services/credentials-manager.service';
 import { EbayWebhookService } from '../services/ebay-webhook.service';
 
-export type MarketplaceWebhook = 'ebay' | 'mercadolibre' | 'amazon';
+export type MarketplaceWebhook = 'ebay' | 'mercadolibre' | 'amazon' | 'shopify';
 
 interface SignatureValidationResult {
   valid: boolean;
@@ -152,6 +152,38 @@ function validateAmazonSignature(
   }
 }
 
+function validateShopifySignature(
+  payload: string | Buffer,
+  signature: string,
+  secret: string
+): SignatureValidationResult {
+  if (!secret) {
+    return { valid: false, error: 'Shopify webhook secret not configured' };
+  }
+
+  if (!signature) {
+    return { valid: false, error: 'X-Shopify-Hmac-SHA256 header missing' };
+  }
+
+  try {
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(payload)
+      .digest('base64');
+
+    const left = Buffer.from(signature.trim(), 'utf8');
+    const right = Buffer.from(expected, 'utf8');
+    const isValid = left.length === right.length && crypto.timingSafeEqual(left, right);
+
+    return { valid: isValid, error: isValid ? undefined : 'Invalid signature' };
+  } catch (error: any) {
+    logger.warn('[WebhookSignature] Error validating Shopify signature', {
+      error: error.message,
+    });
+    return { valid: false, error: error.message };
+  }
+}
+
 /**
  * ✅ FASE 3: Middleware factory para validar firmas de webhooks
  */
@@ -188,7 +220,9 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
     
     // Obtener secret desde env
     const secretEnvVar = `WEBHOOK_SECRET_${marketplace.toUpperCase()}`;
-    const secret = process.env[secretEnvVar];
+    const secret = marketplace === 'shopify'
+      ? (process.env.WEBHOOK_SECRET_SHOPIFY || process.env.SHOPIFY_CLIENT_SECRET || '')
+      : (process.env[secretEnvVar] || '');
     const secretEmpty = !secret || (typeof secret === 'string' && secret.trim() === '');
     const requiresSharedSecret = marketplace !== 'ebay';
 
@@ -228,6 +262,9 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
         break;
       case 'amazon':
         validation = validateAmazonSignature(payload, signatureHeader || '', secret || '');
+        break;
+      case 'shopify':
+        validation = validateShopifySignature(payload, signatureHeader || '', secret || '');
         break;
       default:
         return res.status(400).json({
@@ -295,6 +332,8 @@ function getSignatureHeaderName(marketplace: MarketplaceWebhook): string {
       return 'x-signature';
     case 'amazon':
       return 'x-amzn-signature';
+    case 'shopify':
+      return 'x-shopify-hmac-sha256';
     default:
       return 'x-signature';
   }
