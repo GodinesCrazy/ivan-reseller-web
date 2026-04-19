@@ -537,6 +537,72 @@ function SearchResultCard({
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function CjEbayProductsPage() {
+  // ─── Trend recommendation ─────────────────────────────────────────────────────
+  const [showTrendPanel, setShowTrendPanel] = useState(false);
+  const [trendCandidates, setTrendCandidates] = useState<Array<{
+    id: string;
+    seedKeyword: string;
+    seedCategory?: string;
+    recommendationReason?: string;
+    totalScore?: number;
+    trendSourceType?: string;
+  }>>([]);
+  const [trendLoading, setTrendLoading] = useState(false);
+  const [trendDiscovering, setTrendDiscovering] = useState(false);
+
+  async function loadTrendRecommendations() {
+    setTrendLoading(true);
+    try {
+      const res = await api.get<{ ok: boolean; candidates: typeof trendCandidates }>('/api/cj-ebay/opportunities/recommendations');
+      if (res.data?.ok) setTrendCandidates(res.data.candidates);
+    } catch { /* silently fail */ }
+    finally { setTrendLoading(false); }
+  }
+
+  async function runTrendDiscovery() {
+    setTrendDiscovering(true);
+    try {
+      await api.post('/api/cj-ebay/opportunities/discover', { mode: 'STARTER' });
+      await loadTrendRecommendations();
+    } catch { /* silently fail */ }
+    finally { setTrendDiscovering(false); }
+  }
+
+  function toggleTrendPanel() {
+    if (!showTrendPanel && trendCandidates.length === 0) loadTrendRecommendations();
+    setShowTrendPanel((v) => !v);
+  }
+
+  function injectTrendSeed(keyword: string) {
+    setSearchQuery(keyword);
+    setShowTrendPanel(false);
+    // Trigger search after state update
+    setTimeout(() => void (async () => {
+      setSearchError(null);
+      setSearchLoading(true);
+      setSearchResults(null);
+      setWarehouseAwareEnabled(false);
+      setWarehouseSummary(undefined);
+      setSelectedProduct(null);
+      setSelectedVariantKey('');
+      setProductId('');
+      setVariantId('');
+      setPreview(null);
+      setEvaluate(null);
+      setError(null);
+      try {
+        const res = await api.post<SearchResponse>('/api/cj-ebay/cj/search', { keyword, page: 1, pageSize: 20 });
+        setSearchResults(res.data?.items ?? []);
+        setWarehouseAwareEnabled(res.data?.warehouseAwareEnabled ?? false);
+        setWarehouseSummary(res.data?.warehouseSummary);
+      } catch (e) {
+        setSearchError(extractApiError(e, 'Error al buscar productos CJ.'));
+      } finally {
+        setSearchLoading(false);
+      }
+    })(), 0);
+  }
+
   // ─── Search ──────────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
@@ -858,14 +924,91 @@ export default function CjEbayProductsPage() {
 
       {/* ══ SECCIÓN A — Buscador CJ ═══════════════════════════════════════════════ */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            Buscar producto CJ
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Escribe un término para explorar el catálogo CJ Dropshipping
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Buscar producto CJ
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Escribe un término para explorar el catálogo CJ Dropshipping
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={toggleTrendPanel}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 text-xs font-medium hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
+          >
+            <span>✦</span>
+            <span>Suggest winning products</span>
+            {showTrendPanel ? <span>▲</span> : <span>▼</span>}
+          </button>
         </div>
+
+        {/* ── Trend recommendation panel ─────────────────────────────────── */}
+        {showTrendPanel && (
+          <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-900/10 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-medium text-violet-800 dark:text-violet-300">USA Trending Product Ideas</p>
+                <p className="text-[11px] text-violet-600 dark:text-violet-400 mt-0.5">
+                  Source: HEURISTIC (seasonal eBay USA patterns, not live API) · Click a keyword to search CJ
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void runTrendDiscovery()}
+                disabled={trendDiscovering}
+                className="shrink-0 px-2.5 py-1 rounded border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs hover:bg-violet-100 dark:hover:bg-violet-900/30 disabled:opacity-50"
+              >
+                {trendDiscovering ? 'Discovering…' : '↻ Refresh'}
+              </button>
+            </div>
+
+            {trendLoading ? (
+              <p className="text-xs text-violet-500">Loading recommendations…</p>
+            ) : trendCandidates.length === 0 ? (
+              <div className="text-center py-3">
+                <p className="text-xs text-violet-500">No recommendations yet.</p>
+                <button
+                  type="button"
+                  onClick={() => void runTrendDiscovery()}
+                  disabled={trendDiscovering}
+                  className="mt-2 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 disabled:opacity-50"
+                >
+                  {trendDiscovering ? 'Discovering…' : '✦ Run Discovery'}
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {trendCandidates.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => injectTrendSeed(c.seedKeyword)}
+                    className="text-left rounded-lg border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900 p-2.5 hover:border-violet-400 dark:hover:border-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-1">
+                      <p className="text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-1">{c.seedKeyword}</p>
+                      {c.totalScore != null && (
+                        <span className="shrink-0 text-[10px] font-medium text-violet-600 dark:text-violet-400">{Number(c.totalScore).toFixed(0)}pts</span>
+                      )}
+                    </div>
+                    {c.seedCategory && (
+                      <p className="text-[10px] text-slate-400 mt-0.5">{c.seedCategory}</p>
+                    )}
+                    {c.recommendationReason && (
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">{c.recommendationReason}</p>
+                    )}
+                    {c.trendSourceType && (
+                      <span className="inline-block mt-1 px-1 py-0.5 rounded text-[9px] bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400">{c.trendSourceType}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <input
             type="text"

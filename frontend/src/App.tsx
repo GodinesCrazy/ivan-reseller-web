@@ -59,6 +59,18 @@ const CjEbayAlertsPage = lazy(() => import('@pages/cj-ebay/CjEbayAlertsPage'));
 const CjEbayProfitPage = lazy(() => import('@pages/cj-ebay/CjEbayProfitPage'));
 const CjEbayLogsPage = lazy(() => import('@pages/cj-ebay/CjEbayLogsPage'));
 const CjEbayOpportunityPage = lazy(() => import('@pages/cj-ebay/CjEbayOpportunityPage'));
+// CJ → eBay UK
+const CjEbayUkModuleGate = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkModuleGate'));
+const CjEbayUkLayout = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkLayout'));
+const CjEbayUkOverviewPage = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkOverviewPage'));
+const CjEbayUkProductsPage = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkProductsPage'));
+const CjEbayUkListingsPage = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkListingsPage'));
+const CjEbayUkOrdersPage = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkOrdersPage'));
+const CjEbayUkOrderDetailPage = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkOrderDetailPage'));
+const CjEbayUkAlertsPage = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkAlertsPage'));
+const CjEbayUkProfitPage = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkProfitPage'));
+const CjEbayUkLogsPage = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkLogsPage'));
+const CjEbayUkOpportunityPage = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkOpportunityPage'));
 // CJ → ML Chile
 const CjMlChileModuleGate = lazy(() => import('@pages/cj-ml-chile/CjMlChileModuleGate'));
 const CjMlChileLayout = lazy(() => import('@pages/cj-ml-chile/CjMlChileLayout'));
@@ -66,6 +78,7 @@ const CjMlChileOverviewPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileOve
 const CjMlChileProductsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileProductsPage'));
 const CjMlChileListingsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileListingsPage'));
 const CjMlChileOrdersPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileOrdersPage'));
+const CjMlChileOrderDetailPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileOrderDetailPage'));
 const CjMlChileAlertsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileAlertsPage'));
 const CjMlChileProfitPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileProfitPage'));
 const CjMlChileLogsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileLogsPage'));
@@ -274,6 +287,22 @@ function AppContent() {
           </Route>
         </Route>
 
+        {/* CJ → eBay UK (feature-flagged; gate redirects to /dashboard if VITE_ENABLE_CJ_EBAY_UK_MODULE is not true) */}
+        <Route path="cj-ebay-uk" element={<CjEbayUkModuleGate />}>
+          <Route element={<CjEbayUkLayout />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<CjEbayUkOverviewPage />} />
+            <Route path="products" element={<CjEbayUkProductsPage />} />
+            <Route path="listings" element={<CjEbayUkListingsPage />} />
+            <Route path="orders" element={<CjEbayUkOrdersPage />} />
+            <Route path="orders/:orderId" element={<CjEbayUkOrderDetailPage />} />
+            <Route path="alerts" element={<CjEbayUkAlertsPage />} />
+            <Route path="profit" element={<CjEbayUkProfitPage />} />
+            <Route path="logs" element={<CjEbayUkLogsPage />} />
+            <Route path="discover" element={<CjEbayUkOpportunityPage />} />
+          </Route>
+        </Route>
+
         {/* CJ → ML Chile (feature-flagged; gate muestra aviso si VITE_ENABLE_CJ_ML_CHILE_MODULE no es true) */}
         <Route path="cj-ml-chile" element={<CjMlChileModuleGate />}>
           <Route element={<CjMlChileLayout />}>
@@ -282,6 +311,7 @@ function AppContent() {
             <Route path="products" element={<CjMlChileProductsPage />} />
             <Route path="listings" element={<CjMlChileListingsPage />} />
             <Route path="orders" element={<CjMlChileOrdersPage />} />
+            <Route path="orders/:orderId" element={<CjMlChileOrderDetailPage />} />
             <Route path="alerts" element={<CjMlChileAlertsPage />} />
             <Route path="profit" element={<CjMlChileProfitPage />} />
             <Route path="logs" element={<CjMlChileLogsPage />} />

@@ -8,3 +8,7 @@ export function isCjEbayModuleEnabled(): boolean {
 export function isCjMlChileModuleEnabled(): boolean {
   return String(import.meta.env.VITE_ENABLE_CJ_ML_CHILE_MODULE || '').toLowerCase() === 'true';
 }
+
+export function isCjEbayUkModuleEnabled(): boolean {
+  return String(import.meta.env.VITE_ENABLE_CJ_EBAY_UK_MODULE || '').toLowerCase() === 'true';
+}

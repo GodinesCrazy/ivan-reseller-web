@@ -514,6 +514,18 @@ const envSchema = z.object({
   ENABLE_CJ_EBAY_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
   /** When true, exposes /api/cj-ml-chile/* and enables CJ→ML Chile vertical (isolated module). */
   ENABLE_CJ_ML_CHILE_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /** When true, exposes /api/cj-ebay-uk/* and enables CJ→eBay UK vertical (isolated module). */
+  ENABLE_CJ_EBAY_UK_MODULE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /**
+   * CJ→eBay UK — warehouse-aware probing for GB warehouses.
+   * When true, probes `startCountryCode=GB` on freightCalculate to confirm UK stock.
+   */
+  CJ_EBAY_UK_WAREHOUSE_AWARE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /** Max CJ search results to probe for UK warehouse when CJ_EBAY_UK_WAREHOUSE_AWARE=true. */
+  CJ_EBAY_UK_WAREHOUSE_PROBE_LIMIT: z.string().default('3').transform((v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 0 && n <= 10 ? n : 3;
+  }),
   /**
    * FASE 3G+ — Warehouse-aware fulfillment: when true, the CJ-eBay module probes US freight
    * (`startCountryCode=US`) before falling back to CN. This is the only reliable signal for

@@ -92,6 +92,19 @@ model User {
   cjEbayOpportunityRuns     CjEbayOpportunityRun[]
   cjEbayOpportunityCandidates CjEbayOpportunityCandidate[]
 
+  // CJ → eBay UK vertical (isolated module)
+  cjEbayUkAccountSettings         CjEbayUkAccountSettings?
+  cjEbayUkProducts                CjEbayUkProduct[]
+  cjEbayUkShippingQuotes          CjEbayUkShippingQuote[]
+  cjEbayUkProductEvaluations      CjEbayUkProductEvaluation[]
+  cjEbayUkListings                CjEbayUkListing[]
+  cjEbayUkOrders                  CjEbayUkOrder[]
+  cjEbayUkAlerts                  CjEbayUkAlert[]
+  cjEbayUkProfitSnapshots         CjEbayUkProfitSnapshot[]
+  cjEbayUkExecutionTraces         CjEbayUkExecutionTrace[]
+  cjEbayUkOpportunityRuns         CjEbayUkOpportunityRun[]
+  cjEbayUkOpportunityCandidates   CjEbayUkOpportunityCandidate[]
+
   // CJ → ML Chile vertical (isolated module; FASE 1+)
   cjMlChileAccountSettings    CjMlChileAccountSettings?
   cjMlChileProducts           CjMlChileProduct[]
@@ -1983,6 +1996,384 @@ model CjEbayOpportunityCandidate {
   @@index([userId, status])
   @@index([userId, totalScore])
   @@map("cj_ebay_opportunity_candidates")
+}
+
+// ====================================
+// CJ → eBay UK vertical (cj_ebay_uk_*)
+// Mirror of CJ→eBay USA architecture; destination = United Kingdom (GB).
+// Key differences: GBP currency, UK VAT (20% marketplace-facilitated for ≤£135),
+// eBay UK (siteId=3 / ebay.co.uk), GB warehouse probing via startCountryCode=GB.
+// ====================================
+
+model CjEbayUkAccountSettings {
+  id                         Int      @id @default(autoincrement())
+  userId                     Int      @unique
+  minMarginPct               Decimal? @db.Decimal(6, 4)
+  minProfitGbp               Decimal? @db.Decimal(18, 2)
+  maxShippingUsd             Decimal? @db.Decimal(18, 2)
+  handlingBufferDays         Int      @default(3)
+  minStock                   Int      @default(1)
+  rejectOnUnknownShipping    Boolean  @default(true)
+  maxRiskScore               Int?
+  priceChangePctReevaluate   Decimal? @db.Decimal(6, 4)
+  incidentBufferPct          Decimal? @db.Decimal(6, 4)
+  /// eBay UK FVF effective % on listed price. Default ~12.8%.
+  defaultEbayFeePct          Decimal? @db.Decimal(6, 4)
+  defaultPaymentFeePct       Decimal? @db.Decimal(6, 4)
+  defaultPaymentFixedFeeGbp  Decimal? @db.Decimal(18, 2)
+  /// UK VAT rate applied by eBay as marketplace facilitator (default 20).
+  ukVatPct                   Decimal  @default(20) @db.Decimal(6, 4)
+  /// When true, eBay UK collects VAT from buyer and deducts from seller payout (applies ≤£135).
+  vatMarketplaceFacilitated  Boolean  @default(true)
+  /// USD→GBP exchange rate used for cost conversion. Operator-set; updated manually.
+  fxRateUsdToGbp             Decimal  @default(0.79) @db.Decimal(10, 6)
+  cjPostCreateCheckoutMode   String   @default("MANUAL")
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cj_ebay_uk_account_settings")
+}
+
+model CjEbayUkProduct {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  cjProductId      String
+  title            String
+  description      String?   @db.Text
+  images           Json?
+  rawPayloadHash   String?
+  snapshotStatus   String    @default("SYNCED")
+  lastSyncedAt     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variants         CjEbayUkProductVariant[]
+  shippingQuotes   CjEbayUkShippingQuote[]
+  evaluations      CjEbayUkProductEvaluation[]
+  listings         CjEbayUkListing[]
+  orders           CjEbayUkOrder[]
+
+  @@unique([userId, cjProductId])
+  @@index([userId])
+  @@index([userId, snapshotStatus])
+  @@map("cj_ebay_uk_products")
+}
+
+model CjEbayUkProductVariant {
+  id             Int       @id @default(autoincrement())
+  productId      Int
+  cjSku          String
+  cjVid          String?
+  attributes     Json?
+  unitCostUsd    Decimal?  @db.Decimal(18, 2)
+  stockLastKnown Int?
+  stockCheckedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  product        CjEbayUkProduct             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shippingQuotes CjEbayUkShippingQuote[]
+  evaluations    CjEbayUkProductEvaluation[]
+  listings       CjEbayUkListing[]
+  orders         CjEbayUkOrder[]
+
+  @@unique([productId, cjSku])
+  @@index([productId])
+  @@index([productId, cjVid])
+  @@map("cj_ebay_uk_product_variants")
+}
+
+model CjEbayUkShippingQuote {
+  id                Int       @id @default(autoincrement())
+  userId            Int
+  productId         Int
+  variantId         Int?
+  quantity          Int       @default(1)
+  /// Shipping cost in USD (raw from CJ API).
+  amountUsd         Decimal   @db.Decimal(18, 2)
+  /// Shipping cost converted to GBP at snapshot FX rate.
+  amountGbp         Decimal?  @db.Decimal(18, 2)
+  /// FX rate used for USD→GBP conversion.
+  fxRateUsed        Decimal?  @db.Decimal(10, 6)
+  currency          String    @default("GBP")
+  serviceName       String?
+  carrier           String?
+  estimatedMinDays  Int?
+  estimatedMaxDays  Int?
+  confidence        String    @default("unknown")
+  /// GB = GB warehouse confirmed; CN = ships from China.
+  fulfillmentOrigin String?
+  /// CJ freight API raw payload for audit.
+  requestPayload    Json?
+  responseRaw       Json?
+  originCountryCode String?
+  quotedAt          DateTime  @default(now())
+  expiresAt         DateTime?
+
+  product   CjEbayUkProduct         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   CjEbayUkProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, productId])
+  @@map("cj_ebay_uk_shipping_quotes")
+}
+
+model CjEbayUkProductEvaluation {
+  id                    Int       @id @default(autoincrement())
+  userId                Int
+  productId             Int
+  variantId             Int?
+  shippingQuoteId       Int?
+  decision              String    @default("PENDING")
+  reasons               Json?
+  /// Supplier cost in USD at evaluation time.
+  supplierCostUsd       Decimal?  @db.Decimal(18, 2)
+  shippingUsd           Decimal?  @db.Decimal(18, 2)
+  /// Shipping cost in GBP.
+  shippingGbp           Decimal?  @db.Decimal(18, 2)
+  fxRateUsed            Decimal?  @db.Decimal(10, 6)
+  estimatedListPriceGbp Decimal?  @db.Decimal(18, 2)
+  estimatedMarginPct    Decimal?  @db.Decimal(6, 4)
+  estimatedProfitGbp    Decimal?  @db.Decimal(18, 2)
+  vatDeductedGbp        Decimal?  @db.Decimal(18, 2)
+  riskScore             Int?
+  fulfillmentOrigin     String?
+  rawBreakdown          Json?
+  evaluatedAt           DateTime  @default(now())
+  expiresAt             DateTime?
+
+  user    User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product CjEbayUkProduct         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant CjEbayUkProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([userId, decision])
+  @@index([productId])
+  @@map("cj_ebay_uk_product_evaluations")
+}
+
+model CjEbayUkListing {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  productId       Int
+  variantId       Int?
+  status          String    @default("DRAFT")
+  ebayListingId   String?
+  ebayOfferId     String?
+  ebaySku         String?   @unique
+  /// Listed price in GBP (VAT inclusive, as shown to eBay UK buyer).
+  listedPriceGbp  Decimal?  @db.Decimal(18, 2)
+  draftPayload    Json?
+  publishError    String?
+  reconcileCount  Int       @default(0)
+  reconcileRetryAfter DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user    User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product CjEbayUkProduct         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant CjEbayUkProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  orders  CjEbayUkOrder[]
+
+  @@index([userId, status])
+  @@index([userId, productId])
+  @@map("cj_ebay_uk_listings")
+}
+
+model CjEbayUkOrder {
+  id                   Int       @id @default(autoincrement())
+  userId               Int
+  productId            Int?
+  variantId            Int?
+  listingId            Int?
+  ebayOrderId          String
+  cjOrderId            String?
+  status               String    @default("DETECTED")
+  paymentBlockReason   String?
+  /// eBay order total in GBP.
+  totalGbp             Decimal?  @db.Decimal(18, 2)
+  rawEbaySummary       Json?
+  buyerPayload         Json?
+  cjOrderPayload       Json?
+  events               Json?
+  cjPostCreateCheckoutMode String @default("MANUAL")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user     User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product  CjEbayUkProduct?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant  CjEbayUkProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  listing  CjEbayUkListing?        @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  refunds  CjEbayUkOrderRefund[]
+  tracking CjEbayUkTracking[]
+
+  @@unique([userId, ebayOrderId])
+  @@index([userId, status])
+  @@map("cj_ebay_uk_orders")
+}
+
+model CjEbayUkOrderRefund {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  status    String   @default("RETURN_REQUESTED")
+  type      String   @default("FULL")
+  amountGbp Decimal? @db.Decimal(18, 2)
+  reason    String?
+  notes     String?  @db.Text
+  events    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order CjEbayUkOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("cj_ebay_uk_order_refunds")
+}
+
+model CjEbayUkTracking {
+  id                 Int       @id @default(autoincrement())
+  orderId            Int
+  carrierCode        String?
+  trackingNumber     String?
+  trackingUrl        String?
+  cjOrderStatus      String?
+  submittedToEbayAt  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  order CjEbayUkOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("cj_ebay_uk_tracking")
+}
+
+model CjEbayUkAlert {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  orderId   Int?
+  type      String
+  severity  String   @default("HIGH")
+  status    String   @default("OPEN")
+  message   String?
+  payload   Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, type])
+  @@map("cj_ebay_uk_alerts")
+}
+
+model CjEbayUkProfitSnapshot {
+  id                    Int      @id @default(autoincrement())
+  userId                Int
+  snapshotDate          DateTime @db.Date
+  /// Revenue in GBP.
+  estimatedRevenueGbp   Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedCjCostUsd    Decimal  @default(0) @db.Decimal(18, 2)
+  estimatedProfitGbp    Decimal  @default(0) @db.Decimal(18, 2)
+  completedOrders       Int      @default(0)
+  activeOrders          Int      @default(0)
+  refundedAmountGbp     Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, snapshotDate])
+  @@index([userId])
+  @@map("cj_ebay_uk_profit_snapshots")
+}
+
+model CjEbayUkExecutionTrace {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  correlationId String?
+  route         String?
+  step          String
+  message       String?  @db.Text
+  meta          Json?
+  durationMs    Int?
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([correlationId])
+  @@map("cj_ebay_uk_execution_traces")
+}
+
+model CjEbayUkOpportunityRun {
+  id            String   @id @default(uuid())
+  userId        Int
+  status        String   @default("PENDING")
+  mode          String   @default("STARTER")
+  settings      Json?
+  providerUsed  String?
+  providerNote  String?
+  seedCount     Int      @default(0)
+  candidateCount Int     @default(0)
+  shortlistedCount Int   @default(0)
+  errorMessage  String?  @db.Text
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user       User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidates CjEbayUkOpportunityCandidate[]
+
+  @@index([userId, status])
+  @@map("cj_ebay_uk_opportunity_runs")
+}
+
+model CjEbayUkOpportunityCandidate {
+  id                      String   @id @default(uuid())
+  runId                   String
+  userId                  Int
+  seedKeyword             String
+  seedSource              String   @default("MOCK_TREND")
+  seedCategory            String?
+  seedConfidence          Decimal? @db.Decimal(6, 4)
+  cjProductId             String
+  cjProductTitle          String   @db.Text
+  cjVariantSku            String
+  cjVariantVid            String?
+  images                  Json?
+  supplierCostUsd         Decimal? @db.Decimal(18, 2)
+  shippingUsd             Decimal? @db.Decimal(18, 2)
+  shippingGbp             Decimal? @db.Decimal(18, 2)
+  shippingConfidence      String   @default("UNKNOWN")
+  shippingDaysMin         Int?
+  shippingDaysMax         Int?
+  stockCount              Int?
+  marketObservedPriceGbp  Decimal? @db.Decimal(18, 2)
+  pricingSnapshot         Json?
+  scoreSnapshot           Json?
+  recommendationReason    String?  @db.Text
+  status                  String   @default("SHORTLISTED")
+  reviewNotes             String?  @db.Text
+  reviewedAt              DateTime?
+  handedOffAt             DateTime?
+  linkedEvaluationId      Int?
+  trendSourceType         String   @default("MOCK")
+  marketPriceSourceType   String   @default("MOCK")
+  dataConfidenceScore     Int      @default(0)
+  totalScore              Decimal? @db.Decimal(6, 2)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  run  CjEbayUkOpportunityRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  user User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([userId, status])
+  @@index([userId, totalScore])
+  @@map("cj_ebay_uk_opportunity_candidates")
 }
 
 // ====================================
