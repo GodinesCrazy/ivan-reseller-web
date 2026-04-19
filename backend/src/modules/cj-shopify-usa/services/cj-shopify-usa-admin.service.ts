@@ -316,10 +316,12 @@ export class CjShopifyUsaAdminService {
 
   async probeConnection(userId: number) {
     const token = await this.getAccessToken(userId);
-    const data = await this.graphql<ShopifyProbeData>({
+
+    // Phase 1: core probe — shop, scopes, locations, webhooks. Always required.
+    const coreData = await this.graphql<Omit<ShopifyProbeData, 'publications'>>({
       userId,
       query: `
-        query CjShopifyUsaProbe {
+        query CjShopifyUsaProbeCore {
           shop {
             name
             currencyCode
@@ -343,14 +345,6 @@ export class CjShopifyUsaAdminService {
               fulfillsOnlineOrders
             }
           }
-          publications(first: 20) {
-            nodes {
-              id
-              name
-              autoPublish
-              supportsFuturePublishing
-            }
-          }
           webhookSubscriptions(first: 20) {
             nodes {
               id
@@ -363,23 +357,49 @@ export class CjShopifyUsaAdminService {
     });
 
     const grantedScopes =
-      data.currentAppInstallation?.accessScopes?.map((scope) => trimOrEmpty(scope.handle)).filter(Boolean) ?? [];
+      coreData.currentAppInstallation?.accessScopes?.map((scope) => trimOrEmpty(scope.handle)).filter(Boolean) ?? [];
     const missingScopes = CJ_SHOPIFY_USA_REQUIRED_SCOPES.filter((scope) => !grantedScopes.includes(scope));
+
+    // Phase 2: publications — optional; requires read_publications scope.
+    // If the scope is missing the query is skipped gracefully (does not fail the probe).
+    let publications: NonNullable<ShopifyProbeData['publications']>['nodes'] = [];
+    if (grantedScopes.includes('read_publications')) {
+      try {
+        const pubData = await this.graphql<Pick<ShopifyProbeData, 'publications'>>({
+          userId,
+          query: `
+            query CjShopifyUsaProbePublications {
+              publications(first: 20) {
+                nodes {
+                  id
+                  name
+                  autoPublish
+                  supportsFuturePublishing
+                }
+              }
+            }
+          `,
+        });
+        publications = pubData.publications?.nodes ?? [];
+      } catch {
+        // Non-fatal: publication data is informational for the probe
+      }
+    }
 
     return {
       shopDomain: token.shopDomain,
       accessTokenExpiresAt: new Date(token.expiresAtMs).toISOString(),
       shop: {
-        name: trimOrEmpty(data.shop?.name),
-        currencyCode: trimOrEmpty(data.shop?.currencyCode),
-        countryCode: trimOrEmpty(data.shop?.billingAddress?.countryCodeV2),
-        primaryDomainUrl: trimOrEmpty(data.shop?.primaryDomain?.url),
+        name: trimOrEmpty(coreData.shop?.name),
+        currencyCode: trimOrEmpty(coreData.shop?.currencyCode),
+        countryCode: trimOrEmpty(coreData.shop?.billingAddress?.countryCodeV2),
+        primaryDomainUrl: trimOrEmpty(coreData.shop?.primaryDomain?.url),
       },
       grantedScopes,
       missingScopes,
-      locations: data.locations?.nodes ?? [],
-      publications: data.publications?.nodes ?? [],
-      webhookSubscriptions: data.webhookSubscriptions?.nodes ?? [],
+      locations: coreData.locations?.nodes ?? [],
+      publications,
+      webhookSubscriptions: coreData.webhookSubscriptions?.nodes ?? [],
     };
   }
 
