@@ -82,6 +82,10 @@ const CjMlChileOrderDetailPage = lazy(() => import('@pages/cj-ml-chile/CjMlChile
 const CjMlChileAlertsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileAlertsPage'));
 const CjMlChileProfitPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileProfitPage'));
 const CjMlChileLogsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileLogsPage'));
+// CJ → Shopify USA
+const CjShopifyUsaModuleGate = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaModuleGate'));
+const CjShopifyUsaLayout = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaLayout'));
+const CjShopifyUsaPlaceholderPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaPlaceholderPage'));
 const Listings = lazy(() => import('@pages/Listings'));
 const ControlCenter = lazy(() => import('@pages/ControlCenter'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
@@ -315,6 +319,22 @@ function AppContent() {
             <Route path="alerts" element={<CjMlChileAlertsPage />} />
             <Route path="profit" element={<CjMlChileProfitPage />} />
             <Route path="logs" element={<CjMlChileLogsPage />} />
+          </Route>
+        </Route>
+
+        {/* CJ → Shopify USA */}
+        <Route path="cj-shopify-usa" element={<CjShopifyUsaModuleGate />}>
+          <Route element={<CjShopifyUsaLayout />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<CjShopifyUsaPlaceholderPage title="Overview" />} />
+            <Route path="products" element={<CjShopifyUsaPlaceholderPage title="Products" />} />
+            <Route path="listings" element={<CjShopifyUsaPlaceholderPage title="Store Products" />} />
+            <Route path="orders" element={<CjShopifyUsaPlaceholderPage title="Orders" />} />
+            <Route path="orders/:orderId" element={<CjShopifyUsaPlaceholderPage title="Order Detail" />} />
+            <Route path="alerts" element={<CjShopifyUsaPlaceholderPage title="Alerts" />} />
+            <Route path="profit" element={<CjShopifyUsaPlaceholderPage title="Profit" />} />
+            <Route path="logs" element={<CjShopifyUsaPlaceholderPage title="Logs" />} />
+            <Route path="discover" element={<CjShopifyUsaPlaceholderPage title="Discover" />} />
           </Route>
         </Route>
 

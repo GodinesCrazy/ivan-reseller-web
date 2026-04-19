@@ -12,3 +12,7 @@ export function isCjMlChileModuleEnabled(): boolean {
 export function isCjEbayUkModuleEnabled(): boolean {
   return String(import.meta.env.VITE_ENABLE_CJ_EBAY_UK_MODULE || '').toLowerCase() === 'true';
 }
+
+export function isCjShopifyUsaModuleEnabled(): boolean {
+  return String(import.meta.env.VITE_ENABLE_CJ_SHOPIFY_USA_MODULE || '').toLowerCase() === 'true';
+}

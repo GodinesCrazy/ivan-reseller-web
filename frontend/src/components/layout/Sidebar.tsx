@@ -30,7 +30,7 @@ import {
   LineChart,
   ScrollText,
 } from 'lucide-react';
-import { isCjEbayModuleEnabled, isCjMlChileModuleEnabled } from '@/config/feature-flags';
+import { isCjEbayModuleEnabled, isCjMlChileModuleEnabled, isCjShopifyUsaModuleEnabled } from '@/config/feature-flags';
 
 interface NavItem {
   path: string;
@@ -68,6 +68,19 @@ const cjMlChileNavGroup: NavGroup = {
     { path: '/cj-ml-chile/alerts', label: 'Alertas', icon: Bell },
     { path: '/cj-ml-chile/profit', label: 'Profit', icon: LineChart },
     { path: '/cj-ml-chile/logs', label: 'Logs', icon: ScrollText },
+  ],
+};
+
+const cjShopifyUsaNavGroup: NavGroup = {
+  title: 'CJ → Shopify USA',
+  items: [
+    { path: '/cj-shopify-usa/overview', label: 'Resumen', icon: LayoutDashboard },
+    { path: '/cj-shopify-usa/products', label: 'Productos CJ', icon: Package },
+    { path: '/cj-shopify-usa/listings', label: 'Store Products', icon: List },
+    { path: '/cj-shopify-usa/orders', label: 'Órdenes', icon: Truck },
+    { path: '/cj-shopify-usa/alerts', label: 'Alertas', icon: Bell },
+    { path: '/cj-shopify-usa/profit', label: 'Profit', icon: LineChart },
+    { path: '/cj-shopify-usa/logs', label: 'Logs', icon: ScrollText },
   ],
 };
 
@@ -133,6 +146,7 @@ export default function Sidebar() {
   const allNavGroups: NavGroup[] = [
     ...(isCjEbayModuleEnabled() ? [cjEbayNavGroup] : []),
     ...(isCjMlChileModuleEnabled() ? [cjMlChileNavGroup] : []),
+    ...(isCjShopifyUsaModuleEnabled() ? [cjShopifyUsaNavGroup] : []),
     ...navGroups,
   ];
 
