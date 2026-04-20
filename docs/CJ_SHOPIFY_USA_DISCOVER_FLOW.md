@@ -174,7 +174,7 @@ The full Discover → Evaluate → Import Draft → Publish flow was executed ag
 **Live result summary:**
 - `GET /discover/search` returned real CJ catalog results
 - `POST /discover/evaluate` returned real CJ detail, shipping, and qualification data
-- `POST /discover/import-draft` created a real draft listing in DB
+- `POST /discover/import-draft` created a real draft listing in DB for an eligible candidate and now returns `400 VALIDATION_ERROR` for zero-stock candidates
 - `POST /listings/publish` published successfully to Shopify after the inventory mutation was updated for Shopify API `2026-04`
 - Resulting listing reached `ACTIVE` with:
   - `shopifyProductId = gid://shopify/Product/9145457803476`
@@ -194,6 +194,7 @@ The full Discover → Evaluate → Import Draft → Publish flow was executed ag
 - ✅ Storefront URL responded `200`
 
 **Warnings still open after this run:**
+- The top tested search candidate (`1999395299549302785`) currently has `stock = 0` on all variants, so it is not draftable/publishable and is now blocked honestly by validation
 - Anonymous storefront visibility is still gated by the Shopify password page; the public URL returns `200` but not buyer-facing product content
 - Profit / order-ingestion validation still depends on a real Shopify order flow
 

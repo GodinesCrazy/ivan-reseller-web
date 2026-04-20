@@ -119,3 +119,13 @@ This warning does not block Discover, Evaluate, Import Draft, or controlled publ
 | Shopify publish failed on inventory sync | Updated `inventorySetQuantities` call for Shopify API `2026-04` using `changeFromQuantity: null` |
 | Webhook automation | Re-registered required Shopify webhook subscriptions via `POST /api/cj-shopify-usa/webhooks/register` |
 | Controlled publish validation | Verified live publish success: listing `#2` reached `ACTIVE` with Shopify product + variant IDs |
+| Zero-stock draft honesty | Commit `ce7a485` now returns `400 VALIDATION_ERROR` for `POST /discover/import-draft` when no CJ variant meets `minStock` |
+
+## First Real Blockers After Shopify Auth
+
+These are the live blockers that remain after auth/scopes were confirmed PASS:
+
+1. **Supplier stock reality** — the current tested CJ candidate (`1999395299549302785`) has `stock = 0` on every variant, so Discover can evaluate it but Import Draft is now correctly blocked with `400 VALIDATION_ERROR`.
+2. **Buyer-facing storefront visibility** — Shopify publish succeeds internally, but anonymous access to the published PDP still lands on the Shopify password page (`/password`) instead of the product page.
+
+Neither blocker is a Shopify scope problem.
