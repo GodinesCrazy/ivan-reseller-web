@@ -1,116 +1,148 @@
-# CJ → Shopify USA — Implementation Progress
+# CJ -> Shopify USA - Implementation Progress
 
 **Last updated:** 2026-04-20
 
 ## Summary
 
-The vertical `CJ → Shopify USA` now has all 9 pages fully real — including **Discover**, which was the last remaining placeholder. The authenticated pipeline from product discovery to Shopify publish is operational in live production for eligible in-stock products, and zero-stock CJ candidates are now rejected honestly instead of failing as fake `500`s.
+`CJ -> Shopify USA` has all operator pages implemented as real surfaces, and the vertical now has a first proven stock-backed product published into Shopify.
 
----
+The key operational finding from `2026-04-20` is that production Discover search was real, but deployed production evaluation/import was using stale CJ detail stock and therefore false-rejecting viable products. After correcting that stock source locally and using the same real DB plus the live production publish endpoint, the team completed a controlled flow with a real in-stock CJ product and confirmed the exact next blocker: the Shopify storefront password gate.
 
 ## Pages status
 
 | Page | Route | Status | Backend endpoint(s) |
 |------|-------|--------|---------------------|
-| **Discover** | `/cj-shopify-usa/discover` | ✅ REAL | `GET /discover/search`, `POST /discover/evaluate`, `POST /discover/import-draft` |
-| Overview | `/cj-shopify-usa/overview` | ✅ REAL (enriched) | `GET /overview`, `GET /system-readiness` |
-| Products | `/cj-shopify-usa/products` | ✅ REAL | `GET /products` |
-| Store Products (Listings) | `/cj-shopify-usa/listings` | ✅ REAL | `GET /listings`, `POST /listings/draft`, `POST /listings/publish` |
-| Orders | `/cj-shopify-usa/orders` | ✅ REAL | `GET /orders`, `POST /orders/sync` |
-| Order Detail | `/cj-shopify-usa/orders/:orderId` | ✅ REAL | `GET /orders/:orderId` |
-| Alerts | `/cj-shopify-usa/alerts` | ✅ REAL | `GET /alerts`, `POST /alerts/:id/acknowledge`, `POST /alerts/:id/resolve` |
-| Profit | `/cj-shopify-usa/profit` | ✅ REAL | `GET /profit` |
-| Logs | `/cj-shopify-usa/logs` | ✅ REAL | `GET /logs` |
+| Discover | `/cj-shopify-usa/discover` | REAL | `GET /discover/search`, `POST /discover/evaluate`, `POST /discover/import-draft` |
+| Overview | `/cj-shopify-usa/overview` | REAL | `GET /overview`, `GET /system-readiness` |
+| Products | `/cj-shopify-usa/products` | REAL | `GET /products` |
+| Store Products (Listings) | `/cj-shopify-usa/listings` | REAL | `GET /listings`, `POST /listings/draft`, `POST /listings/publish` |
+| Orders | `/cj-shopify-usa/orders` | REAL | `GET /orders`, `POST /orders/sync` |
+| Order Detail | `/cj-shopify-usa/orders/:orderId` | REAL | `GET /orders/:orderId` |
+| Alerts | `/cj-shopify-usa/alerts` | REAL | `GET /alerts`, `POST /alerts/:id/acknowledge`, `POST /alerts/:id/resolve` |
+| Profit | `/cj-shopify-usa/profit` | REAL | `GET /profit` |
+| Logs | `/cj-shopify-usa/logs` | REAL | `GET /logs` |
 
-**All pages: REAL. No placeholders remain.**
+## Backend changes completed in this pass
 
----
+### Live-stock correction
 
-## New additions (2026-04-19, session 2)
+Files updated:
 
-### Backend
+- `backend/src/modules/cj-shopify-usa/services/cj-shopify-usa-discover.service.ts`
+- `backend/src/modules/cj-shopify-usa/services/cj-shopify-usa-publish.service.ts`
 
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| `GET` | `/api/cj-shopify-usa/discover/search` | Live CJ catalog search (keyword, page, pageSize) |
-| `POST` | `/api/cj-shopify-usa/discover/evaluate` | Fetch CJ product detail + shipping quote + run qualification (no DB write) |
-| `POST` | `/api/cj-shopify-usa/discover/import-draft` | Save product snapshot to DB + create Shopify draft listing in one step |
+What changed:
 
-### Frontend
+- `discover/evaluate` now enriches CJ product detail with live stock from `getStockForSkus(cjVid[])`
+- `discover/import-draft` now stores live variant stock before choosing the target variant
+- `buildDraft` refreshes live stock before draft validation
+- `publishListing` refreshes live stock again before final Shopify publish
 
-- **`CjShopifyUsaDiscoverPage.tsx`** — real Discover page replacing placeholder
-  - Keyword search → results grid (4 cols on XL)
-  - Per-card: "Evaluar" (inline pricing breakdown toggle) + "Crear Draft" (calls import-draft)
-  - States: idle / loading / results / no-results / error
-  - Pagination ("Cargar más")
-  - Post-draft banner + CTA to navigate to Listings
+This removes the false `stock = 0` outcomes caused by stale `variant.stock` values in CJ detail payloads.
 
-- **`CjShopifyUsaOverviewPage.tsx`** — enriched Overview
-  - Pipeline CTA strip (Discover / Products / Listings)
-  - Inline warnings for FAIL checks, open alerts
-  - Counts grid now clickable (navigates to each section)
-  - Check hints surfaced
+### Validation tooling
 
-### New backend service
+Added:
 
-`cj-shopify-usa-discover.service.ts` — encapsulates:
-1. `search()` — wraps `cjSupplierAdapter.searchProducts()`
-2. `evaluate()` — fetch detail + warehouse-aware shipping + qualification math (pure, no DB)
-3. `importAndDraft()` — upserts product + variants + shipping quote to DB, then calls existing `buildDraft()`
+- `backend/scripts/cj-shopify-usa-live-validation.ts`
 
----
+Purpose:
 
-## Discover flow: how it connects to the pipeline
+- runs live readiness + broad Discover search against production
+- records search counts, candidate evaluations, and publish attempts
+- writes evidence to `backend/cj-shopify-usa-live-validation-results.json`
 
-```
-Discover search → user selects product
-  → POST /discover/evaluate     (optional: view pricing breakdown live)
-  → POST /discover/import-draft (creates DB snapshot + draft listing)
-  → navigate to /cj-shopify-usa/listings
-  → POST /listings/publish       (operator publishes draft to Shopify)
-```
+The controlled hybrid operator run evidence is stored in:
 
-The `import-draft` call:
-1. Calls `adapter.getProductById()` — fetches CJ product with all variants
-2. Upserts `CjShopifyUsaProduct` + all `CjShopifyUsaProductVariant` records
-3. Calls `adapter.quoteShippingToUsWarehouseAware()` — saves a `CjShopifyUsaShippingQuote`
-4. Calls `cjShopifyUsaPublishService.buildDraft()` using the new DB product ID
-5. Returns listing ID + suggested price
+- `backend/cj-shopify-usa-hybrid-run-result.json`
 
----
+## Live validation result (2026-04-20)
 
-## Regression check (verified 2026-04-19)
+### Broad production search
 
-- `CJ → eBay USA`: no files touched ✅
-- `CJ → ML Chile`: no files touched ✅
-- Backend type-check: **PASS** ✅
-- Frontend type-check: **PASS** ✅
-- Frontend build (Vite): **PASS** (13.61s) ✅
+The following required keyword families were searched live in production, pages `1` and `2`, `20` results each page:
 
----
+- `phone accessories`
+- `home organization`
+- `kitchen gadgets`
+- `beauty tools`
+- `pet accessories`
+- `fitness accessories`
+- `office accessories`
+- `car accessories`
+- `led gadgets`
+- `travel accessories`
 
-## Live Production Notes (2026-04-20)
+Result:
 
-- `GET /api/cj-shopify-usa/system-readiness` now returns `ready: true`
-- Shopify required scopes are granted live (`missingScopes = []`)
-- Required Shopify webhooks are registered live
-- `POST /api/cj-shopify-usa/listings/publish` is verified live after the Shopify API `2026-04` inventory mutation fix
-- One controlled listing is currently `ACTIVE` in Shopify (`gid://shopify/Product/9145457803476`)
-- `POST /api/cj-shopify-usa/discover/import-draft` now returns `400 VALIDATION_ERROR` when the CJ product has no variant meeting `minStock` (commit `ce7a485`)
+- `400` raw search results surfaced
+- `40` candidates evaluated from the production Discover path
+- `0` viable candidates selected by deployed production Discover
 
-## Remaining Operational Gaps
+Why `0` viable candidates happened:
 
-- CJ credentials must be configured for the user (required for all Discover operations)
-- Profit snapshots are generated by order processing — empty until real orders flow through
-- The current tested CJ candidate `1999395299549302785` is out of stock across all variants, so it is not a valid draft/publish candidate
-- Anonymous storefront visibility is still blocked by the Shopify password page, so buyer-facing PDP visibility is not yet open
-- Order-ingestion / webhook automation is not yet revalidated with a real Shopify order in this session
+- not because CJ lacked products
+- because deployed production Discover was reading stale stock and marking all evaluated variants as effectively zero-stock
 
----
+### Fixed-service candidate scan
 
-## What remains placeholder / not yet built
+After applying live-stock enrichment locally, targeted searches immediately produced approved USA-viable candidates with real stock:
 
-- Automatic daily profit snapshot job (no cron/scheduler yet)
-- Bulk Discover → batch draft creation
-- Discover filters (category, price range, min stock)
-- US-only stock filter in search results
+| Keyword | Candidate | Top stock | Shipping | Suggested sell |
+|--------|-----------|----------:|----------|----------------|
+| `travel pillow` | `Neck Pillow Travel Pillow` | `14432` | `$6.11`, `USPS+VIP`, `US`, `7d` | `$14.84` |
+| `travel pillow` | `Travel pillow inflatable pillow` | `13503` | `$4.85`, `USPS+VIP`, `US`, `7d` | `$7.12` |
+| `car phone holder` | `Car Phone Holder Car Holder Air Outlet Phone Holder` | `40000` | `$7.64`, `USPS+VIP`, `US`, `7d` | `$22.54` |
+| `drawer organizer` | `Drawer organizer` | `14261` | `$5.03`, `USPS+VIP`, `US`, `7d` | `$7.45` |
+| `facial roller` | `Ice Roller Massager Facial Ice Head Roller Massage` | `14761` | `$5.88`, `USPS+VIP`, `US`, `7d` | `$9.13` |
+| `dog leash` | `Dog leash dog leash pet leash` | `14808` | `$5.88`, `USPS+VIP`, `US`, `7d` | `$8.32` |
+| `resistance bands` | `Fabric Resistance Bands` | `33334` | `$9.41`, `USPS+VIP`, `US`, `7d` | `$19.20` |
+
+Chosen for the controlled flow:
+
+- `Neck Pillow Travel Pillow`
+- reason: strong real stock, multiple usable variants, `US` origin, known shipping, and a cleaner mid-range sell price than the ultra-cheap alternatives
+
+### Controlled end-to-end flow
+
+Result:
+
+- Discover candidate selected: `479E2C57-73CA-4F63-B77E-6ABC5B2F32D5`
+- Evaluate decision: `APPROVED`
+- Import Draft:
+  - `dbProductId = 5`
+  - `listing.id = 3`
+  - `status = DRAFT`
+  - `listedPriceUsd = 14.62`
+- Publish:
+  - `status = ACTIVE`
+  - `shopifyProductId = gid://shopify/Product/9145755435220`
+  - `shopifyVariantId = gid://shopify/ProductVariant/47823252390100`
+  - `shopifyHandle = neck-pillow-travel-pillow-cjjjjfzt00492-pink`
+- Orders sync after publish:
+  - `ok = true`
+  - `count = 0`
+
+### Buyer-facing result
+
+The PDP check returned:
+
+- storefront URL: `https://ivanreseller-2.myshopify.com/products/neck-pillow-travel-pillow-cjjjjfzt00492-pink`
+- HTTP status: `200`
+- final URL: `https://ivanreseller-2.myshopify.com/password`
+- `passwordGate = true`
+
+So the product exists and is published, but the PDP is not publicly accessible to a buyer yet.
+
+## Verification
+
+- Backend type-check: PASS
+- Frontend build: PASS
+- `CJ -> eBay USA`: untouched
+- `CJ -> ML Chile`: untouched
+
+## Remaining operational gaps
+
+1. `Storefront password gate` is now the main commercial blocker after successful publish.
+2. The live-stock correction still needs a production deployment so the same result is repeatable directly from the production Discover UI/API path.
+3. Controlled buyer order / fulfillment / tracking still needs a live pass after the storefront gate is opened.

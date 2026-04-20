@@ -1,124 +1,93 @@
 # CJ -> Shopify USA - Master Plan
 
 ## Current State (updated 2026-04-20)
-`CJ -> Shopify USA` is now wired around the correct Shopify Dev Dashboard app model for a same-org, single-store integration:
+Closed and confirmed live. These points are not being reopened without new evidence:
 
-- Shopify app credentials live in backend env / Railway only.
-- The backend exchanges `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET` for a short-lived Admin API token using `client_credentials`.
-- The module no longer depends on a manually stored Shopify admin access token in DB.
-- **`SHOPIFY_SHOP=ivanreseller-2.myshopify.com` is now set in Railway and `.env.local`.**
-- Token exchange is live and confirmed working — store "IvanReseller" resolved, currency USD.
-- Required Shopify scopes are granted live (`missingScopes = []`).
-- Frontend sidebar and routes are now registered and visible when `VITE_ENABLE_CJ_SHOPIFY_USA_MODULE=true`.
-- Both Shopify webhooks (`ORDERS_CREATE`, `APP_UNINSTALLED`) are registered live.
-- Controlled publish to Shopify is now verified live.
-- Current warnings: checkout reality remains third-party for a Chile-based operator, and anonymous storefront visibility is still gated by the Shopify password page. See `CJ_SHOPIFY_USA_READINESS.md`.
+- Shopify auth = PASS
+- `missingScopes = []`
+- required scopes granted live
+- readiness = `true`
+- webhooks = PASS
+- Discover page = REAL
+- controlled publish already verified live
+- frontend production is working
+- `CJ -> Shopify USA` block is visible in production
+
+Operational evidence added on `2026-04-20`:
+
+- A serious live search sweep was executed against production across 10 USA-oriented niche families, pages `1` and `2`, `20` results per page.
+- That sweep surfaced `400` raw CJ search results and evaluated `40` candidates from production Discover.
+- The deployed production Discover path falsely rejected every evaluated candidate as zero-stock because it trusted stale `variant.stock` from `getProductById()` instead of live stock from `getStockForSkus(cjVid)`.
+- The local fix now enriches live stock during:
+  - `discover/evaluate`
+  - `discover/import-draft`
+  - `listings/buildDraft`
+  - `listings/publish`
+- After applying that stock-truth fix locally against the same real DB and real CJ credentials, the first stock-backed commercial flow was completed:
+  - CJ product: `479E2C57-73CA-4F63-B77E-6ABC5B2F32D5`
+  - title: `Neck Pillow Travel Pillow`
+  - selected SKU: `CJJJJFZT00492-Pink`
+  - selected variant stock: `14432`
+  - shipping: `$6.11`, `USPS+VIP`, `7` days, origin `US`
+  - Shopify product: `gid://shopify/Product/9145755435220`
+  - Shopify handle: `neck-pillow-travel-pillow-cjjjjfzt00492-pink`
+- The product exists correctly in Shopify, but buyer-facing PDP access is still blocked by the Shopify storefront password page.
+
+See `docs/CJ_SHOPIFY_USA_LIVE_PRODUCT_VALIDATION.md` for the full evidence trail.
 
 ## Architecture Decisions
 
 ### Secrets vs DB
-- **Env / secret manager only**
+- Env / secret manager only
   - `SHOPIFY_CLIENT_ID`
   - `SHOPIFY_CLIENT_SECRET`
-- **DB metadata only**
-  - `shopifyStoreUrl` as optional safe store-domain fallback
+- DB metadata only
+  - `shopifyStoreUrl`
   - `shopifyLocationId`
   - pricing / margin / operational settings
-- **Not used anymore for auth**
-  - `shopifyAccessToken` legacy DB field remains in schema for backwards compatibility, but the module ignores it and does not accept it in config updates.
+- Not used anymore for auth
+  - `shopifyAccessToken` remains legacy schema only
 
 ### Shopify Auth Model
 - Auth mode: `client_credentials`
-- Token lifetime: short-lived (refreshed by repeating the same exchange)
+- Token lifetime: short-lived and refreshed by repeating the exchange
 - Token storage: in-memory cache only
-- API surface used by the backend: GraphQL Admin API
+- API surface used by the backend: Shopify GraphQL Admin API
 
-## What Was Implemented
+## What Is Implemented
 
 ### Backend foundations
-- Added typed env support for:
-  - `ENABLE_CJ_SHOPIFY_USA_MODULE`
-  - `SHOPIFY_CLIENT_ID`
-  - `SHOPIFY_CLIENT_SECRET`
-  - `SHOPIFY_SHOP`
-  - `SHOPIFY_API_VERSION`
-  - `WEBHOOK_VERIFY_SIGNATURE_SHOPIFY`
-  - `WEBHOOK_SECRET_SHOPIFY`
-- Added `cjShopifyUsaAdminService` for:
-  - shop-domain normalization
-  - token exchange
-  - in-memory token caching
-  - Shopify connection probe
-  - webhook registration
-  - product upsert
-  - inventory sync
-  - publication
-  - order pull
-  - fulfillment / tracking push
+- Typed env support for Shopify + module flags
+- `cjShopifyUsaAdminService` for auth, publication, inventory sync, webhooks, orders, fulfillment, and tracking
+- Honest readiness checks for module flag, DB, CJ credentials, Shopify auth, scopes, currency, locations, publications, and webhook automation
 
-### Readiness and operator surfaces
-- Replaced manual-token readiness with honest readiness checks for:
-  - module flag
-  - DB connectivity
-  - CJ credential presence
-  - Shopify env secrets presence
-  - Shopify shop-domain presence
-  - live Shopify auth
-  - required scopes
-  - USD currency
-  - location availability
-  - publication availability
-  - webhook automation completeness
-  - Chile operator payment-gateway reality
+### Operator surfaces
+- Overview, Discover, Products, Listings, Orders, Alerts, Profit, and Logs pages are real
+- Discover pipeline is live end-to-end from search to draft creation
+- Shopify publish flow is real and writes active products into Shopify
+- Order sync endpoint is live and was rechecked after the controlled publish
 
-### CJ -> Shopify USA vertical continuation
-- Real overview counts from DB
-- Safe config snapshot endpoint with auth summary and no secret exposure
-- Auth probe endpoint
-- Webhook registration endpoint
-- Draft listing generation from existing CJ product / variant data
-- Shopify publish flow:
-  - product upsert
-  - inventory quantity set
-  - publication to Online Store-like channel
-- Shopify order ingestion:
-  - manual sync endpoint
-  - webhook ingestion path
-  - fail-closed mapping when multiple or zero managed line items match
-- Shopify fulfillment / tracking sync:
-  - uses explicit local tracking or CJ tracking
-  - pushes fulfillment only when a single clear fulfillment target exists
+### Discover stock-truth model
+- Search remains a live CJ catalog search
+- Evaluate/import now refresh stock with `getStockForSkus(cjVid[])` before selecting an eligible variant
+- Draft/publish refresh stock again immediately before quantity validation and Shopify publish
+- This removes the false-negative stock behavior seen in the deployed production Discover path
 
-## Discover Flow (added 2026-04-19)
+## Primary Blockers Now
 
-**All 9 pages are now REAL. Discover is no longer a placeholder.**
-
-The Discover pipeline connects:
-```
-Search CJ → Evaluate margin → Import + Draft → Publish to Shopify
-```
-
-New service: `cj-shopify-usa-discover.service.ts`
-New endpoints:
-- `GET  /api/cj-shopify-usa/discover/search`
-- `POST /api/cj-shopify-usa/discover/evaluate`
-- `POST /api/cj-shopify-usa/discover/import-draft`
-
-See `CJ_SHOPIFY_USA_DISCOVER_FLOW.md` for full documentation.
-
-Overview page was also enriched with pipeline CTAs, warning strips, and clickable count tiles.
-
-## Remaining External Blockers
-
-1. **Supplier stock reality** — the current live-tested candidate (`1999395299549302785`) has no variant meeting `minStock`, so draft/publish is correctly blocked after evaluation.
-2. **Storefront visibility** — the published product is active in Shopify, but anonymous access still hits the Shopify password page instead of buyer-facing PDP content.
-3. **CJ credentials** — must be configured per user for Discover search/evaluate/import to work.
-4. **Profit snapshots** — generated by order processing only; empty until real orders flow.
-5. **Order-ingestion proof** — controlled publish is verified, but real Shopify order ingestion/tracking sync still needs its own live pass.
+1. `Storefront password gate`
+   The published product URL resolves to `/password`, so the PDP is not buyer-facing yet.
+2. `Production deployment of the stock-truth fix`
+   The repeatable UI flow in production still needs the Discover/publish stock-refresh fix to be deployed.
+3. `Controlled order validation`
+   Order ingestion, tracking, and fulfillment cannot be validated as a buyer flow until public PDP / checkout access is available.
 
 ## Next Correct Steps
 
-1. Use Discover to select an in-stock CJ product instead of the current zero-stock candidate.
-2. Remove or adjust the Shopify storefront password gate so anonymous buyers can reach the PDP.
-3. Verify the published product appears in Shopify admin and as buyer-facing PDP content.
-4. Place a controlled test order and verify webhook ingestion plus tracking sync.
+1. Deploy the `CJ -> Shopify USA` live-stock fix to production so Discover no longer rejects viable products as stock `0`.
+2. Remove or temporarily lift the Shopify storefront password gate, or provide a controlled buyer-access path for testing.
+3. Place one controlled order against the published product and verify:
+   - Shopify order visibility
+   - webhook / manual sync ingestion
+   - tracking / fulfillment propagation
+4. Capture the first real profit snapshot after the order exists.

@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { AppError, ErrorCode } from '../../../middleware/error.middleware';
+import { createCjSupplierAdapter } from '../../cj-ebay/adapters/cj-supplier.adapter';
 import { cjShopifyUsaAdminService } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
@@ -47,6 +48,40 @@ async function recordTrace(userId: number, step: string, message: string, meta?:
   });
 }
 
+async function resolveLatestVariantStock(input: {
+  userId: number;
+  variantId: number;
+  cjVid?: string | null;
+  fallbackStock?: Prisma.Decimal | number | string | null;
+}): Promise<number> {
+  const fallback = toSafeInt(input.fallbackStock);
+  const vid = String(input.cjVid || '').trim();
+  if (!vid) {
+    return fallback;
+  }
+
+  try {
+    const adapter = createCjSupplierAdapter(input.userId);
+    const stockMap = await adapter.getStockForSkus([vid]);
+    const liveStock = stockMap.get(vid);
+    if (liveStock === undefined || !Number.isFinite(liveStock)) {
+      return fallback;
+    }
+
+    const normalized = Math.max(0, Math.floor(liveStock));
+    await prisma.cjShopifyUsaProductVariant.update({
+      where: { id: input.variantId },
+      data: {
+        stockLastKnown: normalized,
+        stockCheckedAt: new Date(),
+      },
+    });
+    return normalized;
+  } catch {
+    return fallback;
+  }
+}
+
 export const cjShopifyUsaPublishService = {
   async buildDraft(input: {
     userId: number;
@@ -81,7 +116,12 @@ export const cjShopifyUsaPublishService = {
 
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(input.userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
-    const availableStock = toSafeInt(variant.stockLastKnown);
+    const availableStock = await resolveLatestVariantStock({
+      userId: input.userId,
+      variantId: variant.id,
+      cjVid: variant.cjVid,
+      fallbackStock: variant.stockLastKnown,
+    });
 
     if (availableStock < minStock) {
       throw new AppError(
@@ -236,7 +276,14 @@ export const cjShopifyUsaPublishService = {
 
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(input.userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
-    const availableStock = toSafeInt(listing.variant?.stockLastKnown);
+    const availableStock = listing.variant
+      ? await resolveLatestVariantStock({
+          userId: input.userId,
+          variantId: listing.variant.id,
+          cjVid: listing.variant.cjVid,
+          fallbackStock: listing.variant.stockLastKnown,
+        })
+      : 0;
     const desiredQuantity = toSafeInt(listing.quantity ?? draft.quantity ?? 0);
 
     if (availableStock < minStock) {

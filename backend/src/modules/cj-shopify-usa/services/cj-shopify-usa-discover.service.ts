@@ -6,7 +6,12 @@ import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
 import { CJ_SHOPIFY_USA_TRACE_STEP } from '../cj-shopify-usa.constants';
-import type { CjProductSummary, CjVariantDetail } from '../../cj-ebay/adapters/cj-supplier.adapter.interface';
+import type {
+  CjProductDetail,
+  CjProductSummary,
+  CjVariantDetail,
+  ICjSupplierAdapter,
+} from '../../cj-ebay/adapters/cj-supplier.adapter.interface';
 import type { CjShippingQuoteNormalized } from '../../cj-ebay/adapters/cj-freight-calculate.official';
 
 async function recordTrace(userId: number, step: string, message: string, meta?: Prisma.InputJsonValue) {
@@ -19,6 +24,32 @@ function confidenceFromEvidence(evidence: CjShippingQuoteNormalized['warehouseEv
 
 function hasMinimumStock(stock: number | null | undefined, minStock: number): boolean {
   return Number(stock ?? 0) >= minStock;
+}
+
+function liveStockVariantKeys(detail: CjProductDetail): string[] {
+  return detail.variants
+    .map((variant) => String(variant.cjVid || '').trim())
+    .filter(Boolean);
+}
+
+async function enrichProductDetailWithLiveStock(
+  adapter: ICjSupplierAdapter,
+  detail: CjProductDetail,
+): Promise<CjProductDetail> {
+  const probeKeys = liveStockVariantKeys(detail);
+  if (probeKeys.length === 0) {
+    return detail;
+  }
+
+  const liveStock = await adapter.getStockForSkus(probeKeys);
+  return {
+    ...detail,
+    variants: detail.variants.map((variant) => {
+      const key = String(variant.cjVid || '').trim();
+      const stock = key ? liveStock.get(key) : undefined;
+      return stock === undefined ? variant : { ...variant, stock };
+    }),
+  };
 }
 
 export interface DiscoverShippingResult {
@@ -79,7 +110,7 @@ export const cjShopifyUsaDiscoverService = {
     destPostalCode?: string,
   ): Promise<DiscoverEvaluationResult> {
     const adapter = createCjSupplierAdapter(userId);
-    const product = await adapter.getProductById(cjProductId);
+    const product = await enrichProductDetailWithLiveStock(adapter, await adapter.getProductById(cjProductId));
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
     const firstVariant = product.variants[0] as CjVariantDetail | undefined;
@@ -148,7 +179,7 @@ export const cjShopifyUsaDiscoverService = {
     destPostalCode: string | undefined,
   ): Promise<DiscoverImportDraftResult> {
     const adapter = createCjSupplierAdapter(userId);
-    const product = await adapter.getProductById(cjProductId);
+    const product = await enrichProductDetailWithLiveStock(adapter, await adapter.getProductById(cjProductId));
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
 
