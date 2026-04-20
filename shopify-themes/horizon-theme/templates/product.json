@@ -264,6 +264,74 @@
         "padding-block-end": 0
       }
     },
+    "ir_product_trust_main": {
+      "type": "ir-product-trust",
+      "blocks": {
+        "ir_benefit_support": {
+          "type": "benefit",
+          "settings": {
+            "text": "Curated for practical everyday use with strong buyer-facing presentation"
+          }
+        },
+        "ir_benefit_delivery": {
+          "type": "benefit",
+          "settings": {
+            "text": "Built to support confident checkout with clear delivery and trust cues"
+          }
+        },
+        "ir_benefit_checkout": {
+          "type": "benefit",
+          "settings": {
+            "text": "Designed to reduce hesitation with transparent support and guarantees"
+          }
+        },
+        "ir_trust_shipping": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🚚",
+            "text": "Reliable shipping updates"
+          }
+        },
+        "ir_trust_returns": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🔄",
+            "text": "Straightforward return support"
+          }
+        },
+        "ir_trust_checkout": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🔐",
+            "text": "Secure checkout experience"
+          }
+        }
+      },
+      "block_order": [
+        "ir_benefit_support",
+        "ir_benefit_delivery",
+        "ir_benefit_checkout",
+        "ir_trust_shipping",
+        "ir_trust_returns",
+        "ir_trust_checkout"
+      ],
+      "settings": {
+        "show_guarantee": true,
+        "guarantee_title": "30-Day Money-Back Promise",
+        "guarantee_text": "Shop with confidence. If it is not the right fit, we make the next step easier.",
+        "show_benefits": true,
+        "show_stock_indicator": true,
+        "stock_text": "In stock and ready to ship",
+        "stock_subtext": "— Popular with shoppers right now.",
+        "show_trust_bar": true,
+        "show_payment_trust": true,
+        "payment_text": "Secure checkout with trusted payment methods",
+        "show_visa": true,
+        "show_mastercard": true,
+        "show_amex": true,
+        "show_paypal": true
+      }
+    },
     "product_recommendations_qggXJq": {
       "type": "product-recommendations",
       "blocks": {
@@ -408,6 +476,7 @@
   },
   "order": [
     "main",
+    "ir_product_trust_main",
     "product_recommendations_qggXJq"
   ]
 }
