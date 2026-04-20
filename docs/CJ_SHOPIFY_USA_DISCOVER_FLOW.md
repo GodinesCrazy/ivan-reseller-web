@@ -108,6 +108,11 @@ The `CJ -> Shopify USA` flow now uses live stock truth:
 
 This aligns `CJ -> Shopify USA` with the stock-validation pattern already used in other CJ verticals.
 
+Deployment status:
+
+- deployed to Railway production on `2026-04-20`
+- backend commit: `93f9777`
+
 ## Connection to the rest of the pipeline
 
 ```text
@@ -197,6 +202,23 @@ Controlled flow result:
   - `shopifyProductId = gid://shopify/Product/9145755435220`
   - `shopifyVariantId = gid://shopify/ProductVariant/47823252390100`
   - `shopifyHandle = neck-pillow-travel-pillow-cjjjjfzt00492-pink`
+
+### Post-deploy production proof
+
+After the Railway deploy, production Discover was checked directly:
+
+- `GET /discover/search?keyword=travel pillow&page=1&pageSize=10` returned `10` results
+- the first three production titles were:
+  - `Neck Pillow Travel Pillow`
+  - `Travel pillow inflatable pillow`
+  - `Travel U-shaped pillow eye protection neck pillow cervical pillow neck pillow travel portable pillow`
+- `POST /discover/evaluate` for `479E2C57-73CA-4F63-B77E-6ABC5B2F32D5` returned:
+  - decision `APPROVED`
+  - shipping `$6.11`
+  - method `USPS+VIP`
+  - origin `US`
+  - `5` eligible variants
+  - top stock `14432`
 
 ## Buyer-facing status
 

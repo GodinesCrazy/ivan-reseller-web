@@ -6,7 +6,7 @@
 
 `CJ -> Shopify USA` has all operator pages implemented as real surfaces, and the vertical now has a first proven stock-backed product published into Shopify.
 
-The key operational finding from `2026-04-20` is that production Discover search was real, but deployed production evaluation/import was using stale CJ detail stock and therefore false-rejecting viable products. After correcting that stock source locally and using the same real DB plus the live production publish endpoint, the team completed a controlled flow with a real in-stock CJ product and confirmed the exact next blocker: the Shopify storefront password gate.
+The key operational finding from `2026-04-20` is that production Discover search was real, but deployed production evaluation/import was using stale CJ detail stock and therefore false-rejecting viable products. That stock source was corrected, deployed to Railway production in commit `93f9777`, and then revalidated directly against production. The team completed a controlled flow with a real in-stock CJ product and confirmed the exact next blocker: the Shopify storefront password gate.
 
 ## Pages status
 
@@ -123,6 +123,23 @@ Result:
   - `ok = true`
   - `count = 0`
 
+### Post-deploy production revalidation
+
+After the Railway deploy of commit `93f9777`, production was rechecked directly:
+
+- `GET /discover/search?keyword=travel pillow&page=1&pageSize=10` returned `10` results
+- top production titles:
+  - `Neck Pillow Travel Pillow`
+  - `Travel pillow inflatable pillow`
+  - `Travel U-shaped pillow eye protection neck pillow cervical pillow neck pillow travel portable pillow`
+- `POST /discover/evaluate` for `479E2C57-73CA-4F63-B77E-6ABC5B2F32D5` returned:
+  - decision `APPROVED`
+  - shipping `$6.11`
+  - method `USPS+VIP`
+  - origin `US`
+  - `5` eligible variants
+  - top stock `14432`
+
 ### Buyer-facing result
 
 The PDP check returned:
@@ -138,11 +155,12 @@ So the product exists and is published, but the PDP is not publicly accessible t
 
 - Backend type-check: PASS
 - Frontend build: PASS
+- Railway backend deployment for commit `93f9777`: SUCCESS
+- Production direct Discover/Evaluate revalidation after deploy: PASS
 - `CJ -> eBay USA`: untouched
 - `CJ -> ML Chile`: untouched
 
 ## Remaining operational gaps
 
 1. `Storefront password gate` is now the main commercial blocker after successful publish.
-2. The live-stock correction still needs a production deployment so the same result is repeatable directly from the production Discover UI/API path.
-3. Controlled buyer order / fulfillment / tracking still needs a live pass after the storefront gate is opened.
+2. Controlled buyer order / fulfillment / tracking still needs a live pass after the storefront gate is opened.

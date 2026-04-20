@@ -90,6 +90,12 @@ Real fix applied locally:
 - refresh stock with `adapter.getStockForSkus(cjVid[])`
 - use the refreshed stock in evaluate, import-draft, draft validation, and publish validation
 
+Deployment outcome:
+
+- pushed to `main`
+- Railway backend deploy succeeded on `2026-04-20`
+- backend commit: `93f9777`
+
 Conclusion:
 
 - broad search was real
@@ -198,6 +204,23 @@ Confirmed listing state:
 - SKU: `CJJJJFZT00492-Pink`
 - handle: `neck-pillow-travel-pillow-cjjjjfzt00492-pink`
 
+## Phase 2.1 - Post-deploy production revalidation
+
+After the backend deploy, production was rechecked directly without the hybrid workaround for search/evaluate:
+
+- `GET /discover/search?keyword=travel pillow&page=1&pageSize=10` returned `10` results
+- top three production titles:
+  - `Neck Pillow Travel Pillow`
+  - `Travel pillow inflatable pillow`
+  - `Travel U-shaped pillow eye protection neck pillow cervical pillow neck pillow travel portable pillow`
+- `POST /discover/evaluate` for `479E2C57-73CA-4F63-B77E-6ABC5B2F32D5` returned:
+  - decision `APPROVED`
+  - shipping `$6.11`
+  - method `USPS+VIP`
+  - origin `US`
+  - `5` eligible variants
+  - top stocks `14432`, `12654`, `11702`, `11638`, `11059`
+
 ## Phase 3 - PDP buyer-facing verification
 
 Storefront check result:
@@ -231,7 +254,7 @@ Why this is the main blocker now:
 
 Secondary follow-up item:
 
-- deploy the live-stock fix to production so the same discovery result is repeatable directly from the production Discover UI/API path without the hybrid operator workaround
+- execute the first controlled buyer order after storefront access is opened
 
 ## Phase 5 - Controlled order possibility
 
@@ -261,6 +284,7 @@ Therefore:
 - import-draft live: PASS
 - listings live: PASS
 - publish live: PASS
+- production Discover/Evaluate after deploy: PASS
 - Shopify product existence: PASS
 - buyer-facing PDP: FAIL because of storefront password gate
 - controlled order: NOT executed yet because storefront access is blocked

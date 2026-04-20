@@ -23,6 +23,11 @@ Operational evidence added on `2026-04-20`:
   - `discover/import-draft`
   - `listings/buildDraft`
   - `listings/publish`
+- That fix was deployed to Railway production on `2026-04-20` in commit `93f9777`.
+- Production was revalidated after deploy:
+  - `GET /discover/search?keyword=travel pillow&page=1&pageSize=10` returned `10` results
+  - `POST /discover/evaluate` for `479E2C57-73CA-4F63-B77E-6ABC5B2F32D5` returned `APPROVED`
+  - production now exposes `5` eligible variants for that product, led by stock `14432`
 - After applying that stock-truth fix locally against the same real DB and real CJ credentials, the first stock-backed commercial flow was completed:
   - CJ product: `479E2C57-73CA-4F63-B77E-6ABC5B2F32D5`
   - title: `Neck Pillow Travel Pillow`
@@ -77,17 +82,14 @@ See `docs/CJ_SHOPIFY_USA_LIVE_PRODUCT_VALIDATION.md` for the full evidence trail
 
 1. `Storefront password gate`
    The published product URL resolves to `/password`, so the PDP is not buyer-facing yet.
-2. `Production deployment of the stock-truth fix`
-   The repeatable UI flow in production still needs the Discover/publish stock-refresh fix to be deployed.
-3. `Controlled order validation`
+2. `Controlled order validation`
    Order ingestion, tracking, and fulfillment cannot be validated as a buyer flow until public PDP / checkout access is available.
 
 ## Next Correct Steps
 
-1. Deploy the `CJ -> Shopify USA` live-stock fix to production so Discover no longer rejects viable products as stock `0`.
-2. Remove or temporarily lift the Shopify storefront password gate, or provide a controlled buyer-access path for testing.
-3. Place one controlled order against the published product and verify:
+1. Remove or temporarily lift the Shopify storefront password gate, or provide a controlled buyer-access path for testing.
+2. Place one controlled order against the published product and verify:
    - Shopify order visibility
    - webhook / manual sync ingestion
    - tracking / fulfillment propagation
-4. Capture the first real profit snapshot after the order exists.
+3. Capture the first real profit snapshot after the order exists.
