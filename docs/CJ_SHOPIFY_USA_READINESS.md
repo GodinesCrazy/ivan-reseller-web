@@ -20,7 +20,7 @@ using `client_credentials` grant. It is intentionally fail-closed:
 | Shopify Config | **PASS** | `SHOPIFY_SHOP=ivanreseller-2.myshopify.com` set in Railway |
 | Shopify Auth | **PASS** | Token exchange works; shop name resolved to "IvanReseller"; required scopes are granted live |
 | Frontend visibility | **FIXED** | `VITE_ENABLE_CJ_SHOPIFY_USA_MODULE=true` in `.env.production` |
-| Webhook registration | **WARNING** | `auth/test` currently returns `webhookSubscriptions = []` |
+| Webhook registration | **PASS** | Required topics are registered live |
 
 ### Shopify Token Exchange — WORKS
 - Shop domain: `ivanreseller-2.myshopify.com`
@@ -44,7 +44,8 @@ write_products, read_publications, write_publications
 
 ### Webhook subscriptions (live 2026-04-20)
 ```
-[]
+ORDERS_CREATE  → https://ivanreseller.com/api/cj-shopify-usa/webhooks/orders-create
+APP_UNINSTALLED → https://ivanreseller.com/api/cj-shopify-usa/webhooks/app-uninstalled
 ```
 
 ---
@@ -99,12 +100,13 @@ Required:
 
 ## Current Warnings / Follow-up
 
-`GET /api/cj-shopify-usa/system-readiness` now returns `ready: true`, but two live warnings remain:
+`GET /api/cj-shopify-usa/system-readiness` now returns `ready: true`.
 
-1. **Webhook automation warning** — `ORDERS_CREATE` and `APP_UNINSTALLED` are not currently present in `webhookSubscriptions`.
-2. **Checkout / payments reality warning** — the operator is Chile-based, so third-party checkout remains required; do not assume Shopify Payments.
+The remaining live readiness warning is:
 
-Neither warning blocks Discover, Evaluate, Import Draft, or controlled publish.
+1. **Checkout / payments reality warning** — the operator is Chile-based, so third-party checkout remains required; do not assume Shopify Payments.
+
+This warning does not block Discover, Evaluate, Import Draft, or controlled publish.
 
 ---
 
@@ -115,4 +117,5 @@ Neither warning blocks Discover, Evaluate, Import Draft, or controlled publish.
 | Stale scope diagnosis | Corrected: `missingScopes = []` live and `shopify.scopes = PASS` |
 | Discover not live in production | Deployed commit `a73387a` so `/api/cj-shopify-usa/discover/*` exists in production |
 | Shopify publish failed on inventory sync | Updated `inventorySetQuantities` call for Shopify API `2026-04` using `changeFromQuantity: null` |
+| Webhook automation | Re-registered required Shopify webhook subscriptions via `POST /api/cj-shopify-usa/webhooks/register` |
 | Controlled publish validation | Verified live publish success: listing `#2` reached `ACTIVE` with Shopify product + variant IDs |

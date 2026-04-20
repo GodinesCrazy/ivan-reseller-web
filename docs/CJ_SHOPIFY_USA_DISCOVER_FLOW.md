@@ -194,7 +194,7 @@ The full Discover → Evaluate → Import Draft → Publish flow was executed ag
 - ✅ Storefront URL responded `200`
 
 **Warnings still open after this run:**
-- `auth/test` currently returns `webhookSubscriptions = []`
+- Anonymous storefront visibility is still gated by the Shopify password page; the public URL returns `200` but not buyer-facing product content
 - Profit / order-ingestion validation still depends on a real Shopify order flow
 
 ---
