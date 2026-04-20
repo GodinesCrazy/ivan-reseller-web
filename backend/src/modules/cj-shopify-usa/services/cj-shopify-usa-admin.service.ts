@@ -684,13 +684,12 @@ export class CjShopifyUsaAdminService {
           name: 'available',
           reason: 'correction',
           referenceDocumentUri: input.referenceDocumentUri,
-          ignoreCompareQuantity: true,
           quantities: [
             {
               inventoryItemId: input.inventoryItemId,
               locationId: input.locationId,
               quantity: Math.max(0, Math.floor(input.quantity)),
-              compareQuantity: null,
+              changeFromQuantity: null,
             },
           ],
         },
