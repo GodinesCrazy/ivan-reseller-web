@@ -85,6 +85,7 @@ const CjMlChileLogsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileLogsPag
 // CJ → Shopify USA
 const CjShopifyUsaModuleGate = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaModuleGate'));
 const CjShopifyUsaLayout = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaLayout'));
+const CjShopifyUsaOverviewPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaOverviewPage'));
 const CjShopifyUsaPlaceholderPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaPlaceholderPage'));
 const Listings = lazy(() => import('@pages/Listings'));
 const ControlCenter = lazy(() => import('@pages/ControlCenter'));
@@ -326,7 +327,7 @@ function AppContent() {
         <Route path="cj-shopify-usa" element={<CjShopifyUsaModuleGate />}>
           <Route element={<CjShopifyUsaLayout />}>
             <Route index element={<Navigate to="overview" replace />} />
-            <Route path="overview" element={<CjShopifyUsaPlaceholderPage title="Overview" />} />
+            <Route path="overview" element={<CjShopifyUsaOverviewPage />} />
             <Route path="products" element={<CjShopifyUsaPlaceholderPage title="Products" />} />
             <Route path="listings" element={<CjShopifyUsaPlaceholderPage title="Store Products" />} />
             <Route path="orders" element={<CjShopifyUsaPlaceholderPage title="Orders" />} />
