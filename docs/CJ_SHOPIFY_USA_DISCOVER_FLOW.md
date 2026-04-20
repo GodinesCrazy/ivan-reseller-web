@@ -165,29 +165,37 @@ The listing is now visible in `GET /listings` and ready for `POST /listings/publ
 
 ---
 
-## End-to-end flow test result (2026-04-19)
+## End-to-end flow test result (2026-04-20)
 
-**Status: NOT EXECUTED — external blocker**
+**Status: EXECUTED LIVE**
 
-The Discover → Evaluate → Draft steps work (endpoints exist, types check, build passes). The **publish to Shopify** step requires:
-- Active Shopify store with app installed
-- 5 missing OAuth scopes granted in Shopify Partners dashboard
-- `system-readiness` returning `ready: true`
+The full Discover → Evaluate → Import Draft → Publish flow was executed against production on `2026-04-20`.
 
-Until those scopes are added, `POST /listings/publish` will fail at the Shopify GraphQL productCreate call.
+**Live result summary:**
+- `GET /discover/search` returned real CJ catalog results
+- `POST /discover/evaluate` returned real CJ detail, shipping, and qualification data
+- `POST /discover/import-draft` created a real draft listing in DB
+- `POST /listings/publish` published successfully to Shopify after the inventory mutation was updated for Shopify API `2026-04`
+- Resulting listing reached `ACTIVE` with:
+  - `shopifyProductId = gid://shopify/Product/9145457803476`
+  - `shopifyVariantId = gid://shopify/ProductVariant/47821968474324`
+  - `shopifyHandle = wireless-tws-stereo-earbuds-cjej264155501az`
 
 **What was verified:**
 - ✅ Backend type-check PASS
 - ✅ Frontend type-check PASS
 - ✅ Frontend build PASS
 - ✅ Discover page loads (no placeholder)
-- ✅ Search, evaluate, import-draft routes exist and are wired
-- ✅ Discover → Listings CTA functional
+- ✅ Real CJ search returning results in production
+- ✅ Real evaluate response with shipping + qualification
+- ✅ Real import-draft DB write
+- ✅ End-to-end publish to Shopify
+- ✅ Listing status became `ACTIVE` in `/api/cj-shopify-usa/listings`
+- ✅ Storefront URL responded `200`
 
-**What was NOT verified (requires live env with scopes):**
-- ❌ Real CJ search returning results (requires CJ credentials)
-- ❌ End-to-end publish to Shopify (requires Shopify scope fix)
-- ❌ Listing appearing in Shopify admin after publish
+**Warnings still open after this run:**
+- `auth/test` currently returns `webhookSubscriptions = []`
+- Profit / order-ingestion validation still depends on a real Shopify order flow
 
 ---
 

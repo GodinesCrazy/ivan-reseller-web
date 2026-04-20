@@ -9,7 +9,7 @@ using `client_credentials` grant. It is intentionally fail-closed:
 - no silent fallback to DB-stored Shopify tokens
 - no assumption that Chile operators can use Shopify Payments
 
-## Current Live State (audited 2026-04-19)
+## Current Live State (audited 2026-04-20)
 
 | Check | Status | Notes |
 |-------|--------|-------|
@@ -18,9 +18,9 @@ using `client_credentials` grant. It is intentionally fail-closed:
 | Pricing Settings | **PASS** | Default margins present |
 | CJ Credentials | **PASS** | `cj-dropshipping` apiKey available |
 | Shopify Config | **PASS** | `SHOPIFY_SHOP=ivanreseller-2.myshopify.com` set in Railway |
-| Shopify Auth | **FAIL** | Token exchange works; shop name resolved to "IvanReseller"; **missing 5 scopes** — see below |
+| Shopify Auth | **PASS** | Token exchange works; shop name resolved to "IvanReseller"; required scopes are granted live |
 | Frontend visibility | **FIXED** | `VITE_ENABLE_CJ_SHOPIFY_USA_MODULE=true` in `.env.production` |
-| Webhook registration | **PASS** | Both topics registered on Shopify |
+| Webhook registration | **WARNING** | `auth/test` currently returns `webhookSubscriptions = []` |
 
 ### Shopify Token Exchange — WORKS
 - Shop domain: `ivanreseller-2.myshopify.com`
@@ -32,22 +32,19 @@ using `client_credentials` grant. It is intentionally fail-closed:
 ### Granted scopes (current app installation)
 ```
 read_fulfillments, write_fulfillments, write_inventory, read_inventory,
-read_orders, read_products, write_products
+read_locations, read_merchant_managed_fulfillment_orders,
+write_merchant_managed_fulfillment_orders, read_orders, read_products,
+write_products, read_publications, write_publications
 ```
 
-### Missing scopes (external action required in Shopify Partners)
+### Missing scopes (live)
 ```
-read_locations
-read_publications
-write_publications
-read_merchant_managed_fulfillment_orders
-write_merchant_managed_fulfillment_orders
+[]
 ```
 
-### Webhooks registered (2026-04-19)
+### Webhook subscriptions (live 2026-04-20)
 ```
-ORDERS_CREATE  → https://ivanreseller.com/api/cj-shopify-usa/webhooks/orders-create
-APP_UNINSTALLED → https://ivanreseller.com/api/cj-shopify-usa/webhooks/app-uninstalled
+[]
 ```
 
 ---
@@ -100,36 +97,22 @@ Required:
 
 ---
 
-## Remaining External Blocker to Full `ready: true`
+## Current Warnings / Follow-up
 
-The Shopify app at [partners.shopify.com](https://partners.shopify.com) must be updated to request
-the missing scopes, a new app version published, and the store must approve the updated scope set.
+`GET /api/cj-shopify-usa/system-readiness` now returns `ready: true`, but two live warnings remain:
 
-**Exact scopes to add in Shopify Partners → App → App setup → Configuration:**
-```
-read_locations
-read_publications
-write_publications
-read_merchant_managed_fulfillment_orders
-write_merchant_managed_fulfillment_orders
-```
+1. **Webhook automation warning** — `ORDERS_CREATE` and `APP_UNINSTALLED` are not currently present in `webhookSubscriptions`.
+2. **Checkout / payments reality warning** — the operator is Chile-based, so third-party checkout remains required; do not assume Shopify Payments.
 
-**Steps:**
-1. Go to Shopify Partners → ivan-reseller app → Configuration
-2. Add the 5 missing scopes listed above
-3. Save and create a new app version (Release)
-4. In the store (ivanreseller-2.myshopify.com) → Apps → approve updated permissions
-5. Run `POST /api/cj-shopify-usa/auth/test` — expect `ok: true`
-6. Run `GET /api/cj-shopify-usa/system-readiness` — expect `ready: true`
+Neither warning blocks Discover, Evaluate, Import Draft, or controlled publish.
 
 ---
 
-## What Was Fixed in This Session (2026-04-19)
+## What Was Fixed In Live Production (2026-04-20)
 
 | Item | Change |
 |------|--------|
-| `SHOPIFY_SHOP` was missing | Set to `ivanreseller-2.myshopify.com` in Railway and `.env.local` |
-| Backend routes were never registered | Added `app.use('/api/cj-shopify-usa', ...)` in `app.ts` — committed and pushed |
-| Frontend flag missing in production | Added `VITE_ENABLE_CJ_SHOPIFY_USA_MODULE=true` to `frontend/.env.production` |
-| Probe hard-failed on any missing scope | Redesigned probe into independent phases — each scope-gated field isolated |
-| Webhooks not registered | Registered via `POST /webhooks/register` — both topics confirmed on Shopify |
+| Stale scope diagnosis | Corrected: `missingScopes = []` live and `shopify.scopes = PASS` |
+| Discover not live in production | Deployed commit `a73387a` so `/api/cj-shopify-usa/discover/*` exists in production |
+| Shopify publish failed on inventory sync | Updated `inventorySetQuantities` call for Shopify API `2026-04` using `changeFromQuantity: null` |
+| Controlled publish validation | Verified live publish success: listing `#2` reached `ACTIVE` with Shopify product + variant IDs |
