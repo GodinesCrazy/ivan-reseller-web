@@ -3,6 +3,7 @@ import { prisma } from '../../../config/database';
 import { createCjSupplierAdapter } from '../../cj-ebay/adapters/cj-supplier.adapter';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
+import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
 import { CJ_SHOPIFY_USA_TRACE_STEP } from '../cj-shopify-usa.constants';
 import type { CjProductSummary, CjVariantDetail } from '../../cj-ebay/adapters/cj-supplier.adapter.interface';
 import type { CjShippingQuoteNormalized } from '../../cj-ebay/adapters/cj-freight-calculate.official';
@@ -13,6 +14,10 @@ async function recordTrace(userId: number, step: string, message: string, meta?:
 
 function confidenceFromEvidence(evidence: CjShippingQuoteNormalized['warehouseEvidence']): string {
   return evidence === 'assumed' ? 'unknown' : 'known';
+}
+
+function hasMinimumStock(stock: number | null | undefined, minStock: number): boolean {
+  return Number(stock ?? 0) >= minStock;
 }
 
 export interface DiscoverShippingResult {
@@ -74,15 +79,20 @@ export const cjShopifyUsaDiscoverService = {
   ): Promise<DiscoverEvaluationResult> {
     const adapter = createCjSupplierAdapter(userId);
     const product = await adapter.getProductById(cjProductId);
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const minStock = Math.max(0, Number(settings.minStock ?? 1));
     const firstVariant = product.variants[0] as CjVariantDetail | undefined;
+    const candidateVariant =
+      product.variants.find((variant) => hasMinimumStock(variant.stock, minStock)) as CjVariantDetail | undefined;
+    const selectedVariant = candidateVariant ?? firstVariant;
 
     let shippingResult: DiscoverShippingResult | null = null;
     let shippingError: string | undefined;
 
-    if (firstVariant) {
+    if (selectedVariant) {
       try {
         const waResult = await adapter.quoteShippingToUsWarehouseAware({
-          variantId: firstVariant.cjVid,
+          variantId: selectedVariant.cjVid,
           productId: cjProductId,
           quantity,
           destPostalCode,
@@ -101,9 +111,16 @@ export const cjShopifyUsaDiscoverService = {
     }
 
     let qualification: DiscoverEvaluationResult['qualification'] = null;
-    if (firstVariant && firstVariant.unitCostUsd > 0) {
+    if (selectedVariant && selectedVariant.unitCostUsd > 0) {
       const shippingUsd = shippingResult?.amountUsd ?? 0;
-      qualification = await cjShopifyUsaQualificationService.evaluate(userId, firstVariant.unitCostUsd, shippingUsd);
+      qualification = await cjShopifyUsaQualificationService.evaluate(userId, selectedVariant.unitCostUsd, shippingUsd);
+      if (!hasMinimumStock(selectedVariant.stock, minStock)) {
+        qualification = {
+          ...qualification,
+          decision: 'REJECTED',
+        };
+        shippingError = shippingError ?? `No CJ variant meets minimum stock requirement (${minStock}).`;
+      }
     }
 
     await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_COMPLETE, 'discover.evaluate', {
@@ -131,6 +148,8 @@ export const cjShopifyUsaDiscoverService = {
   ): Promise<DiscoverImportDraftResult> {
     const adapter = createCjSupplierAdapter(userId);
     const product = await adapter.getProductById(cjProductId);
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const minStock = Math.max(0, Number(settings.minStock ?? 1));
 
     if (!product.variants.length) {
       throw new Error('CJ product has no variants — cannot create draft.');
@@ -182,9 +201,19 @@ export const cjShopifyUsaDiscoverService = {
       ),
     );
 
-    // Pick target variant: prefer matching cjVid, else first
-    const targetVariant =
-      (variantCjVid ? upsertedVariants.find((v) => v.cjVid === variantCjVid) : undefined) ?? upsertedVariants[0];
+    const requestedVariant = variantCjVid ? upsertedVariants.find((v) => v.cjVid === variantCjVid) : undefined;
+    if (requestedVariant && !hasMinimumStock(requestedVariant.stockLastKnown, minStock)) {
+      throw new Error(
+        `Selected CJ variant does not meet minimum stock requirement (${minStock}).`,
+      );
+    }
+
+    const eligibleVariants = upsertedVariants.filter((variant) => hasMinimumStock(variant.stockLastKnown, minStock));
+    const targetVariant = requestedVariant ?? eligibleVariants[0];
+
+    if (!targetVariant) {
+      throw new Error(`No CJ variant meets minimum stock requirement (${minStock}).`);
+    }
 
     const sourceVariant =
       product.variants.find((v: CjVariantDetail) => v.cjVid === targetVariant.cjVid) ?? product.variants[0];

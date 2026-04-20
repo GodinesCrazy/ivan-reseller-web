@@ -22,6 +22,12 @@ function toUsdNumber(value: Prisma.Decimal | number | string | null | undefined)
   return Number.isFinite(num) ? num : 0;
 }
 
+function toSafeInt(value: unknown): number {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return 0;
+  return Math.max(0, Math.floor(num));
+}
+
 function buildDraftDescription(product: { title: string; description: string | null }) {
   const body = String(product.description || '').trim();
   if (body.length > 0) {
@@ -73,6 +79,18 @@ export const cjShopifyUsaPublishService = {
       throw new AppError('Product variant not found for Shopify draft.', 400, ErrorCode.VALIDATION_ERROR);
     }
 
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(input.userId);
+    const minStock = Math.max(0, Number(settings.minStock ?? 1));
+    const availableStock = toSafeInt(variant.stockLastKnown);
+
+    if (availableStock < minStock) {
+      throw new AppError(
+        `Variant stock is ${availableStock}; minimum stock requirement is ${minStock}.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
     const shippingQuote = await prisma.cjShopifyUsaShippingQuote.findFirst({
       where: {
         userId: input.userId,
@@ -102,11 +120,18 @@ export const cjShopifyUsaPublishService = {
     const suggestedSellPriceUsd = Number(
       qualification.breakdown.suggestedSellPriceUsd.toFixed(2),
     );
-    const baseQuantity =
-      input.quantity ??
-      variant.stockLastKnown ??
-      (product.snapshotStatus === 'SYNCED' ? 1 : 0);
-    const safeQuantity = Math.max(0, Math.floor(Number(baseQuantity || 0)));
+    const baseQuantity = input.quantity ?? 1;
+    const safeQuantity = toSafeInt(baseQuantity);
+    if (safeQuantity <= 0) {
+      throw new AppError('Draft quantity must be at least 1.', 400, ErrorCode.VALIDATION_ERROR);
+    }
+    if (safeQuantity > availableStock) {
+      throw new AppError(
+        `Requested draft quantity ${safeQuantity} exceeds current CJ stock ${availableStock}.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
     const handle = sanitizeHandle(`${product.title}-${variant.cjSku}`);
 
     const draftPayload = {
@@ -210,6 +235,30 @@ export const cjShopifyUsaPublishService = {
     }
 
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(input.userId);
+    const minStock = Math.max(0, Number(settings.minStock ?? 1));
+    const availableStock = toSafeInt(listing.variant?.stockLastKnown);
+    const desiredQuantity = toSafeInt(listing.quantity ?? draft.quantity ?? 0);
+
+    if (availableStock < minStock) {
+      throw new AppError(
+        `Listing variant stock is ${availableStock}; minimum stock requirement is ${minStock}.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    if (desiredQuantity <= 0) {
+      throw new AppError('Listing quantity must be at least 1 before publish.', 400, ErrorCode.VALIDATION_ERROR);
+    }
+
+    if (desiredQuantity > availableStock) {
+      throw new AppError(
+        `Listing quantity ${desiredQuantity} exceeds current CJ stock ${availableStock}.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
     const probe = await cjShopifyUsaAdminService.probeConnection(input.userId);
 
     if (probe.missingScopes.length > 0) {
@@ -276,7 +325,6 @@ export const cjShopifyUsaPublishService = {
         status: 'ACTIVE',
       });
 
-      const desiredQuantity = Math.max(0, Math.floor(Number(listing.quantity ?? draft.quantity ?? 0)));
       await cjShopifyUsaAdminService.setInventoryQuantity({
         userId: input.userId,
         inventoryItemId: upserted.inventoryItemId,
