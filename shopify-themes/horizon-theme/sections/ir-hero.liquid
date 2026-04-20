@@ -1,0 +1,305 @@
+{%- comment -%}
+  IVAN RESELLER - Hero Section
+  Modern, conversion-focused hero banner
+{%- endcomment -%}
+
+<style>
+  .ir-hero-section {
+    background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+    padding: 80px 20px;
+    color: #FFFFFF;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .ir-hero__pattern {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+
+  .ir-hero__container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .ir-hero__eyebrow {
+    color: #14B8A6;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ir-hero__eyebrow::before {
+    content: '';
+    width: 30px;
+    height: 2px;
+    background: #14B8A6;
+  }
+
+  .ir-hero__title {
+    font-size: clamp(32px, 5vw, 56px);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 20px;
+    color: #FFFFFF;
+  }
+
+  .ir-hero__subtitle {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 32px;
+    line-height: 1.6;
+    max-width: 480px;
+  }
+
+  .ir-hero__buttons {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .ir-hero__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 32px;
+    font-size: 16px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: all 250ms ease;
+  }
+
+  .ir-hero__btn--primary {
+    background: #FFFFFF;
+    color: #0F172A;
+  }
+
+  .ir-hero__btn--primary:hover {
+    background: #14B8A6;
+    color: #FFFFFF;
+    transform: translateY(-2px);
+  }
+
+  .ir-hero__btn--secondary {
+    background: transparent;
+    color: #FFFFFF;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .ir-hero__btn--secondary:hover {
+    border-color: #FFFFFF;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .ir-hero__image-wrapper {
+    position: relative;
+  }
+
+  .ir-hero__image {
+    width: 100%;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  }
+
+  .ir-hero__floating-badge {
+    position: absolute;
+    background: #FFFFFF;
+    color: #0F172A;
+    padding: 12px 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .ir-hero__floating-badge--1 {
+    top: 20%;
+    left: -20px;
+  }
+
+  .ir-hero__floating-badge--2 {
+    bottom: 20%;
+    right: -20px;
+    background: #14B8A6;
+    color: #FFFFFF;
+  }
+
+  @media (max-width: 768px) {
+    .ir-hero-section {
+      padding: 60px 20px;
+    }
+
+    .ir-hero__container {
+      grid-template-columns: 1fr;
+      text-align: center;
+      gap: 40px;
+    }
+
+    .ir-hero__eyebrow {
+      justify-content: center;
+    }
+
+    .ir-hero__eyebrow::before {
+      display: none;
+    }
+
+    .ir-hero__subtitle {
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .ir-hero__buttons {
+      justify-content: center;
+    }
+
+    .ir-hero__image-wrapper {
+      order: -1;
+    }
+
+    .ir-hero__floating-badge {
+      display: none;
+    }
+  }
+</style>
+
+<div class="ir-hero-section">
+  <div class="ir-hero__pattern"></div>
+  <div class="ir-hero__container">
+    <div class="ir-hero__content">
+      {% if section.settings.eyebrow != blank %}
+        <p class="ir-hero__eyebrow">{{ section.settings.eyebrow }}</p>
+      {% endif %}
+
+      {% if section.settings.title != blank %}
+        <h1 class="ir-hero__title">{{ section.settings.title }}</h1>
+      {% endif %}
+
+      {% if section.settings.subtitle != blank %}
+        <p class="ir-hero__subtitle">{{ section.settings.subtitle }}</p>
+      {% endif %}
+
+      <div class="ir-hero__buttons">
+        {% if section.settings.button_1_text != blank and section.settings.button_1_link != blank %}
+          <a href="{{ section.settings.button_1_link }}" class="ir-hero__btn ir-hero__btn--primary">
+            {{ section.settings.button_1_text }}
+          </a>
+        {% endif %}
+
+        {% if section.settings.button_2_text != blank and section.settings.button_2_link != blank %}
+          <a href="{{ section.settings.button_2_link }}" class="ir-hero__btn ir-hero__btn--secondary">
+            {{ section.settings.button_2_text }}
+          </a>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if section.settings.image != blank %}
+      <div class="ir-hero__image-wrapper">
+        <img
+          srcset="{{ section.settings.image | image_url: width: 600 }} 1x, {{ section.settings.image | image_url: width: 1200 }} 2x"
+          src="{{ section.settings.image | image_url: width: 600 }}"
+          alt="{{ section.settings.image.alt | escape }}"
+          class="ir-hero__image"
+          loading="lazy"
+          width="600"
+          height="400"
+        >
+
+        {% if section.settings.show_badges %}
+          <div class="ir-hero__floating-badge ir-hero__floating-badge--1">
+            ✓ AI-Curated
+          </div>
+          <div class="ir-hero__floating-badge ir-hero__floating-badge--2">
+            🚚 Fast Shipping
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "IR - Hero",
+  "tag": "section",
+  "class": "ir-hero-section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow Text",
+      "default": "AI-CURATED FOR YOU"
+    },
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Heading",
+      "default": "Trending Products, Smarter Shopping"
+    },
+    {
+      "type": "textarea",
+      "id": "subtitle",
+      "label": "Subheading",
+      "default": "Discover quality products sourced by AI, delivered fast to your door. No markup, no hassle."
+    },
+    {
+      "type": "text",
+      "id": "button_1_text",
+      "label": "Primary Button Text",
+      "default": "Shop Best Sellers"
+    },
+    {
+      "type": "url",
+      "id": "button_1_link",
+      "label": "Primary Button Link"
+    },
+    {
+      "type": "text",
+      "id": "button_2_text",
+      "label": "Secondary Button Text",
+      "default": "See What's New"
+    },
+    {
+      "type": "url",
+      "id": "button_2_link",
+      "label": "Secondary Button Link"
+    },
+    {
+      "type": "image_picker",
+      "id": "image",
+      "label": "Hero Image"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_badges",
+      "label": "Show Floating Badges",
+      "default": true
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Hero",
+      "category": "Ivan Reseller"
+    }
+  ]
+}
+{% endschema %}

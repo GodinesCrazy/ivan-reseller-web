@@ -1,0 +1,160 @@
+{%- comment -%}
+  IVAN RESELLER - Trust Bar Section
+  Displays trust signals below announcement bar
+{%- endcomment -%}
+
+<style>
+  .ir-trust-bar-section {
+    background-color: {{ section.settings.background_color | default: '#FFFFFF' }};
+    border-bottom: 1px solid #E2E8F0;
+    padding: 20px 0;
+  }
+
+  .ir-trust-bar__container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 60px;
+    flex-wrap: wrap;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  .ir-trust-bar__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: #64748B;
+  }
+
+  .ir-trust-bar__icon {
+    width: 24px;
+    height: 24px;
+    color: #14B8A6;
+    flex-shrink: 0;
+  }
+
+  .ir-trust-bar__label {
+    font-weight: 600;
+    color: #1E293B;
+  }
+
+  @media (max-width: 768px) {
+    .ir-trust-bar__container {
+      gap: 20px;
+      justify-content: space-around;
+    }
+
+    .ir-trust-bar__item {
+      font-size: 12px;
+    }
+
+    .ir-trust-bar__icon {
+      width: 20px;
+      height: 20px;
+    }
+  }
+</style>
+
+<div class="ir-trust-bar-section">
+  <div class="ir-trust-bar__container">
+    {% for block in section.blocks %}
+      <div class="ir-trust-bar__item" {{ block.shopify_attributes }}>
+        {% if block.settings.icon != blank %}
+          <span class="ir-trust-bar__icon">
+            {{ block.settings.icon }}
+          </span>
+        {% endif %}
+        <div>
+          <span class="ir-trust-bar__label">{{ block.settings.label }}</span>
+          {% if block.settings.subtext != blank %}
+            <br><span>{{ block.settings.subtext }}</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "IR - Trust Bar",
+  "tag": "section",
+  "class": "ir-trust-bar-section",
+  "settings": [
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background Color",
+      "default": "#FFFFFF"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "trust_item",
+      "name": "Trust Item",
+      "settings": [
+        {
+          "type": "text",
+          "id": "icon",
+          "label": "Icon (emoji or SVG)",
+          "default": "🚚"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "Free Shipping"
+        },
+        {
+          "type": "text",
+          "id": "subtext",
+          "label": "Subtext",
+          "default": "Over $35"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Trust Bar",
+      "blocks": [
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🚚",
+            "label": "Free Shipping",
+            "subtext": "Over $35"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "⚡",
+            "label": "Fast Delivery",
+            "subtext": "3-7 Days USA"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🔄",
+            "label": "Easy Returns",
+            "subtext": "30-Day Policy"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🤖",
+            "label": "AI Curated",
+            "subtext": "Trending Products"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

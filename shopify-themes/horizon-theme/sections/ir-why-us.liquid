@@ -1,0 +1,200 @@
+{%- comment -%}
+  IVAN RESELLER - Why Shop With Us Section
+  Three-card value proposition section
+{%- endcomment -%}
+
+<style>
+  .ir-why-section {
+    background: #F1F5F9;
+    padding: 80px 20px;
+  }
+
+  .ir-why__container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .ir-why__header {
+    text-align: center;
+    margin-bottom: 60px;
+  }
+
+  .ir-why__title {
+    font-size: clamp(28px, 4vw, 36px);
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: #1E293B;
+  }
+
+  .ir-why__subtitle {
+    font-size: 18px;
+    color: #64748B;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .ir-why__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+  }
+
+  .ir-why-card {
+    text-align: center;
+    padding: 48px 32px;
+    background: #FFFFFF;
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: all 250ms ease;
+  }
+
+  .ir-why-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  }
+
+  .ir-why-card__icon {
+    width: 72px;
+    height: 72px;
+    background: #14B8A6;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+    font-size: 32px;
+  }
+
+  .ir-why-card__title {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #1E293B;
+  }
+
+  .ir-why-card__text {
+    font-size: 16px;
+    color: #64748B;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 900px) {
+    .ir-why__grid {
+      grid-template-columns: 1fr;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+  }
+</style>
+
+<div class="ir-why-section">
+  <div class="ir-why__container">
+    <div class="ir-why__header">
+      {% if section.settings.title != blank %}
+        <h2 class="ir-why__title">{{ section.settings.title }}</h2>
+      {% endif %}
+      {% if section.settings.subtitle != blank %}
+        <p class="ir-why__subtitle">{{ section.settings.subtitle }}</p>
+      {% endif %}
+    </div>
+
+    <div class="ir-why__grid">
+      {% for block in section.blocks %}
+        <div class="ir-why-card" {{ block.shopify_attributes }}>
+          {% if block.settings.icon != blank %}
+            <div class="ir-why-card__icon">
+              {{ block.settings.icon }}
+            </div>
+          {% endif %}
+
+          {% if block.settings.title != blank %}
+            <h3 class="ir-why-card__title">{{ block.settings.title }}</h3>
+          {% endif %}
+
+          {% if block.settings.text != blank %}
+            <p class="ir-why-card__text">{{ block.settings.text }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "IR - Why Shop With Us",
+  "tag": "section",
+  "class": "ir-why-section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Section Title",
+      "default": "Why Ivan Reseller?"
+    },
+    {
+      "type": "textarea",
+      "id": "subtitle",
+      "label": "Section Subtitle",
+      "default": "We use AI to find quality products before they go viral."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "value_card",
+      "name": "Value Card",
+      "settings": [
+        {
+          "type": "text",
+          "id": "icon",
+          "label": "Icon (emoji or text)",
+          "default": "🤖"
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Card Title",
+          "default": "AI-Powered Discovery"
+        },
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Card Text",
+          "default": "Our algorithms analyze trends to bring you products you'll love — before everyone else has them."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Why Shop With Us",
+      "blocks": [
+        {
+          "type": "value_card",
+          "settings": {
+            "icon": "🤖",
+            "title": "AI-Powered Discovery",
+            "text": "Our algorithms analyze trends to bring you products you'll love — before everyone else has them."
+          }
+        },
+        {
+          "type": "value_card",
+          "settings": {
+            "icon": "⚡",
+            "title": "Fast USA Shipping",
+            "text": "Most orders ship within 24 hours from US-based facilities. Track your order in real-time."
+          }
+        },
+        {
+          "type": "value_card",
+          "settings": {
+            "icon": "💯",
+            "title": "Quality Guaranteed",
+            "text": "Every product is vetted. Not satisfied? 30-day hassle-free returns."
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}
