@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
+import { AppError, ErrorCode } from '../../../middleware/error.middleware';
 import { createCjSupplierAdapter } from '../../cj-ebay/adapters/cj-supplier.adapter';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
@@ -152,7 +153,7 @@ export const cjShopifyUsaDiscoverService = {
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
 
     if (!product.variants.length) {
-      throw new Error('CJ product has no variants — cannot create draft.');
+      throw new AppError('CJ product has no variants — cannot create draft.', 400, ErrorCode.VALIDATION_ERROR);
     }
 
     // Upsert product snapshot
@@ -203,8 +204,10 @@ export const cjShopifyUsaDiscoverService = {
 
     const requestedVariant = variantCjVid ? upsertedVariants.find((v) => v.cjVid === variantCjVid) : undefined;
     if (requestedVariant && !hasMinimumStock(requestedVariant.stockLastKnown, minStock)) {
-      throw new Error(
+      throw new AppError(
         `Selected CJ variant does not meet minimum stock requirement (${minStock}).`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
       );
     }
 
@@ -212,7 +215,11 @@ export const cjShopifyUsaDiscoverService = {
     const targetVariant = requestedVariant ?? eligibleVariants[0];
 
     if (!targetVariant) {
-      throw new Error(`No CJ variant meets minimum stock requirement (${minStock}).`);
+      throw new AppError(
+        `No CJ variant meets minimum stock requirement (${minStock}).`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
     }
 
     const sourceVariant =
