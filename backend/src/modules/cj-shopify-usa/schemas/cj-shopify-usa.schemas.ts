@@ -58,3 +58,22 @@ export const cjShopifyUsaOpportunityPipelineBodySchema = z.object({
   draftOnly: z.boolean().default(false),
   publish: z.boolean().default(false),
 });
+
+export const cjShopifyUsaDiscoverSearchSchema = z.object({
+  keyword: z.string().min(1).max(200),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export const cjShopifyUsaDiscoverEvaluateBodySchema = z.object({
+  cjProductId: z.string().min(1),
+  quantity: z.number().int().min(1).default(1),
+  destPostalCode: z.string().optional(),
+});
+
+export const cjShopifyUsaDiscoverImportDraftBodySchema = z.object({
+  cjProductId: z.string().min(1),
+  variantCjVid: z.string().optional(),
+  quantity: z.number().int().min(1).default(1),
+  destPostalCode: z.string().optional(),
+});

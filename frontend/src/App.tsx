@@ -93,7 +93,7 @@ const CjShopifyUsaOrderDetailPage = lazy(() => import('@pages/cj-shopify-usa/CjS
 const CjShopifyUsaAlertsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaAlertsPage'));
 const CjShopifyUsaProfitPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaProfitPage'));
 const CjShopifyUsaLogsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaLogsPage'));
-const CjShopifyUsaPlaceholderPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaPlaceholderPage'));
+const CjShopifyUsaDiscoverPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaDiscoverPage'));
 const Listings = lazy(() => import('@pages/Listings'));
 const ControlCenter = lazy(() => import('@pages/ControlCenter'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
@@ -342,7 +342,7 @@ function AppContent() {
             <Route path="alerts" element={<CjShopifyUsaAlertsPage />} />
             <Route path="profit" element={<CjShopifyUsaProfitPage />} />
             <Route path="logs" element={<CjShopifyUsaLogsPage />} />
-            <Route path="discover" element={<CjShopifyUsaPlaceholderPage title="Discover — próximamente" />} />
+            <Route path="discover" element={<CjShopifyUsaDiscoverPage />} />
           </Route>
         </Route>
 

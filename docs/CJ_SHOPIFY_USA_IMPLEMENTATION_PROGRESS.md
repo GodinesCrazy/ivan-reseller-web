@@ -4,119 +4,104 @@
 
 ## Summary
 
-The vertical `CJ → Shopify USA` has transitioned from a mostly-placeholder frontend to a fully wired, operationally useful internal tool. All 7 previously stubbed pages now display real data from the backend.
+The vertical `CJ → Shopify USA` now has all 9 pages fully real — including **Discover**, which was the last remaining placeholder. The full pipeline from product discovery to draft creation is operational.
 
 ---
 
 ## Pages status
 
-| Page | Route | Status | Backend endpoint |
-|------|-------|--------|-----------------|
-| Overview | `/cj-shopify-usa/overview` | ✅ REAL | `GET /api/cj-shopify-usa/overview`, `GET /system-readiness` |
-| Products | `/cj-shopify-usa/products` | ✅ REAL | `GET /api/cj-shopify-usa/products` (new) |
-| Store Products (Listings) | `/cj-shopify-usa/listings` | ✅ REAL | `GET /api/cj-shopify-usa/listings`, `POST /listings/publish` |
-| Orders | `/cj-shopify-usa/orders` | ✅ REAL | `GET /api/cj-shopify-usa/orders`, `POST /orders/sync` |
-| Order Detail | `/cj-shopify-usa/orders/:orderId` | ✅ REAL | `GET /api/cj-shopify-usa/orders/:orderId` (new) |
-| Alerts | `/cj-shopify-usa/alerts` | ✅ REAL | `GET /api/cj-shopify-usa/alerts` (new), `POST /alerts/:id/acknowledge`, `POST /alerts/:id/resolve` |
-| Profit | `/cj-shopify-usa/profit` | ✅ REAL | `GET /api/cj-shopify-usa/profit` (new) |
-| Logs | `/cj-shopify-usa/logs` | ✅ REAL | `GET /api/cj-shopify-usa/logs` (new) |
-| Discover | `/cj-shopify-usa/discover` | ⚪ PLACEHOLDER | — pending opportunity pipeline |
+| Page | Route | Status | Backend endpoint(s) |
+|------|-------|--------|---------------------|
+| **Discover** | `/cj-shopify-usa/discover` | ✅ REAL | `GET /discover/search`, `POST /discover/evaluate`, `POST /discover/import-draft` |
+| Overview | `/cj-shopify-usa/overview` | ✅ REAL (enriched) | `GET /overview`, `GET /system-readiness` |
+| Products | `/cj-shopify-usa/products` | ✅ REAL | `GET /products` |
+| Store Products (Listings) | `/cj-shopify-usa/listings` | ✅ REAL | `GET /listings`, `POST /listings/draft`, `POST /listings/publish` |
+| Orders | `/cj-shopify-usa/orders` | ✅ REAL | `GET /orders`, `POST /orders/sync` |
+| Order Detail | `/cj-shopify-usa/orders/:orderId` | ✅ REAL | `GET /orders/:orderId` |
+| Alerts | `/cj-shopify-usa/alerts` | ✅ REAL | `GET /alerts`, `POST /alerts/:id/acknowledge`, `POST /alerts/:id/resolve` |
+| Profit | `/cj-shopify-usa/profit` | ✅ REAL | `GET /profit` |
+| Logs | `/cj-shopify-usa/logs` | ✅ REAL | `GET /logs` |
+
+**All pages: REAL. No placeholders remain.**
 
 ---
 
-## New backend endpoints added (2026-04-19)
+## New additions (2026-04-19, session 2)
+
+### Backend
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| `GET` | `/api/cj-shopify-usa/products` | List CJ product snapshots with latest evaluation and listing refs |
-| `GET` | `/api/cj-shopify-usa/orders/:orderId` | Full order detail: tracking, events timeline, refunds |
-| `GET` | `/api/cj-shopify-usa/alerts` | List alerts (filterable by status: OPEN/ACKNOWLEDGED/RESOLVED) |
-| `POST` | `/api/cj-shopify-usa/alerts/:alertId/acknowledge` | Mark alert as seen |
-| `POST` | `/api/cj-shopify-usa/alerts/:alertId/resolve` | Close alert |
-| `GET` | `/api/cj-shopify-usa/profit` | KPI summary + daily snapshots + order list |
-| `GET` | `/api/cj-shopify-usa/logs` | Execution traces (filterable by step, configurable limit) |
+| `GET` | `/api/cj-shopify-usa/discover/search` | Live CJ catalog search (keyword, page, pageSize) |
+| `POST` | `/api/cj-shopify-usa/discover/evaluate` | Fetch CJ product detail + shipping quote + run qualification (no DB write) |
+| `POST` | `/api/cj-shopify-usa/discover/import-draft` | Save product snapshot to DB + create Shopify draft listing in one step |
+
+### Frontend
+
+- **`CjShopifyUsaDiscoverPage.tsx`** — real Discover page replacing placeholder
+  - Keyword search → results grid (4 cols on XL)
+  - Per-card: "Evaluar" (inline pricing breakdown toggle) + "Crear Draft" (calls import-draft)
+  - States: idle / loading / results / no-results / error
+  - Pagination ("Cargar más")
+  - Post-draft banner + CTA to navigate to Listings
+
+- **`CjShopifyUsaOverviewPage.tsx`** — enriched Overview
+  - Pipeline CTA strip (Discover / Products / Listings)
+  - Inline warnings for FAIL checks, open alerts
+  - Counts grid now clickable (navigates to each section)
+  - Check hints surfaced
+
+### New backend service
+
+`cj-shopify-usa-discover.service.ts` — encapsulates:
+1. `search()` — wraps `cjSupplierAdapter.searchProducts()`
+2. `evaluate()` — fetch detail + warehouse-aware shipping + qualification math (pure, no DB)
+3. `importAndDraft()` — upserts product + variants + shipping quote to DB, then calls existing `buildDraft()`
 
 ---
 
-## What each page shows
+## Discover flow: how it connects to the pipeline
 
-### Products
-- CJ product snapshots with variant count, evaluation decision (APPROVED/REJECTED/PENDING/Sin evaluar)
-- Estimated margin % from latest evaluation
-- Number of listings and active count
-- Last sync timestamp
-- "Crear draft" action for APPROVED products without a listing
-- Expandable detail row with evaluation reasons + variant breakdown (SKU, cost, stock)
-- Filter bar by evaluation decision
+```
+Discover search → user selects product
+  → POST /discover/evaluate     (optional: view pricing breakdown live)
+  → POST /discover/import-draft (creates DB snapshot + draft listing)
+  → navigate to /cj-shopify-usa/listings
+  → POST /listings/publish       (operator publishes draft to Shopify)
+```
 
-### Listings (Store Products)
-- All listings with status badge (DRAFT/PUBLISHING/ACTIVE/FAILED/PAUSED/ARCHIVED/RECONCILE_*)
-- Shopify product ID, price, CJ SKU, publish date
-- Publish action for DRAFT/FAILED listings
-- Expandable detail with Shopify IDs, handle, last error
-- Status banners for FAILED/RECONCILE_PENDING/RECONCILE_FAILED states
-
-### Orders
-- All orders with status badge and color-coded pipeline stage
-- "Próximo paso" guidance column
-- CJ Order ID, total, tracking number if available
-- Row click or "Ver detalle" → Order Detail page
-- "Sincronizar últimas 24h" action button
-- Filter by status
-
-### Order Detail
-- Header card: status, total, CJ order ID, timestamps
-- Last error block (red) if present
-- Tracking section: number, carrier, URL, submitted to Shopify timestamp
-- "Sincronizar tracking → Shopify" action when status = CJ_SHIPPED
-- Full events timeline (ordered ASC)
-- Refunds section if present
-
-### Alerts
-- Alert cards grouped by severity (error/warning/info)
-- Alert type label + description in Spanish
-- Status badge (OPEN/ACKNOWLEDGED/RESOLVED)
-- Ack + Resolve actions
-- Filter by status
-- Expandable payload JSON
-- Empty state for "Todo en orden"
-
-### Profit
-- KPI grid: total revenue, CJ cost, fees, net profit (color-coded)
-- Orders summary: total / completed / open / failed
-- Daily snapshots table (up to 90 days)
-- Order list with status and total
-- Data note when no snapshots exist
-
-### Logs
-- Terminal-style table (dark background) with color-coded step names
-- Timestamp, step, message, correlation ID
-- Filter by step text
-- Limit selector (50/100/200)
-- "Solo errores" quick filter
-- Error count in footer
+The `import-draft` call:
+1. Calls `adapter.getProductById()` — fetches CJ product with all variants
+2. Upserts `CjShopifyUsaProduct` + all `CjShopifyUsaProductVariant` records
+3. Calls `adapter.quoteShippingToUsWarehouseAware()` — saves a `CjShopifyUsaShippingQuote`
+4. Calls `cjShopifyUsaPublishService.buildDraft()` using the new DB product ID
+5. Returns listing ID + suggested price
 
 ---
 
-## Regression check (verified)
+## Regression check (verified 2026-04-19)
 
-- `CJ → eBay USA`: no files touched, routes unchanged ✅
+- `CJ → eBay USA`: no files touched ✅
 - `CJ → ML Chile`: no files touched ✅
-- Backend type-check: PASS ✅
-- Frontend type-check: PASS ✅
-- Frontend build (Vite): PASS ✅
+- Backend type-check: **PASS** ✅
+- Frontend type-check: **PASS** ✅
+- Frontend build (Vite): **PASS** (13.61s) ✅
 
 ---
 
 ## External blockers (unchanged)
 
 - Shopify store must have active webhook subscriptions (register via `/api/cj-shopify-usa/webhooks/register`)
-- CJ credentials (`cj-dropshipping` API credential) must be present in the user's account for product operations
+- CJ credentials must be configured for the user (required for all Discover operations)
+- 5 missing Shopify OAuth scopes still block `system-readiness` from returning `ready: true` — add in Shopify Partners dashboard
 - Profit snapshots are generated by order processing — empty until real orders flow through
+- `POST /listings/publish` requires Shopify auth to be active (scopes + store configured)
 
 ---
 
-## What remains placeholder
+## What remains placeholder / not yet built
 
-- `Discover` page (`/cj-shopify-usa/discover`) — opportunity pipeline not yet built for Shopify (no CJ product search UI)
-- Profit snapshots are written manually or by order processing — no automatic daily job yet
+- Automatic daily profit snapshot job (no cron/scheduler yet)
+- Bulk Discover → batch draft creation
+- Discover filters (category, price range, min stock)
+- US-only stock filter in search results

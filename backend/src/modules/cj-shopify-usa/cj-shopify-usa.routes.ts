@@ -17,7 +17,11 @@ import {
   cjShopifyUsaOrderImportBodySchema,
   cjShopifyUsaTrackingSyncBodySchema,
   cjShopifyUsaUpdateConfigSchema,
+  cjShopifyUsaDiscoverSearchSchema,
+  cjShopifyUsaDiscoverEvaluateBodySchema,
+  cjShopifyUsaDiscoverImportDraftBodySchema,
 } from './schemas/cj-shopify-usa.schemas';
+import { cjShopifyUsaDiscoverService } from './services/cj-shopify-usa-discover.service';
 import {
   CJ_SHOPIFY_USA_ALERT_TYPE,
   CJ_SHOPIFY_USA_LISTING_STATUS,
@@ -387,6 +391,47 @@ router.get('/orders/:orderId', async (req: Request, res: Response, next: NextFun
       return;
     }
     res.json({ ok: true, order });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Discover — live CJ catalog search + evaluate + import-and-draft ───────────
+
+router.get('/discover/search', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const query = cjShopifyUsaDiscoverSearchSchema.parse(req.query);
+    const results = await cjShopifyUsaDiscoverService.search(userId, query.keyword, query.page, query.pageSize);
+    res.json({ ok: true, results, count: results.length, page: query.page, pageSize: query.pageSize });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/discover/evaluate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const body = cjShopifyUsaDiscoverEvaluateBodySchema.parse(req.body);
+    const result = await cjShopifyUsaDiscoverService.evaluate(userId, body.cjProductId, body.quantity, body.destPostalCode);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/discover/import-draft', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const body = cjShopifyUsaDiscoverImportDraftBodySchema.parse(req.body);
+    const result = await cjShopifyUsaDiscoverService.importAndDraft(
+      userId,
+      body.cjProductId,
+      body.variantCjVid,
+      body.quantity,
+      body.destPostalCode,
+    );
+    res.json({ ok: true, ...result });
   } catch (error) {
     next(error);
   }
