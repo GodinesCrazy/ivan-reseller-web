@@ -86,6 +86,13 @@ const CjMlChileLogsPage = lazy(() => import('@pages/cj-ml-chile/CjMlChileLogsPag
 const CjShopifyUsaModuleGate = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaModuleGate'));
 const CjShopifyUsaLayout = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaLayout'));
 const CjShopifyUsaOverviewPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaOverviewPage'));
+const CjShopifyUsaProductsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaProductsPage'));
+const CjShopifyUsaListingsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaListingsPage'));
+const CjShopifyUsaOrdersPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaOrdersPage'));
+const CjShopifyUsaOrderDetailPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaOrderDetailPage'));
+const CjShopifyUsaAlertsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaAlertsPage'));
+const CjShopifyUsaProfitPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaProfitPage'));
+const CjShopifyUsaLogsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaLogsPage'));
 const CjShopifyUsaPlaceholderPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaPlaceholderPage'));
 const Listings = lazy(() => import('@pages/Listings'));
 const ControlCenter = lazy(() => import('@pages/ControlCenter'));
@@ -328,14 +335,14 @@ function AppContent() {
           <Route element={<CjShopifyUsaLayout />}>
             <Route index element={<Navigate to="overview" replace />} />
             <Route path="overview" element={<CjShopifyUsaOverviewPage />} />
-            <Route path="products" element={<CjShopifyUsaPlaceholderPage title="Products" />} />
-            <Route path="listings" element={<CjShopifyUsaPlaceholderPage title="Store Products" />} />
-            <Route path="orders" element={<CjShopifyUsaPlaceholderPage title="Orders" />} />
-            <Route path="orders/:orderId" element={<CjShopifyUsaPlaceholderPage title="Order Detail" />} />
-            <Route path="alerts" element={<CjShopifyUsaPlaceholderPage title="Alerts" />} />
-            <Route path="profit" element={<CjShopifyUsaPlaceholderPage title="Profit" />} />
-            <Route path="logs" element={<CjShopifyUsaPlaceholderPage title="Logs" />} />
-            <Route path="discover" element={<CjShopifyUsaPlaceholderPage title="Discover" />} />
+            <Route path="products" element={<CjShopifyUsaProductsPage />} />
+            <Route path="listings" element={<CjShopifyUsaListingsPage />} />
+            <Route path="orders" element={<CjShopifyUsaOrdersPage />} />
+            <Route path="orders/:orderId" element={<CjShopifyUsaOrderDetailPage />} />
+            <Route path="alerts" element={<CjShopifyUsaAlertsPage />} />
+            <Route path="profit" element={<CjShopifyUsaProfitPage />} />
+            <Route path="logs" element={<CjShopifyUsaLogsPage />} />
+            <Route path="discover" element={<CjShopifyUsaPlaceholderPage title="Discover — próximamente" />} />
           </Route>
         </Route>
 
