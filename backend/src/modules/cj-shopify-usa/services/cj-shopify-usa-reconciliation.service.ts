@@ -5,7 +5,6 @@ import {
   CJ_SHOPIFY_USA_TRACE_STEP,
 } from '../cj-shopify-usa.constants';
 import {
-  buildShopifyStorefrontUrl,
   cjShopifyUsaAdminService,
 } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
@@ -43,6 +42,17 @@ type ShopifyProductTruth = {
   variants?: {
     nodes?: ShopifyVariantTruth[];
   } | null;
+};
+
+type StorefrontVerificationResult = {
+  storefrontUrl: string;
+  status: number | null;
+  finalUrl: string | null;
+  passwordGate: boolean;
+  buyerFacingOk: boolean;
+  hasAddToCart: boolean;
+  hasPrice: boolean;
+  error?: string;
 };
 
 export type CjShopifyUsaPublishTruth = {
@@ -102,6 +112,12 @@ function normalizeShopifyVariantGid(value: string | null | undefined): string | 
   return raw;
 }
 
+function buildStorefrontUrl(shopDomain: string, productHandle: string): string {
+  const domain = trim(shopDomain).replace(/^https?:\/\//i, '').replace(/\/+$/g, '');
+  const handle = trim(productHandle).replace(/^\/+|\/+$/g, '');
+  return `https://${domain}/products/${encodeURIComponent(handle)}`;
+}
+
 function availableQuantity(variant: ShopifyVariantTruth | null): number | null {
   const quantities = variant?.inventoryItem?.inventoryLevel?.quantities ?? [];
   const available = quantities.find((entry) => entry.name === 'available');
@@ -134,6 +150,68 @@ async function recordTrace(userId: number, step: string, message: string, meta?:
 }
 
 export class CjShopifyUsaReconciliationService {
+  private async verifyStorefrontProductPage(input: {
+    userId: number;
+    productHandle: string;
+  }): Promise<StorefrontVerificationResult> {
+    const token = await cjShopifyUsaAdminService.getAccessToken(input.userId);
+    const storefrontUrl = buildStorefrontUrl(token.shopDomain, input.productHandle);
+
+    try {
+      const response = await fetch(storefrontUrl, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 Ivan Reseller Storefront Integrity Auditor',
+        },
+      });
+      const html = await response.text();
+      const finalUrl = response.url;
+      const lowerHtml = html.toLowerCase();
+      const lowerFinalUrl = finalUrl.toLowerCase();
+      const handle = trim(input.productHandle).toLowerCase();
+
+      const passwordGate =
+        lowerFinalUrl.includes('/password') ||
+        lowerHtml.includes('enter store using password') ||
+        lowerHtml.includes('opening soon');
+      const hasAddToCart =
+        /\/cart\/add|add to cart|agregar al carrito|data-type="add-to-cart-form"|name="add"/i.test(html);
+      const hasPrice = /\$\s?\d|usd/i.test(html);
+      const finalUrlMatchesHandle =
+        lowerFinalUrl.includes(`/products/${encodeURIComponent(handle)}`) ||
+        lowerFinalUrl.includes(`/products/${handle}`);
+      const hasNotFoundMarker = /404|not found/i.test(html.slice(0, 3000));
+
+      return {
+        storefrontUrl,
+        status: response.status,
+        finalUrl,
+        passwordGate,
+        hasAddToCart,
+        hasPrice,
+        buyerFacingOk:
+          response.status >= 200 &&
+          response.status < 300 &&
+          finalUrlMatchesHandle &&
+          !passwordGate &&
+          !hasNotFoundMarker &&
+          hasAddToCart &&
+          hasPrice,
+      };
+    } catch (error) {
+      return {
+        storefrontUrl,
+        status: null,
+        finalUrl: null,
+        passwordGate: false,
+        hasAddToCart: false,
+        hasPrice: false,
+        buyerFacingOk: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   private async resolveTruthTargets(userId: number) {
     const [settings, probe] = await Promise.all([
       cjShopifyUsaConfigService.getOrCreateSettings(userId),
@@ -232,7 +310,7 @@ export class CjShopifyUsaReconciliationService {
     let storefrontUrl: string | null = null;
     if (shopDomain && listing.shopifyHandle) {
       try {
-        storefrontUrl = buildShopifyStorefrontUrl(shopDomain, listing.shopifyHandle);
+        storefrontUrl = buildStorefrontUrl(shopDomain, listing.shopifyHandle);
       } catch {
         storefrontUrl = null;
       }
@@ -313,17 +391,17 @@ export class CjShopifyUsaReconciliationService {
         : null;
 
     let storefrontUrl: string | null = null;
-    let storefront: Awaited<ReturnType<typeof cjShopifyUsaAdminService.verifyStorefrontProductPage>> | null = null;
+    let storefront: StorefrontVerificationResult | null = null;
     if (adminHandle) {
       try {
-        storefrontUrl = buildShopifyStorefrontUrl(resolvedTargets.shopDomain, adminHandle);
+        storefrontUrl = buildStorefrontUrl(resolvedTargets.shopDomain, adminHandle);
       } catch {
         storefrontUrl = null;
       }
     }
 
     if (adminStatus === 'ACTIVE' && adminHandle) {
-      storefront = await cjShopifyUsaAdminService.verifyStorefrontProductPage({
+      storefront = await this.verifyStorefrontProductPage({
         userId: listing.userId,
         productHandle: adminHandle,
       });
