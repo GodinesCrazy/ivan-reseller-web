@@ -9,6 +9,7 @@ import { cjShopifyUsaConfigService } from './services/cj-shopify-usa-config.serv
 import { cjShopifyUsaAuthService } from './services/cj-shopify-usa-auth.service';
 import { cjShopifyUsaAdminService } from './services/cj-shopify-usa-admin.service';
 import { cjShopifyUsaPublishService } from './services/cj-shopify-usa-publish.service';
+import { cjShopifyUsaReconciliationService } from './services/cj-shopify-usa-reconciliation.service';
 import { cjShopifyUsaOrderIngestService } from './services/cj-shopify-usa-order-ingest.service';
 import { cjShopifyUsaTrackingService } from './services/cj-shopify-usa-tracking.service';
 import {
@@ -174,6 +175,52 @@ router.post('/webhooks/register', async (req: Request, res: Response, next: Next
   }
 });
 
+// GET /storefront-status — Verifica si el storefront está protegido por password gate
+router.get('/storefront-status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const productHandle = String(req.query.productHandle || '').trim();
+
+    if (!productHandle) {
+      res.status(400).json({
+        ok: false,
+        error: 'MISSING_PRODUCT_HANDLE',
+        message: 'Se requiere productHandle como query parameter (ej: ?productHandle=mi-producto)'
+      });
+      return;
+    }
+
+    const result = await cjShopifyUsaAdminService.checkStorefrontStatus(userId, productHandle);
+
+    res.json({
+      ok: true,
+      storefront: {
+        ...result,
+        buyerAccessible: !result.passwordGate,
+        status: result.passwordGate ? 'PASSWORD_PROTECTED' : 'PUBLIC'
+      },
+      nextStep: result.passwordGate
+        ? {
+            action: 'MANUAL_SHOPIFY_ADMIN',
+            description: 'El storefront está protegido por password gate. Se requiere acción manual en Shopify Admin.',
+            steps: [
+              `1. Acceder a: https://${result.shopDomain}/admin`,
+              '2. Navegar a: Online Store > Preferences',
+              '3. En sección "Password protection", desmarcar "Enable password"',
+              '4. Guardar cambios'
+            ],
+            alternative: `shopify store:disable-password --store=${result.shopDomain} (si Shopify CLI está configurado)`
+          }
+        : {
+            action: 'NONE',
+            description: 'Storefront está público y accesible para buyers.'
+          }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
@@ -281,7 +328,8 @@ router.get('/listings', async (req: Request, res: Response, next: NextFunction) 
       orderBy: { updatedAt: 'desc' },
       take: 100,
     });
-    res.json({ ok: true, listings });
+    const listingsWithStorefront = await cjShopifyUsaReconciliationService.reconcileListings(userId, listings);
+    res.json({ ok: true, listings: listingsWithStorefront });
   } catch (error) {
     next(error);
   }
@@ -467,14 +515,28 @@ router.get('/products', async (req: Request, res: Response, next: NextFunction) 
           },
         },
         listings: {
-          select: { id: true, status: true, shopifyProductId: true },
+          select: { id: true, status: true, shopifyProductId: true, shopifyVariantId: true, shopifyHandle: true },
           take: 5,
         },
       },
       orderBy: { updatedAt: 'desc' },
       take: 100,
     });
-    res.json({ ok: true, products });
+    const allListings = products.flatMap((product) =>
+      product.listings.map((listing) => ({
+        ...listing,
+        userId,
+      })),
+    );
+    const reconciledListings = await cjShopifyUsaReconciliationService.reconcileListings(userId, allListings);
+    const reconciledById = new Map(reconciledListings.map((listing) => [listing.id, listing]));
+    const productsWithStorefront = products.map((product) => ({
+      ...product,
+      listings: product.listings.map((listing) => {
+        return reconciledById.get(listing.id) ?? listing;
+      }),
+    }));
+    res.json({ ok: true, products: productsWithStorefront });
   } catch (error) {
     next(error);
   }
@@ -678,6 +740,267 @@ router.get('/logs', async (req: Request, res: Response, next: NextFunction) => {
       },
     });
     res.json({ ok: true, traces, count: traces.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── PATCH /listings/:listingId/price — Update listing price and sync to Shopify ─
+
+router.patch('/listings/:listingId/price', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const listingId = parseInt(String(req.params.listingId), 10);
+    const { sellPriceUsd } = req.body as { sellPriceUsd?: number };
+
+    if (!Number.isFinite(listingId) || !Number.isFinite(sellPriceUsd) || sellPriceUsd! <= 0) {
+      res.status(400).json({ ok: false, error: 'INVALID_PARAMS', message: 'listingId and positive sellPriceUsd required' });
+      return;
+    }
+
+    const listing = await prisma.cjShopifyUsaListing.findFirst({
+      where: { id: listingId, userId },
+      include: { product: true, variant: true },
+    });
+
+    if (!listing) {
+      res.status(404).json({ ok: false, error: 'LISTING_NOT_FOUND' });
+      return;
+    }
+
+    // Update listing price in database
+    await prisma.cjShopifyUsaListing.update({
+      where: { id: listingId },
+      data: { listedPriceUsd: sellPriceUsd },
+    });
+
+    // Sync to Shopify if already published
+    if (listing.shopifyProductId && listing.status === CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE) {
+      const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+      const shopDomain = settings.shopifyStoreUrl ? settings.shopifyStoreUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '') : '';
+      
+      if (shopDomain && env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET) {
+        try {
+          const token = await cjShopifyUsaAdminService.getAccessToken(userId);
+          const accessToken = token.accessToken;
+          
+          // Update product price via Shopify Admin REST API
+          const variantUpdateRes = await fetch(
+            `https://${shopDomain}/admin/api/2024-01/variants/${listing.shopifyVariantId || listing.shopifyProductId}.json`,
+            {
+              method: 'PUT',
+              headers: {
+                'X-Shopify-Access-Token': accessToken,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                variant: {
+                  id: listing.shopifyVariantId || listing.shopifyProductId,
+                  price: String(sellPriceUsd),
+                },
+              }),
+            }
+          );
+
+          if (!variantUpdateRes.ok) {
+            const errorText = await variantUpdateRes.text();
+            console.warn(`Shopify price update warning: ${errorText}`);
+          }
+        } catch (shopifyError) {
+          console.warn('Shopify sync warning:', shopifyError);
+        }
+      }
+    }
+
+    await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_COMPLETE, 'listing.price.updated', {
+      listingId,
+      newPrice: sellPriceUsd,
+    } as Prisma.InputJsonValue);
+
+    res.json({ ok: true, listingId, sellPriceUsd, syncedToShopify: listing.status === CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── POST /collections/create — Create a collection in Shopify ─────────────────
+
+router.post('/collections/create', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const { title, handle, descriptionHtml = '', collectionType = 'manual' } = req.body as {
+      title?: string;
+      handle?: string;
+      descriptionHtml?: string;
+      collectionType?: 'manual' | 'smart';
+    };
+
+    if (!title || !handle) {
+      res.status(400).json({ ok: false, error: 'MISSING_FIELDS', message: 'title and handle are required' });
+      return;
+    }
+
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const shopDomain = settings.shopifyStoreUrl ? settings.shopifyStoreUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '') : '';
+
+    if (!shopDomain || !env.SHOPIFY_CLIENT_ID || !env.SHOPIFY_CLIENT_SECRET) {
+      res.status(503).json({ ok: false, error: 'SHOPIFY_NOT_CONFIGURED' });
+      return;
+    }
+
+    const token = await cjShopifyUsaAdminService.getAccessToken(userId);
+    const accessToken = token.accessToken;
+
+    // Create custom collection via REST API
+    const createRes = await fetch(
+      `https://${shopDomain}/admin/api/2024-01/custom_collections.json`,
+      {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          custom_collection: {
+            title,
+            handle,
+            body_html: descriptionHtml,
+          },
+        }),
+      }
+    );
+
+    if (!createRes.ok) {
+      const errorText = await createRes.text();
+      res.status(502).json({ ok: false, error: 'SHOPIFY_API_ERROR', details: errorText });
+      return;
+    }
+
+    const created = await createRes.json() as { custom_collection?: { id?: number; handle?: string } };
+
+    res.json({
+      ok: true,
+      collection: {
+        id: created?.custom_collection?.id,
+        title,
+        handle: created?.custom_collection?.handle || handle,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── POST /collections/assign — Assign product to collection ───────────────────
+
+router.post('/collections/assign', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const { listingId, collectionId } = req.body as { listingId?: number; collectionId?: number };
+
+    if (!Number.isFinite(listingId) || !Number.isFinite(collectionId)) {
+      res.status(400).json({ ok: false, error: 'INVALID_PARAMS', message: 'listingId and collectionId required' });
+      return;
+    }
+
+    const listing = await prisma.cjShopifyUsaListing.findFirst({
+      where: { id: listingId, userId },
+    });
+
+    if (!listing || !listing.shopifyProductId) {
+      res.status(404).json({ ok: false, error: 'LISTING_NOT_FOUND_OR_NOT_PUBLISHED' });
+      return;
+    }
+
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const shopDomain = settings.shopifyStoreUrl ? settings.shopifyStoreUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '') : '';
+
+    if (!shopDomain || !env.SHOPIFY_CLIENT_ID || !env.SHOPIFY_CLIENT_SECRET) {
+      res.status(503).json({ ok: false, error: 'SHOPIFY_NOT_CONFIGURED' });
+      return;
+    }
+
+    const token = await cjShopifyUsaAdminService.getAccessToken(userId);
+    const accessToken = token.accessToken;
+
+    // Create collect (product-collection link) via REST API
+    const collectRes = await fetch(
+      `https://${shopDomain}/admin/api/2024-01/collects.json`,
+      {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          collect: {
+            product_id: listing.shopifyProductId,
+            collection_id: collectionId,
+          },
+        }),
+      }
+    );
+
+    if (!collectRes.ok) {
+      const errorText = await collectRes.text();
+      res.status(502).json({ ok: false, error: 'SHOPIFY_API_ERROR', details: errorText });
+      return;
+    }
+
+    const created = await collectRes.json() as { collect?: { id?: number } };
+
+    res.json({
+      ok: true,
+      assignment: {
+        collectId: created?.collect?.id,
+        listingId,
+        collectionId,
+        shopifyProductId: listing.shopifyProductId,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── GET /collections — List Shopify collections ─────────────────────────────
+
+router.get('/collections', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const shopDomain = settings.shopifyStoreUrl ? settings.shopifyStoreUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '') : '';
+
+    if (!shopDomain || !env.SHOPIFY_CLIENT_ID || !env.SHOPIFY_CLIENT_SECRET) {
+      res.status(503).json({ ok: false, error: 'SHOPIFY_NOT_CONFIGURED' });
+      return;
+    }
+
+    const token = await cjShopifyUsaAdminService.getAccessToken(userId);
+    const accessToken = token.accessToken;
+
+    // Fetch collections from Shopify
+    const collectionsRes = await fetch(
+      `https://${shopDomain}/admin/api/2024-01/custom_collections.json`,
+      {
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+        },
+      }
+    );
+
+    if (!collectionsRes.ok) {
+      const errorText = await collectionsRes.text();
+      res.status(502).json({ ok: false, error: 'SHOPIFY_API_ERROR', details: errorText });
+      return;
+    }
+
+    const collections = await collectionsRes.json() as { custom_collections?: Array<{ id: number; title: string; handle: string }> };
+
+    res.json({
+      ok: true,
+      collections: collections?.custom_collections || [],
+    });
   } catch (error) {
     next(error);
   }

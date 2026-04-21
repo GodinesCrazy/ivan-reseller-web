@@ -25,6 +25,20 @@ type ListingRef = {
   id: number;
   status: string;
   shopifyProductId: string | null;
+  shopifyVariantId: string | null;
+  shopifyHandle: string | null;
+  storefrontUrl: string | null;
+  publishTruth?: {
+    shopifyIdentifiersPresent: boolean;
+    buyerFacingVerified: boolean;
+    readyForStorefront?: boolean;
+    shopify?: {
+      exists: boolean | null;
+      adminStatus: string | null;
+      publishedOnPublication: boolean | null;
+      inventoryQuantity: number | null;
+    };
+  };
 };
 
 type ProductRow = {
@@ -76,6 +90,15 @@ function axiosMsg(e: unknown, fb: string): string {
     return d.message || d.error || fb;
   }
   return e instanceof Error ? e.message : fb;
+}
+
+function listingTruthLabel(listing: ListingRef): string {
+  const admin = listing.publishTruth?.shopify?.adminStatus ?? listing.status;
+  const stock = listing.publishTruth?.shopify?.inventoryQuantity;
+  const pub = listing.publishTruth?.shopify?.publishedOnPublication;
+  const pubText = pub == null ? 'pub —' : pub ? 'pub OK' : 'pub NO';
+  const stockText = stock == null ? 'stock —' : `stock ${stock}`;
+  return `${admin} / ${pubText} / ${stockText}`;
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -209,8 +232,10 @@ export default function CjShopifyUsaProductsPage() {
               {filtered.map((row) => {
                 const ev = row.evaluations[0] ?? null;
                 const activeListing = row.listings.find((l) => l.status === 'ACTIVE');
+                const verifiedActiveListing = row.listings.find((l) => l.status === 'ACTIVE' && l.publishTruth?.buyerFacingVerified);
                 const hasDraft = row.listings.some((l) => l.status === 'DRAFT');
-                const canDraft = ev?.decision === 'APPROVED' && !hasDraft && !activeListing;
+                const hasShopifyLinkedListing = row.listings.some((l) => Boolean(l.shopifyProductId));
+                const canDraft = ev?.decision === 'APPROVED' && !hasDraft && !activeListing && !hasShopifyLinkedListing;
 
                 return (
                   <>
@@ -238,7 +263,7 @@ export default function CjShopifyUsaProductsPage() {
                           <span className="text-slate-400">—</span>
                         ) : (
                           <span className="tabular-nums">
-                            {row.listings.length} ({row.listings.filter((l) => l.status === 'ACTIVE').length} activos)
+                            {row.listings.length} ({row.listings.filter((l) => l.status === 'ACTIVE' && l.publishTruth?.buyerFacingVerified).length} buyer-ready)
                           </span>
                         )}
                       </td>
@@ -254,8 +279,14 @@ export default function CjShopifyUsaProductsPage() {
                             {busyId === row.id ? '…' : 'Crear draft'}
                           </button>
                         )}
-                        {activeListing && activeListing.shopifyProductId && (
-                          <span className="text-xs text-emerald-600 dark:text-emerald-400">Publicado</span>
+                        {verifiedActiveListing && (
+                          <span className="text-xs text-emerald-600 dark:text-emerald-400">Shopify buyer-ready</span>
+                        )}
+                        {activeListing && !verifiedActiveListing && (
+                          <span className="text-xs text-amber-600 dark:text-amber-400">Shopify no verificado</span>
+                        )}
+                        {!activeListing && hasShopifyLinkedListing && (
+                          <span className="text-xs text-amber-600 dark:text-amber-400">Revisar Shopify truth</span>
                         )}
                         <button
                           type="button"
@@ -290,6 +321,18 @@ export default function CjShopifyUsaProductsPage() {
                                 {row.variants.map((v) => (
                                   <p key={v.id} className="font-mono">
                                     SKU: {v.cjSku ?? '—'} | VID: {v.cjVid ?? '—'} | Costo: {usd(v.unitCostUsd)} | Stock: {v.stockLastKnown ?? '?'}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {row.listings.length > 0 && (
+                            <div>
+                              <p className="font-medium text-slate-800 dark:text-slate-200 mb-1">Shopify truth ({row.listings.length})</p>
+                              <div className="space-y-1">
+                                {row.listings.map((listing) => (
+                                  <p key={listing.id} className="font-mono">
+                                    #{listing.id}: {listingTruthLabel(listing)} | Handle: {listing.shopifyHandle ?? '—'}
                                   </p>
                                 ))}
                               </div>

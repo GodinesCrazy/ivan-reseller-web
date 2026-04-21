@@ -10,6 +10,31 @@ type ListingRow = {
   shopifyProductId: string | null;
   shopifyVariantId: string | null;
   shopifyHandle: string | null;
+  quantity: number | null;
+  storefrontUrl: string | null;
+  publishTruth?: {
+    reconciledAt?: string;
+    shopifyIdentifiersPresent: boolean;
+    buyerFacingVerified: boolean;
+    readyForStorefront?: boolean;
+    reasons?: string[];
+    shopify?: {
+      exists: boolean | null;
+      adminStatus: string | null;
+      publishedOnPublication: boolean | null;
+      publicationName: string | null;
+      inventoryQuantity: number | null;
+      handle: string | null;
+    };
+    storefront?: {
+      status: number | null;
+      finalUrl: string | null;
+      passwordGate: boolean | null;
+      hasAddToCart: boolean | null;
+      hasPrice: boolean | null;
+      error: string | null;
+    };
+  };
   listedPriceUsd: number | null;
   publishedAt: string | null;
   lastError: string | null;
@@ -34,13 +59,43 @@ const STATUS_BADGE: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   DRAFT:             'Draft',
   PUBLISHING:        'Publicando…',
-  ACTIVE:            'Activo',
+  ACTIVE:            'Shopify Active verificado',
   FAILED:            'Fallido',
   PAUSED:            'Pausado',
-  ARCHIVED:          'Archivado',
-  RECONCILE_PENDING: 'Reconciliación pendiente',
+  ARCHIVED:          'Shopify Archivado',
+  RECONCILE_PENDING: 'Shopify no buyer-ready',
   RECONCILE_FAILED:  'Reconciliación fallida',
 };
+
+function statusBadge(row: ListingRow): string {
+  if (row.status === 'ACTIVE' && !row.publishTruth?.buyerFacingVerified) {
+    return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+  }
+  return STATUS_BADGE[row.status] ?? 'bg-slate-100 text-slate-700';
+}
+
+function statusLabel(row: ListingRow): string {
+  if (row.status === 'ACTIVE' && !row.publishTruth?.buyerFacingVerified) {
+    return 'Shopify Active no verificado';
+  }
+  return STATUS_LABEL[row.status] ?? row.status;
+}
+
+function truthSummary(row: ListingRow): string {
+  const truth = row.publishTruth;
+  const admin = truth?.shopify?.adminStatus ?? '—';
+  const publication =
+    truth?.shopify?.publishedOnPublication == null
+      ? 'pub: —'
+      : truth.shopify.publishedOnPublication
+        ? 'pub: OK'
+        : 'pub: NO';
+  const inventory =
+    truth?.shopify?.inventoryQuantity == null
+      ? 'stock: —'
+      : `stock: ${truth.shopify.inventoryQuantity}`;
+  return `${admin} / ${publication} / ${inventory}`;
+}
 
 function usd(n: number | null | undefined): string {
   if (n == null) return '—';
@@ -126,8 +181,8 @@ export default function CjShopifyUsaListingsPage() {
       )}
       {hasReconcilePending && (
         <div className="rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/40 px-4 py-3 text-sm text-violet-900 dark:text-violet-100 space-y-1">
-          <p className="font-semibold">Reconciliación pendiente</p>
-          <p>Shopify aceptó el producto pero el ID aún no está disponible. Espera unos minutos y recarga.</p>
+          <p className="font-semibold">Shopify no está buyer-ready</p>
+          <p>Uno o más productos existen en Shopify pero no pasan toda la verdad actual: estado Admin, publicación, inventario o storefront.</p>
         </div>
       )}
       {hasReconcileFailed && (
@@ -159,7 +214,7 @@ export default function CjShopifyUsaListingsPage() {
               <th className="px-3 py-2">Precio</th>
               <th className="px-3 py-2">SKU CJ</th>
               <th className="px-3 py-2">Shopify ID</th>
-              <th className="px-3 py-2">Publicado</th>
+              <th className="px-3 py-2">Shopify truth</th>
               <th className="px-3 py-2">Acciones</th>
             </tr>
           </thead>
@@ -176,8 +231,8 @@ export default function CjShopifyUsaListingsPage() {
                   <tr className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40">
                     <td className="px-3 py-2 font-mono tabular-nums text-xs">{row.id}</td>
                     <td className="px-3 py-2">
-                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[row.status] ?? 'bg-slate-100 text-slate-700'}`}>
-                        {STATUS_LABEL[row.status] ?? row.status}
+                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusBadge(row)}`}>
+                        {statusLabel(row)}
                       </span>
                     </td>
                     <td className="px-3 py-2 max-w-[180px]">
@@ -197,7 +252,7 @@ export default function CjShopifyUsaListingsPage() {
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{fmtDate(row.publishedAt)}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{truthSummary(row)}</td>
                     <td className="px-3 py-2 space-x-2 whitespace-nowrap">
                       {['DRAFT', 'FAILED'].includes(row.status) && (
                         <button
@@ -209,15 +264,18 @@ export default function CjShopifyUsaListingsPage() {
                           {busyId === row.id ? '…' : 'Publicar'}
                         </button>
                       )}
-                      {row.status === 'ACTIVE' && row.shopifyHandle && (
+                      {row.status === 'ACTIVE' && row.storefrontUrl && row.publishTruth?.buyerFacingVerified && (
                         <a
-                          href={`https://${row.shopifyHandle}`}
+                          href={row.storefrontUrl}
                           target="_blank"
                           rel="noreferrer"
                           className="text-xs text-emerald-600 dark:text-emerald-400 underline"
                         >
                           Ver en tienda
                         </a>
+                      )}
+                      {row.status === 'ACTIVE' && !row.publishTruth?.buyerFacingVerified && (
+                        <span className="text-xs text-amber-600 dark:text-amber-400">Tienda no verificada</span>
                       )}
                       <button
                         type="button"
@@ -231,12 +289,27 @@ export default function CjShopifyUsaListingsPage() {
                   {expandedId === row.id && (
                     <tr className="bg-slate-50/90 dark:bg-slate-950/50">
                       <td colSpan={8} className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                        <p><strong>Estado:</strong> {row.status}</p>
+                        <p><strong>Estado Ivan reconciliado:</strong> {row.status}</p>
+                        <p><strong>Shopify Admin status:</strong> {row.publishTruth?.shopify?.adminStatus ?? '—'}</p>
+                        <p><strong>Shopify existe:</strong> {row.publishTruth?.shopify?.exists == null ? '—' : row.publishTruth.shopify.exists ? 'Sí' : 'No'}</p>
+                        <p><strong>Publication:</strong> {row.publishTruth?.shopify?.publicationName ?? '—'} / {row.publishTruth?.shopify?.publishedOnPublication == null ? '—' : row.publishTruth.shopify.publishedOnPublication ? 'Publicado' : 'No publicado'}</p>
+                        <p><strong>Inventory available:</strong> {row.publishTruth?.shopify?.inventoryQuantity ?? '—'}</p>
                         <p><strong>Shopify Product ID:</strong> {row.shopifyProductId ?? '—'}</p>
                         <p><strong>Shopify Variant ID:</strong> {row.shopifyVariantId ?? '—'}</p>
                         <p><strong>Handle:</strong> {row.shopifyHandle ?? '—'}</p>
-                        <p><strong>Publicado:</strong> {fmtDate(row.publishedAt)}</p>
+                        <p><strong>Storefront URL:</strong> {row.storefrontUrl ?? '—'}</p>
+                        <p><strong>Buyer-facing:</strong> {row.publishTruth?.buyerFacingVerified ? 'OK' : 'No verificado'}</p>
+                        <p><strong>Última publicación verificada:</strong> {fmtDate(row.publishedAt)}</p>
+                        <p><strong>Reconciliado:</strong> {fmtDate(row.publishTruth?.reconciledAt ?? null)}</p>
                         <p><strong>Actualizado:</strong> {fmtDate(row.updatedAt)}</p>
+                        {row.publishTruth?.reasons && row.publishTruth.reasons.length > 0 && (
+                          <div className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 mt-1">
+                            <p className="font-medium text-amber-800 dark:text-amber-200 mb-1">Razones de reconciliación</p>
+                            <ul className="list-disc pl-4 space-y-1">
+                              {row.publishTruth.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                            </ul>
+                          </div>
+                        )}
                         {row.lastError && (
                           <div className="rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3 py-2 mt-1">
                             <p className="font-medium text-red-800 dark:text-red-200 mb-1">Último error</p>
