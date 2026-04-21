@@ -22,6 +22,19 @@ type ShopifyGraphqlUserError = {
   message: string;
 };
 
+export type StorefrontVerificationResult = {
+  shopDomain: string;
+  storefrontUrl: string;
+  status: number | null;
+  finalUrl: string | null;
+  passwordGate: boolean;
+  buyerFacingOk: boolean;
+  hasAddToCart: boolean;
+  hasPrice: boolean;
+  markers: string[];
+  error?: string;
+};
+
 type ShopifyProbeData = {
   shop: {
     name: string;
@@ -110,6 +123,18 @@ export function normalizeShopifyShopDomain(raw: string): string {
   }
 
   return hostname;
+}
+
+export function buildShopifyStorefrontUrl(shopDomain: string, productHandle: string): string {
+  const normalizedShopDomain = normalizeShopifyShopDomain(shopDomain);
+  const handle = trimOrEmpty(productHandle).replace(/^\/+|\/+$/g, '');
+  if (!handle) {
+    throw new AppError('Shopify product handle is required to build storefront URL.', 400, ErrorCode.VALIDATION_ERROR);
+  }
+  if (/^https?:\/\//i.test(handle) || handle.includes('/')) {
+    throw new AppError('Shopify product handle must be a handle, not a full or partial URL.', 400, ErrorCode.VALIDATION_ERROR);
+  }
+  return `https://${normalizedShopDomain}/products/${encodeURIComponent(handle)}`;
 }
 
 function ensureCredentials() {
@@ -750,6 +775,89 @@ export class CjShopifyUsaAdminService {
     }
   }
 
+  async verifyStorefrontProductPage(input: {
+    userId: number;
+    productHandle: string;
+  }): Promise<StorefrontVerificationResult> {
+    const token = await this.getAccessToken(input.userId);
+    const storefrontUrl = buildShopifyStorefrontUrl(token.shopDomain, input.productHandle);
+
+    try {
+      const response = await fetch(storefrontUrl, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 Ivan Reseller Storefront Integrity Auditor',
+        },
+      });
+
+      const html = await response.text();
+      const finalUrl = response.url;
+      const lowerHtml = html.toLowerCase();
+      const lowerFinalUrl = finalUrl.toLowerCase();
+      const handle = trimOrEmpty(input.productHandle).toLowerCase();
+
+      const markers = [
+        'Enter store using password',
+        '/password',
+        'Opening soon',
+        'store using password',
+        'password',
+        'coming soon',
+        'not open to the public',
+        '404',
+        'not found',
+      ].filter((marker) =>
+        lowerHtml.includes(marker.toLowerCase()) ||
+        lowerFinalUrl.includes(marker.toLowerCase()),
+      );
+
+      const passwordGate =
+        lowerFinalUrl.includes('/password') ||
+        lowerHtml.includes('enter store using password') ||
+        lowerHtml.includes('opening soon');
+      const hasAddToCart =
+        /\/cart\/add|add to cart|agregar al carrito|data-type="add-to-cart-form"|name="add"/i.test(html);
+      const hasPrice = /\$\s?\d|usd/i.test(html);
+      const finalUrlMatchesHandle =
+        lowerFinalUrl.includes(`/products/${encodeURIComponent(handle)}`) ||
+        lowerFinalUrl.includes(`/products/${handle}`);
+      const hasNotFoundMarker = /404|not found/i.test(html.slice(0, 3000));
+      const buyerFacingOk =
+        response.status >= 200 &&
+        response.status < 300 &&
+        finalUrlMatchesHandle &&
+        !passwordGate &&
+        !hasNotFoundMarker &&
+        hasAddToCart &&
+        hasPrice;
+
+      return {
+        shopDomain: token.shopDomain,
+        storefrontUrl,
+        status: response.status,
+        finalUrl,
+        passwordGate,
+        buyerFacingOk,
+        hasAddToCart,
+        hasPrice,
+        markers,
+      };
+    } catch (error) {
+      return {
+        shopDomain: token.shopDomain,
+        storefrontUrl,
+        status: null,
+        finalUrl: null,
+        passwordGate: false,
+        buyerFacingOk: false,
+        hasAddToCart: false,
+        hasPrice: false,
+        markers: ['FETCH_ERROR'],
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   async listRecentOrders(input: {
     userId: number;
     first: number;
@@ -978,6 +1086,27 @@ export class CjShopifyUsaAdminService {
     }
 
     return data.fulfillmentCreate.fulfillment;
+  }
+
+  /**
+   * Verifica el estado del storefront de Shopify para determinar si está
+   * protegido por password gate o es público.
+   *
+   * NOTA: El password gate de Shopify NO puede ser controlado mediante la API
+   * de administración. Requiere acción manual en el admin panel de Shopify o
+   * mediante Shopify CLI.
+   */
+  async checkStorefrontStatus(userId: number, productHandle: string): Promise<{
+    shopDomain: string;
+    storefrontUrl: string;
+    status: number | null;
+    finalUrl: string | null;
+    passwordGate: boolean;
+    buyerFacingOk: boolean;
+    markers: string[];
+    error?: string;
+  }> {
+    return this.verifyStorefrontProductPage({ userId, productHandle });
   }
 }
 
