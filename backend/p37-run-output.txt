@@ -1,0 +1,202 @@
+[BOOT] loading credentials-manager.service
+[BOOT] loading mercadolibre.service
+[BOOT] loading ebay.service
+[BOOT] loading amazon.service
+🔍 DATABASE_URL encontrada:
+   Variable: DATABASE_URL
+   postgresql://postgres:pzXS***xwiO@yamabiko.proxy.rlwy.net:35731/railway
+   Host: yamabiko.proxy.rlwy.net
+   Port: 35731
+   Database: railway
+   User: postgres
+   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)
+   💡 Si estás en Railway, considera usar DATABASE_URL con postgres.railway.internal
+   💡 La URL pública funciona pero puede ser más lenta
+🔍 REDIS_URL encontrada:
+   Variable: REDIS_URL
+   redis://default:****@shortline.proxy.rlwy.net:56022
+   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)
+   💡 Si estás en Railway, considera usar REDIS_URL con redis.railway.internal
+✅ ENCRYPTION_KEY validada (longitud: 64 caracteres)
+[BOOT] loading destination.service
+[BOOT] loading marketplace.service
+[P37] === reset + close + publish ===
+[P37] ✅ product status reset to VALIDATED_READY
+⚠️ Usando salt por defecto. Se recomienda configurar ENCRYPTION_SALT único.
+
+[P37] STEP 2: closing MLC3828307770…
+[P37] ✅ closed MLC3828307770
+
+[P37] STEP 3: publishing…
+[BOOT] loading workflow-config.service
+[BOOT] loading aliexpress-dropshipping-api.service
+[BOOT] loading fx.service
+[BOOT] loading cost-calculator.service
+[BOOT] loading tax-calculator.service
+⚠️ Usando salt por defecto. Se recomienda configurar ENCRYPTION_SALT único.
+2026-04-02 19:02:10 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] Getting product info {"service":"ivan-reseller-backend","productId":"3256810079300907","localCountry":"CL"}
+2026-04-02 19:02:11 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] makeRequest product-info extraction debug {"service":"ivan-reseller-backend","method":"aliexpress.offer.ds.product.simplequery","responseTopKeys":["aliexpress_offer_ds_product_simplequery_response"],"resultTopKeys":["request_id","_trace_id_"],"hasResultProduct":false,"resultProductKeys":[],"resultPreview":"{\"request_id\":\"210137bd17751673317481092\",\"_trace_id_\":\"21013cc017751673317425485e0fc3\"}"}
+2026-04-02 19:02:11 [[33mwarn[39m]: [ALIEXPRESS-DROPSHIPPING-API] Primary getProductInfo returned no product fields; trying aliexpress.ds.product.get {"service":"ivan-reseller-backend","productId":"3256810079300907"}
+2026-04-02 19:02:12 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] ds.product.get result shape {"service":"ivan-reseller-backend","resultResultKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info"],"ae_item_sku_info_dtosType":"object","ae_item_sku_info_dtosKeys":["ae_item_sku_info_d_t_o"]}
+2026-04-02 19:02:12 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] getProductInfo product shape (skus) {"service":"ivan-reseller-backend","productKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info","product_id","product_title"],"hasSkus":false,"hasAeSkuDtos":true,"skuArrayLength":3,"hasClassicShippingInfo":false,"hasLogisticsInfoDto":true,"logisticsInfoKeys":["delivery_time","ship_to_country"],"normalizedShippingMethodCount":0}
+2026-04-02 19:02:12 [[32minfo[39m]: [PREVENTIVE-SUPPLIER] Using persisted ML Chile freight truth for original supplier validation {"service":"ivan-reseller-backend","productId":"3256810079300907","shipToCountry":"CL","shippingUsd":1.99,"selectedServiceName":"AliExpress Standard Shipping","checkedAt":"2026-04-01T21:32:05.000Z","ageHours":24.501447777777777}
+2026-04-02 19:02:12 [[32minfo[39m]: FXService: rates refreshed from provider {"service":"ivan-reseller-backend","base":"USD","providerUrl":"https://open.er-api.com/v6/latest/{base}","lastUpdated":"2026-04-02T00:02:31.000Z"}
+✅ Redis connected
+2026-04-02 19:02:13 [[32minfo[39m]: [PRE-PUBLISH] persisted validated listing sale price (before ML image gate) {"service":"ivan-reseller-backend","productId":32722,"listingSalePriceUsd":11305,"totalCostUsd":1360.98,"canonicalUpliftApplied":false}
+2026-04-02 19:02:13 [[32minfo[39m]: [ML-IMAGE-POLICY] audited {"service":"ivan-reseller-backend","productId":32722,"status":"ml_image_manual_review_required","hardBlockers":[],"manualReviewReasons":["supplier_raw_images_require_reviewed_ml_cover"],"primaryImageUrl":"https://ae-pic-a1.aliexpress-media.com/kf/S0b0e7a4e560347d9bdf1eeced8ac2aa65.jpg","imageCount":4}
+2026-04-02 19:02:20 [[32minfo[39m]: [ML-IMAGE-REMEDIATION] evaluated {"service":"ivan-reseller-backend","productId":32722,"decision":"manual_review_required","remediationPathSelected":"canonical_pipeline_v1","publishSafe":true,"integrationLayerOutcome":"legacy_approved_pack","packApproved":true,"blockingReasons":["ml_canonical_dual_gate_failed_all_candidates_and_remediations","last_try:square_white_catalog_jpeg:policy=false:conv=false:hero=true:integrity=true"]}
+2026-04-02 19:02:20 [[32minfo[39m]: [PRE-PUBLISH] preventive preparation ready {"service":"ivan-reseller-backend","productId":32722,"marketplace":"mercadolibre","shipCountry":"CL","selectedSupplierId":"3256810079300907","supplierReliabilityScore":7,"fallbackSuppliers":0,"netProfitUsd":9944.02,"marginRatio":0.8796124677017622}
+⚠️ Usando salt por defecto. Se recomienda configurar ENCRYPTION_SALT único.
+2026-04-02 19:02:22 [[32minfo[39m]: [ML Publish] Token refreshed before publish {"service":"ivan-reseller-backend","userId":1}
+2026-04-02 19:02:23 [[32minfo[39m]: [MercadoLibre] Category predicted via domain_discovery {"service":"ivan-reseller-backend","title":"Soporte Escritorio Tel�fono Gatito Decorativo Mini","categoryId":"MLC439917","site":"MLC"}
+2026-04-02 19:02:23 [[32minfo[39m]: [ML Publish] Using pre-publish ML-compliant image inputs {"service":"ivan-reseller-backend","count":2}
+2026-04-02 19:02:23 [[32minfo[39m]: [ML Publish] Origin CN → Destination {"service":"ivan-reseller-backend","siteId":"MLC","countryCode":"CL","currency":"CLP"}
+2026-04-02 19:02:23 [[32minfo[39m]: [ML Publish] Price already in target currency — no FX conversion {"service":"ivan-reseller-backend","price":11305,"targetCurrency":"CLP","productCurrency":"CLP","siteId":"MLC"}
+⚠️ Usando salt por defecto. Se recomienda configurar ENCRYPTION_SALT único.
+2026-04-02 19:02:26 [[32minfo[39m]: [ML Publish] Auto-resolved required attributes {"service":"ivan-reseller-backend","categoryId":"MLC439917","attributeCount":1,"attrs":"BRAND"}
+2026-04-02 19:02:26 [[32minfo[39m]: Publishing product to MercadoLibre with multiple images {"service":"ivan-reseller-backend","productId":32722,"imageCount":2,"categoryId":"MLC439917","price":11305}
+2026-04-02 19:02:27 [[32minfo[39m]: [MercadoLibre] Image uploaded successfully {"service":"ivan-reseller-backend","pictureId":"644625-MLC109982184963_042026","maxSize":"1200x1200","bytes":65236}
+2026-04-02 19:02:28 [[32minfo[39m]: [MercadoLibre] Image uploaded successfully {"service":"ivan-reseller-backend","pictureId":"788243-MLC109141179888_042026","maxSize":"1200x1200","bytes":98944}
+2026-04-02 19:02:28 [[32minfo[39m]: [MercadoLibre] Using pre-uploaded images {"service":"ivan-reseller-backend","count":2}
+2026-04-02 19:02:28 [[33mwarn[39m]: [MercadoLibre] Pre-validation reported issues {"service":"ivan-reseller-backend","errors":["Validation error","validation_error","shipping.lost_me1_by_user: User has not mode me1"]}
+2026-04-02 19:02:28 [[32minfo[39m]: [MercadoLibre] createListing attempt {"service":"ivan-reseller-backend","title":"Soporte Escritorio Decorativo Gatito para Telfono Celular","category_id":"MLC439917","price":11305,"currency_id":"CLP","listing_type_id":"gold_special","pictureCount":2,"attributeCount":1,"siteId":"MLC"}
+[BOOT] loading product.service
+2026-04-02 19:02:31 [[33mwarn[39m]: Product status inconsistency detected and will be corrected {"service":"ivan-reseller-backend","productId":32722,"currentStatus":"VALIDATED_READY","currentIsPublished":true,"newStatus":"PUBLISHED","userId":1}
+[P37] publish result:
+{
+  "success": true,
+  "marketplace": "mercadolibre",
+  "listingId": "MLC3828313306",
+  "listingUrl": "https://articulo.mercadolibre.cl/MLC-3828313306-soporte-escritorio-decorativo-gatito-para-telfono-celular-_JM"
+}
+
+[P37] ✅ New listing: MLC3828313306
+
+[P37] STEP 4: waiting 120s for ML async review…
+[P37] polling…
+[P37] status=under_review health=null
+[P37] ⚠️  status=under_review
+{
+  "id": "MLC3828313306",
+  "status": "under_review",
+  "sub_status": [
+    "waiting_for_patch"
+  ],
+  "pictures": [
+    {
+      "id": "644625-MLC109982184963_042026",
+      "max_size": "1200x1200"
+    },
+    {
+      "id": "788243-MLC109141179888_042026",
+      "max_size": "1200x1200"
+    }
+  ]
+}
+
+[P37] === DONE ===
+❌ Redis error: Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+✅ Redis connected

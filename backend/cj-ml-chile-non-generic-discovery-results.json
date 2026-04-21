@@ -1,0 +1,85 @@
+{
+  "timestamp": "2026-04-19T02:05:43.426Z",
+  "warehouseAudit": {
+    "error": "CjSupplierError: CJ HTTP 400"
+  },
+  "countryCodeSearch": [
+    {
+      "seed": "",
+      "count": 0,
+      "samples": []
+    },
+    {
+      "seed": "phone",
+      "count": 0,
+      "samples": []
+    },
+    {
+      "seed": "home",
+      "count": 0,
+      "samples": []
+    },
+    {
+      "seed": "kitchen",
+      "count": 0,
+      "samples": []
+    }
+  ],
+  "categorySampling": {
+    "totalCategories": 14,
+    "samples": [
+      {
+        "count": 0,
+        "hasCLInventory": false
+      },
+      {
+        "count": 0,
+        "hasCLInventory": false
+      },
+      {
+        "count": 0,
+        "hasCLInventory": false
+      },
+      {
+        "count": 0,
+        "hasCLInventory": false
+      },
+      {
+        "count": 0,
+        "hasCLInventory": false
+      }
+    ]
+  },
+  "blindFreightProbing": [
+    {
+      "pid": "CFF2C762-D293-4BEB-9C1E-AC18E238EAF6",
+      "title": "LED light strip",
+      "success": false,
+      "error": "CjSupplierError: CJ freightCalculate returned no shipping options (empty data array)"
+    },
+    {
+      "pid": "1782639175183900672",
+      "title": "12v Colorful LED Strip WS2811 Light Strip",
+      "success": false,
+      "error": "CjSupplierError: CJ freightCalculate returned no shipping options (empty data array)"
+    },
+    {
+      "pid": "1385040939717890048",
+      "title": "Smd Led Flexible Strip Car Light Strip 12v Flexible Strip",
+      "success": false,
+      "error": "CjSupplierError: CJ freightCalculate returned no shipping options (empty data array)"
+    },
+    {
+      "pid": "00740305-7F49-467E-BD86-D8223E5C01BE",
+      "title": "Equestrian LED light strip",
+      "success": false,
+      "error": "CjSupplierError: CJ freightCalculate returned no shipping options (empty data array)"
+    },
+    {
+      "pid": "1431863464602767360",
+      "title": "Luminous Helmet Strip Motorcycle Helmet Light Strip Led Helmet Light Strip Cold Light Strip",
+      "success": false,
+      "error": "CjSupplierError: CJ freightCalculate returned no shipping options (empty data array)"
+    }
+  ]
+}

@@ -1,0 +1,352 @@
+{%- comment -%}
+  IVAN RESELLER - Featured Collection Section
+  Displays curated products in a clean grid with collection filtering
+{%- endcomment -%}
+
+<style>
+  .ir-featured-section {
+    padding: 80px 20px;
+    background: #FFFFFF;
+  }
+
+  .ir-featured__container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .ir-featured__header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .ir-featured__title {
+    font-size: clamp(28px, 4vw, 36px);
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: #1E293B;
+  }
+
+  .ir-featured__subtitle {
+    font-size: 16px;
+    color: #64748B;
+    max-width: 500px;
+    margin: 0 auto;
+  }
+
+  .ir-featured__tabs {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+
+  .ir-featured__tab {
+    padding: 12px 24px;
+    background: #F1F5F9;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748B;
+    cursor: pointer;
+    transition: all 200ms ease;
+    text-decoration: none;
+  }
+
+  .ir-featured__tab:hover,
+  .ir-featured__tab--active {
+    background: #0F172A;
+    color: #FFFFFF;
+  }
+
+  .ir-featured__grid {
+    display: grid;
+    grid-template-columns: repeat({{ section.settings.products_per_row | default: 4 }}, 1fr);
+    gap: 24px;
+  }
+
+  @media (max-width: 900px) {
+    .ir-featured__grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .ir-featured__grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .ir-product-card {
+    background: #FFFFFF;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: all 250ms ease;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
+  .ir-product-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  }
+
+  .ir-product-card__image-wrapper {
+    position: relative;
+    padding-top: 100%;
+    background: #F8FAFC;
+    overflow: hidden;
+  }
+
+  .ir-product-card__image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 300ms ease;
+  }
+
+  .ir-product-card:hover .ir-product-card__image {
+    transform: scale(1.05);
+  }
+
+  .ir-product-card__badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: #14B8A6;
+    color: #FFFFFF;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .ir-product-card__info {
+    padding: 20px;
+  }
+
+  .ir-product-card__category {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #14B8A6;
+    margin-bottom: 8px;
+  }
+
+  .ir-product-card__title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1E293B;
+    margin-bottom: 12px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .ir-product-card__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .ir-product-card__price {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0F172A;
+  }
+
+  .ir-product-card__btn {
+    padding: 8px 16px;
+    background: #0F172A;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 200ms ease;
+    text-decoration: none;
+  }
+
+  .ir-product-card__btn:hover {
+    background: #14B8A6;
+  }
+
+  .ir-featured__empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: #64748B;
+  }
+</style>
+
+<div class="ir-featured-section">
+  <div class="ir-featured__container">
+    <div class="ir-featured__header">
+      {% if section.settings.title != blank %}
+        <h2 class="ir-featured__title">{{ section.settings.title }}</h2>
+      {% endif %}
+      {% if section.settings.subtitle != blank %}
+        <p class="ir-featured__subtitle">{{ section.settings.subtitle }}</p>
+      {% endif %}
+    </div>
+
+    {% comment %} Collection Tabs {% endcomment %}
+    <div class="ir-featured__tabs">
+      {% for block in section.blocks %}
+        {% if block.type == 'collection_tab' %}
+          <a href="{{ block.settings.collection.url }}" class="ir-featured__tab {% if forloop.first %}ir-featured__tab--active{% endif %}">
+            {{ block.settings.tab_title | default: block.settings.collection.title }}
+          </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    {% comment %} Product Grid {% endcomment %}
+    <div class="ir-featured__grid">
+      {% assign product_count = 0 %}
+      {% for block in section.blocks %}
+        {% if block.type == 'featured_product' and product_count < section.settings.products_per_row %}
+          {% assign product = block.settings.product %}
+          {% if product != blank %}
+            {% assign product_count = product_count | plus: 1 %}
+            <a href="{{ product.url }}" class="ir-product-card">
+              <div class="ir-product-card__image-wrapper">
+                {% if product.featured_image != blank %}
+                  <img 
+                    src="{{ product.featured_image | image_url: width: 400 }}"
+                    srcset="{{ product.featured_image | image_url: width: 400 }} 1x, {{ product.featured_image | image_url: width: 800 }} 2x"
+                    alt="{{ product.featured_image.alt | escape }}"
+                    class="ir-product-card__image"
+                    loading="lazy"
+                    width="400"
+                    height="400"
+                  >
+                {% else %}
+                  <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #94A3B8;">
+                    No image
+                  </div>
+                {% endif %}
+                
+                {% if block.settings.badge != blank %}
+                  <span class="ir-product-card__badge">{{ block.settings.badge }}</span>
+                {% endif %}
+              </div>
+              
+              <div class="ir-product-card__info">
+                {% if block.settings.category_label != blank %}
+                  <p class="ir-product-card__category">{{ block.settings.category_label }}</p>
+                {% endif %}
+                <h3 class="ir-product-card__title">{{ product.title }}</h3>
+                <div class="ir-product-card__footer">
+                  <span class="ir-product-card__price">{{ product.price | money }}</span>
+                  <span class="ir-product-card__btn">{{ block.settings.button_text | default: 'View' }}</span>
+                </div>
+              </div>
+            </a>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    {% if product_count == 0 %}
+      <div class="ir-featured__empty">
+        <p>Products coming soon. Check back shortly for our curated collection.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "IR - Featured Collection",
+  "tag": "section",
+  "class": "ir-featured-section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Section Title",
+      "default": "Curated For You"
+    },
+    {
+      "type": "textarea",
+      "id": "subtitle",
+      "label": "Section Subtitle",
+      "default": "Hand-picked products for smarter living"
+    },
+    {
+      "type": "range",
+      "id": "products_per_row",
+      "label": "Products per row",
+      "min": 2,
+      "max": 4,
+      "step": 1,
+      "default": 4
+    }
+  ],
+  "blocks": [
+    {
+      "type": "featured_product",
+      "name": "Featured Product",
+      "settings": [
+        {
+          "type": "product",
+          "id": "product",
+          "label": "Product"
+        },
+        {
+          "type": "text",
+          "id": "category_label",
+          "label": "Category Label",
+          "default": "Smart Essential"
+        },
+        {
+          "type": "text",
+          "id": "badge",
+          "label": "Badge Text",
+          "info": "Leave empty for no badge"
+        },
+        {
+          "type": "text",
+          "id": "button_text",
+          "label": "Button Text",
+          "default": "View"
+        }
+      ]
+    },
+    {
+      "type": "collection_tab",
+      "name": "Collection Tab",
+      "settings": [
+        {
+          "type": "collection",
+          "id": "collection",
+          "label": "Collection"
+        },
+        {
+          "type": "text",
+          "id": "tab_title",
+          "label": "Tab Title (optional)",
+          "info": "Leave empty to use collection title"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Featured Collection"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,194 @@
+ROLE: Principal Research Lead + Marketplace Image Pipeline Analyst + Competitive Reverse-Engineering Specialist
+
+MISSION:
+Execute a deep research sprint focused ONLY on how the best dropshipping / multichannel listing software solve marketplace image selection, remediation, ordering, and policy compliance for product publications.
+
+This is not yet the implementation sprint.
+This is the investigation sprint that must produce the strongest possible foundation before we refactor Ivan Reseller’s publication image pipeline.
+
+==================================================
+RESEARCH OBJECTIVE
+==================================================
+
+Investigate how leading dropshipping / multichannel publishing software handle product images for marketplace listings, especially in channels like Mercado Libre, eBay, Amazon, Walmart, Etsy, Shopify marketplaces, and similar environments where image policy and conversion quality both matter.
+
+The key question is:
+
+How do the best systems choose, optimize, clean, rank, remediate, and publish images so that:
+1. the listing complies with marketplace rules
+2. the main image is attractive and conversion-friendly
+3. the software can operate at scale without constant human correction
+
+==================================================
+RESEARCH SCOPE
+==================================================
+
+Focus on platforms/software categories such as:
+- multichannel listing software
+- dropshipping automation systems
+- marketplace publishing suites
+- e-commerce feed management / listing optimization software
+- AI catalog / product content optimization tools
+
+You may include:
+- SaaS tools
+- enterprise listing platforms
+- feed-management systems
+- AI commerce tooling
+- marketplace-specific seller tooling if relevant
+
+Do NOT waste time on generic SEO/image theory unless it directly informs real software behavior.
+
+==================================================
+RESEARCH QUESTIONS
+==================================================
+
+Investigate and answer all of these:
+
+1. IMAGE SELECTION
+How do strong platforms choose the primary image from a set of supplier/product images?
+Do they rank images? By what criteria?
+Do they detect text, logos, clutter, packaging, watermarks, hands, context backgrounds, or weak product framing?
+
+2. MARKETPLACE POLICY COMPLIANCE
+How do they adapt images to marketplace-specific rules?
+Do they keep separate rules per marketplace?
+Do they enforce different logic for main image vs secondary images?
+
+3. REMEDIATION
+When source images are imperfect, what do top systems do?
+Do they:
+- crop
+- isolate product
+- remove background
+- remove text/logo
+- replace background
+- reject the item
+- send to human review
+- use AI editing
+- use manual approval queues
+
+4. ORDERING / SLOT ASSIGNMENT
+How do they decide which image becomes cover/main image and which become secondary?
+Do they swap image roles based on policy/commercial goals?
+
+5. CONVERSION / ATTRACTIVENESS
+How do they avoid publishing a policy-compliant but ugly/weak main image?
+Do they explicitly score for attractiveness, clarity, product occupancy, trustworthiness, catalog quality, clickability, or marketplace conversion fitness?
+
+6. FALLBACK STRATEGIES
+What happens when none of the available images are fully compliant?
+What is the best-practice fallback:
+- automated remediation
+- alternate source fetch
+- human review
+- item rejection
+- marketplace-specific downgrade path
+
+7. SYSTEM DESIGN
+What is the common architecture pattern used by the best software?
+Is it usually:
+- candidate ranking + rule engine
+- marketplace-specific policy templates
+- AI remediation layer
+- confidence threshold + manual review
+- feedback loop from marketplace moderation results
+
+8. LEARNING LOOP
+Do top systems appear to learn from:
+- marketplace rejections
+- moderation flags
+- conversion performance
+- image CTR
+- listing suppression events
+
+9. RECOMMENDATION FOR IVAN RESELLER
+Based on all findings, what is the strongest recommended image pipeline architecture for Ivan Reseller specifically?
+
+==================================================
+RESEARCH METHOD
+==================================================
+
+Use a rigorous reverse-engineering approach:
+
+- identify strong candidate software/tools
+- inspect official docs, product pages, help centers, feature pages, case studies, demos, or credible technical descriptions
+- infer product behavior only when evidence strongly supports it
+- separate:
+  explicit evidence
+  reasonable inference
+  unknown / not proven
+
+Do not invent internal implementations without stating they are inferred.
+
+==================================================
+REQUIRED OUTPUT STRUCTURE
+==================================================
+
+Create/update the following docs:
+
+- docs/R1_MARKETPLACE_IMAGE_PIPELINE_RESEARCH.md
+- docs/R1_COMPETITIVE_SOFTWARE_COMPARISON.md
+- docs/R1_IMAGE_SELECTION_PATTERNS.md
+- docs/R1_POLICY_COMPLIANCE_PATTERNS.md
+- docs/R1_REMEDIATION_PATTERNS.md
+- docs/R1_ORDERING_AND_SLOT_ASSIGNMENT_PATTERNS.md
+- docs/R1_CONVERSION_VS_COMPLIANCE_BALANCE.md
+- docs/R1_FALLBACK_AND_HUMAN_REVIEW_PATTERNS.md
+- docs/R1_RECOMMENDED_IVAN_RESELLER_IMAGE_ARCHITECTURE.md
+- docs/R1_EXECUTION_REPORT.md
+
+==================================================
+COMPARISON REQUIREMENTS
+==================================================
+
+Build a comparison matrix that, for each relevant software/platform found, tries to evaluate:
+
+- image ranking present or not
+- policy-specific adaptation present or not
+- AI remediation present or not
+- main-vs-secondary image distinction present or not
+- conversion-aware logic present or not
+- human review fallback present or not
+- strengths
+- weaknesses
+- what Ivan Reseller should copy from it
+
+==================================================
+QUALITY BAR
+==================================================
+
+The final research must not be shallow.
+I want:
+- a practical, software-oriented analysis
+- explicit patterns that can be implemented
+- clear separation between proven findings and inference
+- a final recommendation that is directly usable for the next implementation sprint
+
+==================================================
+FINAL OUTPUT FORMAT
+==================================================
+
+Return exactly:
+
+RESEARCH STATUS:
+- MARKETPLACE IMAGE PIPELINE RESEARCH: [DONE / PARTIAL / FAILED]
+- COMPETITIVE SOFTWARE COMPARISON: [DONE / PARTIAL / FAILED]
+- IMAGE SELECTION PATTERNS: [DONE / PARTIAL / FAILED]
+- POLICY COMPLIANCE PATTERNS: [DONE / PARTIAL / FAILED]
+- REMEDIATION PATTERNS: [DONE / PARTIAL / FAILED]
+- ORDERING / SLOT ASSIGNMENT PATTERNS: [DONE / PARTIAL / FAILED]
+- CONVERSION VS COMPLIANCE BALANCE: [DONE / PARTIAL / FAILED]
+- FALLBACK / HUMAN REVIEW PATTERNS: [DONE / PARTIAL / FAILED]
+- RECOMMENDED IVAN RESELLER IMAGE ARCHITECTURE: [DONE / PARTIAL / FAILED]
+
+REAL PROOF:
+- strongest patterns found
+- strongest software behaviors identified
+- strongest recommended architecture for Ivan Reseller
+
+REMAINING BLOCKERS:
+- exact blockers only
+
+NEXT STEP:
+- one highest-leverage next move

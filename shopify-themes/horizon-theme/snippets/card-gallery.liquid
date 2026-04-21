@@ -9,9 +9,21 @@
 {%- enddoc -%}
 
 {% liquid
-  assign product = closest.product
+  assign product = product | default: closest.product
+  assign hydrated_product = product
   assign block_settings = block.settings
   assign image_sizes = '(min-width: 750px) 50vw, 100vw'
+  assign fallback_image = blank
+
+  if product != blank and product.handle != blank and product.media.size == 0 and product.images.size == 0
+    assign hydrated_product = all_products[product.handle] | default: product
+  endif
+
+  assign product = hydrated_product
+
+  if product != blank
+    assign fallback_image = product.featured_image | default: product.images.first
+  endif
 
   # Check if product has badges and determine position
   assign has_badges = false
@@ -52,7 +64,7 @@
     when 'square'
       assign ratio = '1'
     when 'adapt'
-      assign ratio = product.featured_media.preview_image.aspect_ratio | default: '1'
+      assign ratio = product.featured_media.preview_image.aspect_ratio | default: fallback_image.aspect_ratio | default: '1'
   endcase
 
   if block_settings.image_ratio == 'adapt' and block_settings.constrain_to_viewport
@@ -72,6 +84,9 @@
     --gallery-aspect-ratio: {{ ratio }};
   "
   data-product-id="{{ product.id }}"
+  data-product-handle="{{ product.handle }}"
+  data-product-url="{{ product.url }}"
+  data-product-title="{{ product.title | escape }}"
   {% if settings.show_second_image_on_hover %}
     on:pointerenter="/previewImage"
     on:pointerleave="/resetImage"
@@ -170,6 +185,41 @@
         slide_count: media_list_to_show.size,
         show_arrows: show_arrows,
         attributes: slideshow_attributes
+      %}
+    </a>
+  {% elsif product != blank and fallback_image != blank %}
+    {% capture fallback_slide %}
+      {% capture fallback_image_markup %}
+        {{
+          fallback_image
+          | image_url: width: 1200
+          | image_tag:
+            widths: '240, 352, 832, 1200',
+            sizes: image_sizes,
+            loading: 'lazy',
+            class: 'product-media__image',
+            alt: product.title
+        }}
+      {% endcapture %}
+      {% render 'slideshow-slide',
+        slide_id: product.id,
+        index: 0,
+        class: 'product-media-container media-fit product-media-container--image',
+        children: fallback_image_markup
+      %}
+    {% endcapture %}
+    <a
+      class="contents"
+      ref="cardGalleryLink"
+      href="{{ product.selected_or_first_available_variant.url }}"
+      aria-label="{{- product.title -}}"
+    >
+      {% render 'slideshow',
+        ref: 'slideshow',
+        initial_slide: 0,
+        slides: fallback_slide,
+        slide_count: 1,
+        attributes: 'disabled="true"'
       %}
     </a>
   {% elsif product != blank and product.media.size == 0 %}

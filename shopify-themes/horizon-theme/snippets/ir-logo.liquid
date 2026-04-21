@@ -1,0 +1,47 @@
+{%- comment -%}
+  IVAN RESELLER - Premium SVG Logo
+  Executive-grade wordmark with cart+AI circuit icon
+{%- endcomment -%}
+
+<a href="{{ routes.root_url }}" class="ir-logo-link" aria-label="{{ shop.name }} - Home">
+  <svg width="240" height="40" viewBox="0 0 240 40" fill="none" xmlns="http://www.w3.org/2000/svg" class="ir-logo-svg">
+    <!-- Icon: Shopping Cart + AI Circuit -->
+    <g transform="translate(2, 6)">
+      <!-- Cart body -->
+      <path d="M2 2h4l3 18h14l3-12H8" stroke="#0F172A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <!-- Cart wheels -->
+      <circle cx="10" cy="26" r="2.8" stroke="#0F172A" stroke-width="2.2" fill="none"/>
+      <circle cx="22" cy="26" r="2.8" stroke="#0F172A" stroke-width="2.2" fill="none"/>
+      <!-- AI sparkle/circuit -->
+      <circle cx="28" cy="8" r="3.5" fill="#0F172A"/>
+      <path d="M28 4V2M28 14V16M22 8h-3M36 8h3M24 4l-2-2M32 12l2 2M24 12l-2 2M32 4l2-2" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round"/>
+      <!-- Green dot indicator -->
+      <circle cx="32" cy="4" r="2" fill="#22c55e"/>
+    </g>
+    <!-- Wordmark: Ivan Reseller -->
+    <text x="48" y="28" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="20" font-weight="750" fill="#0F172A" letter-spacing="-0.03em">Ivan</text>
+    <text x="95" y="28" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="20" font-weight="450" fill="#525252" letter-spacing="-0.02em">Reseller</text>
+  </svg>
+</a>
+
+<style>
+  .ir-logo-link {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+  }
+  .ir-logo-link:hover {
+    opacity: 0.85;
+  }
+  .ir-logo-svg {
+    height: 32px;
+    width: auto;
+    display: block;
+  }
+  @media screen and (max-width: 749px) {
+    .ir-logo-svg {
+      height: 26px;
+    }
+  }
+</style>

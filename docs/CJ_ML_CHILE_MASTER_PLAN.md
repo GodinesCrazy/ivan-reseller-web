@@ -188,11 +188,21 @@ listPriceCLP   = round(listPriceUsd × fxRate)             // entero, sin decima
 - Con `not_specified`, el vendedor configura el envío en el portal ML post-publicación (envío personalizado / acuerdo con comprador).
 - Esta es la única opción coherente para dropshipping directo en el MVP.
 
-**categoryId** — RESUELTO operacionalmente:
-- El operador usa `/ml/categories/suggest` para obtener sugerencias del ML Category Predictor (gratuito, sin auth).
-- Selecciona la categoría antes de crear el draft.
-- La categoría se persiste en `draftPayload.categoryId`.
-- Publish bloquea si `categoryId === 'MLC9999'` (comodín vacío).
+### PHASE 2 — DISCOVERY AUDIT (BASELINE) [DONE]
+**Status**: Completed 2026-04-18.
+- **Goal**: Identify which keyword families yield `countryCode=CL` stock.
+- **Results**: 14/14 families (140 products) yielded **0** local candidates.
+- **Conclusion**: Generic English keywords are not a viable seed for Chile-local discovery. 
+### PHASE 3 — NON-GENERIC DISCOVERY [DONE]
+**Status**: Completed 2026-04-18.
+- **Goal**: Find local stock via warehouse, category sampling, and blind freight probing.
+- **Results**: 
+  - `warehouse/detail` returned 400.
+  - `countryCode=CL` filter returned 0 hits.
+  - Category sampling (14 CIDs) returned 0 hits.
+  - Blind freight probing returned 0 hits.
+- **Conclusion**: The "Chile-local" catalog is effectively invisible/inaccessible via public API 2.0.
+- **Operator Guidance**: Automating publication of local stock is blocked by source data. Switch to manual SKU ingestion or pivot to global model.
 
 ### Estado real del módulo — post-fase C
 
@@ -204,12 +214,11 @@ listPriceCLP   = round(listPriceUsd × fxRate)             // entero, sin decima
 - ✅ FX staleness: badge + guardrail + reprice action (sin auto-reprice)
 - ✅ Webhook ML: endpoint listo, URL documentada para portal
 - ✅ Orders: fetch-ml real, timeline, vinculación automática de listing
-- ✅ Type-check backend: 0 errores
-- ✅ Type-check frontend: 0 errores
-- ✅ Prisma validate: ✅
-- ✅ No rompe CJ→eBay USA ni legacy ML
-
-### Limitaciones remanentes del MVP (honesto)
+- [x] Chile-local truth is stricter and correct (Adapter + Qualification hardened).
+- [x] False local promotion was reduced (Verification logic in place).
+- [x] **Discovery Audit Baseline (14 families) completed: Result: 0 Candidates.**
+- [x] **Non-Generic Technical Discovery completed: Result: 0 Candidates (API Surface Dry).**
+- [!] **Parity Goal:** Logic parity achieved; Catalog parity NOT possible via automated discovery (CJ API gap).
 
 | Pendiente | Tipo | Qué falta |
 |-----------|------|-----------|
@@ -276,3 +285,61 @@ La pantalla `CJ → ML Chile / Products` era un listado plano sin contexto visua
 - Precios en CLP son siempre ESTIMATED (dependen de FX)
 - Risk score numérico no implementado — la decisión es binaria APPROVED/REJECTED/NOT_VIABLE
 
+---
+
+## Fase E — Local Stock Parity Audit vs CJ → eBay USA (2026-04-18)
+
+**Estado: lógica de paridad implementada, validación final todavía bloqueada**
+
+### Regla de verdad actual para CJ → ML Chile
+
+Un resultado CJ solo puede entrar al flujo principal como `Chile local` si existe evidencia positiva de destino Chile por una de estas dos rutas:
+
+1. `product/listV2` trae una fila destino `countryCode=CL`, `verifiedWarehouse=true`, y stock local no-fábrica positivo:
+   `cjInventoryNum > 0` o `totalInventoryNum - factoryInventoryNum > 0`.
+2. Si el search no trae esa fila, el backend debe confirmar la variante por dos pasos:
+   - stock vivo positivo en `product/stock/queryByVid`
+   - `logistic/freightCalculate` exitoso con `startCountryCode=CL` y `endCountryCode=CL`
+
+Sin esas pruebas, stock genérico/global/CN no se promueve como operable. Queda en `stock_unknown`, `global_only` o `out_of_stock`.
+
+### Qué cambió para acercar ML Chile a la filosofía USA
+
+- Se reutilizó la misma filosofía del vertical `CJ → eBay USA`: search/list solo como seed, `queryByVid` como verdad de variante, `freightCalculate` como prueba final de operabilidad destino.
+- El adaptador compartido ahora preserva `destinationInventories` de `listV2` y acepta `destCountryCode` dinámico para no forzar `US`.
+- `CJ → ML Chile` dejó de depender del fast verify débil basado solo en `product/variant/query`.
+- Preview/evaluate y shipping quote ahora prueban `CL -> CL` de forma real.
+- Products screen diferencia `Chile local` de `Solo stock global/CN` y deja de tratar stock genérico como si fuera publicable.
+
+### Resultado real de validación
+
+Artefactos generados:
+
+- `backend/cj-ml-chile-local-stock-parity-validation.json`
+- `backend/cj-ml-chile-local-stock-parity-validation-extra.json`
+- `backend/scripts/cj-ebay-warehouse-aware-smoke.ts`
+
+Queries primarias ejecutadas:
+
+- `wireless earbuds`
+- `earbuds`
+- `smartphone holder`
+- `charger`
+- `phone case`
+- `ring`
+
+Resultado agregado de 14 queries / 168 resultados crudos:
+
+- `beforeMainFlow = 0`
+- `afterMainFlow = 0`
+- `beforeReady = 0`
+- `afterReady = 0`
+- `after fast verify global_only = 84`
+
+Interpretación: el sistema ahora clasifica correctamente y deja de inflar stock global como si fuera local Chile, pero esta tanda real todavía no produjo candidatos `chile_local` robustos comparables al patrón operativo de `CJ → eBay USA`.
+
+### Estado honesto
+
+**PARITY NOT ACHIEVED**
+
+La lógica correcta ya está implementada, pero la evidencia real todavía no demuestra que `CJ → ML Chile` esté encontrando candidatos con stock local Chile y promoción operable con robustez comparable a `CJ → eBay USA`.

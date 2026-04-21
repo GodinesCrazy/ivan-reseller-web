@@ -1,0 +1,2247 @@
+{
+  "startedAt": "2026-04-20T17:59:25.826Z",
+  "baseUrl": "https://ivan-reseller-backend-production.up.railway.app",
+  "loginUser": "admin",
+  "searchConfig": {
+    "keywords": [
+      "phone accessories",
+      "home organization",
+      "kitchen gadgets",
+      "beauty tools",
+      "pet accessories",
+      "fitness accessories",
+      "office accessories",
+      "car accessories",
+      "led gadgets",
+      "travel accessories"
+    ],
+    "pages": [
+      1,
+      2
+    ],
+    "pageSize": 20,
+    "destPostalCode": "10001",
+    "maxEvaluationsPerKeyword": 4
+  },
+  "systemReadiness": {
+    "ready": true,
+    "checks": [
+      {
+        "id": "env.enable_cj_shopify_usa_module",
+        "name": "Module Flag",
+        "status": "PASS",
+        "message": "ENABLE_CJ_SHOPIFY_USA_MODULE is true."
+      },
+      {
+        "id": "database.connection",
+        "name": "Database",
+        "status": "PASS",
+        "message": "Prisma database connectivity is working."
+      },
+      {
+        "id": "account_settings",
+        "name": "Pricing Settings",
+        "status": "PASS",
+        "message": "Pricing settings are present."
+      },
+      {
+        "id": "credentials.cj_dropshipping",
+        "name": "CJ Credentials",
+        "status": "PASS",
+        "message": "CJ apiKey is available."
+      },
+      {
+        "id": "shopify.config",
+        "name": "Shopify Config",
+        "status": "PASS",
+        "message": "Shopify client credentials and shop domain are configured."
+      },
+      {
+        "id": "shopify.auth",
+        "name": "Shopify Auth",
+        "status": "PASS",
+        "message": "Connected to IvanReseller via client_credentials."
+      },
+      {
+        "id": "shopify.scopes",
+        "name": "Shopify Scopes",
+        "status": "PASS",
+        "message": "Required Shopify scopes are granted."
+      },
+      {
+        "id": "shopify.currency",
+        "name": "Store Currency",
+        "status": "PASS",
+        "message": "Store currency is USD."
+      },
+      {
+        "id": "shopify.location",
+        "name": "Inventory Location",
+        "status": "PASS",
+        "message": "A Shopify inventory location is available for publish/inventory sync."
+      },
+      {
+        "id": "shopify.publication",
+        "name": "Publication Target",
+        "status": "PASS",
+        "message": "At least one Shopify publication is available."
+      },
+      {
+        "id": "shopify.webhooks",
+        "name": "Webhook Automation",
+        "status": "PASS",
+        "message": "Required Shopify webhooks are registered."
+      },
+      {
+        "id": "shopify.payments_reality",
+        "name": "Checkout / Payments Reality",
+        "status": "WARNING",
+        "message": "Chile-based operator detected. Use a third-party checkout gateway; do not assume Shopify Payments."
+      }
+    ]
+  },
+  "authTest": {
+    "ok": true,
+    "authMode": "client_credentials",
+    "shopDomain": "ivanreseller-2.myshopify.com",
+    "accessTokenExpiresAt": "2026-04-21T17:59:24.625Z",
+    "grantedScopes": [
+      "read_fulfillments",
+      "write_fulfillments",
+      "write_inventory",
+      "read_inventory",
+      "read_locations",
+      "read_merchant_managed_fulfillment_orders",
+      "write_merchant_managed_fulfillment_orders",
+      "read_orders",
+      "read_products",
+      "write_products",
+      "read_publications",
+      "write_publications"
+    ],
+    "missingScopes": [],
+    "locations": [
+      {
+        "id": "gid://shopify/Location/91678998740",
+        "name": "Sucursal de la tienda",
+        "isActive": true,
+        "fulfillsOnlineOrders": true
+      }
+    ],
+    "publications": [
+      {
+        "id": "gid://shopify/Publication/192846201044",
+        "name": "Online Store",
+        "autoPublish": false,
+        "supportsFuturePublishing": true
+      },
+      {
+        "id": "gid://shopify/Publication/192846233812",
+        "name": "Point of Sale",
+        "autoPublish": false,
+        "supportsFuturePublishing": false
+      }
+    ],
+    "webhookSubscriptions": [
+      {
+        "id": "gid://shopify/WebhookSubscription/1693181051092",
+        "topic": "ORDERS_CREATE",
+        "uri": "https://ivanreseller.com/api/cj-shopify-usa/webhooks/orders-create"
+      },
+      {
+        "id": "gid://shopify/WebhookSubscription/1693181083860",
+        "topic": "APP_UNINSTALLED",
+        "uri": "https://ivanreseller.com/api/cj-shopify-usa/webhooks/app-uninstalled"
+      }
+    ],
+    "shopData": {
+      "name": "IvanReseller",
+      "currency": "USD",
+      "country": "CL",
+      "primaryDomainUrl": "https://ivanreseller-2.myshopify.com"
+    }
+  },
+  "overviewBefore": {
+    "ok": true,
+    "counts": {
+      "products": 2,
+      "variants": 5,
+      "evaluations": 0,
+      "evaluationsApproved": 0,
+      "evaluationsRejected": 0,
+      "evaluationsPending": 0,
+      "shippingQuotes": 2,
+      "listings": 2,
+      "listingsActive": 1,
+      "orders": 0,
+      "ordersOpen": 0,
+      "ordersWithTracking": 0,
+      "alertsOpen": 0,
+      "profitSnapshots": 0,
+      "tracesLast24h": 17
+    }
+  },
+  "productsBeforeCount": 2,
+  "listingsBeforeCount": 2,
+  "searchRuns": [
+    {
+      "keyword": "phone accessories",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "U Mobile Phone Clip Hose Bracket Mobile Phone Accessories",
+        "Car accessories car phone navigation bracket",
+        "Wirelsess solar powerbank phone accessories torch",
+        "Sports Camera Accessories Chest Fixation Phone Holder",
+        "Magnetizing Piece Magnetic Car Phone Holder Accessories"
+      ]
+    },
+    {
+      "keyword": "phone accessories",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "16-19 Hyundai Ioniq Special Car Wireless Charger Mobile Phone Car Wireless Charger Accessories",
+        "Auto parts car base universal telescopic long rod car navigation bracket car phone bracket accessories processing",
+        "12 times telescopic lens universal collar clip cell phone accessories 12X high-definition outdoor filming long coke",
+        "Compatible with Apple, Tablet Stands Holder For Ipad Stand Mini Tablet Phone Mount Support Deskt Accessories Adjustable Bracket",
+        "For Magsafe Magnetic Luxury Leather Card Holder Wallet Case For 14 Pro Max 13 12 Phone Bag Adsorption Accessories Cover"
+      ]
+    },
+    {
+      "keyword": "home organization",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "Home Storage Organization Pendant Durable Practical",
+        "Home Clothes Organization Storage Basket Bathroom Waterproof",
+        "Oxford Cloth Foldable Storage Box For Home Clothes Organization",
+        "Home Use Retro Lockable Wooden Box For Storage And Organization",
+        "Kitchen Drawer Dividers For Bowls Plates And Cutlery Home Cabinet Organization And Storage"
+      ]
+    },
+    {
+      "keyword": "home organization",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "VEVOR Wood Literature Organizer, 24 Compartments, File Sorter With Removable Shelves, Mailboxes Slot For Office Home Classroom Mailrooms Organization, EPA Certified, Black",
+        "Literature Organizers, 36 Compartments Office Mailbox With Adjustable Shelves, Wood Literature Sorter 39.3x12x26.8 Inches For Office, Home, Classroom, Mailrooms Organization, EPA Certified Brown",
+        "Laminator Machine With 10 Sheets - Fast Warm-Up For A4A5A6 Documents & Photos - Office, School, Home Use - Teacher Supplies & Organization Essentials Color  Banned PlatformsAmazon",
+        "CIFbuy Adorable Dog Shaped Wall Hooks Space Saving Pet Home Decor For Entryway Kitchen Living Room Bedroom Organization(TikTok, Temu Pick-up Service)",
+        "35\"x23\" Dry Erase Wall Calendar Glass Whiteboard Monthly Planner For Homeschool Supplies & Home Office Organization With 4 Markers And 1 Eraser,Frameless"
+      ]
+    },
+    {
+      "keyword": "kitchen gadgets",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "Wine Aerator Kitchen Gadgets",
+        "Kitchen gadgets garlic peeler",
+        "Kitchen Plastic Microwave Steaming Container Kitchen Gadgets",
+        "Multifunctional Carrot Brush Kitchen Household Kitchen Gadgets",
+        "Kitchen Gadgets Stainless Steel Suit"
+      ]
+    },
+    {
+      "keyword": "kitchen gadgets",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "Lid For Airtight Container Kitchen Round Seal Kitchen Gadgets",
+        "Kitchen Scissors Creative Magnetic Suction Household Kitchen Supplies Gadgets",
+        "PP Handle Cup Brush Silicone Kitchen Gadgets",
+        "Ice Cream Snow Bucket Shelf Kitchen Gadgets",
+        "Stainless Steel Kitchen Gadgets 7 Piece Set"
+      ]
+    },
+    {
+      "keyword": "beauty tools",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "Beauty tools makeup brush",
+        "Beauty tools makeup brush",
+        "Facial care beauty tools",
+        "Beauty tools makeup brush",
+        "Facial Beauty Tools And EMS Beauty Equipment"
+      ]
+    },
+    {
+      "keyword": "beauty tools",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "Roller Beauty Instrument Facelift Tools Promote Absorption",
+        "Planting Eyelash Hydrogel Pearlescent Film Beauty Tools",
+        "Diamond Handle Makeup Brush Multifunctional Beauty Tools",
+        "10PCS Beauty Tools Novice Makeup Brush Set",
+        "Beauty tools eyebrow scissors with eyebrow comb"
+      ]
+    },
+    {
+      "keyword": "pet accessories",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "Pet Love Diamond Bow Tie Bow Tie Accessories",
+        "Pet Dog Accessories Embroidered Velcro New Pet Clothing Decorative Sticker Computer Embroidery Chapter",
+        "Pet Lace Hat Cat Photo Dress Up Hair Accessories",
+        "Pet Headdress Flower Spring Flower Solid Color Headdress Flower Dog Cat Accessories",
+        "New Cat Specific Pet White Collar Angel Wing Accessories Outdoor Dog Neck Rings Butterfly Tie Supplies Pet Decoration Supplies"
+      ]
+    },
+    {
+      "keyword": "pet accessories",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "Goggles Windproof Sunscreen Pet Accessories",
+        "Pet Head Plaid Bow Accessories",
+        "Pet Supplies Dog Pen Accessories",
+        "Shearing Tool Pet Shaver Accessories",
+        "Pet Comfort Toy Heartbeat Accessories"
+      ]
+    },
+    {
+      "keyword": "fitness accessories",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "Smart Fitness Equipment Accessories Gel",
+        "Fitness Equipment Plastic Accessories Pulley",
+        "Fitness Accessories Dumbbell Pot Handle",
+        "Fitness equipment accessories wire rope",
+        "Fitness equipment accessories wire rope"
+      ]
+    },
+    {
+      "keyword": "fitness accessories",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "Gantry Steel Wire Rope Rope Accessories Fitness Equipment",
+        "Fitness equipment accessories roller aluminum alloy guide wheel",
+        "Fitness Equipment Accessories Spherical Rotating Pull Pin Spring",
+        "Fitness Equipment Accessories Treadmills Wave Velocity Ball Drawstring",
+        "New Fitness Ring Leggings With Large Accessories Fixed"
+      ]
+    },
+    {
+      "keyword": "office accessories",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "Internet Cafe Office Wired Mouse Computer Accessories",
+        "Ergonomic Mouse Wrist Rest Mouse Pads Silicon Gel Non-Slip Streamline Wrist Rest Support Mat Computer Mouse Pad For Office Gaming PC Accessories",
+        "Computer Accessories USB Adapter",
+        "Computer Peripheral Accessories Mute Gaming Mouse",
+        "Cute Mechanical Gaming Macro Mute Computer Accessories"
+      ]
+    },
+    {
+      "keyword": "office accessories",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "3D Printer Accessories Openbuilds Accessories T8 Screw Nut Seat Nut Block 8MM Screw POM Nut",
+        "Wood Bead Color Accessories DIY Material",
+        "Printer Accessories 2GT Timing Belt Wheel",
+        "Plastic Flipbook Accessories Frosted Cover Clip",
+        "Matte Touchpad  Scratch Resistant Computer Accessories"
+      ]
+    },
+    {
+      "keyword": "car accessories",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "Car Accessories For Women's Aromatherapy Car Interior Accessories",
+        "Car Neck Pillow Car Accessories",
+        "Leather Car Accessories Car Glasses Frame",
+        "Car Sun Visor Clip Car Accessories",
+        "Motorcycle electric car accessories"
+      ]
+    },
+    {
+      "keyword": "car accessories",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "Car Accessories Piggy Creative Cartoon Cute Car Decoration",
+        "Car Accessories Quick Short Rod",
+        "Car Oil Filter Element Accessories",
+        "Cute Cartoon Pig Car Accessories",
+        "130pcs Boxed Grease Nipple Accessories Combination Car Connector Accessories"
+      ]
+    },
+    {
+      "keyword": "led gadgets",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "Christmas Led Cup FDA Food Grade Plastic Cocktail Glass Kitchen Gadgets",
+        "Transparent Shell Dual Arc USB Charging Lighter Outdoor Waterproof LED Colorful Light Power Display Illumination Light Gadgets",
+        "2-3 Days Arrive  Clock Fans DC 5V LED Clock Fan Portable Gadgets -Time Temperature Display-  UK",
+        "Cup Warmer Pad USB Charge Home Office 3 Temperatures Adjustable Heat Plate LED Display Electric Heater Mug Pad Winter Kitchen Gadgets",
+        "Electric Food Corn Soybean Salt And Pepper Grinder Mill Machine Rechargeable Electric Pepper And Salt Grinder Set With LED Kitchen Gadgets"
+      ]
+    },
+    {
+      "keyword": "led gadgets",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "Kitchen Gadgets Dumpling Mould Pure White",
+        "Kitchen Gadgets Plastic Small Garlic Cutter",
+        "Manual Garlic Press Household Kitchen Gadgets",
+        "Kitchen Gadgets Stainless Steel Single Head",
+        "Lemon Artifact Lemon Slicer Kitchen Gadgets"
+      ]
+    },
+    {
+      "keyword": "travel accessories",
+      "page": 1,
+      "count": 20,
+      "sampleTitles": [
+        "Ladies travel gift hair accessories",
+        "Braided Pillow Travel Office Accessories",
+        "Travel Portable Accessories Storage Box",
+        "Boho Ladies Prom Travel Hair Accessories",
+        "Desert Travel DIY Bracelet Beaded Pendant Accessories"
+      ]
+    },
+    {
+      "keyword": "travel accessories",
+      "page": 2,
+      "count": 20,
+      "sampleTitles": [
+        "Travel Pack Accessories Bottle Brush Skin Care Products Buggy Bag",
+        "Best-selling Travel Jewelry Box For Earrings And Other Accessories",
+        "Compact Mirror Cosmetic-Tool Travel-Accessories Makeup Round Mini Portable",
+        "Pearl Hair Band Photo Studio Wedding Travel Photography Dress Accessories",
+        "Jelly Luggage Tag - Lime Green/Gray: Solid TPU Travel Accessories"
+      ]
+    }
+  ],
+  "evaluationPoolCount": 40,
+  "evaluatedCandidates": [
+    {
+      "keyword": "phone accessories",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "2407220139221610100",
+      "title": "U Mobile Phone Clip Hose Bracket Mobile Phone Accessories",
+      "listPriceUsd": 0.14,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.73,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 0.14,
+        "shippingCostUsd": 4.73,
+        "totalCostUsd": 4.87,
+        "paymentProcessingFeeUsd": 0.6507286432160804,
+        "targetProfitUsd": 0.9742462311557789,
+        "suggestedSellPriceUsd": 6.494974874371859
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "phone accessories",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "D9B21C47-986E-4C4E-A39F-448D87A39F86",
+      "title": "Car accessories car phone navigation bracket",
+      "listPriceUsd": 0.58,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.91,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 1.32,
+        "shippingCostUsd": 4.91,
+        "totalCostUsd": 6.23,
+        "paymentProcessingFeeUsd": 0.7429899497487438,
+        "targetProfitUsd": 1.230527638190955,
+        "suggestedSellPriceUsd": 8.2035175879397
+      },
+      "variantsCount": 3,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "phone accessories",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "F7C5016C-77E8-4661-8DA8-F77B5E3848BB",
+      "title": "Wirelsess solar powerbank phone accessories torch",
+      "listPriceUsd": 17.39,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 9.43,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 22.45,
+        "shippingCostUsd": 9.43,
+        "totalCostUsd": 31.88,
+        "paymentProcessingFeeUsd": 2.483065326633166,
+        "targetProfitUsd": 6.064070351758795,
+        "suggestedSellPriceUsd": 40.42713567839196
+      },
+      "variantsCount": 6,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "phone accessories",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "2505310134321622200",
+      "title": "Sports Camera Accessories Chest Fixation Phone Holder",
+      "listPriceUsd": 1.26,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 7.37,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 1.26,
+        "shippingCostUsd": 7.37,
+        "totalCostUsd": 8.63,
+        "paymentProcessingFeeUsd": 0.9058040201005026,
+        "targetProfitUsd": 1.6827889447236186,
+        "suggestedSellPriceUsd": 11.218592964824124
+      },
+      "variantsCount": 3,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "home organization",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "1399561760180146176",
+      "title": "Home Storage Organization Pendant Durable Practical",
+      "listPriceUsd": 5.03,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 10.17,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 5.03,
+        "shippingCostUsd": 10.17,
+        "totalCostUsd": 15.2,
+        "paymentProcessingFeeUsd": 1.3515075376884425,
+        "targetProfitUsd": 2.920854271356784,
+        "suggestedSellPriceUsd": 19.47236180904523
+      },
+      "variantsCount": 3,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "home organization",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "1591288894153306112",
+      "title": "Home Clothes Organization Storage Basket Bathroom Waterproof",
+      "listPriceUsd": 3.16,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 11.59,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 3.16,
+        "shippingCostUsd": 11.59,
+        "totalCostUsd": 14.75,
+        "paymentProcessingFeeUsd": 1.3209798994974877,
+        "targetProfitUsd": 2.83605527638191,
+        "suggestedSellPriceUsd": 18.9070351758794
+      },
+      "variantsCount": 2,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "home organization",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "2512220738491619200",
+      "title": "Oxford Cloth Foldable Storage Box For Home Clothes Organization",
+      "listPriceUsd": 1.65,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 11.77,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 1.65,
+        "shippingCostUsd": 11.77,
+        "totalCostUsd": 13.42,
+        "paymentProcessingFeeUsd": 1.2307537688442214,
+        "targetProfitUsd": 2.585427135678392,
+        "suggestedSellPriceUsd": 17.236180904522616
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "home organization",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "587C965E-A1F8-41B6-9939-E96EC7654A6C",
+      "title": "Home Use Retro Lockable Wooden Box For Storage And Organization",
+      "listPriceUsd": 2.64,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 15.11,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 2.64,
+        "shippingCostUsd": 15.11,
+        "totalCostUsd": 17.75,
+        "paymentProcessingFeeUsd": 1.5244974874371864,
+        "targetProfitUsd": 3.401381909547739,
+        "suggestedSellPriceUsd": 22.67587939698493
+      },
+      "variantsCount": 4,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "kitchen gadgets",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "C3FE4D27-D5CB-4D26-8CB3-650DBAF8403F",
+      "title": "Wine Aerator Kitchen Gadgets",
+      "listPriceUsd": 0.78,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.02,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 0.98,
+        "shippingCostUsd": 5.02,
+        "totalCostUsd": 6,
+        "paymentProcessingFeeUsd": 0.7273869346733669,
+        "targetProfitUsd": 1.1871859296482412,
+        "suggestedSellPriceUsd": 7.914572864321609
+      },
+      "variantsCount": 3,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "kitchen gadgets",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "B03F2DFF-276D-481C-AD18-28DF22E411CC",
+      "title": "Kitchen gadgets garlic peeler",
+      "listPriceUsd": 1.67,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 7.43,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 1.67,
+        "shippingCostUsd": 7.43,
+        "totalCostUsd": 9.1,
+        "paymentProcessingFeeUsd": 0.9376884422110554,
+        "targetProfitUsd": 1.7713567839195983,
+        "suggestedSellPriceUsd": 11.809045226130655
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "kitchen gadgets",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "1745360894529376256",
+      "title": "Kitchen Plastic Microwave Steaming Container Kitchen Gadgets",
+      "listPriceUsd": 2.38,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 12.12,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 2.38,
+        "shippingCostUsd": 12.12,
+        "totalCostUsd": 14.5,
+        "paymentProcessingFeeUsd": 1.304020100502513,
+        "targetProfitUsd": 2.788944723618091,
+        "suggestedSellPriceUsd": 18.592964824120607
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "kitchen gadgets",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "1729022003073527808",
+      "title": "Multifunctional Carrot Brush Kitchen Household Kitchen Gadgets",
+      "listPriceUsd": 0.62,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.88,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 0.62,
+        "shippingCostUsd": 4.88,
+        "totalCostUsd": 5.5,
+        "paymentProcessingFeeUsd": 0.6934673366834172,
+        "targetProfitUsd": 1.092964824120603,
+        "suggestedSellPriceUsd": 7.28643216080402
+      },
+      "variantsCount": 2,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "beauty tools",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "87C84528-6D7E-4D83-8BF3-4FD4961081ED",
+      "title": "Beauty tools makeup brush",
+      "listPriceUsd": 1.99,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 7.66,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 1.99,
+        "shippingCostUsd": 7.66,
+        "totalCostUsd": 9.65,
+        "paymentProcessingFeeUsd": 0.9750000000000001,
+        "targetProfitUsd": 1.8750000000000002,
+        "suggestedSellPriceUsd": 12.500000000000002
+      },
+      "variantsCount": 10,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "beauty tools",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "6C343503-3416-4980-A9B1-AFC22717D814",
+      "title": "Beauty tools makeup brush",
+      "listPriceUsd": 4.48,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.88,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 4.48,
+        "shippingCostUsd": 5.88,
+        "totalCostUsd": 10.36,
+        "paymentProcessingFeeUsd": 1.0231658291457288,
+        "targetProfitUsd": 2.0087939698492465,
+        "suggestedSellPriceUsd": 13.391959798994977
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "beauty tools",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "351905CA-8AED-4799-ABE6-BD10C7005D1F",
+      "title": "Facial care beauty tools",
+      "listPriceUsd": 13.19,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.15,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 13.19,
+        "shippingCostUsd": 5.15,
+        "totalCostUsd": 18.34,
+        "paymentProcessingFeeUsd": 1.564522613065327,
+        "targetProfitUsd": 3.512562814070352,
+        "suggestedSellPriceUsd": 23.41708542713568
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "beauty tools",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "7EB0E1B3-A3A7-48E8-8246-2D1E5FE15889",
+      "title": "Beauty tools makeup brush",
+      "listPriceUsd": 3.79,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.88,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 3.79,
+        "shippingCostUsd": 5.88,
+        "totalCostUsd": 9.67,
+        "paymentProcessingFeeUsd": 0.9763567839195981,
+        "targetProfitUsd": 1.8787688442211057,
+        "suggestedSellPriceUsd": 12.525125628140705
+      },
+      "variantsCount": 5,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "pet accessories",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "2507230543351619600",
+      "title": "Pet Love Diamond Bow Tie Bow Tie Accessories",
+      "listPriceUsd": 0.43,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.64,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 0.43,
+        "shippingCostUsd": 4.64,
+        "totalCostUsd": 5.069999999999999,
+        "paymentProcessingFeeUsd": 0.6642964824120603,
+        "targetProfitUsd": 1.011934673366834,
+        "suggestedSellPriceUsd": 6.746231155778894
+      },
+      "variantsCount": 12,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "pet accessories",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "2411300828541613100",
+      "title": "Pet Dog Accessories Embroidered Velcro New Pet Clothing Decorative Sticker Computer Embroidery Chapter",
+      "listPriceUsd": 0.7,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.6,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 0.7,
+        "shippingCostUsd": 4.6,
+        "totalCostUsd": 5.3,
+        "paymentProcessingFeeUsd": 0.6798994974874373,
+        "targetProfitUsd": 1.0552763819095476,
+        "suggestedSellPriceUsd": 7.035175879396985
+      },
+      "variantsCount": 19,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "pet accessories",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "2509180719571602300",
+      "title": "Pet Lace Hat Cat Photo Dress Up Hair Accessories",
+      "listPriceUsd": 1.26,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.67,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 1.26,
+        "shippingCostUsd": 4.67,
+        "totalCostUsd": 5.93,
+        "paymentProcessingFeeUsd": 0.7226381909547739,
+        "targetProfitUsd": 1.1739949748743719,
+        "suggestedSellPriceUsd": 7.826633165829146
+      },
+      "variantsCount": 3,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "pet accessories",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "2507180604141603200",
+      "title": "Pet Headdress Flower Spring Flower Solid Color Headdress Flower Dog Cat Accessories",
+      "listPriceUsd": 0.22,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 2.5,
+        "method": "Jewel Shipping+",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 0.22,
+        "shippingCostUsd": 2.5,
+        "totalCostUsd": 2.72,
+        "paymentProcessingFeeUsd": 0.5048743718592965,
+        "targetProfitUsd": 0.5690954773869348,
+        "suggestedSellPriceUsd": 3.7939698492462317
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "fitness accessories",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "1454278506874802176",
+      "title": "Smart Fitness Equipment Accessories Gel",
+      "listPriceUsd": 0.06,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.64,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 0.06,
+        "shippingCostUsd": 4.64,
+        "totalCostUsd": 4.699999999999999,
+        "paymentProcessingFeeUsd": 0.6391959798994975,
+        "targetProfitUsd": 0.9422110552763818,
+        "suggestedSellPriceUsd": 6.281407035175879
+      },
+      "variantsCount": 4,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "fitness accessories",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "2504140331191621000",
+      "title": "Fitness Equipment Plastic Accessories Pulley",
+      "listPriceUsd": 0.8,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.78,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 0.8,
+        "shippingCostUsd": 5.78,
+        "totalCostUsd": 6.58,
+        "paymentProcessingFeeUsd": 0.7667336683417086,
+        "targetProfitUsd": 1.2964824120603016,
+        "suggestedSellPriceUsd": 8.643216080402011
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "fitness accessories",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "1623946890813386752",
+      "title": "Fitness Accessories Dumbbell Pot Handle",
+      "listPriceUsd": 5.49,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 9.47,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 5.49,
+        "shippingCostUsd": 9.47,
+        "totalCostUsd": 14.96,
+        "paymentProcessingFeeUsd": 1.3352261306532667,
+        "targetProfitUsd": 2.875628140703518,
+        "suggestedSellPriceUsd": 19.170854271356788
+      },
+      "variantsCount": 2,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "fitness accessories",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "490403CA-8F4D-4AA9-BCBC-3DDD783528EA",
+      "title": "Fitness equipment accessories wire rope",
+      "listPriceUsd": 3.66,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 7.83,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 3.66,
+        "shippingCostUsd": 7.83,
+        "totalCostUsd": 11.49,
+        "paymentProcessingFeeUsd": 1.0998241206030153,
+        "targetProfitUsd": 2.221733668341709,
+        "suggestedSellPriceUsd": 14.811557788944727
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "office accessories",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "1376356379824099328",
+      "title": "Internet Cafe Office Wired Mouse Computer Accessories",
+      "listPriceUsd": 1.8,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 7.43,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 1.8,
+        "shippingCostUsd": 7.43,
+        "totalCostUsd": 9.23,
+        "paymentProcessingFeeUsd": 0.9465075376884424,
+        "targetProfitUsd": 1.7958542713567842,
+        "suggestedSellPriceUsd": 11.972361809045228
+      },
+      "variantsCount": 2,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "office accessories",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "1428189769438990336",
+      "title": "Ergonomic Mouse Wrist Rest Mouse Pads Silicon Gel Non-Slip Streamline Wrist Rest Support Mat Computer Mouse Pad For Office Gaming PC Accessories",
+      "listPriceUsd": 1.5,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.85,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 1.67,
+        "shippingCostUsd": 4.85,
+        "totalCostUsd": 6.52,
+        "paymentProcessingFeeUsd": 0.7626633165829146,
+        "targetProfitUsd": 1.285175879396985,
+        "suggestedSellPriceUsd": 8.5678391959799
+      },
+      "variantsCount": 8,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "office accessories",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "1423110307307458560",
+      "title": "Computer Accessories USB Adapter",
+      "listPriceUsd": 0.4,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.66,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 0.4,
+        "shippingCostUsd": 4.66,
+        "totalCostUsd": 5.0600000000000005,
+        "paymentProcessingFeeUsd": 0.6636180904522614,
+        "targetProfitUsd": 1.0100502512562815,
+        "suggestedSellPriceUsd": 6.733668341708544
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "office accessories",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "1402886158270205952",
+      "title": "Computer Peripheral Accessories Mute Gaming Mouse",
+      "listPriceUsd": 4.96,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 6.17,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 4.96,
+        "shippingCostUsd": 6.17,
+        "totalCostUsd": 11.129999999999999,
+        "paymentProcessingFeeUsd": 1.0754020100502513,
+        "targetProfitUsd": 2.153894472361809,
+        "suggestedSellPriceUsd": 14.359296482412061
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "car accessories",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "1396732241480126464",
+      "title": "Car Accessories For Women's Aromatherapy Car Interior Accessories",
+      "listPriceUsd": 2.7,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.76,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 3.94,
+        "shippingCostUsd": 5.76,
+        "totalCostUsd": 9.7,
+        "paymentProcessingFeeUsd": 0.9783919597989952,
+        "targetProfitUsd": 1.8844221105527639,
+        "suggestedSellPriceUsd": 12.56281407035176
+      },
+      "variantsCount": 8,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "car accessories",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "2512021057111625000",
+      "title": "Car Neck Pillow Car Accessories",
+      "listPriceUsd": 4.28,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 7.66,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 4.28,
+        "shippingCostUsd": 7.66,
+        "totalCostUsd": 11.940000000000001,
+        "paymentProcessingFeeUsd": 1.1303517587939702,
+        "targetProfitUsd": 2.3065326633165832,
+        "suggestedSellPriceUsd": 15.376884422110557
+      },
+      "variantsCount": 8,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "car accessories",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "2507050211141628800",
+      "title": "Leather Car Accessories Car Glasses Frame",
+      "listPriceUsd": 2.63,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 4.91,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 2.63,
+        "shippingCostUsd": 4.91,
+        "totalCostUsd": 7.54,
+        "paymentProcessingFeeUsd": 0.8318592964824121,
+        "targetProfitUsd": 1.477386934673367,
+        "suggestedSellPriceUsd": 9.84924623115578
+      },
+      "variantsCount": 4,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "car accessories",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "F540EB1A-3DE5-4A8B-821B-9C94275CAEF5",
+      "title": "Car Sun Visor Clip Car Accessories",
+      "listPriceUsd": 1.47,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.98,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 1.47,
+        "shippingCostUsd": 5.98,
+        "totalCostUsd": 7.45,
+        "paymentProcessingFeeUsd": 0.8257537688442211,
+        "targetProfitUsd": 1.460427135678392,
+        "suggestedSellPriceUsd": 9.736180904522614
+      },
+      "variantsCount": 3,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "led gadgets",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "2410290907231623000",
+      "title": "Christmas Led Cup FDA Food Grade Plastic Cocktail Glass Kitchen Gadgets",
+      "listPriceUsd": 8.76,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 11.93,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 8.76,
+        "shippingCostUsd": 11.93,
+        "totalCostUsd": 20.689999999999998,
+        "paymentProcessingFeeUsd": 1.7239447236180907,
+        "targetProfitUsd": 3.9554020100502507,
+        "suggestedSellPriceUsd": 26.36934673366834
+      },
+      "variantsCount": 4,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "led gadgets",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "1657273466455859200",
+      "title": "Transparent Shell Dual Arc USB Charging Lighter Outdoor Waterproof LED Colorful Light Power Display Illumination Light Gadgets",
+      "listPriceUsd": 4.82,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.98,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 4.82,
+        "shippingCostUsd": 5.98,
+        "totalCostUsd": 10.8,
+        "paymentProcessingFeeUsd": 1.0530150753768845,
+        "targetProfitUsd": 2.091708542713568,
+        "suggestedSellPriceUsd": 13.944723618090455
+      },
+      "variantsCount": 8,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "led gadgets",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "2007005902269231105",
+      "title": "2-3 Days Arrive  Clock Fans DC 5V LED Clock Fan Portable Gadgets -Time Temperature Display-  UK",
+      "listPriceUsd": 13.83,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": null,
+      "shippingError": "CJ freightCalculate returned no shipping options (empty data array)",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 13.83,
+        "shippingCostUsd": 0,
+        "totalCostUsd": 13.83,
+        "paymentProcessingFeeUsd": 1.2585678391959803,
+        "targetProfitUsd": 2.6626884422110555,
+        "suggestedSellPriceUsd": 17.751256281407038
+      },
+      "variantsCount": 1,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "led gadgets",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "1461621016945102848",
+      "title": "Cup Warmer Pad USB Charge Home Office 3 Temperatures Adjustable Heat Plate LED Display Electric Heater Mug Pad Winter Kitchen Gadgets",
+      "listPriceUsd": 6.65,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.85,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 6.65,
+        "shippingCostUsd": 5.85,
+        "totalCostUsd": 12.5,
+        "paymentProcessingFeeUsd": 1.1683417085427137,
+        "targetProfitUsd": 2.412060301507538,
+        "suggestedSellPriceUsd": 16.080402010050253
+      },
+      "variantsCount": 10,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "travel accessories",
+      "page": 1,
+      "rank": 1,
+      "cjProductId": "707417F7-9C8B-4C3B-8D92-FC870EE5AE11",
+      "title": "Ladies travel gift hair accessories",
+      "listPriceUsd": 6.48,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.82,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 6.48,
+        "shippingCostUsd": 5.82,
+        "totalCostUsd": 12.3,
+        "paymentProcessingFeeUsd": 1.154773869346734,
+        "targetProfitUsd": 2.374371859296483,
+        "suggestedSellPriceUsd": 15.82914572864322
+      },
+      "variantsCount": 4,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "travel accessories",
+      "page": 1,
+      "rank": 2,
+      "cjProductId": "1708045267200647168",
+      "title": "Braided Pillow Travel Office Accessories",
+      "listPriceUsd": 6.52,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 11.88,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 6.52,
+        "shippingCostUsd": 11.88,
+        "totalCostUsd": 18.4,
+        "paymentProcessingFeeUsd": 1.5685929648241208,
+        "targetProfitUsd": 3.5238693467336684,
+        "suggestedSellPriceUsd": 23.49246231155779
+      },
+      "variantsCount": 4,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "travel accessories",
+      "page": 1,
+      "rank": 3,
+      "cjProductId": "1390610365267709952",
+      "title": "Travel Portable Accessories Storage Box",
+      "listPriceUsd": 0.81,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 10.46,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 3.53,
+        "shippingCostUsd": 10.46,
+        "totalCostUsd": 13.99,
+        "paymentProcessingFeeUsd": 1.269422110552764,
+        "targetProfitUsd": 2.6928391959798996,
+        "suggestedSellPriceUsd": 17.952261306532666
+      },
+      "variantsCount": 9,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    },
+    {
+      "keyword": "travel accessories",
+      "page": 1,
+      "rank": 4,
+      "cjProductId": "1506137410344857600",
+      "title": "Boho Ladies Prom Travel Hair Accessories",
+      "listPriceUsd": 8.18,
+      "searchInventoryTotal": null,
+      "searchOrigin": null,
+      "evaluated": true,
+      "shipping": {
+        "amountUsd": 5.02,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "shippingError": "No CJ variant meets minimum stock requirement (1).",
+      "qualificationDecision": "REJECTED",
+      "pricingBreakdown": {
+        "supplierCostUsd": 8.18,
+        "shippingCostUsd": 5.02,
+        "totalCostUsd": 13.2,
+        "paymentProcessingFeeUsd": 1.2158291457286434,
+        "targetProfitUsd": 2.5439698492462313,
+        "suggestedSellPriceUsd": 16.959798994974875
+      },
+      "variantsCount": 4,
+      "maxVariantStock": 0,
+      "eligibleVariantCount": 0,
+      "selectedVariantCjVid": null,
+      "selectedVariantCjSku": null,
+      "discardReason": "Evaluate found no variant with stock >= 1."
+    }
+  ],
+  "viableCandidates": [],
+  "importPublishAttempts": [],
+  "chosenCandidate": null,
+  "importDraftResult": null,
+  "publishResult": null,
+  "listingsAfter": {
+    "ok": true,
+    "listings": [
+      {
+        "id": 2,
+        "userId": 1,
+        "productId": 2,
+        "variantId": 5,
+        "shopifyProductId": "gid://shopify/Product/9145457803476",
+        "shopifyVariantId": "gid://shopify/ProductVariant/47821968474324",
+        "shopifyHandle": "wireless-tws-stereo-earbuds-cjej264155501az",
+        "shopifySku": "CJEJ264155501AZ",
+        "status": "ACTIVE",
+        "listedPriceUsd": "28.33",
+        "quantity": 1,
+        "lastSyncedAt": "2026-04-20T03:57:25.370Z",
+        "draftPayload": {
+          "cjSku": "CJEJ264155501AZ",
+          "cjVid": "1999395299687714817",
+          "title": "Wireless TWS Stereo Earbuds",
+          "handle": "wireless-tws-stereo-earbuds-cjej264155501az",
+          "images": [
+            "https://cf.cjdropshipping.com/a4c0bb7d-533e-475e-9984-b417b4c14119.jpg",
+            "https://cf.cjdropshipping.com/9f8b5bde-287e-477b-bf19-807664337577.jpg",
+            "https://cf.cjdropshipping.com/cbda5228-6437-4d78-8534-564a29f0c5d7.jpg",
+            "https://cf.cjdropshipping.com/9fc10435-7022-4f3b-bb70-3672beabb906.jpg",
+            "https://cf.cjdropshipping.com/7736d392-82dc-4a6b-84c2-024ab1dfde71.jpg",
+            "https://cf.cjdropshipping.com/03b8c13d-f04a-4abf-b250-1f9a9f5caad9.jpg",
+            "https://cf.cjdropshipping.com/a1a028ee-7110-420f-876f-e9b4f19bacb2.jpg",
+            "https://cf.cjdropshipping.com/5c2e13a4-45b2-4d77-a308-399e1f42c873.jpg",
+            "https://cf.cjdropshipping.com/61de92c9-1f70-416f-a0dd-78368de4aa5f.jpg",
+            "https://cf.cjdropshipping.com/520a9247-9ba5-4a24-914e-f1a16f2b3478.jpg",
+            "https://cf.cjdropshipping.com/19d9b38f-5e35-4030-b7bf-9128000dbfed.jpg",
+            "https://cf.cjdropshipping.com/509228f7-ebb2-4d72-81bf-ad4ce88d9b2a.jpg",
+            "https://cf.cjdropshipping.com/eda48cc1-eed5-483d-9687-233430c6c300.jpg"
+          ],
+          "vendor": "CJ Dropshipping",
+          "quantity": 1,
+          "cjProductId": "1999395299549302785",
+          "productType": "CJ Dropshipping",
+          "descriptionHtml": "<p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Features*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">Deliver crisp clear stereo sound </font></li>\n  <font size=\"3\" face=\"Times New Roman\">Easily pair with universal wireless-enabled device like smartphone,tablet,iPhone,iPad,laptop Built-in noise-reducing microphone One button answering/hanging up/rejecting hands-free calls and redialing the last number dialed </font>\n  <li><font size=\"3\" face=\"Times New Roman\">Automatic voice prompt including incoming phone number report </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Each of the earbuds can be used alone with full functionality </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Share your favorite tunes with friend anytime anywhere by sharing the earbuds </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Lightweight,snug and comfortable design </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Includes a charging pod for convenient charging and storage </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">CE and RoHS certified </font></li>\n </ul>\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Specifications*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">Earbuds: </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Wireless Version: V4.2+EDR </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Protocols Supported: HSP, HFP, A2DP, AVRCP </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Transmission Range: ≤12M/39ft </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Driver Unit: Ф7mm </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Impedance: 32ohm±15% </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Talk Time: (One Earbud): 5-6 hours; (Two Earbuds): 4-5 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Play Time: (One Earbud): 5-6 hours; (Two Earbuds): 4-5 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Standby: (One Earbud): 120 hours; (Two Earbuds): 70 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charge Time: 1-2 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Battery: built-in 3.7V 75mAh li-ion battery per earbud </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Size(per earbud): 0.94” x 0.71” x 1.1”/2.4 x 1.8 x 2.8cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Weight(per earbud): 5g/0.17oz </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Available Color: black, white </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charging Pod: </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Battery: built-in 3.7V 950mAh li-ion battery </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charging Voltage: DC 5V </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Size of Charging Pod: 3.27” x 1.5” x 1.3”/8.3 x 3.8 x 3.3cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Weight of Charging Pod: 42g/1.48oz </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Package size: 3.74” x 1.57” x 6.1”/9.5 x 4 x 15.5cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Package weight: 165g/0.36lbs</font></li>\n </ul>\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Package Lists*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">1 × Pair of Wireless Stereo TWS Earbuds </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 2 × Pair of Replacement Eartips </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 1 × USB Charging Cable </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 1 × User Manual</font></li>\n </ul>",
+          "pricingSnapshot": {
+            "shippingCostUsd": 0,
+            "supplierCostUsd": 22.25,
+            "targetProfitUsd": 4.249371859296483,
+            "suggestedSellPriceUsd": 28.33,
+            "paymentProcessingFeeUsd": 1.829773869346734
+          },
+          "shippingSnapshot": {
+            "carrier": null,
+            "amountUsd": 0,
+            "serviceName": "USPS US to US",
+            "estimatedMaxDays": 5,
+            "estimatedMinDays": null,
+            "originCountryCode": "US"
+          },
+          "variantAttributes": {}
+        },
+        "lastError": null,
+        "evaluationId": null,
+        "shippingQuoteId": null,
+        "handlingTimeDays": null,
+        "publishedAt": "2026-04-20T03:57:25.369Z",
+        "reconcileAttempts": 0,
+        "reconcileRetryAfter": null,
+        "createdAt": "2026-04-20T03:57:23.055Z",
+        "updatedAt": "2026-04-20T03:57:25.370Z",
+        "product": {
+          "id": 2,
+          "cjProductId": "1999395299549302785",
+          "title": "Wireless TWS Stereo Earbuds"
+        },
+        "variant": {
+          "id": 5,
+          "cjSku": "CJEJ264155501AZ",
+          "cjVid": "1999395299687714817"
+        }
+      },
+      {
+        "id": 1,
+        "userId": 1,
+        "productId": 1,
+        "variantId": 1,
+        "shopifyProductId": null,
+        "shopifyVariantId": null,
+        "shopifyHandle": null,
+        "shopifySku": "CJXFBXEJ02656-White",
+        "status": "FAILED",
+        "listedPriceUsd": "19.25",
+        "quantity": 1,
+        "lastSyncedAt": null,
+        "draftPayload": {
+          "cjSku": "CJXFBXEJ02656-White",
+          "cjVid": "C4EEFBA3-A9E2-4D97-BFA0-291C4D0B27C0",
+          "title": "Earbuds wireless bluetooth headset",
+          "handle": "earbuds-wireless-bluetooth-headset-cjxfbxej02656-white",
+          "images": [
+            "https://cf.cjdropshipping.com/203207/386132459951.jpg",
+            "https://cf.cjdropshipping.com/203207/5098518456629.jpg",
+            "https://cf.cjdropshipping.com/203207/1997542225641.jpg",
+            "https://cf.cjdropshipping.com/203207/1374339813797.jpg",
+            "https://cf.cjdropshipping.com/203207/1802047212405.jpg",
+            "https://cf.cjdropshipping.com/6d188161-dab8-48c4-a893-24fc4eb7dd57.png",
+            "https://cf.cjdropshipping.com/1a3b0fd4-83b2-46ed-b38b-277ea87c1695.png",
+            "https://cf.cjdropshipping.com/99024f80-c68e-45d0-9843-db927d0a16f6.png"
+          ],
+          "vendor": "CJ Dropshipping",
+          "quantity": 1,
+          "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+          "productType": "CJ Dropshipping",
+          "descriptionHtml": "<div class=\"detailmodule_dynamic\">\n <kse:widget data-widget-type=\"customText\" id=\"24845046\" title=\"\" type=\"custom\"></kse:widget>\n</div> \n<div class=\"detailmodule_html\">\n <div class=\"detail-desc-decorate-richtext\">\n  <p>Bluetooth protocol: 5.0</p>\n  <p>Channel: stereo<br/>How to use: Earplug type<br/>Single and double ears: bilateral three-dimensional</p>\n  <p><br/></p>\n  <p>description:<br/><br/>1. English voice prompt.<br/>2. Send out the phone number.<br/>3. Visualize the functions of the IOS system.<br/>4. Answer/reject the call.<br/>5. Redial the last number.<br/>6. HD voice quality.<br/>7. Solution: high-end solution.<br/>8. Compatibility mode: compatible with all versions of Bluetooth.<br/>9. Signal transmission channel: Cassl2.<br/>10. Usage: Semi-in-ear style.<br/>11. Microphone sensitivity: -42DB high-end transmitter.<br/>12. The longest transmission distance: 10-15 meters.</p>\n  <p><br/></p>\n  <p><img src=\"https://cf.cjdropshipping.com/379fb869-2ae0-4f52-a660-c4fb5d4ec9b7.jpg\" style=\"max-width:100%;\"/><img src=\"https://cf.cjdropshipping.com/50ecd72a-5875-4e4a-bd00-e0490a9429ed.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/308007cc-896c-4ff0-b03d-5c4a4a68ba0d.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/0832e28d-0d12-4cf6-9c65-c767c2e70f5b.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/49a36710-4f5a-46a1-8e21-06e3ce35bbab.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><br/></p> \n  <p style=\"box-sizing: border-box; margin: 0px; font-size: 14px; line-height: inherit; color: rgb(0, 0, 0); font-family: &quot;Open Sans&quot;, Arial, Helvetica, sans-serif, Heiti;\"><br/></p> \n </div>\n</div> \n<div class=\"detailmodule_dynamic\">\n <kse:widget data-widget-type=\"customText\" id=\"24841288\" title=\"\" type=\"custom\"></kse:widget>\n</div>",
+          "pricingSnapshot": {
+            "shippingCostUsd": 5.88,
+            "supplierCostUsd": 9.14,
+            "targetProfitUsd": 2.886934673366834,
+            "suggestedSellPriceUsd": 19.25,
+            "paymentProcessingFeeUsd": 1.339296482412061
+          },
+          "shippingSnapshot": {
+            "carrier": null,
+            "amountUsd": 5.88,
+            "serviceName": "USPS+VIP",
+            "estimatedMaxDays": 7,
+            "estimatedMinDays": null,
+            "originCountryCode": "US"
+          },
+          "variantAttributes": {
+            "label": "Earbuds wireless bluetooth headset White"
+          }
+        },
+        "lastError": "Shopify GraphQL returned errors: Variable $input of type InventorySetQuantitiesInput! was provided invalid value for ignoreCompareQuantity (Field is not defined on InventorySetQuantitiesInput), quantities.0.compareQuantity (Field is not defined on InventoryQuantityInput)",
+        "evaluationId": null,
+        "shippingQuoteId": null,
+        "handlingTimeDays": null,
+        "publishedAt": null,
+        "reconcileAttempts": 0,
+        "reconcileRetryAfter": null,
+        "createdAt": "2026-04-20T03:49:16.813Z",
+        "updatedAt": "2026-04-20T03:49:19.179Z",
+        "product": {
+          "id": 1,
+          "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+          "title": "Earbuds wireless bluetooth headset"
+        },
+        "variant": {
+          "id": 1,
+          "cjSku": "CJXFBXEJ02656-White",
+          "cjVid": "C4EEFBA3-A9E2-4D97-BFA0-291C4D0B27C0"
+        }
+      }
+    ]
+  },
+  "productsAfter": {
+    "ok": true,
+    "products": [
+      {
+        "id": 2,
+        "userId": 1,
+        "cjProductId": "1999395299549302785",
+        "title": "Wireless TWS Stereo Earbuds",
+        "description": "\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Features*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">Deliver crisp clear stereo sound </font></li>\n  <font size=\"3\" face=\"Times New Roman\">Easily pair with universal wireless-enabled device like smartphone,tablet,iPhone,iPad,laptop Built-in noise-reducing microphone One button answering/hanging up/rejecting hands-free calls and redialing the last number dialed </font>\n  <li><font size=\"3\" face=\"Times New Roman\">Automatic voice prompt including incoming phone number report </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Each of the earbuds can be used alone with full functionality </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Share your favorite tunes with friend anytime anywhere by sharing the earbuds </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Lightweight,snug and comfortable design </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Includes a charging pod for convenient charging and storage </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">CE and RoHS certified </font></li>\n </ul>\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Specifications*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">Earbuds: </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Wireless Version: V4.2+EDR </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Protocols Supported: HSP, HFP, A2DP, AVRCP </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Transmission Range: ≤12M/39ft </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Driver Unit: Ф7mm </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Impedance: 32ohm±15% </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Talk Time: (One Earbud): 5-6 hours; (Two Earbuds): 4-5 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Play Time: (One Earbud): 5-6 hours; (Two Earbuds): 4-5 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Standby: (One Earbud): 120 hours; (Two Earbuds): 70 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charge Time: 1-2 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Battery: built-in 3.7V 75mAh li-ion battery per earbud </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Size(per earbud): 0.94” x 0.71” x 1.1”/2.4 x 1.8 x 2.8cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Weight(per earbud): 5g/0.17oz </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Available Color: black, white </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charging Pod: </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Battery: built-in 3.7V 950mAh li-ion battery </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charging Voltage: DC 5V </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Size of Charging Pod: 3.27” x 1.5” x 1.3”/8.3 x 3.8 x 3.3cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Weight of Charging Pod: 42g/1.48oz </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Package size: 3.74” x 1.57” x 6.1”/9.5 x 4 x 15.5cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Package weight: 165g/0.36lbs</font></li>\n </ul>\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Package Lists*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">1 × Pair of Wireless Stereo TWS Earbuds </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 2 × Pair of Replacement Eartips </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 1 × USB Charging Cable </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 1 × User Manual</font></li>\n </ul>\n",
+        "images": [
+          "https://cf.cjdropshipping.com/a4c0bb7d-533e-475e-9984-b417b4c14119.jpg",
+          "https://cf.cjdropshipping.com/9f8b5bde-287e-477b-bf19-807664337577.jpg",
+          "https://cf.cjdropshipping.com/cbda5228-6437-4d78-8534-564a29f0c5d7.jpg",
+          "https://cf.cjdropshipping.com/9fc10435-7022-4f3b-bb70-3672beabb906.jpg",
+          "https://cf.cjdropshipping.com/7736d392-82dc-4a6b-84c2-024ab1dfde71.jpg",
+          "https://cf.cjdropshipping.com/03b8c13d-f04a-4abf-b250-1f9a9f5caad9.jpg",
+          "https://cf.cjdropshipping.com/a1a028ee-7110-420f-876f-e9b4f19bacb2.jpg",
+          "https://cf.cjdropshipping.com/5c2e13a4-45b2-4d77-a308-399e1f42c873.jpg",
+          "https://cf.cjdropshipping.com/61de92c9-1f70-416f-a0dd-78368de4aa5f.jpg",
+          "https://cf.cjdropshipping.com/520a9247-9ba5-4a24-914e-f1a16f2b3478.jpg",
+          "https://cf.cjdropshipping.com/19d9b38f-5e35-4030-b7bf-9128000dbfed.jpg",
+          "https://cf.cjdropshipping.com/509228f7-ebb2-4d72-81bf-ad4ce88d9b2a.jpg",
+          "https://cf.cjdropshipping.com/eda48cc1-eed5-483d-9687-233430c6c300.jpg"
+        ],
+        "rawPayloadHash": null,
+        "snapshotStatus": "SYNCED",
+        "lastSyncedAt": "2026-04-20T17:28:09.401Z",
+        "createdAt": "2026-04-20T03:57:21.984Z",
+        "updatedAt": "2026-04-20T17:28:09.402Z",
+        "variants": [
+          {
+            "id": 4,
+            "cjSku": "CJEJ264155502BY",
+            "cjVid": "1999395299687714818",
+            "unitCostUsd": "22.3",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T17:28:09.417Z"
+          },
+          {
+            "id": 5,
+            "cjSku": "CJEJ264155501AZ",
+            "cjVid": "1999395299687714817",
+            "unitCostUsd": "22.25",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T17:28:09.417Z"
+          }
+        ],
+        "evaluations": [],
+        "listings": [
+          {
+            "id": 2,
+            "status": "ACTIVE",
+            "shopifyProductId": "gid://shopify/Product/9145457803476"
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "userId": 1,
+        "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+        "title": "Earbuds wireless bluetooth headset",
+        "description": "<div class=\"detailmodule_dynamic\">\n <kse:widget data-widget-type=\"customText\" id=\"24845046\" title=\"\" type=\"custom\"></kse:widget>\n</div> \n<div class=\"detailmodule_html\">\n <div class=\"detail-desc-decorate-richtext\">\n  <p>Bluetooth protocol: 5.0</p>\n  <p>Channel: stereo<br/>How to use: Earplug type<br/>Single and double ears: bilateral three-dimensional</p>\n  <p><br/></p>\n  <p>description:<br/><br/>1. English voice prompt.<br/>2. Send out the phone number.<br/>3. Visualize the functions of the IOS system.<br/>4. Answer/reject the call.<br/>5. Redial the last number.<br/>6. HD voice quality.<br/>7. Solution: high-end solution.<br/>8. Compatibility mode: compatible with all versions of Bluetooth.<br/>9. Signal transmission channel: Cassl2.<br/>10. Usage: Semi-in-ear style.<br/>11. Microphone sensitivity: -42DB high-end transmitter.<br/>12. The longest transmission distance: 10-15 meters.</p>\n  <p><br/></p>\n  <p><img src=\"https://cf.cjdropshipping.com/379fb869-2ae0-4f52-a660-c4fb5d4ec9b7.jpg\" style=\"max-width:100%;\"/><img src=\"https://cf.cjdropshipping.com/50ecd72a-5875-4e4a-bd00-e0490a9429ed.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/308007cc-896c-4ff0-b03d-5c4a4a68ba0d.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/0832e28d-0d12-4cf6-9c65-c767c2e70f5b.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/49a36710-4f5a-46a1-8e21-06e3ce35bbab.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><br/></p> \n  <p style=\"box-sizing: border-box; margin: 0px; font-size: 14px; line-height: inherit; color: rgb(0, 0, 0); font-family: &quot;Open Sans&quot;, Arial, Helvetica, sans-serif, Heiti;\"><br/></p> \n </div>\n</div> \n<div class=\"detailmodule_dynamic\">\n <kse:widget data-widget-type=\"customText\" id=\"24841288\" title=\"\" type=\"custom\"></kse:widget>\n</div>",
+        "images": [
+          "https://cf.cjdropshipping.com/203207/386132459951.jpg",
+          "https://cf.cjdropshipping.com/203207/5098518456629.jpg",
+          "https://cf.cjdropshipping.com/203207/1997542225641.jpg",
+          "https://cf.cjdropshipping.com/203207/1374339813797.jpg",
+          "https://cf.cjdropshipping.com/203207/1802047212405.jpg",
+          "https://cf.cjdropshipping.com/6d188161-dab8-48c4-a893-24fc4eb7dd57.png",
+          "https://cf.cjdropshipping.com/1a3b0fd4-83b2-46ed-b38b-277ea87c1695.png",
+          "https://cf.cjdropshipping.com/99024f80-c68e-45d0-9843-db927d0a16f6.png"
+        ],
+        "rawPayloadHash": null,
+        "snapshotStatus": "SYNCED",
+        "lastSyncedAt": "2026-04-20T03:49:15.159Z",
+        "createdAt": "2026-04-20T03:49:15.160Z",
+        "updatedAt": "2026-04-20T03:49:15.160Z",
+        "variants": [
+          {
+            "id": 1,
+            "cjSku": "CJXFBXEJ02656-White",
+            "cjVid": "C4EEFBA3-A9E2-4D97-BFA0-291C4D0B27C0",
+            "unitCostUsd": "9.14",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T03:49:15.168Z"
+          },
+          {
+            "id": 2,
+            "cjSku": "CJXFBXEJ02656-Skin",
+            "cjVid": "FD58FF5C-FBEB-417A-BA4F-85D0F1FD61F1",
+            "unitCostUsd": "9.14",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T03:49:15.168Z"
+          },
+          {
+            "id": 3,
+            "cjSku": "CJXFBXEJ02656-Black",
+            "cjVid": "E068A925-3F76-47EF-A206-21C863B77FB4",
+            "unitCostUsd": "9.14",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T03:49:15.168Z"
+          }
+        ],
+        "evaluations": [],
+        "listings": [
+          {
+            "id": 1,
+            "status": "FAILED",
+            "shopifyProductId": null
+          }
+        ]
+      }
+    ]
+  },
+  "ordersSync": {
+    "ok": true,
+    "count": 0,
+    "orders": []
+  },
+  "ordersAfter": {
+    "ok": true,
+    "orders": []
+  },
+  "logsAfter": {
+    "ok": true,
+    "traces": [
+      {
+        "id": "cmo7i6g9m003d4ds0mpysrs9a",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:03:03.515Z"
+      },
+      {
+        "id": "cmo7i6cy7003b4ds02jxzju3s",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:59.215Z"
+      },
+      {
+        "id": "cmo7i69nh00394ds0rytljtng",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:54.941Z"
+      },
+      {
+        "id": "cmo7i666k00374ds0aadw1ib4",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:50.444Z"
+      },
+      {
+        "id": "cmo7i62uo00354ds0lrabujbn",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:46.129Z"
+      },
+      {
+        "id": "cmo7i5zmo00334ds0ynn90l4j",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:41.953Z"
+      },
+      {
+        "id": "cmo7i5vto00314ds0gzfguh0q",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:37.020Z"
+      },
+      {
+        "id": "cmo7i5sjl002z4ds0jkjo3x2w",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:32.770Z"
+      },
+      {
+        "id": "cmo7i5p8c002x4ds0aj77qfci",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:28.475Z"
+      },
+      {
+        "id": "cmo7i5lw5002v4ds0yuv7lx94",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:24.149Z"
+      },
+      {
+        "id": "cmo7i5inu002t4ds0gosw2u35",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:19.963Z"
+      },
+      {
+        "id": "cmo7i5fcy002r4ds0608li5z1",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:15.682Z"
+      },
+      {
+        "id": "cmo7i5by0002p4ds0yqljhjdz",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:11.256Z"
+      },
+      {
+        "id": "cmo7i58ca002n4ds0o2p6ze8o",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:06.586Z"
+      },
+      {
+        "id": "cmo7i54yg002l4ds0oukfxw9p",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:02:02.201Z"
+      },
+      {
+        "id": "cmo7i51kd002j4ds02gcsn6wa",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:57.805Z"
+      },
+      {
+        "id": "cmo7i4y6t002h4ds0c6abage0",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:53.430Z"
+      },
+      {
+        "id": "cmo7i4uwn002f4ds0p3gab8xm",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:49.175Z"
+      },
+      {
+        "id": "cmo7i4rm5002d4ds0p85vantc",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:44.910Z"
+      },
+      {
+        "id": "cmo7i4obh002b4ds0rq2t0bm8",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:40.637Z"
+      },
+      {
+        "id": "cmo7i4l0e00294ds040c4dme0",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:36.350Z"
+      },
+      {
+        "id": "cmo7i4hqr00274ds0mdew23gk",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:32.115Z"
+      },
+      {
+        "id": "cmo7i4e9f00254ds0jccyn6mk",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:27.603Z"
+      },
+      {
+        "id": "cmo7i4azo00234ds0t53h04n3",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:23.364Z"
+      },
+      {
+        "id": "cmo7i47pm00214ds0ntgdars1",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:01:19.114Z"
+      }
+    ],
+    "count": 25
+  },
+  "finishedAt": "2026-04-20T18:03:08.009Z"
+}

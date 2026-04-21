@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-04-19T02:07:38.305Z",
+  "probes": [
+    {
+      "endpoint": "logistic/getWarehouseByEndCountry",
+      "success": false,
+      "error": "Interface not found"
+    }
+  ],
+  "nameSearch": {
+    "keyword": "Chile",
+    "hits": 0,
+    "samples": []
+  }
+}

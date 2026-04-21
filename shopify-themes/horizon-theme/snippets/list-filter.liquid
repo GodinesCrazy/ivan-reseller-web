@@ -13,6 +13,14 @@
 {% liquid
   assign is_swatch = false
   assign swatch_index = filter.values | find_index: 'swatch'
+  assign filter_label = filter.label
+
+  case filter.label | downcase
+    when 'disponibilidad'
+      assign filter_label = 'Availability'
+    when 'precio'
+      assign filter_label = 'Price'
+  endcase
 
   if swatch_index != null
     assign is_swatch = true
@@ -46,7 +54,7 @@
     {% endif %}
   >
     <summary class="facets__summary">
-      <span class="facets__label">{{ filter.label }}</span>
+      <span class="facets__label">{{ filter_label }}</span>
 
       <div class="facets__status-wrapper">
         {% if is_swatch %}
@@ -197,6 +205,7 @@
               style="--image-columns: {{ image_columns }};"
             {% endif %}
             name="{{ filter.label }}"
+            aria-label="{{ filter_label }}"
           >
             {%- for value in filter.values -%}
               {% liquid

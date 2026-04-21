@@ -1,0 +1,95 @@
+{
+  "productId": 32714,
+  "checkedAt": "2026-04-07T00:14:18.480Z",
+  "dbColumns": {
+    "status": "VALIDATED_READY",
+    "isPublished": false,
+    "shippingCost": "3.47",
+    "importTax": "1.33",
+    "totalCost": "8.31",
+    "aliexpressPrice": "3.51",
+    "suggestedPrice": "10.53",
+    "finalPrice": "10.53",
+    "targetCountry": "CL",
+    "originCountry": "CN",
+    "currency": "USD",
+    "updatedAt": "2026-04-07T00:10:12.035Z"
+  },
+  "metadataKeys": [
+    "p92StagingCandidate",
+    "aeProductId",
+    "variantIntent",
+    "mlChileFreight",
+    "mlChileLandedCost",
+    "mlImagePipeline",
+    "preventivePublish",
+    "publishStatus",
+    "publicationStatus",
+    "failedMarketplaces",
+    "publishAttemptedAt"
+  ],
+  "mlChileFreight": {
+    "freightSummaryCode": "freight_quote_found_for_cl",
+    "checkedAt": "2026-04-07T00:10:04.917Z",
+    "targetCountry": "CL",
+    "sendGoodsCountryCode": "CN",
+    "freightOptionsCount": 3,
+    "rawOptionNodeCount": 3,
+    "rawTopKeys": [
+      "success",
+      "aeop_freight_calculate_result_for_buyer_d_t_o_list"
+    ],
+    "selectedServiceName": "CAINIAO_STANDARD",
+    "selectedFreightAmount": 3.47,
+    "selectedFreightCurrency": "USD",
+    "selectedEstimatedDeliveryTime": 8,
+    "selectionReason": "Selected the cheapest tracked/standard-like freight option."
+  },
+  "mlChileLandedCost": {
+    "costCurrency": "USD",
+    "importTaxMethod": "cl_vat_19_product_plus_shipping_low_value",
+    "importTaxAmount": 1.33,
+    "totalCost": 8.31,
+    "landedCostCompleteness": "complete",
+    "checkedAt": "2026-04-07T00:10:04.917Z"
+  },
+  "mlChileFreightCompatibility": null,
+  "preventivePublish": {
+    "auditedAt": "2026-04-06T23:37:00.673Z",
+    "marketplace": "mercadolibre",
+    "shipCountry": "CL",
+    "listingSalePriceUsd": 14.2,
+    "policyComplianceReady": true,
+    "profitability": {
+      "listingCurrency": "CLP",
+      "netProfitUsd": 3.129999999999999,
+      "netProfitMarketplaceCurrency": 2975.2000000000007,
+      "marginRatio": 0.22054855448480362,
+      "totalCostUsd": 11.07,
+      "totalCostMarketplaceCurrency": 10514.8,
+      "supplierUnitUsd": 3.51,
+      "shippingUsd": 3.47,
+      "importTaxUsd": 1.33,
+      "listingFeeMarketplaceCurrency": 0,
+      "finalValueFeeMarketplaceCurrency": 1618.8,
+      "marketplaceFeeMarketplaceCurrency": 1618.8,
+      "paymentFeeMarketplaceCurrency": 0,
+      "taxesMarketplaceCurrency": 1000
+    }
+  },
+  "canonicalFreightTruth": {
+    "status": "freight_truth_ready_for_publish",
+    "ok": true,
+    "reason": null,
+    "truth": {
+      "targetCountry": "CL",
+      "freightSummaryCode": "freight_quote_found_for_cl",
+      "selectedServiceName": "CAINIAO_STANDARD",
+      "selectedFreightAmount": 3.47,
+      "selectedFreightCurrency": "USD",
+      "shippingUsd": 3.47,
+      "checkedAt": "2026-04-07T00:10:04.917Z",
+      "ageHours": 0.07043361111111111
+    }
+  }
+}

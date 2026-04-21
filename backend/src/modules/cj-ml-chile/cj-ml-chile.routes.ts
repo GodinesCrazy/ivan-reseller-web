@@ -37,8 +37,15 @@ import {
 import { createCjMlChileSupplierAdapter, CJ_CHILE_PROBE_POSTAL } from './adapters/cj-ml-chile-supplier.adapter';
 import { CjSupplierError } from '../cj-ebay/adapters/cj-supplier.errors';
 import { rankMlChileSearchResults } from './services/cj-ml-chile-search-ranking';
+import {
+  enrichMlChileProductDetailWithLiveStock,
+  probeProductChileLocalStock,
+  quoteShippingToChileLocalWarehouse,
+  seedMlChileSearchCandidate,
+} from './services/cj-ml-chile-local-stock.service';
 
 const router = Router();
+const CJ_ML_CHILE_VARIANT_PROBE_LIMIT = 1;
 
 function httpStatusForCj(err: CjSupplierError): number {
   switch (err.code) {
@@ -294,9 +301,10 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
     const adapter = createCjMlChileSupplierAdapter(userId);
     const rawItems = await adapter.searchProducts({ keyword: parsed.data.query, page: parsed.data.page, pageSize: parsed.data.pageSize });
+    const seededItems = rawItems.map(seedMlChileSearchCandidate);
 
     // Rank: operability tier → textRelevanceScore → operationalScore
-    const { rankedItems, query: expandedQuery } = rankMlChileSearchResults(parsed.data.query, rawItems);
+    const { rankedItems, query: expandedQuery } = rankMlChileSearchResults(parsed.data.query, seededItems);
 
     // Operability summary for UI stats banner
     const operable = rankedItems.filter(i => i.operabilityStatus === 'operable').length;
@@ -324,7 +332,7 @@ router.post('/cj/search', async (req: Request, res: Response, next: NextFunction
       queryExpansions: expandedQuery.expansions,
       fxRateCLPperUSD,
       fxRateAt,
-      note: 'Resultados rankeados: tier operabilidad → relevancia textual → score operacional. Warehouse Chile se verifica en preview/evaluate.',
+      note: 'Resultados rankeados por stock local Chile confirmado → stock por confirmar → no operable. El stock genérico/global ya no promociona candidatos al flujo principal sin evidencia local Chile.',
     });
   } catch (err) {
     if (err instanceof CjSupplierError) { res.status(httpStatusForCj(err)).json({ ok: false, error: err.message, code: err.code }); return; }
@@ -337,7 +345,13 @@ router.get('/cj/product/:id', async (req: Request, res: Response, next: NextFunc
     const userId = req.user!.userId;
     const adapter = createCjMlChileSupplierAdapter(userId);
     const detail = await adapter.getProductById(req.params.id);
-    res.json({ ok: true, product: detail });
+    const { product, liveStockCoverage } = await enrichMlChileProductDetailWithLiveStock(adapter, detail);
+    res.json({
+      ok: true,
+      product,
+      liveStockCoverage,
+      note: 'Usa product/query + product/variant/query y refresca stock de variantes con product/stock/queryByVid antes de evaluar Chile local.',
+    });
   } catch (err) {
     if (err instanceof CjSupplierError) { res.status(httpStatusForCj(err)).json({ ok: false, error: err.message, code: err.code }); return; }
     next(err);
@@ -345,9 +359,12 @@ router.get('/cj/product/:id', async (req: Request, res: Response, next: NextFunc
 });
 
 /**
- * Fast inventory verify — calls product/variant/query for up to 10 products in parallel.
- * Used by the frontend to reclassify stock_unknown cards immediately after search.
- * Avoids the full evaluate flow (no freight calculation, no warehouse check).
+ * Fast destination verify — reuses the eBay philosophy:
+ * 1. product/query + product/variant/query to choose a candidate variant
+ * 2. product/stock/queryByVid for live stock on that variant
+ * 3. freightCalculate with startCountryCode=CL and endCountryCode=CL
+ *
+ * Generic/global stock does not qualify the product as ready-to-evaluate anymore.
  */
 router.post('/cj/products/batch-verify', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -358,15 +375,17 @@ router.post('/cj/products/batch-verify', async (req: Request, res: Response, nex
     const adapter = createCjMlChileSupplierAdapter(userId);
     const results = await Promise.allSettled(
       parsed.data.productIds.map(async (pid) => {
-        const variants = await adapter.getVariantsForProduct(pid);
-        const maxStock = variants.length > 0 ? Math.max(...variants.map(v => v.stock)) : 0;
-        const operableCount = variants.filter(v => v.stock > 0).length;
+        const probe = await probeProductChileLocalStock(adapter, pid, CJ_ML_CHILE_VARIANT_PROBE_LIMIT);
         return {
           cjProductId: pid,
-          hasAnyStock: maxStock > 0,
-          maxStock,
-          variantCount: variants.length,
-          operableVariantCount: operableCount,
+          status: probe.localStockStatus,
+          operabilityStatus: probe.operabilityStatus,
+          warehouseChileConfirmed: probe.warehouseChileConfirmed,
+          hasAnyStock: probe.liveStockFound,
+          localReadyVariantId: probe.localReadyVariantId ?? null,
+          checkedVariantCount: probe.checkedVariantCount,
+          candidateVariantCount: probe.candidateVariantCount,
+          evidenceSource: probe.localStockEvidenceSource,
         };
       })
     );
@@ -390,14 +409,13 @@ router.post('/cj/shipping-quote', async (req: Request, res: Response, next: Next
     const parsed = cjMlChileShippingQuoteBodySchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.errors }); return; }
     const adapter = createCjMlChileSupplierAdapter(userId);
-    const freight = await adapter.quoteShippingToUsReal({
+    const freight = await quoteShippingToChileLocalWarehouse(adapter, {
       variantId: parsed.data.variantId,
       productId: parsed.data.productId,
       quantity: parsed.data.quantity,
       destPostalCode: CJ_CHILE_PROBE_POSTAL,
     });
-    const warehouseChileConfirmed = freight.quote.startCountryCode === 'CL';
-    res.json({ ok: true, quote: freight.quote, warehouseChileConfirmed, mvpViable: warehouseChileConfirmed });
+    res.json({ ok: true, quote: freight.quote, warehouseChileConfirmed: true, mvpViable: true });
   } catch (err) {
     if (err instanceof CjSupplierError) { res.status(httpStatusForCj(err)).json({ ok: false, error: err.message, code: err.code }); return; }
     next(err);

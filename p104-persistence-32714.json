@@ -1,0 +1,105 @@
+{
+  "executedAt": "2026-03-27T19:32:43.061Z",
+  "productId": 32714,
+  "product": {
+    "id": 32714,
+    "userId": 1,
+    "status": "APPROVED",
+    "isPublished": false,
+    "publishedAt": null,
+    "images": "[\"https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg\",\"https://ae01.alicdn.com/kf/S4005cfbe2ecc4d22bd0f51da34bfc1c6M.jpg\",\"https://ae01.alicdn.com/kf/S574ecbca762045d0a6bc2a6da0f50ceb5.jpg\",\"https://ae01.alicdn.com/kf/S10ca44862d0f4f508d7ee342d162df4ai.jpg\",\"https://ae01.alicdn.com/kf/S80e97bb5f64349c2b69181ba42c91c4cB.jpg\",\"https://ae01.alicdn.com/kf/Sde88307b1549433e859ff52eb73e80d6g.jpg\",\"https://ae01.alicdn.com/kf/S4d28403f329442b281158c9d8695c54cC.jpg\"]",
+    "title": "Rotating Table Cell Phone Holder Support Desktop Stand for IPad Samsung IPhone 15 14 13 Mobile Mount"
+  },
+  "marketplaceListings": [
+    {
+      "id": 1368,
+      "productId": 32714,
+      "userId": 1,
+      "marketplace": "mercadolibre",
+      "listingId": "MLC3805190796",
+      "listingUrl": "https://articulo.mercadolibre.cl/MLC-3805190796-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM",
+      "supplierUrl": "https://www.aliexpress.com/item/1005009130509159.html",
+      "sku": "status:active",
+      "viewCount": 0,
+      "publishedAt": "2026-03-27T03:38:35.901Z",
+      "createdAt": "2026-03-27T03:38:36.757Z",
+      "updatedAt": "2026-03-27T12:00:01.120Z",
+      "status": "failed_publish",
+      "lastReconciledAt": "2026-03-27T12:00:01.120Z"
+    },
+    {
+      "id": 1367,
+      "productId": 32714,
+      "userId": 1,
+      "marketplace": "mercadolibre",
+      "listingId": "MLC3804623142",
+      "listingUrl": "https://articulo.mercadolibre.cl/MLC-3804623142-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM",
+      "supplierUrl": "https://www.aliexpress.com/item/1005009130509159.html",
+      "sku": "status:active",
+      "viewCount": 0,
+      "publishedAt": "2026-03-27T02:35:49.356Z",
+      "createdAt": "2026-03-27T02:35:50.433Z",
+      "updatedAt": "2026-03-27T12:00:01.019Z",
+      "status": "failed_publish",
+      "lastReconciledAt": "2026-03-27T12:00:01.018Z"
+    },
+    {
+      "id": 1366,
+      "productId": 32714,
+      "userId": 1,
+      "marketplace": "mercadolibre",
+      "listingId": "MLC3804135582",
+      "listingUrl": "https://articulo.mercadolibre.cl/MLC-3804135582-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM",
+      "supplierUrl": "https://www.aliexpress.com/item/1005009130509159.html",
+      "sku": "status:active",
+      "viewCount": 0,
+      "publishedAt": "2026-03-27T00:09:49.659Z",
+      "createdAt": "2026-03-27T00:09:50.718Z",
+      "updatedAt": "2026-03-27T01:00:00.382Z",
+      "status": "failed_publish",
+      "lastReconciledAt": "2026-03-27T01:00:00.382Z"
+    }
+  ],
+  "packDir": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714",
+  "manifestPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\ml-asset-pack.json",
+  "manifestPresent": true,
+  "manifest": {
+    "schemaVersion": 1,
+    "productId": 32714,
+    "listingId": "MLC3805190796",
+    "generatedAt": "2026-03-27T03:38:42.726Z",
+    "reviewedProofState": "reviewed_proof_write_ready",
+    "remediationPathSelected": "internal_process_existing_images",
+    "assets": [
+      {
+        "assetKey": "cover_main",
+        "required": true,
+        "filename": "cover_main.png",
+        "promptFilename": null,
+        "approvalState": "approved",
+        "assetSource": "p102_white_background_padding_recovery",
+        "notes": "P102 white-background recovery from prior clean portada by 0.75 white padding; strict+white gate passed"
+      },
+      {
+        "assetKey": "detail_mount_interface",
+        "required": true,
+        "filename": "detail_mount_interface.png",
+        "promptFilename": null,
+        "approvalState": "approved",
+        "assetSource": "preserved_existing_pack",
+        "notes": "unchanged for P100 listing picture replace"
+      },
+      {
+        "assetKey": "usage_context_clean",
+        "required": false,
+        "filename": null,
+        "promptFilename": "usage_context_clean.prompt.txt",
+        "approvalState": "missing",
+        "assetSource": null,
+        "notes": "optional"
+      }
+    ]
+  },
+  "coverExists": true,
+  "detailPngExists": true
+}

@@ -1,0 +1,3176 @@
+Plan
+
+
+Abrir
+
+Real-Profit Audit and Documentation Plan
+Summary
+Produce a code-and-runtime-truth audit of Ivan Reseller against the only finish line that matters: a repeatable, real-profit AliExpress-only dropshipping loop. The audit will use current repo code, live Railway/runtime evidence, and live DB evidence as primary truth; existing markdown reports will be treated only as secondary claims to verify or overturn.
+
+Current baseline already established from live evidence on March 21, 2026:
+
+VALIDATED_READY = 0 globally and for user 1.
+Publishable coverage is effectively absent: almost all products lack targetCountry, shippingCost, importTax, totalCost, and aliexpressSku.
+Live backend is up on Railway, but eBay production token refresh is repeatedly failing with HTTP 400.
+MercadoLibre order sync is failing with 401 invalid access token.
+eBay stored webhook proof says roughly subscription-registered, but live readiness currently fails because endpoint/token/notification config are missing or unreachable.
+Orders exist (5 PURCHASED, 2 PURCHASING, 44 FAILED), but sales proof is weak (1 production DELIVERED, 1 production PAYOUT_FAILED).
+Scope default: audit globally, but anchor business verdicts on the primary operator path and call out cross-tenant contamination separately.
+Deliverables
+Create exactly these files under docs/:
+
+MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md
+ALIEXPRESS_ONLY_BUSINESS_GAP_MAP.md
+MARKETPLACE_VS_SUPPLIER_REALITY_AUDIT.md
+POST_SALE_AND_PAYPAL_AUDIT.md
+REAL_PROFIT_PROOF_GAP.md
+FINISH_LINE_CHECKLIST.md
+PRIORITIZED_IMPROVEMENT_PLAN_TO_REAL_PROFIT.md
+Implementation Plan
+1. Lock the evidence pack
+Use these as primary evidence inputs:
+
+Code: Prisma schema plus the live source services for discovery, trends, supplier validation, pre-publish gating, publish orchestration, order sync, order truth, fulfillment, AliExpress purchase, PayPal payout, real-profit calculation, webhook readiness, and schedulers.
+Live runtime: railway status --json, latest deployment logs, and any targeted diagnostic logs needed for eBay, MercadoLibre, fulfillment tracking, and publish attempts.
+Live DB: backend/scripts/audit-db-snapshot.ts, backend/scripts/check-validated-ready.ts, and targeted read-only Prisma queries for the production delivered sale, payout-failed sale, purchased orders, and current primary-user connector state.
+Secondary claims to verify: the newest relevant docs around validated-ready recovery, webhook proof, supplier strategy, post-sale phases, and real-profit reports.
+2. Build the stage-by-stage business gap map
+Audit the 13 business stages in the user’s Section 1 using a strict matrix:
+
+current_maturity
+what_is_proven
+what_is_code_only
+what_is_blocked
+what_prevents_real_profit
+For each stage, explicitly tie the verdict to evidence from code, DB, or runtime. If evidence conflicts, prefer current DB/runtime over repo docs and mark the docs as stale.
+3. Run the deep technical subsystem audit
+Evaluate these subsystems one by one:
+
+Discovery and optimizer stack
+AliExpress affiliate and dropshipping integrations
+Destination, stock, shipping, SKU, and cost truth
+Pricing, fee, and margin logic
+Publish gating and listing-state reconciliation
+eBay, MercadoLibre, and Amazon auth/publish/webhook/order-sync layers
+Order ingestion, order truth, cancellation truth, and exclusion from commercial proof
+Paid-order processing, fulfillment, manual fallback, and tracking sync
+PayPal balance, payout, and purchase/payment assumptions
+Sales ledger, realized-profit engine, and funds-release recognition
+Each subsystem will be classified as:
+
+production-safe
+partial
+misleadingly present but not operational
+manual dependency
+false automation
+false readiness
+false profit assumption
+4. Audit the AliExpress-only strategy as a first-class business constraint
+Map what is truly usable today for AliExpress-only:
+
+Affiliate discovery
+Dropshipping product validation
+SKU resolution
+Destination shipping check
+Stock check
+Cost extraction
+Alternative supplier fallback
+Purchase execution
+Tracking retrieval
+Then quantify where AliExpress-only fails today:
+
+Supply-side failure rates implied by current rejection reasons and missing validated-ready output
+Gaps caused by API credential state, shipping truth, SKU truth, or pricing truth
+Whether first profitable operation is blocked by real market conditions, implementation gaps, or both
+Do not recommend switching suppliers unless the evidence shows AliExpress-only cannot produce a first safe profitable operation under the current rules.
+5. Audit marketplaces without losing the main bottleneck
+For eBay, MercadoLibre, and Amazon, score:
+
+Auth/OAuth maturity
+Publish readiness
+Webhook maturity
+Order-sync maturity
+Post-sale relevance
+Fit with current AliExpress-only reality
+Default decision logic:
+
+Keep eBay as lead path only if live credential recovery and publish-safe readiness still make it the least-bad route.
+Treat MercadoLibre as secondary unless current destination/shipping reality and auth health materially improve its odds.
+Treat Amazon as immature unless code and runtime evidence show otherwise.
+6. Produce the required documents with fixed content boundaries
+MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md: full verdict, stage map, subsystem map, autonomy audit, final classification, top blockers, top strengths.
+ALIEXPRESS_ONLY_BUSINESS_GAP_MAP.md: supplier-only capability matrix, blocker quantification, optimization room, AliExpress-only verdict.
+MARKETPLACE_VS_SUPPLIER_REALITY_AUDIT.md: marketplace-by-marketplace readiness versus AliExpress constraints.
+POST_SALE_AND_PAYPAL_AUDIT.md: order ingestion, cancellation truth, fulfillment, purchase execution, PayPal path, tracking, released-funds gating.
+REAL_PROFIT_PROOF_GAP.md: projected vs realized profit, data model gaps, payout/fund-release truth, why current proof is or is not commercially valid.
+FINISH_LINE_CHECKLIST.md: 8 required milestones with current status, blocker, evidence, exact work needed.
+PRIORITIZED_IMPROVEMENT_PLAN_TO_REAL_PROFIT.md: P0 to P3, each with exact issue, why it matters, subsystem, recommended fix, business impact, and validation proof.
+7. Final synthesis format
+Return a final terminal summary in the exact structure the user requested:
+
+MASTER AUDIT STATUS
+TOP 10 BLOCKERS TO REAL PROFIT
+TOP 10 STRENGTHS
+FINAL BUSINESS VERDICT
+The final verdict will be evidence-led and conservative. If the system lacks any one of:
+
+safe VALIDATED_READY
+safe publish
+valid real order
+successful automated AliExpress purchase
+truthful post-sale completion
+marketplace fund release
+proven net profit
+then the system will be classified as not finished.
+Verification Plan
+Before writing final docs, verify these checkpoints:
+
+Confirm live counts for products, listings, orders, and sales from DB.
+Confirm current eBay webhook proof and current live readiness are both reported, not conflated.
+Confirm whether the one production delivered sale is commercially valid or undermined by payout failure, exclusion logic, or incomplete fee/currency context.
+Confirm whether any purchased orders are real, profitable, and eligible for commercial proof.
+Confirm whether automated purchase truly used AliExpress Dropshipping API versus manual fallback.
+Confirm whether realized-profit outputs are finalized or only estimated.
+Assumptions and Defaults
+Primary truth source is live DB/runtime, not historical docs.
+Audit scope is platform-wide, but the business verdict is anchored on the primary operator path and not diluted by unrelated tenant artifacts.
+AliExpress remains the only allowed supplier family for recommendations unless the audit proves it is exhausted under current business rules.
+The audit may use read-only production diagnostics and DB queries, but will not change data or code during evidence gathering.
+Documentation deliverables are the only repo mutations expected when execution begins.
+Implementar plan
+
+I’m executing the audit now: first I’m pulling the remaining business-truth evidence that wasn’t yet pinned down, especially the real delivered sale, payout failure, purchased orders, and tenant split. After that I’ll write the seven audit documents directly from the verified code/runtime/DB picture.
+
+Se ejecutó Get-Content 'docs/P1_FIRST_VALIDATED_READY_PROOF.md' | Out-Stringpara 8s
+
+
+Se ejecutó @' const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); (async () => { const sales = await prisma.sale.findMany({ where: { environment: 'production' }, select: { id: true, userId: true, productId: true, orderId: true, marketplace: true, salePrice: true, aliexpressCost: true, marketplaceFee: true, grossProfit: true, commissionAmount: true, netProfit: true, currency: true, status: true, payoutExecuted: true, adminPayoutId: true, userPayoutId: true, buyerEmail: true, createdAt: true, updatedAt: true, product: { select: { title: true, shippingCost: true, importTax: true, totalCost: true, targetCountry: true, currency: true, status: true } } }, orderBy: { createdAt: 'desc' } }); const orders = await prisma.order.findMany({ where: { status: { in: ['PURCHASED','PURCHASING','FAILED','MANUAL_ACTION_REQUIRED','FULFILLMENT_BLOCKED'] } }, select: { id: true, userId: true, productId: true, title: true, price: true, currency: true, status: true, paypalOrderId: true, aliexpressOrderId: true, productUrl: true, errorMessage: true, failureReason: true, manualFulfillmentRequired: true, createdAt: true, updatedAt: true }, orderBy: { updatedAt: 'desc' }, take: 25 }); const perUser = await prisma.user.findMany({ where: { OR: [{ sales: { some: {} } }, { orders: { some: {} } }, { apiCredentials: { some: { isActive: true } } }] }, select: { id: true, username: true, email: true, role: true, ebayConnected: true, amazonConnected: true, mercadolibreConnected: true, _count: { select: { sales: true, orders: true, products: true, apiCredentials: true } }, apiCredentials: { where: { isActive: true }, select: { apiName: true, environment: true, scope: true }, orderBy: [{ apiName: 'asc' }, { environment: 'asc' }] } }, orderBy: { id: 'asc' } }); console.log(JSON.stringify({ sales, orders, perUser }, null, 2)); })().catch(err => { console.error(err); process.exit(1); }).finally(async () => { await prisma.$disconnect(); }); '@ | node -para 13s
+
+
+Se ejecutó Get-Content 'docs/P7_SUPPLIER_STRATEGY_SELECTION.md' | Out-Stringpara 6s
+
+
+Se ejecutó Get-Content 'docs/P6_EBAY_INBOUND_EVENT_PROOF.md' | Out-Stringpara 7s
+
+
+The tenant split is sharper than it looked: the production delivered sale is actually a DEMO-* order under user 1, while the live eBay token failures are happening on user 41. I’m pulling the purchase-log and realized-profit side now so the docs can cleanly separate “orders exist” from “commercially valid profit exists.”
+
+Se ejecutó @' const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); (async () => { const purchasedOrders = await prisma.order.findMany({ where: { status: { in: ['PURCHASED','PURCHASING'] } }, select: { id: true, userId: true, productId: true, title: true, price: true, currency: true, status: true, paypalOrderId: true, aliexpressOrderId: true, productUrl: true, errorMessage: true, failureReason: true, createdAt: true, updatedAt: true, product: { select: { title: true, status: true, aliexpressSku: true, targetCountry: true, shippingCost: true, totalCost: true } } }, orderBy: { updatedAt: 'desc' } }); const purchaseLogs = await prisma.purchaseLog.findMany({ orderBy: { createdAt: 'desc' }, take: 20, select: { id: true, userId: true, saleId: true, orderId: true, productId: true, supplierUrl: true, purchaseAmount: true, currency: true, quantity: true, status: true, success: true, errorMessage: true, supplierOrderId: true, trackingNumber: true, capitalValidated: true, capitalAvailable: true, paypalValidated: true, retryAttempt: true, completedAt: true, createdAt: true } }); const successfulOperations = await prisma.successfulOperation.findMany({ orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, userId: true, productId: true, saleId: true, totalProfit: true, expectedProfit: true, actualSuccess: true, completionDate: true } }); console.log(JSON.stringify({ purchasedOrders, purchaseLogs, successfulOperations }, null, 2)); })().catch(err => { console.error(err); process.exit(1); }).finally(async () => { await prisma.$disconnect(); }); '@ | node -para 8s
+
+
+Se ejecutó @' import { getRealProfitSummary, getRealProfitPerOrder } from './src/services/real-profit-engine.service'; (async () => { const summary = await getRealProfitSummary({ environment: 'production', days: 3650 }); const rows = await getRealProfitPerOrder({ environment: 'production', days: 3650, limit: 20 }); console.log(JSON.stringify({ summary, rows }, null, 2)); })().catch((err) => { console.error(err); process.exit(1); }); '@ | npx tsx -para 6s
+
+
+Se ejecutó Get-Content 'docs/REAL_AUTONOMOUS_PROFIT_GENERATION_FINAL_REPORT.md' | Out-Stringpara 2s
+
+
+The purchased-order picture is now clear enough to be uncomfortable in the right way: the PURCHASED rows are test-style artifacts under user 396, purchase logs are empty, and there are no successful-operation records. I’m running the connector-readiness and real-profit services directly so the documents can quote the system’s own verdict alongside the raw DB facts.
+
+Se ejecutó @' import { getConnectorReadinessForUser } from './src/services/webhook-readiness.service'; (async () => { const u1 = await getConnectorReadinessForUser(1); const u41 = await getConnectorReadinessForUser(41); console.log(JSON.stringify({ user1: u1, user41: u41 }, null, 2)); })().catch((err) => { console.error(err); process.exit(1); }); '@ | npx tsx -para 13s
+
+
+Se ejecutó @' import { RealProfitEngine } from './src/services/real-profit-engine.service'; (async () => { const summary = await RealProfitEngine.getRealProfitSummary({ environment: 'production', days: 3650 }); const rows = await RealProfitEngine.getRealProfitPerOrder({ environment: 'production', days: 3650, limit: 20 }); console.log(JSON.stringify({ summary, rows }, null, 2)); })().catch((err) => { console.error(err); process.exit(1); }); '@ | npx tsx -para 11s
+
+
+Se ejecutó Get-Content 'REAL_AUTONOMOUS_PROFIT_GENERATION_FINAL_REPORT.md' | Out-Stringpara 7s
+
+
+The older “autonomous profit” report is now clearly stale against live evidence: it already admitted REAL PROFIT GENERATED = NO, and the current DB/runtime picture is even weaker than that document’s pending-state framing. I’m doing one last lightweight check on the service exports so I can cite the real-profit and connector-readiness services directly instead of inferring everything from raw tables.
+
+Se ejecutó @' (async () => { const mod = await import('./src/services/real-profit-engine.service'); console.log(JSON.stringify({ keys: Object.keys(mod) }, null, 2)); })().catch((err) => { console.error(err); process.exit(1); }); '@ | npx tsx -para 8s
+
+
+Se ejecutó @' (async () => { const mod = await import('./src/services/webhook-readiness.service'); console.log(JSON.stringify({ keys: Object.keys(mod) }, null, 2)); })().catch((err) => { console.error(err); process.exit(1); }); '@ | npx tsx -para 6s
+
+
+Se ejecutó @' (async () => { const mod = await import('./src/services/real-profit-engine.service'); const engine = mod.default || mod; const summary = await engine.getRealProfitSummary({ environment: 'production', days: 3650 }); const rows = await engine.getRealProfitPerOrder({ environment: 'production', days: 3650, limit: 20 }); console.log(JSON.stringify({ summary, rows }, null, 2)); })().catch((err) => { console.error(err); process.exit(1); }); '@ | npx tsx -para 15s
+
+
+Se ejecutó @' (async () => { const mod = await import('./src/services/webhook-readiness.service'); const svc = mod.default || mod; const user1 = await svc.getConnectorReadinessForUser(1); const user41 = await svc.getConnectorReadinessForUser(41); console.log(JSON.stringify({ user1, user41 }, null, 2)); })().catch((err) => { console.error(err); process.exit(1); }); '@ | npx tsx -para 36s
+
+
+I have enough verified evidence to write the audit without hand-waving. I’m creating the seven docs now, and I’m keeping the language deliberately strict so the verdict tracks the real business finish line rather than module count or prior optimism.
+
+Rechazado
+ALIEXPRESS_ONLY_BUSINESS_GAP_MAP.md
++124
+-0
+ALIEXPRESS_ONLY_BUSINESS_GAP_MAP.md
++124
+-0
+
+# AliExpress-Only Business Gap Map
+
+Audit date: 2026-03-21
+
+## Verdict
+
+AliExpress-only is not commercially sufficient today, but it is also not truthfully exhausted.
+
+The current failure pattern still mixes real supplier-side scarcity with unresolved implementation and operational gaps. Under the current business policy, the correct conclusion is:
+
+- do not switch suppliers yet as the main recommendation
+- fix the unresolved AliExpress-only truth and execution gaps first
+- re-test first-profit readiness only after the current AliExpress-only path is genuinely exercised end-to-end
+
+## Usable AliExpress Capabilities Today
+
+| Capability | Current state | What is genuinely strong | What is weak |
+| --- | --- | --- | --- |
+| Affiliate discovery | PARTIAL | Search and product-detail logic exist; good for candidate mining | Discovery still does not produce validated-ready output |
+| Dropshipping product validation | STRONG BUT INCOMPLETE | Real `getProductInfo`, SKU parsing, destination-sensitive checks | Parameter mismatches and incomplete catalog truth still cause failures |
+| Preventive supplier audit | STRONG BUT INCOMPLETE | Original supplier plus ranked alternatives; rating/order filters; keyword and similarity gates | No live first-safe candidate produced |
+| Fallback ranking | PARTIAL | Ranked alternative supplier selection is real | It has not yet delivered one commercially usable fallback in production |
+| Alternative-product fallback | PARTIAL | Code exists for supplier alternatives and URL substitution | No commercial proof that it rescued a real order safely |
+| Stock checks | PARTIAL | SKU-level stock checks are real | Catalog lacks persisted SKU coverage almost everywhere |
+| Shipping checks | PARTIAL | API-based destination shipping logic is real | Live failures still show destination parameter and shipping truth issues |
+| Cost extraction | PARTIAL | Supplier unit cost and shipping cost extraction exist | Persisted total-cost coverage is near zero |
+| Product identity / SKU resolution | PARTIAL | Strong selection logic exists | Live failures still show `SKU_NOT_EXIST` and missing SKU persistence |
+| Destination compatibility | PARTIAL | Destination-context resolution is strict in the preventive path | Most products do not carry destination-safe persisted context |
+| Purchase execution | PARTIAL | Dropshipping API `placeOrder` path exists | Supplier-side payment closure is not proven |
+| Tracking retrieval | PARTIAL | Tracking API surface exists | No real successful-operation record proves it closed a profitable lifecycle |
+
+## What Has Actually Been Tried Already
+
+### Supplier-side rejection evidence carried into this audit
+
+Previous documented recovery evidence cited:
+
+- `no_stock_for_destination`
+- `margin_invalid`
+- `supplier_unavailable`
+
+Current live evidence still supports those concerns indirectly:
+
+- `VALIDATED_READY = 0`
+- almost no products have required shipping/cost/SKU context
+- live fulfillment tests show:
+  - `MissingParameter` for supplier request fields
+  - `SKU_NOT_EXIST`
+  - `PRODUCT_NOT_EXIST`
+  - `InvalidApiPath`
+
+### Meaning of that evidence
+
+AliExpress-only has clearly been stressed enough to prove that it is hard.
+
+It has not yet been stressed enough to prove that it is impossible under the current rules, because the stack still has unresolved implementation and operational gaps that contaminate the result:
+
+- incomplete persisted product truth
+- unstable marketplace auth on the lead path
+- no proven supplier-side PayPal payment closure
+- legacy/test artifacts mixed into post-sale evidence
+
+## Quantified Current Blockers
+
+### Catalog readiness blockers
+
+- `VALIDATED_READY = 0`
+- `withoutShippingCost = 32650 / 32650`
+- `withoutImportTax = 32650 / 32650`
+- `withoutTotalCost = 32650 / 32650`
+- `withoutAliExpressSku = 32649 / 32650`
+- `withoutTargetCountry = 32638 / 32650`
+
+### Supplier-execution blockers
+
+- recent failed order set includes repeated:
+  - `The input parameter "ship_to_country" ... is not supplied`
+  - `SKU_NOT_EXIST`
+  - `PRODUCT_NOT_EXIST`
+  - `InvalidApiPath`
+- no recent `purchase_logs` proof
+- no `successful_operations` proof
+
+### Commercial-proof blockers
+
+- production delivered sale is demo-tagged
+- production real-profit engine returns zero real orders and zero profit
+- supplier-side payment via PayPal is not proven
+
+## Strengths Inside the AliExpress-Only Path
+
+1. The preventive supplier audit is commercially serious.
+2. The Dropshipping API integration is the strongest production-grade supplier asset in the repo.
+3. The system tries to resolve destination, shipping, SKU, and margin truth before publishing.
+4. The code correctly blocks or downgrades unsafe publish attempts instead of faking success.
+
+## Weaknesses Inside the AliExpress-Only Path
+
+1. The validated catalog is empty.
+2. Product truth persistence is almost non-existent at catalog scale.
+3. Supplier request construction has already shown parameter-shape failures in live tests.
+4. SKU truth is not robust enough to prevent stale-SKU purchase failure.
+5. Supplier payment completion is not automated end-to-end via PayPal.
+
+## Remaining Optimization Room Before Declaring AliExpress-Only Exhausted
+
+AliExpress-only still has meaningful optimization room in five specific places:
+
+1. Populate `targetCountry`, `shippingCost`, `importTax`, `totalCost`, and `aliexpressSku` through the strict preventive path instead of relying on legacy inventory.
+2. Fix supplier-request correctness for `ship_to_country`, `product_count`, and current valid API path usage.
+3. Force first-candidate recovery through a narrow, destination-specific, margin-safe AliExpress-only search program instead of broad catalog churn.
+4. Eliminate stale publish surfaces so only the strict preventive path can attempt publication.
+5. Close the supplier-payment gap so `placeOrder` is not mistaken for fully paid fulfillment.
+
+## Final AliExpress-Only Conclusion
+
+AliExpress-only is currently:
+
+- `STRONG BUT INCOMPLETE` technically
+- `NOT YET SUFFICIENT` commercially
+- `NOT YET EXHAUSTED` strategically
+
+The current audit does not support replacing AliExpress as the main supplier recommendation yet. It supports finishing the AliExpress-only truth path first and then re-evaluating only if the strict path still cannot produce one safe profitable operation.
+
+Rechazado
+FINISH_LINE_CHECKLIST.md
++29
+-0
+FINISH_LINE_CHECKLIST.md
++29
+-0
+
+# Finish-Line Checklist
+
+Audit date: 2026-03-21
+
+The software is only finished when every item below is complete with live commercial evidence.
+
+| Milestone | Current status | Blocker | Evidence | Exact work needed |
+| --- | --- | --- | --- | --- |
+| 1. First `VALIDATED_READY` | NOT DONE | No candidate survives strict supplier, destination, shipping, margin, and completeness gates | `VALIDATED_READY = 0`; catalog completeness is near zero | Force first-candidate recovery through the strict preventive AliExpress-only path and persist all required product truth fields |
+| 2. First safe publish | NOT DONE | No validated-ready inventory; stale publish surfaces still exist | live publish attempt blocked because product was not `VALIDATED_READY`; DB shows only archived artifacts and one failed publish | Remove stale publish paths, route all publish attempts through the strict preventive path, and publish one real validated-ready listing |
+| 3. First valid order | NOT DONE | No safe published listing exists on the lead marketplace | no commercially valid listing inventory; current post-sale rows are demo/test/cancelled/synthetic | Repair lead marketplace auth, publish one safe listing, and capture one real non-demo order |
+| 4. First correct automatic supplier purchase | NOT DONE | Supplier path still fails on parameter and SKU issues; current purchased rows are synthetic | live failures: `ship_to_country`, `product_count`, `SKU_NOT_EXIST`, `PRODUCT_NOT_EXIST`; purchased rows use synthetic data | Fix request-shape correctness, SKU persistence, and product identity handling; prove one real automatic supplier order |
+| 5. First truthful post-sale lifecycle | NOT DONE | No real successful operation has been recorded | `successful_operations = 0`; tracking sync runs but does not prove a completed commercial cycle | Complete one real order through tracking, delivery truth, and commercial-proof eligibility without cancellation or demo artifacts |
+| 6. First marketplace fund release | NOT DONE | No released-funds proof exists | production sale is either demo-delivered or payout-failed | Capture and store marketplace release evidence for a real order before counting success |
+| 7. First proven net profit | NOT DONE | Real-profit engine has no production rows after filtering | live real-profit engine output is zero across all production metrics | Produce one real released-funds order with fully known supplier and fee costs so the real-profit engine shows positive profit |
+| 8. First repeatable success path | NOT DONE | The chain is not yet stable enough even once | validated-ready absent, publish absent, supplier payment absent, released-funds absent | Repeat the full truthful cycle at least twice without relying on demo/test/manual-commercial shortcuts |
+
+## Checklist Verdict
+
+Current finish-line status: `MIDWAY`
+
+Why not `NEAR FIRST REAL OPERATION` yet:
+
+- the first safe validated-ready item does not exist
+- the first safe publish does not exist
+- the first valid real order does not exist
+- the first proven supplier-side payment completion does not exist
+- the first released-funds and real-profit proof do not exist
+
+Rechazado
+MARKETPLACE_VS_SUPPLIER_REALITY_AUDIT.md
++109
+-0
+MARKETPLACE_VS_SUPPLIER_REALITY_AUDIT.md
++109
+-0
+
+# Marketplace vs Supplier Reality Audit
+
+Audit date: 2026-03-21
+
+## Summary
+
+The current bottleneck is still the combination of supplier truth and safe publish readiness, not marketplace count.
+
+That said, the live marketplace state matters because the first profitable operation needs one lead path that can:
+
+- authorize correctly
+- publish a safe listing
+- ingest a real order
+- sustain post-sale truth
+
+Today, none of the three marketplaces meets that standard.
+
+## Marketplace Scorecard
+
+| Marketplace | OAuth/auth maturity | Publish readiness | Webhook maturity | Order-sync maturity | Post-sale relevance | Fit with AliExpress-only reality | Verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| eBay | PARTIAL | BROKEN | PARTIAL | PARTIAL | HIGH | BEST CURRENT FIT | Keep as lead path, but it is operationally blocked right now |
+| MercadoLibre | PARTIAL | BROKEN | WEAK | BROKEN | MEDIUM | MIXED | Do not switch to it now |
+| Amazon | WEAK | WEAK | WEAK | WEAK | LOW | LOW | Too immature to matter for first profit |
+
+## eBay Audit
+
+### What is strong
+
+- deepest connector and webhook design in the codebase
+- strongest post-sale and order-truth relevance
+- explicit webhook proof modeling
+- explicit safe-publish blocking when product status is not acceptable
+
+### What is weak today
+
+- live production logs show repeated token refresh failures with HTTP `400`
+- current live webhook readiness check fails despite older stored proof
+- inbound-event proof is still missing
+- safe publish inventory does not exist
+
+### Net effect
+
+eBay remains the best strategic lead path, but it is not currently execution-ready for the first profitable operation.
+
+## MercadoLibre Audit
+
+### What is strong
+
+- connector exists
+- publish and fulfillment surfaces exist
+
+### What is weak today
+
+- live logs show repeated order-sync failures with `401 invalid access token`
+- no evidence that MercadoLibre currently solves the supplier-side truth bottleneck better than eBay
+- no evidence of a safer publishable path under current AliExpress-only constraints
+
+### Net effect
+
+MercadoLibre is not currently a justified replacement for eBay. Its live auth state is worse, and it does not remove the supplier-side blockers.
+
+## Amazon Audit
+
+### What is strong
+
+- code presence only
+
+### What is weak today
+
+- little live operational evidence
+- low relevance to the first profitable AliExpress-based operation
+- no sign that Amazon is more ready than eBay or MercadoLibre
+
+### Net effect
+
+Amazon is not part of the first-profit path.
+
+## Marketplace Decision
+
+### Which marketplace is best positioned for the first profitable AliExpress-based operation?
+
+eBay, but only in a strategic architecture sense. Operationally, it is still blocked.
+
+### Should eBay remain the lead path?
+
+Yes. The evidence does not support switching away from eBay yet, because:
+
+- its code depth is highest
+- its post-sale and webhook architecture are strongest
+- MercadoLibre is not healthier in live runtime
+
+### Could MercadoLibre fit AliExpress better under current destination/stock conditions?
+
+Not based on current evidence. The current live auth degradation and the unchanged supplier-side blockers do not support that conclusion.
+
+### Is Amazon too immature to matter now?
+
+Yes.
+
+## Bottom Line
+
+The marketplace decision should remain:
+
+- keep eBay as the lead route to first profit
+- repair eBay auth and safe publish readiness
+- do not switch marketplaces as the main recommendation
+- focus first on validated-ready recovery and supplier-execution truth
+
+Rechazado
+MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md
++331
+-0
+MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md
++331
+-0
+
+# Master Audit: Real Profit Objective
+
+Audit date: 2026-03-21
+
+## Summary
+
+Ivan Reseller is not finished under the real business objective.
+
+The current system is technically broad but commercially incomplete. The repo contains discovery, validation, publishing, order ingestion, fulfillment, payout, and reporting surfaces, but the live business chain still breaks before the first truthful repeatable profit loop. The strongest live blockers are:
+
+- `VALIDATED_READY = 0`.
+- Safe publish coverage is effectively absent.
+- eBay production order-sync is currently degraded by token refresh failures.
+- MercadoLibre order-sync is currently degraded by invalid-token failures.
+- The only production `DELIVERED` sale is a `DEMO-*` order and does not count as commercial proof.
+- The production real-profit engine returns `orderCount = 0`, `moneyIn = 0`, `totalProfit = 0`.
+- The AliExpress purchase path can create or attempt supplier orders, but automatic PayPal payment at the supplier is not implemented or proven.
+
+Primary truth sources used:
+
+- Live DB snapshots and targeted Prisma queries on 2026-03-21.
+- Live Railway status and deployment logs on 2026-03-21.
+- Current backend source code in `backend/src`.
+- Secondary docs only where they matched or contradicted live evidence.
+
+## Evidence Baseline
+
+### Confirmed live facts
+
+- Products by status:
+  - `LEGACY_UNVERIFIED = 31868`
+  - `APPROVED = 7`
+  - `PENDING = 772`
+  - `REJECTED = 3`
+  - `VALIDATED_READY = 0`
+- Publishable data completeness is missing on nearly the entire catalog:
+  - `withoutTargetCountry = 32638 / 32650`
+  - `withoutShippingCost = 32650 / 32650`
+  - `withoutImportTax = 32650 / 32650`
+  - `withoutTotalCost = 32650 / 32650`
+  - `withoutAliExpressSku = 32649 / 32650`
+- Marketplace listings:
+  - `archived_legacy_artifact = 507`
+  - `failed_publish = 1`
+  - no live `active` listing evidence in the DB snapshot
+- Orders:
+  - `FAILED = 44`
+  - `PURCHASED = 5`
+  - `PURCHASING = 2`
+- Sales:
+  - production `DELIVERED = 1`
+  - production `PAYOUT_FAILED = 1`
+- The production delivered sale is `orderId = DEMO-UTIL-1773705064277`, so it is not valid commercial proof.
+- The production payout-failed sale is tied to a legacy-unverified product with missing shipping, tax, and total-cost fields.
+- `purchase_logs = 0` recent rows in the targeted query.
+- `successful_operations = 0` rows in the targeted query.
+- The real-profit engine returns zero real production orders and zero production profit.
+
+### Confirmed live runtime facts
+
+- Railway backend is deployed and running.
+- Scheduled jobs are actively executing.
+- Runtime logs show repeated eBay production refresh failures: `Request failed with status code 400`.
+- Runtime logs show repeated MercadoLibre order-sync failures: `invalid access token` with `401`.
+- Runtime logs show:
+  - listing reconciliation scanning `0` live rows
+  - full listing audit `verifiedWithApi = 0`
+  - winner detection `winnersStored = 0`
+  - a publish attempt being downgraded and blocked because the product was not `VALIDATED_READY`
+
+### Secondary-doc truth status
+
+- `docs/P1_FIRST_VALIDATED_READY_PROOF.md`: still directionally consistent with current truth.
+- `docs/P6_EBAY_INBOUND_EVENT_PROOF.md`: stale. It reflects an older, stronger webhook state than the current live readiness check.
+- `docs/P7_SUPPLIER_STRATEGY_SELECTION.md`: partially stale. Its supplier-side pain diagnosis is still useful, but its supplier-switch recommendation is not accepted under the current AliExpress-only audit constraint.
+- `REAL_AUTONOMOUS_PROFIT_GENERATION_FINAL_REPORT.md`: stale and too optimistic relative to current live evidence.
+
+## Section 1: Stage-by-Stage Gap Map
+
+| Stage | Current maturity | What is proven | What is code-only | What is blocked | What prevents real profit |
+| --- | --- | --- | --- | --- | --- |
+| 1. Automatic trend-driven discovery | PARTIAL | Scheduled tasks, autopilot loops, query selection, trend service, winner detection jobs all run | A truthful closed-loop optimizer that consistently turns demand signals into safe commercial candidates | Zero winners stored, zero validated-ready outputs, trend service can fall back to weak internal estimates | Discovery does not generate safe inventory that can be monetized |
+| 2. AliExpress product selection | PARTIAL | Affiliate and Dropshipping services exist; preventive supplier audit logic exists | Reliable first-product selection that survives strict destination/stock/shipping checks in production | Repeated supplier-side failure history, no validated-ready output, missing product completeness | The system cannot surface one commercially safe AliExpress candidate |
+| 3. Destination-valid stock truth | PARTIAL | Strict SKU and stock checks exist in code | Catalog-wide persisted stock truth | Almost all products lack `aliexpressSku`; strict validation keeps rejecting candidates | No safe stock-backed publishable product |
+| 4. Destination-valid shipping truth | BROKEN | Strict destination shipping checks exist in validator code | Persisted shipping truth for real listings | Catalog has no shipping-cost coverage; failed test fulfillment shows `ship_to_country` parameter issues | Cannot safely publish or fulfill with destination-level shipping truth |
+| 5. Pricing and fee truth | PARTIAL | Pricing engine, fee intelligence, cost calculator, fee ledger, margin guards exist | Production-complete fee inputs for real products and real marketplaces | Products lack shipping/import/total-cost fields; some publish paths are stale | Margin truth is incomplete, so profitability cannot be trusted |
+| 6. Safe publish readiness | BROKEN | Preventive publish preparation exists and is stricter than old paths | Consistent use of the strict path across all publish entrypoints | `VALIDATED_READY = 0`; one publish path still queries `status = publishable`; live publish attempt was blocked | No item reaches a truthful safe-to-publish state |
+| 7. Marketplace order ingestion | PARTIAL | Order models, sync jobs, webhook plumbing, order truth, exclusion logic exist | Stable production ingestion across the lead marketplace | eBay production refresh failures and MercadoLibre invalid-token failures degrade ingestion | Real buyer order flow is not dependable |
+| 8. Automatic AliExpress purchase | PARTIAL | Fulfillment service, retry service, Dropshipping place-order path, manual fallback hooks exist | Fully truthful automatic supplier purchase for real production orders | Live purchased rows are test or synthetic; recent failures show missing parameters and SKU issues | The supplier-buy step is not proven for a real commercial order |
+| 9. PayPal payment execution path | BROKEN | Customer checkout and payout integrations exist | Automatic supplier payment on AliExpress via PayPal | No code proves supplier-side PayPal settlement; Dropshipping placeOrder can stop at order creation / payment-needed state | The intended buy-from-supplier payment path is not implemented end-to-end |
+| 10. Post-sale tracking truth | PARTIAL | Tracking sync, order truth flags, cancellation exclusion, fulfillment state logic exist | Proven truthful post-sale lifecycle on a real profit-bearing order | Tracking sync logs show repeated errors; no successful operations exist | Post-sale truth is not proven on a real commercial success |
+| 11. Released-funds accounting | BROKEN | Payout services and balance checks exist | Marketplace fund-release truth | Production has a `PAYOUT_FAILED` sale and no released-funds proof | Revenue cannot be recognized as realized commercial success |
+| 12. Real net-profit proof | ABSENT | Real-profit engine exists and correctly excludes demo/test order IDs in production | A positive realized production profit ledger | Real-profit engine returns zero production order count and zero profit | The system cannot prove it has made real money |
+| 13. Repeatable autonomous loop | BROKEN | Schedulers and jobs run continuously | A repeatable safe commerce engine | Discovery, publish readiness, order sync, supplier payment, and released-funds proof all remain broken or partial | No repeatable profit loop exists |
+
+## Section 2: Deep Technical Audit
+
+| Subsystem | Classification | Evidence | Commercial consequence |
+| --- | --- | --- | --- |
+| Discovery and optimizer stack | PARTIAL | Autopilot, workflow scheduler, trends, and winner-detection code all exist and run | Automation exists, but it does not create safe inventory |
+| Google Trends and demand signals | PARTIAL | SerpApi support exists, but fallback can degrade to internal estimates | Demand validation is not consistently external and trustworthy |
+| AliExpress Affiliate connector | PARTIAL | Search and detail logic exists and is actively used by supplier audit code | Good discovery surface, but not sufficient to create validated-ready output |
+| AliExpress Dropshipping connector | PARTIAL | `getProductInfo`, `placeOrder`, `tracking`, token refresh, and OAuth code exist | Strongest supplier asset in the stack, but still not proven for a real profit-bearing order |
+| Preventive supplier audit | STRONG BUT INCOMPLETE | Destination, stock, shipping, rating, order-volume, and fallback ranking logic are real | Strong gatekeeping, but currently outputs no safe candidate |
+| Pre-publish validator | STRONG BUT INCOMPLETE | Strict destination, shipping, SKU, margin, fee completeness, and metadata patching exist | This is the correct direction, but it has not yet produced a live publishable item |
+| Marketplace publish orchestration | MISLEADINGLY PRESENT BUT NOT OPERATIONAL | `marketplace-publish.service.ts` still looks for `status = publishable`, while live business logic requires `VALIDATED_READY` | Old publish surfaces can create false readiness impressions |
+| Listing reconciliation and recovery | PARTIAL | Reconciliation and audit jobs run | The system manages listing artifacts, but there are no real active profitable listings to protect |
+| eBay auth/publish/webhook/order sync | PARTIAL | Code depth is highest here, but production refresh currently fails and webhook readiness regressed | Best marketplace path in architecture, but operationally degraded |
+| MercadoLibre auth/publish/order sync | PARTIAL | Connector exists, but live order sync is failing with `401 invalid access token` | Not currently a safer path than eBay |
+| Amazon connector | MISLEADINGLY PRESENT BUT NOT OPERATIONAL | Routes and service code exist, but runtime evidence is thin and commercially irrelevant right now | Adds breadth, not first-profit readiness |
+| Order truth and cancellation truth | PRODUCTION-SAFE | Exclusion from commercial proof and manual cancellation truth are explicit and working | This is one of the strongest truth-preserving areas |
+| Paid-order processing and fulfillment orchestration | PARTIAL | `processPaidOrders` and `orderFulfillmentService` are real scheduled surfaces | Good orchestration, but real success proof is missing |
+| AliExpress auto-purchase service | FALSE READINESS | Real path uses Dropshipping API, but purchaser PayPal settlement is not completed; browser path is semi-manual | “Auto purchase” exists in name, not as proven full supplier payment automation |
+| PayPal balance and payout | PARTIAL | Payout API is real; balance checks mostly degrade to estimates/unavailable | Useful for payouts, but not enough for supplier payment truth |
+| Real-profit engine | PRODUCTION-SAFE BUT EMPTY | It correctly returns zero production profit once demo/test rows are excluded | Strong truth surface, but it proves the business is not finished |
+
+## Section 3: Discovery / Trend / Optimizer Audit
+
+Current classification: `primitive to partially real optimizer`, not a real business optimizer.
+
+What exists:
+
+- `autopilot.service.ts`
+- `workflow-scheduler.service.ts`
+- trend ingestion via `google-trends.service.ts`
+- winner detection, CRO, scaling, and scheduled recurring jobs
+
+What is missing for a real autonomous daily cycle:
+
+- a repeatable path from trend signal to `VALIDATED_READY`
+- learning loops that actually reduce the dominant supplier rejection reasons in production
+- safe publish inventory
+- a marketplace path that can reliably create real order events
+- supplier payment completion and post-sale profit recognition
+
+Live evidence against “real optimizer” status:
+
+- `winnersStored = 0`
+- no active safe listing inventory
+- no validated-ready inventory
+- discovery jobs run, but commercial output remains zero
+
+## Section 4: Marketplace Audit
+
+| Marketplace | Auth maturity | Publish readiness | Webhook maturity | Order-sync maturity | Post-sale relevance | Fit with current AliExpress-only reality |
+| --- | --- | --- | --- | --- | --- | --- |
+| eBay | PARTIAL | BROKEN for first safe publish | PARTIAL and currently regressed | PARTIAL but live token refresh failing | HIGH | Still the least-bad first path, but operationally blocked right now |
+| MercadoLibre | PARTIAL | BROKEN for first safe publish | WEAK | BROKEN live due `401 invalid access token` | MEDIUM | Not currently a better route than eBay |
+| Amazon | WEAK | WEAK | WEAK | WEAK | LOW | Too immature to matter for first profit |
+
+Marketplace decision:
+
+- eBay should remain the lead marketplace only in the strategic sense that it has the deepest implementation and the strongest webhook/post-sale design.
+- eBay is not currently operationally ready for first profit because live token refresh is broken and safe publish inventory is absent.
+- MercadoLibre should not replace eBay right now because its current auth state is worse and supplier-side blockers remain dominant.
+- Amazon is not relevant to the first-profit objective today.
+
+## Section 5: Pre-Sale Truth Audit
+
+### Already solid
+
+- strict destination resolution
+- SKU/stock gating logic
+- shipping-cost-from-AliExpress checks
+- fee ledger completeness checks
+- margin guard logic
+- auditable metadata patching for preventive publish preparation
+
+### Still causing false negatives
+
+- almost no products carry the fields the strict pipeline requires
+- eBay credential instability reduces the ability to reach a real candidate on the lead marketplace
+- supplier API failures and parameter mismatches have historically interrupted validation attempts
+
+### Still risking false positives
+
+- stale publish surfaces
+- legacy product states and legacy listing artifacts
+- test and simulated fulfillment/order rows that can look superficially “successful”
+
+### Verdict on `VALIDATED_READY = 0`
+
+`VALIDATED_READY = 0` is caused by both real business constraints and model/runtime weakness:
+
+- real business constraints: destination-valid stock/shipping and margin scarcity
+- model/runtime weakness: missing persisted product truth, stale publish surfaces, credential instability, and incomplete supplier-payment closure
+
+## Section 6: Order Capture and Post-Sale Audit
+
+### Code-safe today
+
+- order truth and exclusion from commercial proof
+- manual marketplace cancellation handling
+- fulfillment orchestration and retry hooks
+- sale creation blocking when commercial proof eligibility is false
+
+### Operationally safe today
+
+- cancellation truth is safer than revenue optimism
+- the system is better at excluding bad proof than proving good proof
+
+### Never proven end-to-end
+
+- real buyer order -> automatic AliExpress purchase -> supplier payment -> tracking -> delivered -> marketplace funds release -> realized profit
+
+### Requires a real successful order to validate
+
+- supplier-payment completion
+- accurate tracking closure
+- payout/released-funds truth
+- realized net profit
+
+## Section 7: PayPal / Purchase Execution Audit
+
+Current classification: `BROKEN` as a first-class blocker.
+
+Why:
+
+- PayPal exists for customer checkout and for payouts.
+- The intended requirement is automatic purchase at AliExpress using PayPal.
+- The current real supplier-buy path is Dropshipping API `placeOrder`.
+- That path does not prove automatic supplier-side PayPal settlement.
+- The browser automation fallback is semi-manual and not the real production path when `userId` is present.
+
+Conclusion:
+
+- supplier purchase automation is only partial
+- supplier payment automation via PayPal is not proven
+- this alone is enough to keep the software in a not-finished state
+
+## Section 8: Real Profit Audit
+
+The system differentiates projected and realized profit correctly in code, but the live business proof is absent.
+
+Current live truth:
+
+- The only production delivered sale is demo-tagged and excluded by the real-profit engine.
+- The only non-demo production sale of interest is `PAYOUT_FAILED`.
+- The real-profit engine returns:
+  - `moneyIn = 0`
+  - `totalProfit = 0`
+  - `orderCount = 0`
+
+Conclusion:
+
+- projected profit exists
+- publish-time margin math exists
+- order-time estimated margin exists
+- realized production profit proof does not exist
+- released-funds profit proof does not exist
+
+Software status under the finish line: `not finished`
+
+## Section 9: Autonomy Audit
+
+| Function | Current autonomy |
+| --- | --- |
+| Discovery | automation with hard gates |
+| Validation | automation with hard gates |
+| Publishing | operator-assisted and blocked by missing safe inventory |
+| Order sync | semi-automatic but connector-degraded |
+| Supplier purchase | semi-automatic and incomplete |
+| Post-sale truth | automation with hard gates |
+| Profit recognition | manual/evidence-limited because real proof is absent |
+| Feedback learning | primitive |
+
+Answer to the core autonomy question:
+
+No. The system cannot yet run a daily automatic cycle that can eventually generate real profit with operational confidence. The exact gaps are:
+
+- no safe validated-ready inventory
+- stale or degraded marketplace connectors
+- no proven supplier-side payment completion
+- no released-funds proof
+- no realized-profit proof
+
+## Section 10: Truthful Final Classification
+
+| Dimension | Classification |
+| --- | --- |
+| Technical maturity | STRONG BUT INCOMPLETE |
+| Marketplace maturity | PARTIAL |
+| AliExpress supplier maturity | STRONG BUT INCOMPLETE |
+| Discovery/optimizer maturity | PARTIAL |
+| Pre-sale safety maturity | STRONG BUT INCOMPLETE |
+| Post-sale maturity | PARTIAL |
+| PayPal purchase maturity | BROKEN |
+| Realized-profit maturity | ABSENT |
+| End-to-end autonomy maturity | BROKEN |
+| Finish-line proximity | MIDWAY |
+
+## Top 10 Blockers to Real Profit
+
+1. No real `VALIDATED_READY` candidate exists.
+2. Product truth coverage is almost entirely missing for shipping, tax, total cost, target country, and SKU.
+3. eBay production order-sync/auth is currently degraded by refresh failures.
+4. MercadoLibre order-sync is currently degraded by invalid-token failures.
+5. The supplier buy path does not prove automatic PayPal payment at AliExpress.
+6. The only production delivered sale is a demo order and not commercial proof.
+7. The only non-demo production sale proof is `PAYOUT_FAILED`.
+8. Purchased-order rows are dominated by test or synthetic artifacts, not real commercial orders.
+9. Purchase logs and successful-operation records do not prove a real end-to-end success.
+10. Stale publish/orchestration surfaces still create readiness confusion.
+
+## Top 10 Strengths
+
+1. The codebase has unusually strong truth-preserving cancellation and exclusion logic.
+2. AliExpress supplier validation logic is strict and commercially sane.
+3. The pre-publish validator is materially real and safety-first.
+4. The real-profit engine correctly excludes demo/test production rows.
+5. Order fulfillment orchestration is structurally coherent.
+6. Webhook proof modeling is more mature than most of the surrounding system.
+7. The system has meaningful scheduler and workflow infrastructure.
+8. Pricing, fee, and ledger logic are deeper than the live business state suggests.
+9. Runtime jobs are actually running in production.
+10. The code is better at refusing false proof than many superficially “working” commerce stacks.
+
+## Final Business Verdict
+
+`TECHNICALLY ADVANCED BUT NOT COMMERCIALLY READY`
+
+The software is not finished. It is not near first real profit until it produces:
+
+- the first truthful `VALIDATED_READY`
+- the first safe publish
+- the first valid non-demo order
+- the first successful automatic supplier purchase with supplier-side payment closure
+- the first truthful post-sale completion
+- the first marketplace fund release
+- the first real positive net-profit proof
+
+Rechazado
+POST_SALE_AND_PAYPAL_AUDIT.md
++165
+-0
+POST_SALE_AND_PAYPAL_AUDIT.md
++165
+-0
+
+# Post-Sale and PayPal Audit
+
+Audit date: 2026-03-21
+
+## Summary
+
+The post-sale stack is better at preserving truth than at proving commercial success.
+
+That is a real strength. It is also why the final verdict is harsh: once demo, cancelled, payout-failed, and synthetic artifacts are filtered out, there is still no real post-sale proof of a profitable automated business cycle.
+
+## Order Lifecycle Audit
+
+| Lifecycle stage | Current state | What is code-safe | What is not operationally proven |
+| --- | --- | --- | --- |
+| Real order ingestion | PARTIAL | order models, sync jobs, order creation surfaces | dependable live production ingestion on the lead marketplace |
+| Order state truth | STRONG BUT INCOMPLETE | `CREATED -> PAID -> PURCHASING -> PURCHASED/FAILED` state model | proven truth on a real commercial order |
+| Manual cancellations | STRONG | cancellation marking and exclusion from commercial proof are explicit | n/a |
+| Exclusion from commercial proof | STRONG | one real failed eBay order is correctly excluded | n/a |
+| Order to supplier purchase transition | PARTIAL | `processPaidOrders` and `fulfillOrder` are real | safe real-world success for a non-test order |
+| Supplier purchase payload | PARTIAL | shipping address parsing, product URL resolution, SKU preference logic exist | proven correctness for a real profitable order |
+| Buyer destination data usage | PARTIAL | destination is passed into supplier path | live failures show parameter-shape issues still exist |
+| Fulfillment status truth | PARTIAL | failure handling, manual fallback, tracking sync jobs exist | truth after a real successful purchase and delivery |
+| Delivery and received-state assumptions | WEAK | state surfaces exist | real delivered proof without demo or synthetic artifacts |
+| Fund-release dependency | BROKEN | payout-related code exists | marketplace release proof does not exist |
+| Net-profit recognition | BROKEN | real-profit engine exists | live post-sale data does not justify recognizing success |
+
+## Live Evidence That Matters
+
+### Orders
+
+Current targeted DB evidence:
+
+- `FAILED = 44`
+- `PURCHASED = 5`
+- `PURCHASING = 2`
+
+But the `PURCHASED` rows are not clean commercial proof:
+
+- they belong to user `396`, not the primary operator path
+- they use synthetic product URLs such as `https://example.com/platform-commission-test`
+- several have obviously synthetic supplier order IDs:
+  - `FINAL_PAYOUT_TEST`
+  - `REAL_PAYOUT_TEST`
+  - `TEST_SIMULATED`
+- associated products are `LEGACY_UNVERIFIED` and lack shipping, total-cost, destination, and SKU truth
+
+The two `PURCHASING` rows are also test-like:
+
+- `paypalOrderId` starts with `TEST_FULFILLMENT_`
+- product URL is `https://www.aliexpress.com/item/example.html`
+
+### Commercial-proof exclusion is working
+
+The clearest truthful post-sale artifact is actually a failed one:
+
+- order `ebay:17-14370-63716`
+- status `FAILED`
+- failure reason `MANUALLY_CANCELLED_MARKETPLACE_SIDE`
+- explicit message: it was cancelled because it was not profitable and must be excluded from commercial proof
+
+This is commercially negative, but truth-preserving.
+
+## Fulfillment Audit
+
+### What is real
+
+- `processPaidOrders` scans `PAID` orders
+- `orderFulfillmentService.fulfillOrder()` is the real orchestrator
+- capital checks exist
+- daily limits exist
+- product URL and SKU rescue logic exist
+- failure escalation to manual fulfillment exists
+
+### What has not been proven end-to-end
+
+- real marketplace order
+- real AliExpress purchase with paid supplier settlement
+- real tracking progression
+- real delivered buyer outcome
+- real funds release
+- real positive net profit
+
+### Live failure signatures
+
+Recent failed fulfillment tests include:
+
+- missing `ship_to_country`
+- missing `product_count`
+- `SKU_NOT_EXIST`
+- `PRODUCT_NOT_EXIST`
+- `InvalidApiPath`
+
+Those are not theoretical bugs. They are live evidence that the supplier-purchase path is still fragile.
+
+## PayPal Audit
+
+## What PayPal is currently used for
+
+- customer checkout surfaces
+- payout and commission distribution
+- balance verification attempts
+
+## What PayPal is not proven to do
+
+- automatic supplier-side payment at AliExpress for the real production path
+
+This is the most important PayPal truth in the entire audit.
+
+The intended business model is:
+
+- buyer pays marketplace / checkout
+- system buys automatically from AliExpress
+- supplier is paid via PayPal
+
+The current code does not prove that last step.
+
+### Why this is a blocker
+
+- `aliexpress-auto-purchase.service.ts` uses Dropshipping API first
+- that path can create supplier orders, but it does not complete a supplier-side PayPal payment flow
+- the browser automation path is semi-manual and not the real production path when `userId` is present
+
+So PayPal purchase maturity is not “partial but okay.” It is a first-class blocker.
+
+## Payout and Released-Funds Audit
+
+### What is real
+
+- PayPal payout service is real
+- payout/balance code exists
+- payout failure is recorded explicitly
+
+### What is not proven
+
+- marketplace funds release
+- successful payout on a real valid production success
+
+Live proof:
+
+- one production sale is `PAYOUT_FAILED`
+- no production real-profit row survives the real-profit engine filter
+
+## Final Verdict
+
+### Code-safe today
+
+- order truth
+- cancellation truth
+- exclusion from commercial proof
+- fulfillment failure handling
+
+### Operationally safe today
+
+- safer at refusing false revenue proof than at proving success
+
+### Never proven end-to-end
+
+- real valid order -> automatic supplier purchase -> supplier-side payment -> tracking -> delivery -> funds release -> realized profit
+
+### Required classification
+
+`POST-SALE MATURITY = PARTIAL`
+
+`PAYPAL PURCHASE MATURITY = BROKEN`
+
+Rechazado
+PRIORITIZED_IMPROVEMENT_PLAN_TO_REAL_PROFIT.md
++147
+-0
+PRIORITIZED_IMPROVEMENT_PLAN_TO_REAL_PROFIT.md
++147
+-0
+
+# Prioritized Improvement Plan to Real Profit
+
+Audit date: 2026-03-21
+
+## P0: Absolute Blockers to the First Profitable Operation
+
+### P0.1 Recover the first truthful `VALIDATED_READY`
+
+- Exact issue: the validated catalog is empty and product truth persistence is almost entirely missing.
+- Why it matters: no validated-ready item means no safe publish, no safe order, and no real profit path.
+- Affected subsystem: preventive supplier validation, pre-publish validator, product persistence.
+- Recommended fix: run a narrow AliExpress-only recovery program that persists `targetCountry`, `shippingCost`, `importTax`, `totalCost`, and `aliexpressSku` only through the strict preventive path.
+- Expected business impact: creates the first candidate that can legally and economically move into commerce.
+- Validation proof required: DB shows `VALIDATED_READY >= 1` with all required fields populated and audit metadata present.
+
+### P0.2 Remove or hard-block stale publish surfaces
+
+- Exact issue: at least one publish surface still operates on stale semantics like `status = publishable`.
+- Why it matters: it creates false readiness and can produce unsafe listing attempts.
+- Affected subsystem: marketplace publish orchestration.
+- Recommended fix: make `VALIDATED_READY` the only acceptable publish input and fail closed everywhere else.
+- Expected business impact: prevents unsafe listings and keeps evidence trustworthy.
+- Validation proof required: any non-validated-ready publish attempt hard-fails with a clear message; one validated-ready publish succeeds.
+
+### P0.3 Repair eBay lead-path auth and order-sync readiness
+
+- Exact issue: live production logs show repeated eBay refresh failures with HTTP `400`.
+- Why it matters: even with safe inventory, the lead marketplace cannot sustain real order flow.
+- Affected subsystem: eBay connector, OAuth token refresh, credential persistence.
+- Recommended fix: reconcile the live production credential set for the intended operator account, then re-run bounded readiness checks and live order-sync validation.
+- Expected business impact: restores the strongest available marketplace route.
+- Validation proof required: no refresh failures in recent logs, healthy production snapshot, and successful bounded probe.
+
+### P0.4 Repair supplier request correctness for real Dropshipping execution
+
+- Exact issue: recent failures show missing required parameters and stale SKU/product references.
+- Why it matters: automatic purchase cannot be trusted.
+- Affected subsystem: order fulfillment, AliExpress Dropshipping request construction.
+- Recommended fix: normalize request payload generation for destination, quantity, SKU, and product identity; reject incomplete payloads before hitting AliExpress.
+- Expected business impact: converts supplier purchase from fragile to testable.
+- Validation proof required: one real non-test order reaches a real supplier order without `MissingParameter`, `SKU_NOT_EXIST`, or `PRODUCT_NOT_EXIST`.
+
+### P0.5 Close the supplier-side PayPal payment gap
+
+- Exact issue: the intended AliExpress purchase-via-PayPal step is not proven or automated.
+- Why it matters: without supplier payment closure, the business loop is incomplete.
+- Affected subsystem: AliExpress purchase path, PayPal integration, supplier payment orchestration.
+- Recommended fix: implement and prove the exact supplier-side payment completion step, or explicitly redesign the business policy if Dropshipping API cannot support PayPal settlement.
+- Expected business impact: turns “order created” into “supplier actually paid”.
+- Validation proof required: one real supplier purchase shows both supplier order creation and payment completion.
+
+## P1: Blockers to Safe Repeatability
+
+### P1.1 Separate primary-operator truth from tenant contamination
+
+- Exact issue: user `1`, user `41`, and user `396` all contribute misleadingly different evidence.
+- Why it matters: mixed tenants distort readiness and profit claims.
+- Affected subsystem: operational reporting, audit tooling, connector ownership.
+- Recommended fix: designate the primary operator tenant and isolate demo/test tenants from commercial dashboards.
+- Expected business impact: cleaner decision-making and less false optimism.
+- Validation proof required: reports can be filtered cleanly to the commercial tenant and exclude demo/test artifacts.
+
+### P1.2 Restore truthful webhook readiness reporting
+
+- Exact issue: older stored eBay proof is stronger than the current live readiness state.
+- Why it matters: webhook maturity can be overstated.
+- Affected subsystem: webhook readiness, proof recording, operational diagnostics.
+- Recommended fix: distinguish stored historical proof from current live readiness in status reporting and dashboards.
+- Expected business impact: prevents operator confusion about event-flow readiness.
+- Validation proof required: one report shows current readiness and historical proof separately without conflation.
+
+### P1.3 Make purchase logs mandatory for real fulfillment attempts
+
+- Exact issue: recent targeted audit found no useful purchase-log evidence.
+- Why it matters: supplier execution cannot be audited without a hard ledger.
+- Affected subsystem: fulfillment logging, purchase ledger.
+- Recommended fix: require durable purchase-log creation for every real attempt, including payload summary, supplier response class, and completion state.
+- Expected business impact: stronger forensics and easier profit reconciliation.
+- Validation proof required: every real fulfillment attempt produces a purchase-log row.
+
+### P1.4 Tie successful operations to real commercial proof only
+
+- Exact issue: `successful_operations = 0`, but the schema is available and currently underused.
+- Why it matters: the business lacks a durable record of truthful wins.
+- Affected subsystem: post-sale closure, commercial proof recording.
+- Recommended fix: create successful-operation rows only after non-demo delivery, released funds, and positive realized profit.
+- Expected business impact: gives the business an unambiguous success ledger.
+- Validation proof required: first successful-operation row linked to a real released-funds sale.
+
+## P2: Blockers to High-Quality Automation
+
+### P2.1 Upgrade the optimizer from “running jobs” to “commercially learning”
+
+- Exact issue: autopilot runs, but it does not convert prior failure reasons into improved validated-ready yield.
+- Why it matters: daily automation without learning only burns cycles.
+- Affected subsystem: discovery, ranking, learning engine, recovery loops.
+- Recommended fix: feed supplier rejection reasons back into query selection, marketplace targeting, and category filtering.
+- Expected business impact: higher chance of first valid candidate and lower wasted compute.
+- Validation proof required: measurable reduction in repeated rejection patterns across controlled runs.
+
+### P2.2 Replace internal-trend fallbacks with verified external demand where possible
+
+- Exact issue: trend validation can fall back to internal or weak estimates.
+- Why it matters: discovery quality can be overstated.
+- Affected subsystem: Google Trends / SerpApi usage.
+- Recommended fix: require explicit source labeling and quality weighting in discovery output.
+- Expected business impact: more trustworthy trend-driven discovery.
+- Validation proof required: discovery reports show whether demand came from SerpApi or fallback estimation.
+
+### P2.3 Harden marketplace-status telemetry
+
+- Exact issue: booleans like `ebayConnected` are false even when active credentials exist, while live runtime tells a different story.
+- Why it matters: operator dashboards can misread connector health.
+- Affected subsystem: auth status, connector readiness, dashboards.
+- Recommended fix: standardize on live readiness snapshots instead of static connection flags.
+- Expected business impact: faster diagnosis and fewer false assumptions.
+- Validation proof required: dashboard connector state matches the latest readiness probe output.
+
+## P3: Later Scaling Improvements
+
+### P3.1 Expand once the first truthful path exists
+
+- Exact issue: the system has scale-oriented surfaces before first-profit proof exists.
+- Why it matters: scaling unfinished truth creates larger false positives.
+- Affected subsystem: scaling, CRO, autonomous revenue monitor.
+- Recommended fix: keep scaling logic behind first-profit and repeatability gates.
+- Expected business impact: cleaner path from survival to scale.
+- Validation proof required: scaling jobs stay dormant until the first truthful success is recorded.
+
+### P3.2 Add marketplace-by-marketplace released-funds accounting
+
+- Exact issue: released-funds recognition is not yet a first-class business ledger.
+- Why it matters: cash release timing is central to real profit.
+- Affected subsystem: sales ledger, payout accounting, finance reporting.
+- Recommended fix: record marketplace-specific funds-release milestones before recognizing realized success.
+- Expected business impact: truthful cash-flow and profit visibility.
+- Validation proof required: first sale shows order capture date, supplier payment date, fund-release date, and final realized profit date.
+
+### P3.3 Formalize audit-grade evidence packs
+
+- Exact issue: prior reports became stale because they were not anchored to immutable evidence snapshots.
+- Why it matters: the business keeps inheriting optimism debt.
+- Affected subsystem: documentation and audit tooling.
+- Recommended fix: generate timestamped evidence packs from scripts plus log excerpts for every major readiness claim.
+- Expected business impact: future audits become faster and more trustworthy.
+- Validation proof required: every “ready” claim links directly to current DB/runtime evidence.
+
+Rechazado
+REAL_PROFIT_PROOF_GAP.md
++113
+-0
+REAL_PROFIT_PROOF_GAP.md
++113
+-0
+
+# Real Profit Proof Gap
+
+Audit date: 2026-03-21
+
+## Bottom Line
+
+The system cannot currently prove real production profit.
+
+This is not a subtle accounting nuance. It is a finish-line blocker.
+
+## Profit Layers the System Must Distinguish
+
+| Profit layer | Definition | Current state |
+| --- | --- | --- |
+| Projected profit | rough discovery-time estimate | EXISTS |
+| Publish-time estimated margin | margin after supplier + fee modeling | EXISTS IN CODE |
+| Order-time estimated margin | expected profit when an order is captured | PARTIAL |
+| Realized profit after supplier purchase | profit after real supplier execution cost is known | NOT PROVEN |
+| Realized profit after marketplace funds release | commercially final profit | ABSENT |
+
+## What the Code Gets Right
+
+The codebase does have a meaningful real-profit discipline:
+
+- a dedicated real-profit engine
+- production filters that exclude `test`, `mock`, `demo`, and `DEMO` order IDs
+- fee completeness tracking
+- currency-safety tracking
+- payout failure states
+- exclusion logic for commercially invalid orders
+
+That is all good architecture.
+
+## What the Live System Proves Instead
+
+### Production sales in the targeted audit
+
+1. `DEMO-UTIL-1773705064277`
+   - status: `DELIVERED`
+   - environment: `production`
+   - invalid as commercial proof because it is demo-tagged
+
+2. `cmmsb7msl0001bsnnyiq8zn1l`
+   - status: `PAYOUT_FAILED`
+   - marketplace: `checkout`
+   - tied to a `LEGACY_UNVERIFIED` product with missing shipping/tax/total-cost truth
+
+### Real-profit engine output
+
+Production result from the live service:
+
+- `moneyIn = 0`
+- `moneyOut.total = 0`
+- `totalProfit = 0`
+- `orderCount = 0`
+- `rows = []`
+
+This is the strongest single piece of business truth in the audit.
+
+## Why the Current Production Profit Picture Is Not Valid
+
+### The delivered production sale does not count
+
+It is demo-tagged, so the real-profit engine correctly excludes it.
+
+### The payout-failed sale does not count as finished commercial success
+
+It proves neither:
+
+- released marketplace funds
+- nor successful downstream payout
+
+It also sits on incomplete product-cost truth.
+
+### Purchased orders do not repair the gap
+
+The `PURCHASED` rows are dominated by synthetic/test artifacts:
+
+- synthetic supplier order IDs
+- example product URLs
+- legacy-unverified products
+
+They are not evidence of realized commercial profit.
+
+## Missing Cost and Revenue Truth
+
+The system cannot yet claim truthful realized profit because it still lacks one or more of:
+
+- trusted supplier payment completion
+- trusted shipping and total-cost truth on the sold product
+- trusted released-funds proof
+- trusted post-sale completion on a non-demo order
+
+## Required Classification
+
+`REAL PROFIT PROOF = ABSENT`
+
+## Explicit Finish-Line Statement
+
+Software status under the real-profit objective:
+
+`NOT FINISHED`
+
+It becomes finish-line credible only after all of the following are true in the same real operation:
+
+- non-demo order
+- safe validated-ready source listing
+- successful automated AliExpress purchase
+- supplier-side payment closure
+- truthful post-sale completion
+- marketplace fund release
+- positive realized net profit
+
+listo?
+
+Todavia no. The audit content is drafted, but the bulk file-creation patch failed before writing the docs, so I’m splitting it into smaller patches now and finishing the seven files cleanly.
+
+I’m writing the documents in smaller chunks so the patch tool accepts them reliably. I’ve already locked the evidence and the verdict; this step is just getting that verified material onto disk without losing fidelity.
+
+Archivo creado
+ALIEXPRESS_ONLY_BUSINESS_GAP_MAP.md
++124
+-0
+
+# AliExpress-Only Business Gap Map
+
+Audit date: 2026-03-21
+
+## Verdict
+
+AliExpress-only is not commercially sufficient today, but it is also not truthfully exhausted.
+
+The current failure pattern still mixes real supplier-side scarcity with unresolved implementation and operational gaps. Under the current business policy, the correct conclusion is:
+
+- do not switch suppliers yet as the main recommendation
+- fix the unresolved AliExpress-only truth and execution gaps first
+- re-test first-profit readiness only after the current AliExpress-only path is genuinely exercised end-to-end
+
+## Usable AliExpress Capabilities Today
+
+| Capability | Current state | What is genuinely strong | What is weak |
+| --- | --- | --- | --- |
+| Affiliate discovery | PARTIAL | Search and product-detail logic exist; good for candidate mining | Discovery still does not produce validated-ready output |
+| Dropshipping product validation | STRONG BUT INCOMPLETE | Real `getProductInfo`, SKU parsing, destination-sensitive checks | Parameter mismatches and incomplete catalog truth still cause failures |
+| Preventive supplier audit | STRONG BUT INCOMPLETE | Original supplier plus ranked alternatives; rating/order filters; keyword and similarity gates | No live first-safe candidate produced |
+| Fallback ranking | PARTIAL | Ranked alternative supplier selection is real | It has not yet delivered one commercially usable fallback in production |
+| Alternative-product fallback | PARTIAL | Code exists for supplier alternatives and URL substitution | No commercial proof that it rescued a real order safely |
+| Stock checks | PARTIAL | SKU-level stock checks are real | Catalog lacks persisted SKU coverage almost everywhere |
+| Shipping checks | PARTIAL | API-based destination shipping logic is real | Live failures still show destination parameter and shipping truth issues |
+| Cost extraction | PARTIAL | Supplier unit cost and shipping cost extraction exist | Persisted total-cost coverage is near zero |
+| Product identity / SKU resolution | PARTIAL | Strong selection logic exists | Live failures still show `SKU_NOT_EXIST` and missing SKU persistence |
+| Destination compatibility | PARTIAL | Destination-context resolution is strict in the preventive path | Most products do not carry destination-safe persisted context |
+| Purchase execution | PARTIAL | Dropshipping API `placeOrder` path exists | Supplier-side payment closure is not proven |
+| Tracking retrieval | PARTIAL | Tracking API surface exists | No real successful-operation record proves it closed a profitable lifecycle |
+
+## What Has Actually Been Tried Already
+
+### Supplier-side rejection evidence carried into this audit
+
+Previous documented recovery evidence cited:
+
+- `no_stock_for_destination`
+- `margin_invalid`
+- `supplier_unavailable`
+
+Current live evidence still supports those concerns indirectly:
+
+- `VALIDATED_READY = 0`
+- almost no products have required shipping/cost/SKU context
+- live fulfillment tests show:
+  - `MissingParameter` for supplier request fields
+  - `SKU_NOT_EXIST`
+  - `PRODUCT_NOT_EXIST`
+  - `InvalidApiPath`
+
+### Meaning of that evidence
+
+AliExpress-only has clearly been stressed enough to prove that it is hard.
+
+It has not yet been stressed enough to prove that it is impossible under the current rules, because the stack still has unresolved implementation and operational gaps that contaminate the result:
+
+- incomplete persisted product truth
+- unstable marketplace auth on the lead path
+- no proven supplier-side PayPal payment closure
+- legacy/test artifacts mixed into post-sale evidence
+
+## Quantified Current Blockers
+
+### Catalog readiness blockers
+
+- `VALIDATED_READY = 0`
+- `withoutShippingCost = 32650 / 32650`
+- `withoutImportTax = 32650 / 32650`
+- `withoutTotalCost = 32650 / 32650`
+- `withoutAliExpressSku = 32649 / 32650`
+- `withoutTargetCountry = 32638 / 32650`
+
+### Supplier-execution blockers
+
+- recent failed order set includes repeated:
+  - `The input parameter "ship_to_country" ... is not supplied`
+  - `SKU_NOT_EXIST`
+  - `PRODUCT_NOT_EXIST`
+  - `InvalidApiPath`
+- no recent `purchase_logs` proof
+- no `successful_operations` proof
+
+### Commercial-proof blockers
+
+- production delivered sale is demo-tagged
+- production real-profit engine returns zero real orders and zero profit
+- supplier-side payment via PayPal is not proven
+
+## Strengths Inside the AliExpress-Only Path
+
+1. The preventive supplier audit is commercially serious.
+2. The Dropshipping API integration is the strongest production-grade supplier asset in the repo.
+3. The system tries to resolve destination, shipping, SKU, and margin truth before publishing.
+4. The code correctly blocks or downgrades unsafe publish attempts instead of faking success.
+
+## Weaknesses Inside the AliExpress-Only Path
+
+1. The validated catalog is empty.
+2. Product truth persistence is almost non-existent.
+3. Supplier request construction has already shown parameter-shape failures in live tests.
+4. SKU truth is not robust enough to prevent stale-SKU purchase failure.
+5. Supplier payment completion is not automated end-to-end via PayPal.
+
+## Remaining Optimization Room Before Declaring AliExpress-Only Exhausted
+
+AliExpress-only still has meaningful optimization room in five specific places:
+
+1. Populate `targetCountry`, `shippingCost`, `importTax`, `totalCost`, and `aliexpressSku` through the strict preventive path instead of relying on legacy inventory.
+2. Fix supplier-request correctness for `ship_to_country`, `product_count`, and current valid API path usage.
+3. Force first-candidate recovery through a narrow, destination-specific, margin-safe AliExpress-only search program instead of broad catalog churn.
+4. Eliminate stale publish surfaces so only the strict preventive path can attempt publication.
+5. Close the supplier-payment gap so `placeOrder` is not mistaken for fully paid fulfillment.
+
+## Final AliExpress-Only Conclusion
+
+AliExpress-only is currently:
+
+- `STRONG BUT INCOMPLETE` technically
+- `NOT YET SUFFICIENT` commercially
+- `NOT YET EXHAUSTED` strategically
+
+The current audit does not support replacing AliExpress as the main supplier recommendation yet. It supports finishing the AliExpress-only truth path first and then re-evaluating only if the strict path still cannot produce one safe profitable operation.
+
+Archivo creado
+MARKETPLACE_VS_SUPPLIER_REALITY_AUDIT.md
++109
+-0
+
+# Marketplace vs Supplier Reality Audit
+
+Audit date: 2026-03-21
+
+## Summary
+
+The current bottleneck is still the combination of supplier truth and safe publish readiness, not marketplace count.
+
+That said, the live marketplace state matters because the first profitable operation needs one lead path that can:
+
+- authorize correctly
+- publish a safe listing
+- ingest a real order
+- sustain post-sale truth
+
+Today, none of the three marketplaces meets that standard.
+
+## Marketplace Scorecard
+
+| Marketplace | OAuth/auth maturity | Publish readiness | Webhook maturity | Order-sync maturity | Post-sale relevance | Fit with AliExpress-only reality | Verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| eBay | PARTIAL | BROKEN | PARTIAL | PARTIAL | HIGH | BEST CURRENT FIT | Keep as lead path, but it is operationally blocked right now |
+| MercadoLibre | PARTIAL | BROKEN | WEAK | BROKEN | MEDIUM | MIXED | Do not switch to it now |
+| Amazon | WEAK | WEAK | WEAK | WEAK | LOW | LOW | Too immature to matter for first profit |
+
+## eBay Audit
+
+### What is strong
+
+- deepest connector and webhook design in the codebase
+- strongest post-sale and order-truth relevance
+- explicit webhook proof modeling
+- explicit safe-publish blocking when product status is not acceptable
+
+### What is weak today
+
+- live production logs show repeated token refresh failures with HTTP `400`
+- current live webhook readiness check fails despite older stored proof
+- inbound-event proof is still missing
+- safe publish inventory does not exist
+
+### Net effect
+
+eBay remains the best strategic lead path, but it is not currently execution-ready for the first profitable operation.
+
+## MercadoLibre Audit
+
+### What is strong
+
+- connector exists
+- publish and fulfillment surfaces exist
+
+### What is weak today
+
+- live logs show repeated order-sync failures with `401 invalid access token`
+- no evidence that MercadoLibre currently solves the supplier-side truth bottleneck better than eBay
+- no evidence of a safer publishable path under current AliExpress-only constraints
+
+### Net effect
+
+MercadoLibre is not currently a justified replacement for eBay. Its live auth state is worse, and it does not remove the supplier-side blockers.
+
+## Amazon Audit
+
+### What is strong
+
+- code presence only
+
+### What is weak today
+
+- little live operational evidence
+- low relevance to the first profitable AliExpress-based operation
+- no sign that Amazon is more ready than eBay or MercadoLibre
+
+### Net effect
+
+Amazon is not part of the first-profit path.
+
+## Marketplace Decision
+
+### Which marketplace is best positioned for the first profitable AliExpress-based operation?
+
+eBay, but only in a strategic architecture sense. Operationally, it is still blocked.
+
+### Should eBay remain the lead path?
+
+Yes. The evidence does not support switching away from eBay yet, because:
+
+- its code depth is highest
+- its post-sale and webhook architecture are strongest
+- MercadoLibre is not healthier in live runtime
+
+### Could MercadoLibre fit AliExpress better under current destination and stock conditions?
+
+Not based on current evidence. The current live auth degradation and the unchanged supplier-side blockers do not support that conclusion.
+
+### Is Amazon too immature to matter now?
+
+Yes.
+
+## Bottom Line
+
+The marketplace decision should remain:
+
+- keep eBay as the lead route to first profit
+- repair eBay auth and safe publish readiness
+- do not switch marketplaces as the main recommendation
+- focus first on validated-ready recovery and supplier-execution truth
+
+Archivo creado
+MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md
++331
+-0
+
+# Master Audit: Real Profit Objective
+
+Audit date: 2026-03-21
+
+## Summary
+
+Ivan Reseller is not finished under the real business objective.
+
+The current system is technically broad but commercially incomplete. The repo contains discovery, validation, publishing, order ingestion, fulfillment, payout, and reporting surfaces, but the live business chain still breaks before the first truthful repeatable profit loop. The strongest live blockers are:
+
+- `VALIDATED_READY = 0`.
+- Safe publish coverage is effectively absent.
+- eBay production order-sync is currently degraded by token refresh failures.
+- MercadoLibre order-sync is currently degraded by invalid-token failures.
+- The only production `DELIVERED` sale is a `DEMO-*` order and does not count as commercial proof.
+- The production real-profit engine returns `orderCount = 0`, `moneyIn = 0`, `totalProfit = 0`.
+- The AliExpress purchase path can create or attempt supplier orders, but automatic PayPal payment at the supplier is not implemented or proven.
+
+Primary truth sources used:
+
+- Live DB snapshots and targeted Prisma queries on 2026-03-21.
+- Live Railway status and deployment logs on 2026-03-21.
+- Current backend source code in `backend/src`.
+- Secondary docs only where they matched or contradicted live evidence.
+
+## Evidence Baseline
+
+### Confirmed live facts
+
+- Products by status:
+  - `LEGACY_UNVERIFIED = 31868`
+  - `APPROVED = 7`
+  - `PENDING = 772`
+  - `REJECTED = 3`
+  - `VALIDATED_READY = 0`
+- Publishable data completeness is missing on nearly the entire catalog:
+  - `withoutTargetCountry = 32638 / 32650`
+  - `withoutShippingCost = 32650 / 32650`
+  - `withoutImportTax = 32650 / 32650`
+  - `withoutTotalCost = 32650 / 32650`
+  - `withoutAliExpressSku = 32649 / 32650`
+- Marketplace listings:
+  - `archived_legacy_artifact = 507`
+  - `failed_publish = 1`
+  - no live `active` listing evidence in the DB snapshot
+- Orders:
+  - `FAILED = 44`
+  - `PURCHASED = 5`
+  - `PURCHASING = 2`
+- Sales:
+  - production `DELIVERED = 1`
+  - production `PAYOUT_FAILED = 1`
+- The production delivered sale is `orderId = DEMO-UTIL-1773705064277`, so it is not valid commercial proof.
+- The production payout-failed sale is tied to a legacy-unverified product with missing shipping, tax, and total-cost fields.
+- `purchase_logs = 0` recent rows in the targeted query.
+- `successful_operations = 0` rows in the targeted query.
+- The real-profit engine returns zero real production orders and zero production profit.
+
+### Confirmed live runtime facts
+
+- Railway backend is deployed and running.
+- Scheduled jobs are actively executing.
+- Runtime logs show repeated eBay production refresh failures: `Request failed with status code 400`.
+- Runtime logs show repeated MercadoLibre order-sync failures: `invalid access token` with `401`.
+- Runtime logs show:
+  - listing reconciliation scanning `0` live rows
+  - full listing audit `verifiedWithApi = 0`
+  - winner detection `winnersStored = 0`
+  - a publish attempt being downgraded and blocked because the product was not `VALIDATED_READY`
+
+### Secondary-doc truth status
+
+- `docs/P1_FIRST_VALIDATED_READY_PROOF.md`: still directionally consistent with current truth.
+- `docs/P6_EBAY_INBOUND_EVENT_PROOF.md`: stale. It reflects an older, stronger webhook state than the current live readiness check.
+- `docs/P7_SUPPLIER_STRATEGY_SELECTION.md`: partially stale. Its supplier-side pain diagnosis is still useful, but its supplier-switch recommendation is not accepted under the current AliExpress-only audit constraint.
+- `REAL_AUTONOMOUS_PROFIT_GENERATION_FINAL_REPORT.md`: stale and too optimistic relative to current live evidence.
+
+## Section 1: Stage-by-Stage Gap Map
+
+| Stage | Current maturity | What is proven | What is code-only | What is blocked | What prevents real profit |
+| --- | --- | --- | --- | --- | --- |
+| 1. Automatic trend-driven discovery | PARTIAL | Scheduled tasks, autopilot loops, query selection, trend service, winner detection jobs all run | A truthful closed-loop optimizer that consistently turns demand signals into safe commercial candidates | Zero winners stored, zero validated-ready outputs, trend service can fall back to weak internal estimates | Discovery does not generate safe inventory that can be monetized |
+| 2. AliExpress product selection | PARTIAL | Affiliate and Dropshipping services exist; preventive supplier audit logic exists | Reliable first-product selection that survives strict destination/stock/shipping checks in production | Repeated supplier-side failure history, no validated-ready output, missing product completeness | The system cannot surface one commercially safe AliExpress candidate |
+| 3. Destination-valid stock truth | PARTIAL | Strict SKU and stock checks exist in code | Catalog-wide persisted stock truth | Almost all products lack `aliexpressSku`; strict validation keeps rejecting candidates | No safe stock-backed publishable product |
+| 4. Destination-valid shipping truth | BROKEN | Strict destination shipping checks exist in validator code | Persisted shipping truth for real listings | Catalog has no shipping-cost coverage; failed test fulfillment shows `ship_to_country` parameter issues | Cannot safely publish or fulfill with destination-level shipping truth |
+| 5. Pricing and fee truth | PARTIAL | Pricing engine, fee intelligence, cost calculator, fee ledger, margin guards exist | Production-complete fee inputs for real products and real marketplaces | Products lack shipping/import/total-cost fields; some publish paths are stale | Margin truth is incomplete, so profitability cannot be trusted |
+| 6. Safe publish readiness | BROKEN | Preventive publish preparation exists and is stricter than old paths | Consistent use of the strict path across all publish entrypoints | `VALIDATED_READY = 0`; one publish path still queries `status = publishable`; live publish attempt was blocked | No item reaches a truthful safe-to-publish state |
+| 7. Marketplace order ingestion | PARTIAL | Order models, sync jobs, webhook plumbing, order truth, exclusion logic exist | Stable production ingestion across the lead marketplace | eBay production refresh failures and MercadoLibre invalid-token failures degrade ingestion | Real buyer order flow is not dependable |
+| 8. Automatic AliExpress purchase | PARTIAL | Fulfillment service, retry service, Dropshipping place-order path, manual fallback hooks exist | Fully truthful automatic supplier purchase for real production orders | Live purchased rows are test or synthetic; recent failures show missing parameters and SKU issues | The supplier-buy step is not proven for a real commercial order |
+| 9. PayPal payment execution path | BROKEN | Customer checkout and payout integrations exist | Automatic supplier payment on AliExpress via PayPal | No code proves supplier-side PayPal settlement; Dropshipping placeOrder can stop at order creation or payment-needed state | The intended buy-from-supplier payment path is not implemented end-to-end |
+| 10. Post-sale tracking truth | PARTIAL | Tracking sync, order truth flags, cancellation exclusion, fulfillment state logic exist | Proven truthful post-sale lifecycle on a real profit-bearing order | Tracking sync logs show repeated errors; no successful operations exist | Post-sale truth is not proven on a real commercial success |
+| 11. Released-funds accounting | BROKEN | Payout services and balance checks exist | Marketplace fund-release truth | Production has a `PAYOUT_FAILED` sale and no released-funds proof | Revenue cannot be recognized as realized commercial success |
+| 12. Real net-profit proof | ABSENT | Real-profit engine exists and correctly excludes demo/test order IDs in production | A positive realized production profit ledger | Real-profit engine returns zero production order count and zero profit | The system cannot prove it has made real money |
+| 13. Repeatable autonomous loop | BROKEN | Schedulers and jobs run continuously | A repeatable safe commerce engine | Discovery, publish readiness, order sync, supplier payment, and released-funds proof all remain broken or partial | No repeatable profit loop exists |
+
+## Section 2: Deep Technical Audit
+
+| Subsystem | Classification | Evidence | Commercial consequence |
+| --- | --- | --- | --- |
+| Discovery and optimizer stack | PARTIAL | Autopilot, workflow scheduler, trends, and winner-detection code all exist and run | Automation exists, but it does not create safe inventory |
+| Google Trends and demand signals | PARTIAL | SerpApi support exists, but fallback can degrade to internal estimates | Demand validation is not consistently external and trustworthy |
+| AliExpress Affiliate connector | PARTIAL | Search and detail logic exists and is actively used by supplier audit code | Good discovery surface, but not sufficient to create validated-ready output |
+| AliExpress Dropshipping connector | PARTIAL | `getProductInfo`, `placeOrder`, `tracking`, token refresh, and OAuth code exist | Strongest supplier asset in the stack, but still not proven for a real profit-bearing order |
+| Preventive supplier audit | STRONG BUT INCOMPLETE | Destination, stock, shipping, rating, order-volume, and fallback ranking logic are real | Strong gatekeeping, but currently outputs no safe candidate |
+| Pre-publish validator | STRONG BUT INCOMPLETE | Strict destination, shipping, SKU, margin, fee completeness, and metadata patching exist | This is the correct direction, but it has not yet produced a live publishable item |
+| Marketplace publish orchestration | MISLEADINGLY PRESENT BUT NOT OPERATIONAL | `marketplace-publish.service.ts` still looks for `status = publishable`, while live business logic requires `VALIDATED_READY` | Old publish surfaces can create false readiness impressions |
+| Listing reconciliation and recovery | PARTIAL | Reconciliation and audit jobs run | The system manages listing artifacts, but there are no real active profitable listings to protect |
+| eBay auth/publish/webhook/order sync | PARTIAL | Code depth is highest here, but production refresh currently fails and webhook readiness regressed | Best marketplace path in architecture, but operationally degraded |
+| MercadoLibre auth/publish/order sync | PARTIAL | Connector exists, but live order sync is failing with `401 invalid access token` | Not currently a safer path than eBay |
+| Amazon connector | MISLEADINGLY PRESENT BUT NOT OPERATIONAL | Routes and service code exist, but runtime evidence is thin and commercially irrelevant right now | Adds breadth, not first-profit readiness |
+| Order truth and cancellation truth | PRODUCTION-SAFE | Exclusion from commercial proof and manual cancellation truth are explicit and working | This is one of the strongest truth-preserving areas |
+| Paid-order processing and fulfillment orchestration | PARTIAL | `processPaidOrders` and `orderFulfillmentService` are real scheduled surfaces | Good orchestration, but real success proof is missing |
+| AliExpress auto-purchase service | FALSE READINESS | Real path uses Dropshipping API, but purchaser PayPal settlement is not completed; browser path is semi-manual | “Auto purchase” exists in name, not as proven full supplier payment automation |
+| PayPal balance and payout | PARTIAL | Payout API is real; balance checks mostly degrade to estimates/unavailable | Useful for payouts, but not enough for supplier payment truth |
+| Real-profit engine | PRODUCTION-SAFE BUT EMPTY | It correctly returns zero production profit once demo/test rows are excluded | Strong truth surface, but it proves the business is not finished |
+
+## Section 3: Discovery / Trend / Optimizer Audit
+
+Current classification: `primitive to partially real optimizer`, not a real business optimizer.
+
+What exists:
+
+- `autopilot.service.ts`
+- `workflow-scheduler.service.ts`
+- trend ingestion via `google-trends.service.ts`
+- winner detection, CRO, scaling, and scheduled recurring jobs
+
+What is missing for a real autonomous daily cycle:
+
+- a repeatable path from trend signal to `VALIDATED_READY`
+- learning loops that actually reduce the dominant supplier rejection reasons in production
+- safe publish inventory
+- a marketplace path that can reliably create real order events
+- supplier payment completion and post-sale profit recognition
+
+Live evidence against “real optimizer” status:
+
+- `winnersStored = 0`
+- no active safe listing inventory
+- no validated-ready inventory
+- discovery jobs run, but commercial output remains zero
+
+## Section 4: Marketplace Audit
+
+| Marketplace | Auth maturity | Publish readiness | Webhook maturity | Order-sync maturity | Post-sale relevance | Fit with current AliExpress-only reality |
+| --- | --- | --- | --- | --- | --- | --- |
+| eBay | PARTIAL | BROKEN for first safe publish | PARTIAL and currently regressed | PARTIAL but live token refresh failing | HIGH | Still the least-bad first path, but operationally blocked right now |
+| MercadoLibre | PARTIAL | BROKEN for first safe publish | WEAK | BROKEN live due `401 invalid access token` | MEDIUM | Not currently a better route than eBay |
+| Amazon | WEAK | WEAK | WEAK | WEAK | LOW | Too immature to matter for first profit |
+
+Marketplace decision:
+
+- eBay should remain the lead marketplace only in the strategic sense that it has the deepest implementation and the strongest webhook/post-sale design.
+- eBay is not currently operationally ready for first profit because live token refresh is broken and safe publish inventory is absent.
+- MercadoLibre should not replace eBay right now because its current auth state is worse and supplier-side blockers remain dominant.
+- Amazon is not relevant to the first-profit objective today.
+
+## Section 5: Pre-Sale Truth Audit
+
+### Already solid
+
+- strict destination resolution
+- SKU/stock gating logic
+- shipping-cost-from-AliExpress checks
+- fee ledger completeness checks
+- margin guard logic
+- auditable metadata patching for preventive publish preparation
+
+### Still causing false negatives
+
+- almost no products carry the fields the strict pipeline requires
+- eBay credential instability reduces the ability to reach a real candidate on the lead marketplace
+- supplier API failures and parameter mismatches have historically interrupted validation attempts
+
+### Still risking false positives
+
+- stale publish surfaces
+- legacy product states and legacy listing artifacts
+- test and simulated fulfillment/order rows that can look superficially “successful”
+
+### Verdict on `VALIDATED_READY = 0`
+
+`VALIDATED_READY = 0` is caused by both real business constraints and model/runtime weakness:
+
+- real business constraints: destination-valid stock/shipping and margin scarcity
+- model/runtime weakness: missing persisted product truth, stale publish surfaces, credential instability, and incomplete supplier-payment closure
+
+## Section 6: Order Capture and Post-Sale Audit
+
+### Code-safe today
+
+- order truth and exclusion from commercial proof
+- manual marketplace cancellation handling
+- fulfillment orchestration and retry hooks
+- sale creation blocking when commercial proof eligibility is false
+
+### Operationally safe today
+
+- cancellation truth is safer than revenue optimism
+- the system is better at excluding bad proof than proving good proof
+
+### Never proven end-to-end
+
+- real buyer order -> automatic AliExpress purchase -> supplier payment -> tracking -> delivered -> marketplace funds release -> realized profit
+
+### Requires a real successful order to validate
+
+- supplier-payment completion
+- accurate tracking closure
+- payout/released-funds truth
+- realized net profit
+
+## Section 7: PayPal / Purchase Execution Audit
+
+Current classification: `BROKEN` as a first-class blocker.
+
+Why:
+
+- PayPal exists for customer checkout and for payouts.
+- The intended requirement is automatic purchase at AliExpress using PayPal.
+- The current real supplier-buy path is Dropshipping API `placeOrder`.
+- That path does not prove automatic supplier-side PayPal settlement.
+- The browser automation fallback is semi-manual and not the real production path when `userId` is present.
+
+Conclusion:
+
+- supplier purchase automation is only partial
+- supplier payment automation via PayPal is not proven
+- this alone is enough to keep the software in a not-finished state
+
+## Section 8: Real Profit Audit
+
+The system differentiates projected and realized profit correctly in code, but the live business proof is absent.
+
+Current live truth:
+
+- The only production delivered sale is demo-tagged and excluded by the real-profit engine.
+- The only non-demo production sale of interest is `PAYOUT_FAILED`.
+- The real-profit engine returns:
+  - `moneyIn = 0`
+  - `totalProfit = 0`
+  - `orderCount = 0`
+
+Conclusion:
+
+- projected profit exists
+- publish-time margin math exists
+- order-time estimated margin exists
+- realized production profit proof does not exist
+- released-funds profit proof does not exist
+
+Software status under the finish line: `not finished`
+
+## Section 9: Autonomy Audit
+
+| Function | Current autonomy |
+| --- | --- |
+| Discovery | automation with hard gates |
+| Validation | automation with hard gates |
+| Publishing | operator-assisted and blocked by missing safe inventory |
+| Order sync | semi-automatic but connector-degraded |
+| Supplier purchase | semi-automatic and incomplete |
+| Post-sale truth | automation with hard gates |
+| Profit recognition | manual or evidence-limited because real proof is absent |
+| Feedback learning | primitive |
+
+Answer to the core autonomy question:
+
+No. The system cannot yet run a daily automatic cycle that can eventually generate real profit with operational confidence. The exact gaps are:
+
+- no safe validated-ready inventory
+- stale or degraded marketplace connectors
+- no proven supplier-side payment completion
+- no released-funds proof
+- no realized-profit proof
+
+## Section 10: Truthful Final Classification
+
+| Dimension | Classification |
+| --- | --- |
+| Technical maturity | STRONG BUT INCOMPLETE |
+| Marketplace maturity | PARTIAL |
+| AliExpress supplier maturity | STRONG BUT INCOMPLETE |
+| Discovery/optimizer maturity | PARTIAL |
+| Pre-sale safety maturity | STRONG BUT INCOMPLETE |
+| Post-sale maturity | PARTIAL |
+| PayPal purchase maturity | BROKEN |
+| Realized-profit maturity | ABSENT |
+| End-to-end autonomy maturity | BROKEN |
+| Finish-line proximity | MIDWAY |
+
+## Top 10 Blockers to Real Profit
+
+1. No real `VALIDATED_READY` candidate exists.
+2. Product truth coverage is almost entirely missing for shipping, tax, total cost, target country, and SKU.
+3. eBay production order-sync and auth are currently degraded by refresh failures.
+4. MercadoLibre order-sync is currently degraded by invalid-token failures.
+5. The supplier buy path does not prove automatic PayPal payment at AliExpress.
+6. The only production delivered sale is a demo order and not commercial proof.
+7. The only non-demo production sale proof is `PAYOUT_FAILED`.
+8. Purchased-order rows are dominated by test or synthetic artifacts, not real commercial orders.
+9. Purchase logs and successful-operation records do not prove a real end-to-end success.
+10. Stale publish and orchestration surfaces still create readiness confusion.
+
+## Top 10 Strengths
+
+1. The codebase has unusually strong truth-preserving cancellation and exclusion logic.
+2. AliExpress supplier validation logic is strict and commercially sane.
+3. The pre-publish validator is materially real and safety-first.
+4. The real-profit engine correctly excludes demo and test production rows.
+5. Order fulfillment orchestration is structurally coherent.
+6. Webhook proof modeling is more mature than most of the surrounding system.
+7. The system has meaningful scheduler and workflow infrastructure.
+8. Pricing, fee, and ledger logic are deeper than the live business state suggests.
+9. Runtime jobs are actually running in production.
+10. The code is better at refusing false proof than many superficially “working” commerce stacks.
+
+## Final Business Verdict
+
+`TECHNICALLY ADVANCED BUT NOT COMMERCIALLY READY`
+
+The software is not finished. It is not near first real profit until it produces:
+
+- the first truthful `VALIDATED_READY`
+- the first safe publish
+- the first valid non-demo order
+- the first successful automatic supplier purchase with supplier-side payment closure
+- the first truthful post-sale completion
+- the first marketplace fund release
+- the first real positive net-profit proof
+
+El contexto se compactó automáticamente
+Estoy cerrando la parte que faltaba: voy a escribir los 7 documentos en parches chicos para evitar el fallo del parche grande, y luego haré una verificacion rapida de que quedaron en docs/ con el contenido correcto.
+
+Antes de editar, estoy comprobando si alguno de los nombres objetivo ya existe para no pisar algo sin revisarlo.
+
+Se ejecutó Test-Path 'docs/MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md'para 9s
+
+
+Se ejecutó Test-Path 'docs/ALIEXPRESS_ONLY_BUSINESS_GAP_MAP.md'para 9s
+
+
+Se ejecutó Test-Path 'docs/POST_SALE_AND_PAYPAL_AUDIT.md'para 9s
+
+
+Se ejecutó Test-Path 'docs/REAL_PROFIT_PROOF_GAP.md'para 9s
+
+
+Se ejecutó Test-Path 'docs/PRIORITIZED_IMPROVEMENT_PLAN_TO_REAL_PROFIT.md'para 4s
+
+
+Se ejecutó Test-Path 'docs/FINISH_LINE_CHECKLIST.md'para 6s
+
+
+Se ejecutó Test-Path 'docs/MARKETPLACE_VS_SUPPLIER_REALITY_AUDIT.md'para 6s
+
+
+Estoy escribiendo el documento maestro primero y luego voy bajando a los documentos especializados para que el criterio quede consistente en todos.
+
+Archivo creado
+MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md
++331
+-0
+
+# Master Audit: Real Profit Objective
+
+Date: 2026-03-21
+Scope: Platform-wide audit, with final business verdict anchored on the primary operator path for user `1`
+Business rule: AliExpress remains the only supplier family allowed for the first profitable operation unless evidence proves that AliExpress-only is exhausted
+
+## Executive Verdict
+
+Ivan Reseller is not finished.
+
+The system is technically advanced, but it is not commercially ready for the target finish line: a repeatable, truthful, automated AliExpress-only dropshipping loop that ends in released marketplace funds and proven net profit.
+
+Current live evidence shows:
+
+- `VALIDATED_READY = 0` globally and for user `1`
+- publishable coverage is effectively absent because almost every product is missing destination, shipping, import tax, total cost, and AliExpress SKU truth
+- eBay production token refresh is failing with HTTP `400`
+- MercadoLibre order sync is failing with `401 invalid access token`
+- stored eBay webhook proof still points to roughly `subscription-registered`, but current live readiness is failing
+- orders exist, but commercially valid post-sale proof does not
+- real-profit engine returns `moneyIn = 0`, `moneyOut.total = 0`, `totalProfit = 0`, `orderCount = 0`, even with `profitClassification = finalized`
+
+Final business verdict: `TECHNICALLY ADVANCED BUT NOT COMMERCIALLY READY`
+
+## Evidence Baseline
+
+Primary sources used for this audit:
+
+- live database snapshot via `backend/scripts/audit-db-snapshot.ts`
+- validated-ready verification via `backend/scripts/check-validated-ready.ts`
+- eBay webhook readiness via `backend/scripts/check-ebay-webhook-readiness.ts 1`
+- Railway runtime status and deployment logs from 2026-03-21
+- targeted Prisma queries for production sales, purchased orders, connector state, and successful operations
+- direct source review of the services that implement supplier validation, pre-publish gating, fulfillment, auto-purchase, PayPal, order truth, discovery, and realized-profit logic
+
+Secondary docs were treated as claims to verify, not as primary truth. Where live DB or runtime evidence conflicts with older docs, the live evidence wins.
+
+## Stage-by-Stage Business Gap Map
+
+| Stage | Current maturity | What is proven | What is code-only | What is blocked | What prevents real profit |
+| --- | --- | --- | --- | --- | --- |
+| 1. Automatic trend-driven product discovery | Partial | Schedulers run, discovery services exist, Google Trends integration exists with SerpApi support and fallback logic | No proof that a daily cycle is producing commercially viable winners | Winner detection ran on 507 products and stored 0 winners | Discovery does not currently feed a profitable validated-ready pipeline |
+| 2. AliExpress product selection | Strong but incomplete | Affiliate and dropshipping services exist, preventive supplier validation exists, alternative supplier search exists inside AliExpress family | No proof of repeated real candidate output that survives downstream validation | Supplier availability, destination shipping, SKU truth, and cost truth frequently fail | Product selection is not producing safe inventory for the target destinations at profitable margins |
+| 3. Destination-valid stock truth | Partial | Strict validation path checks stock and SKU viability through AliExpress APIs | No proof of stable, destination-valid stock truth on any publishable candidate | Rejection reasons include `no_stock_for_destination` and `supplier_unavailable` | Without stock truth, products cannot be safely published |
+| 4. Destination-valid shipping truth | Partial | Pre-publish validator requires shipping data and cost truth | Live catalog lacks `targetCountry`, `shippingCost`, `importTax`, and `totalCost` on almost all products | `withoutShippingCost = 32650`, `withoutTargetCountry = 32638` | Shipping cost cannot be trusted, so margin truth cannot be trusted |
+| 5. Pricing and fee truth | Strong but incomplete | Pricing engine and fee logic exist, validator checks margin validity | No proof of a live candidate with complete fee inputs and acceptable net margin | Repeated `margin_invalid` rejections and missing cost inputs | Safe pricing cannot be established for a real listing |
+| 6. Safe publish readiness | Broken | Strict gate exists and correctly blocks unsafe products | Legacy publish surfaces remain present and can look more ready than reality | `VALIDATED_READY = 0` and live eBay publish attempt failed after downgrade to `LEGACY_UNVERIFIED` | No product is safe to publish under the actual rules |
+| 7. Marketplace order ingestion | Strong but incomplete | Order ingestion, order truth, and cancellation handling exist; eBay webhook verification history exists | No proof of inbound eBay event flow for a real validated listing | Current webhook readiness fails and no safe listing exists to generate real order flow | Order capture is not proven in the commercially valid path |
+| 8. Automatic AliExpress purchase | Partial | Fulfillment orchestration and AliExpress auto-purchase services exist | No proof of a real, profitable automatic purchase tied to a valid marketplace sale | Existing `PURCHASING` and `PURCHASED` orders are testlike or synthetic | Supplier purchase is not proven for a commercially valid order |
+| 9. PayPal payment execution path | Broken | PayPal payouts exist for outbound marketplace settlements | No proof of automated supplier-side PayPal settlement on AliExpress | Purchase flow does not prove PayPal payment completion at supplier checkout | Without supplier payment automation, the core business loop is incomplete |
+| 10. Post-sale tracking | Partial | Tracking sync, order truth, and delivery-state services exist | No proof of post-sale truth for a real profitable operation | Tracking sync logs show processed `5`, updated `0`, errors `5` | Delivery and received-state truth remain unproven for valid commerce |
+| 11. Released-funds accounting | Partial | Real-profit engine exists and filters invalid/demo data conservatively | No proof of a valid production sale that reached released-funds status and counted as profit | One production sale is `PAYOUT_FAILED`; delivered production sale is demo-like and excluded by truth rules | Marketplace money release is not commercially proven |
+| 12. Real net-profit proof | Absent | Real-profit engine is conservative and production-aware | No real positive production rows survive the filters | Engine returns zero finalized profit | No real profit has been proven |
+| 13. Repeatable autonomous loop | Broken | Many automation modules exist and schedulers run | No proof of one full successful loop, let alone repeatability | Pre-sale, publish, supplier purchase, PayPal, and released-funds stages all break the loop | The system cannot yet generate repeatable truthful profit |
+
+## Deep Technical Audit
+
+| Subsystem | Classification | Evidence-led assessment |
+| --- | --- | --- |
+| Discovery and optimizer stack | Partial | Discovery jobs, trend services, and winner detection exist, but live runtime stored `0` winners and there is no evidence of optimizer learning that is producing profitable publishable candidates |
+| AliExpress affiliate integration | Strong but incomplete | Real code exists for affiliate search and alternative-product lookup, and it is one of the stronger implemented surfaces |
+| AliExpress dropshipping validation | Strong but incomplete | Preventive supplier validation calls dropshipping product info and attempts strict checks, but live output still yields no validated-ready candidates |
+| Destination, stock, shipping, SKU, and cost truth | Partial | Strict validation logic is good, but live catalog coverage is extremely poor and blocks real commercialization |
+| Pricing and fee logic | Strong but incomplete | Margin checks and marketplace pricing logic exist, but missing cost inputs make live profit decisions unreliable |
+| Publish gating | Production-safe | The strict gate blocks unsafe products correctly; this is a real safety strength |
+| Listing-state reconciliation | Misleadingly present but not operational | Reconciliation jobs run, but live logs show zero verified listings and a stale `publishable` concept still exists in some surfaces |
+| eBay auth and publish path | Partial | OAuth and publish integrations are real, but live production token refresh is failing with `400`, preventing operational readiness |
+| eBay webhook layer | Partial | Stored proof is materially real, but current readiness check fails due to endpoint/token/config reachability problems |
+| MercadoLibre auth and order sync | Broken | Current logs show repeated `401 invalid access token` for order sync |
+| Amazon integration | Broken to partial | Present in codebase but too immature to matter for first profitable operation |
+| Order ingestion and truth | Production-safe | Strong cancellation handling and exclusion from commercial proof are in place |
+| Fulfillment orchestration | Strong but incomplete | Paid-order processing, capital checks, and purchase retry logic exist, but real commercial proof is missing |
+| AliExpress auto-purchase | Partial with manual dependency risk | Dropshipping API purchase path is real, but fallback/manual assumptions remain and commercially valid proof is missing |
+| PayPal supplier payment path | Broken | No evidence of safe, automated, supplier-side PayPal completion for a real order |
+| Post-sale tracking | Partial | Services exist, but current sync errors and lack of real valid orders keep it unproven |
+| Real-profit engine | Production-safe | Strong conservative filtering exists and correctly reports zero real production profit rather than inflating success |
+
+## AliExpress-Only Strategy Audit
+
+AliExpress-only is not yet exhausted, but it is not currently enough for the first profitable operation under current runtime conditions.
+
+What is genuinely strong:
+
+- AliExpress is the only supplier family with materially real code across discovery, validation, alternative lookup, and purchase orchestration
+- preventive supplier validation is already wired to commercial rejection reasons
+- the system already understands the actual failure categories that matter: stock, supplier availability, and margin
+
+What is weak:
+
+- destination shipping truth is missing at catalog scale
+- SKU resolution coverage is extremely poor in live data
+- cost completeness is missing on almost the entire product set
+- no validated-ready output exists today
+- automated supplier-side PayPal settlement is not proven
+
+What has already been tried repeatedly:
+
+- eBay US recovery cycles that still ended with `VALIDATED_READY = 0`
+- repeated validation attempts that still produced the same dominant rejection reasons
+
+What optimization room still exists before declaring AliExpress-only exhausted:
+
+- force destination-first validation instead of catalog-first accumulation
+- restrict discovery to shipping-friendly destination windows before enrichment
+- enforce mandatory AliExpress SKU capture at ingestion time
+- tighten cost extraction and shipping-cost persistence before any product can re-enter approval
+- run smaller targeted discovery batches against proven niches instead of broad weak candidates
+
+Business conclusion on AliExpress-only:
+
+- AliExpress-only is still the correct supplier focus for now
+- the problem is not lack of supplier code surface
+- the first operation is blocked by validation truth, operational credential health, and supplier payment completion, not by a proven exhaustion of AliExpress itself
+
+## Discovery and Optimizer Audit
+
+Current classification: `primitive to partially real optimizer`
+
+What exists:
+
+- schedulers and periodic jobs are running
+- trend input exists through Google Trends and SerpApi-backed services
+- discovery and ranking logic exists
+- failure reasons are explicit and can theoretically be learned from
+
+What is missing for a real autonomous daily cycle:
+
+- proof that daily discovery is producing candidate improvements after prior failures
+- a closed feedback loop that downranks repeated `no_stock_for_destination`, `margin_invalid`, and `supplier_unavailable` patterns in a measurable way
+- a stable path from discovered product to validated-ready product
+- a safe publish queue populated by current validation truth
+
+Verdict: the system has automation infrastructure, but not yet a real business optimizer.
+
+## Marketplace Audit
+
+### eBay
+
+- Auth/OAuth maturity: strong but currently degraded by live HTTP `400` token refresh failures
+- Publish readiness: blocked because `VALIDATED_READY = 0`
+- Webhook maturity: historically real but currently not live-ready
+- Order-sync maturity: materially real in architecture, not proven on the safe commercial path
+- Post-sale relevance: highest
+- Fit with current AliExpress-only reality: still the best lead path, but operationally blocked
+
+### MercadoLibre
+
+- Auth/OAuth maturity: currently broken in runtime for order sync due to `401 invalid access token`
+- Publish readiness: behind eBay
+- Webhook maturity: less relevant than the eBay bottleneck right now
+- Order-sync maturity: currently failing
+- Post-sale relevance: secondary
+- Fit with current AliExpress-only reality: not clearly better than eBay based on current destination and credential truth
+
+### Amazon
+
+- Auth/OAuth maturity: too immature to matter now
+- Publish readiness: not a near-term first-profit path
+- Webhook/order maturity: insufficient
+- Fit with current AliExpress-only reality: low
+
+Marketplace conclusion:
+
+- eBay should remain the lead path
+- MercadoLibre should not replace eBay unless its auth health and destination fit materially improve
+- Amazon should not influence the near-term roadmap
+
+## Pre-Sale Truth Audit
+
+Already solid:
+
+- strict validator design
+- rejection reason expressiveness
+- fee and margin awareness
+- publish gate that refuses unsafe products
+
+Still causing false negatives:
+
+- incomplete enrichment on shipping, destination, taxes, and total cost can reject products that might be viable if better enriched
+- credential failures upstream can prevent completion of otherwise promising validation
+
+Still risking false positives:
+
+- legacy surfaces and stale listing states can make the system appear more publish-ready than it is
+
+Why `VALIDATED_READY = 0` persists:
+
+- mostly real business constraints plus missing enrichment truth
+- not just a model weakness
+- but also not a pure market impossibility, because the system has not yet completed the stricter destination-first AliExpress loop cleanly enough to prove exhaustion
+
+## Order Capture and Post-Sale Audit
+
+Code-safe today:
+
+- order truth model
+- cancellation handling
+- exclusion of invalid or manually cancelled orders from commercial proof
+
+Operationally safe today:
+
+- truth-preserving behavior is stronger than revenue-seeking shortcuts
+
+Never proven end-to-end:
+
+- real validated listing -> real marketplace order -> automatic AliExpress purchase -> supplier-side PayPal completion -> shipment/tracking truth -> delivered order -> released marketplace funds -> realized profit recognition
+
+Still requiring a real successful order:
+
+- inbound webhook proof on the safe listing path
+- buyer-destination-to-supplier-payload accuracy in a real order
+- tracking truth after actual supplier shipment
+- released-funds recognition after actual marketplace settlement
+
+## PayPal and Purchase Execution Audit
+
+PayPal purchase maturity is a first-class blocker.
+
+What exists:
+
+- PayPal payout services for outbound business flows
+- supplier purchase orchestration that can attempt AliExpress order creation
+
+What does not exist in proven form:
+
+- safe automated supplier-side PayPal payment completion
+- hard proof that order -> supplier purchase payload -> AliExpress checkout -> PayPal settlement completes without manual intervention
+- reconciliation of actual paid supplier cost against expected margin in a commercially valid order
+
+Verdict: this area is not near-ready and must be treated as P0.
+
+## Real Profit Audit
+
+Different profit layers:
+
+- projected profit: exists at validation time
+- publish-time estimated margin: exists in code
+- order-time estimated margin: partially exists
+- realized profit after supplier purchase: not proven on valid orders
+- realized profit after marketplace fund release: absent
+
+What live truth says today:
+
+- one production `DELIVERED` sale exists but is demo-like and tied to an unsafe product state
+- one production `PAYOUT_FAILED` sale exists and does not qualify as commercial success
+- recent `PURCHASED` orders are synthetic test rows
+- `successfulOperations` returned no real rows
+- real-profit engine returns zero finalized production profit
+
+Therefore the software is not finished.
+
+## Autonomy Audit
+
+| Area | Autonomy level | Audit note |
+| --- | --- | --- |
+| Discovery | Semi-automatic | Jobs run, but not yet commercially productive |
+| Validation | Automation with hard gates | Strong safety, weak yield |
+| Publishing | Broken for real business | No validated-ready candidates |
+| Order sync | Partial | Architecture is real, runtime health is mixed |
+| Supplier purchase | Operator-assisted to partial automation | Real orchestration exists, but commercial proof and supplier payment completion are missing |
+| Post-sale truth | Automation with hard gates | Truth preservation is strong, proof is weak |
+| Profit recognition | Partial | Good conservative engine, but no real profit to recognize |
+| Feedback learning | Primitive | Failure reasons exist, but measurable optimizer learning is not proven |
+
+Can the system already run a daily automatic cycle that can eventually generate real profit?
+
+No. The exact gaps are:
+
+- no validated-ready candidates
+- broken marketplace credential health in current runtime
+- missing live webhook readiness
+- unproven supplier-side PayPal completion
+- missing commercially valid released-funds proof
+
+## Truthful Final Classification
+
+| Dimension | Classification |
+| --- | --- |
+| Technical maturity | Strong but incomplete |
+| Marketplace maturity | Partial |
+| AliExpress supplier maturity | Strong but incomplete |
+| Discovery/optimizer maturity | Partial |
+| Pre-sale safety maturity | Strong but incomplete |
+| Post-sale maturity | Partial |
+| PayPal purchase maturity | Broken |
+| Realized-profit maturity | Partial to absent |
+| End-to-end autonomy maturity | Partial |
+| Finish-line proximity | Near first real operation in architecture, but still materially blocked in business reality |
+
+## Top 10 Blockers To Real Profit
+
+1. `VALIDATED_READY = 0`, so no safe product can enter the real marketplace path
+2. Shipping-cost and destination truth are missing for almost the entire catalog
+3. eBay production token refresh is currently failing with HTTP `400`
+4. Current eBay webhook readiness is not live-safe despite stronger stored proof
+5. MercadoLibre auth is failing and cannot serve as a clean fallback path
+6. Automated supplier-side PayPal completion is not proven
+7. Recent `PURCHASED` orders are synthetic and do not validate the real business loop
+8. Production delivered sale evidence is commercially weak and tied to unsafe product truth
+9. Released marketplace funds are not proven on a valid operation
+10. Real-profit engine correctly reports zero real production profit
+
+## Top 10 Strengths
+
+1. Strict pre-publish validation logic exists and is commercially aware
+2. Rejection reasons are meaningful and tied to real business constraints
+3. AliExpress is deeply integrated across discovery, validation, and purchase orchestration
+4. Order truth and cancellation exclusion logic are strong
+5. Fulfillment orchestration is materially real
+6. Real-profit engine is conservative and does not inflate success
+7. Schedulers and operational jobs are running in production
+8. Historical eBay webhook verification work is materially real
+9. Alternative AliExpress supplier search exists inside the allowed supplier family
+10. The codebase already optimizes more for truth than for vanity metrics
+
+## Final Business Verdict
+
+- `NOT FINISHED`
+- `TECHNICALLY ADVANCED BUT NOT COMMERCIALLY READY`
+
+The software should only be considered finished after it proves all of the following in production:
+
+1. first real `VALIDATED_READY`
+2. first safe publish
+3. first valid non-demo order
+4. first correct automatic AliExpress purchase
+5. first supplier-side PayPal completion
+6. first truthful post-sale completion
+7. first released marketplace funds
+8. first proven net profit
+9. first repeatable success path
+El documento maestro ya quedo. Ahora estoy separando los hallazgos por proveedor, marketplaces, post-sale, profit proof y plan de cierre para que cada archivo tenga una funcion clara.
+
+Archivo creado
+ALIEXPRESS_ONLY_BUSINESS_GAP_MAP.md
++110
+-0
+
+# AliExpress-Only Business Gap Map
+
+Date: 2026-03-21
+Constraint: AliExpress remains the only supplier family allowed for the first profitable operation unless evidence proves exhaustion
+
+## Core Verdict
+
+AliExpress-only is not exhausted, but it is not currently sufficient for the first profitable operation under current live conditions.
+
+The blocker is not a total lack of supplier capability in code. The blocker is that the live business pipeline still fails before it reaches a truthful, profitable, released-funds outcome.
+
+## What Is Truly Usable Today
+
+| Capability | Current state | Evidence-led view |
+| --- | --- | --- |
+| Affiliate discovery | Usable | Real affiliate discovery and alternative-product search exist and are among the strongest supplier surfaces in the codebase |
+| Dropshipping validation | Usable but incomplete | Preventive supplier validation calls real AliExpress dropshipping product info and rejects unsafe candidates |
+| Preventive supplier audit | Strong | The system already classifies real supplier failures such as `supplier_unavailable` |
+| Fallback ranking | Partial | Alternative lookup exists, but there is no proof that fallback ranking is producing validated-ready outputs |
+| Alternative-product fallback | Partial to strong | Present in code, but not proven to recover enough viable candidates in production |
+| Stock checks | Partial | Validation checks stock truth, but repeated `no_stock_for_destination` still dominates |
+| Shipping checks | Partial | Logic exists, but live data shows massive missing shipping truth |
+| Cost extraction | Partial | Cost components are modeled, but live product coverage is near-zero for shipping cost, tax, and total cost |
+| Product identity / SKU resolution | Weak in live data | AliExpress SKU handling exists in code, but live catalog has almost no persisted `aliexpressSku` coverage |
+| Destination compatibility checks | Strong design, weak live output | Destination-first safety is embedded in validation, but output yield remains zero |
+| Purchase execution | Partial | AliExpress auto-purchase exists, but commercially valid proof is missing |
+| Tracking retrieval | Partial | Tracking services exist, but current sync results are weak and unproven for valid commerce |
+
+## What Is Strong
+
+- AliExpress is the only supplier family with real breadth across discovery, validation, and purchase orchestration
+- preventive supplier validation is commercially meaningful and tied to actual rejection reasons
+- the codebase already tries alternative AliExpress products instead of giving up immediately
+- the system knows how to reject unsafe supplier situations instead of publishing fantasy listings
+
+## What Is Weak
+
+- destination-valid stock truth still fails too often
+- destination-valid shipping truth is mostly absent in persisted catalog data
+- SKU persistence is weak enough to cripple repeatable validation
+- total landed cost is missing for almost the entire catalog
+- purchase execution does not prove supplier-side PayPal settlement
+
+## What Has Been Tried Repeatedly Already
+
+- repeated recovery under eBay US conditions
+- repeated validation cycles that still ended with `VALIDATED_READY = 0`
+- repeated supplier rejections concentrated around:
+  - `no_stock_for_destination`
+  - `margin_invalid`
+  - `supplier_unavailable`
+
+## Quantified Current Blockers
+
+Live DB evidence from 2026-03-21 shows:
+
+- `validatedReadyCount = 0`
+- `totalProducts = 32650`
+- `withoutTargetCountry = 32638`
+- `withoutShippingCost = 32650`
+- `withoutImportTax = 32650`
+- `withoutTotalCost = 32650`
+- `withoutAliExpressSku = 32649`
+
+These are not small misses. They mean AliExpress-only validation is not failing at the last inch. It is failing at the core operational truth layer for almost the whole catalog.
+
+## Why AliExpress-Only Still Has Optimization Room
+
+AliExpress-only should not be declared exhausted yet because the system has not fully exploited the strongest operational path available inside the current rules.
+
+Remaining optimization room:
+
+1. Move from broad catalog accumulation to destination-first candidate generation
+2. Require SKU capture at product ingestion or immediately reject the record from commercial workflows
+3. Persist shipping-cost and import-cost truth before any product can become `APPROVED`
+4. Use smaller high-confidence search batches based on niches with historically better AliExpress shipping coverage
+5. Downrank patterns that repeatedly cause `no_stock_for_destination` and `supplier_unavailable`
+6. Separate commercial-grade candidates from legacy artifacts much earlier in the pipeline
+
+## What Is Blocking The First Profitable Operation
+
+The first profitable AliExpress-only operation is blocked by a combination of business reality and implementation reality:
+
+Business reality:
+
+- many AliExpress products do not have safe stock, shipping, or margin truth for the intended destinations
+
+Implementation reality:
+
+- the system is not persisting enough destination, shipping, tax, and SKU truth at scale
+- current marketplace credential health is degraded
+- supplier-side PayPal payment completion is not proven
+
+## Honest Conclusion
+
+AliExpress-only remains the correct supplier strategy for now because:
+
+- it is the only production-usable supplier family in the codebase
+- the code depth is already meaningful
+- current failure evidence does not prove supplier-family exhaustion
+
+But AliExpress-only is not enough today to achieve the finish line because:
+
+- it yields zero validated-ready candidates
+- it has not produced a commercially valid automated purchase with proven PayPal settlement
+- it has not produced released marketplace funds or realized profit
+
+Current classification: `STRONG BUT INCOMPLETE`
+
+Business conclusion: AliExpress-only should remain the main path, but the software is not ready for first real profit until supplier truth coverage and payment execution are fixed.
+Archivo creado
+MARKETPLACE_VS_SUPPLIER_REALITY_AUDIT.md
++97
+-0
+
+# Marketplace vs Supplier Reality Audit
+
+Date: 2026-03-21
+Scope: eBay, MercadoLibre, and Amazon evaluated against the real AliExpress-only bottleneck
+
+## Core Conclusion
+
+eBay should remain the lead marketplace path, but not because it is healthy. It should remain the lead because the alternatives are weaker under current evidence.
+
+MercadoLibre is not currently in better operational shape.
+Amazon is too immature to matter for the first profitable AliExpress-only operation.
+
+## Marketplace Scorecard
+
+| Marketplace | Auth maturity | Publish readiness | Webhook maturity | Order-sync maturity | Post-sale relevance | Fit with AliExpress-only reality | Audit verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| eBay | Strong but currently degraded | Blocked | Historically real, currently degraded | Partial | Highest | Best current fit | Lead path, but operationally blocked |
+| MercadoLibre | Broken to partial | Weak | Secondary | Broken in current runtime | Medium | Not clearly better than eBay | Not ready to replace eBay |
+| Amazon | Broken to partial | Immature | Immature | Immature | Low for near-term plan | Weak | Ignore for first-profit path |
+
+## eBay Audit
+
+What is proven:
+
+- eBay OAuth and marketplace integration are materially real in the codebase
+- stored webhook proof indicates prior verification work reached roughly the `subscription-registered` level
+- eBay remains the most relevant marketplace for the current architecture
+
+What is only code-level or historically true:
+
+- a safe publish path exists in architecture
+- webhook event ingestion path exists
+- order lifecycle handling exists
+
+What is blocked today:
+
+- live production token refresh is repeatedly failing with HTTP `400`
+- current webhook readiness fails with blockers including missing or unreachable endpoint, verification token, notification config, topic reachability, and unusable notification token
+- safe publish is impossible because no product is `VALIDATED_READY`
+
+eBay conclusion:
+
+eBay is still the best-positioned marketplace for the first profitable AliExpress-based operation, but the operational state is currently below that bar.
+
+## MercadoLibre Audit
+
+What is proven:
+
+- MercadoLibre integration exists in the codebase
+
+What is blocked today:
+
+- live runtime logs show repeated order-sync failure with `401 invalid access token`
+- there is no evidence that MercadoLibre currently improves the shipping, stock, or margin constraints that already block AliExpress-only validation
+
+MercadoLibre conclusion:
+
+MercadoLibre is not a healthier replacement path right now. It does not solve the supplier-truth bottleneck, and its own auth state is currently broken.
+
+## Amazon Audit
+
+What is proven:
+
+- Amazon-related surface exists in the codebase
+
+What is blocked today:
+
+- no evidence that Amazon is near publish-ready, webhook-ready, or order-ready for the first profitable operation
+- no evidence that Amazon has better fit than eBay for the current AliExpress-only reality
+
+Amazon conclusion:
+
+Amazon is too immature to matter in the near-term commercial roadmap.
+
+## Supplier Reality vs Marketplace Reality
+
+The main bottleneck is still upstream of marketplace choice:
+
+- no validated-ready catalog output
+- incomplete shipping and cost truth
+- unproven supplier-side PayPal settlement
+
+This means marketplace switching would not fix the core problem.
+
+## Final Recommendations
+
+1. Keep eBay as the lead path
+2. Do not switch to MercadoLibre unless auth health and destination-fit evidence materially improves
+3. Treat Amazon as irrelevant to the first real-profit milestone
+4. Focus the next recovery cycle on supplier truth coverage, eBay credential health, and payment execution proof
+
+## Final Classification
+
+- eBay: `PARTIAL`
+- MercadoLibre: `BROKEN`
+- Amazon: `BROKEN`
+- Overall marketplace maturity: `PARTIAL`
+Estoy entrando en la parte mas sensible: post-sale, PayPal y profit proof. Ahi es donde el sistema deja de ser "software interesante" y demuestra si realmente gana dinero o no.
+
+Archivo creado
+POST_SALE_AND_PAYPAL_AUDIT.md
++166
+-0
+
+# Post-Sale and PayPal Audit
+
+Date: 2026-03-21
+Scope: Real order ingestion, order truth, supplier purchase, PayPal execution, tracking, and released-funds dependencies
+
+## Executive Verdict
+
+The post-sale stack preserves truth better than it proves commercial success.
+
+That is a strength, but it also means the platform is still not finished. It cannot yet prove the end-to-end path that matters:
+
+real marketplace order -> correct automatic AliExpress purchase -> supplier-side PayPal completion -> shipment and tracking truth -> delivery truth -> marketplace fund release -> realized net profit
+
+## Order Ingestion Audit
+
+What is code-safe:
+
+- marketplace order ingestion exists
+- order state model exists
+- order truth service exists
+- manual cancellation and invalid-order exclusion are explicitly modeled
+
+What is operationally safe:
+
+- the system already excludes invalid commercial proof cases instead of pretending they are revenue wins
+- a real failed order exists with failure reason `MANUALLY_CANCELLED_MARKETPLACE_SIDE` and an error that explicitly states it must be excluded from commercial proof
+
+What is not yet proven:
+
+- a real order captured from a safe validated listing
+- inbound webhook proof for a valid production sale path
+
+## Order State Truth Audit
+
+Current live DB snapshot:
+
+- `FAILED = 44`
+- `PURCHASED = 5`
+- `PURCHASING = 2`
+
+Why this is not commercial proof:
+
+- the `PURCHASING` rows for user `1` are `TEST_FULFILLMENT_*` records pointing to example AliExpress URLs and no linked product
+- the `PURCHASED` rows for user `396` are synthetic platform-commission test rows with titles like `Platform Commission Test Product`
+- none of those rows prove a profitable real order from a safe listing
+
+## Transition From Order To Supplier Purchase
+
+What exists:
+
+- paid-order processing service
+- fulfillment orchestration
+- capital checks
+- purchase retry logic
+- AliExpress auto-purchase service
+
+What is strong:
+
+- there is real architecture for automatic progression from paid order to supplier purchase attempt
+
+What is weak:
+
+- no commercially valid order has proven this transition end-to-end
+- purchase logs did not show recent successful real purchase evidence
+- `successfulOperations` returned no real rows
+
+## Buyer Destination and Purchase Payload Audit
+
+What is intended:
+
+- use buyer destination data to drive supplier purchase payload and shipping selection
+
+What live evidence suggests:
+
+- historic failures include missing `ship_to_country`
+- other failures include `SKU_NOT_EXIST`, `PRODUCT_NOT_EXIST`, `InvalidApiPath`, and missing `product_count`
+
+Conclusion:
+
+The system understands the payload mapping problem, but it has not yet proven a robust supplier payload on a commercially valid order.
+
+## PayPal Purchase Execution Audit
+
+This is a first-class blocker.
+
+What exists:
+
+- PayPal-related services for payouts and related payment surfaces
+- AliExpress auto-purchase orchestration that can attempt supplier ordering
+
+What is missing in proven production form:
+
+- automatic supplier-side PayPal payment completion
+- proof that AliExpress checkout completes with PayPal without manual intervention
+- proof that actual paid supplier cost is reconciled back into realized profit on a valid order
+
+Important distinction:
+
+PayPal payout capability is not the same thing as supplier checkout payment capability.
+
+Current classification for PayPal purchase maturity: `BROKEN`
+
+## Fulfillment and Tracking Truth
+
+What exists:
+
+- fulfillment services
+- tracking sync services
+- sales statuses including `DELIVERED` and `PAYOUT_FAILED`
+
+What current runtime shows:
+
+- fulfillment tracking sync processed `5`, updated `0`, errors `5`
+
+What this means:
+
+- tracking machinery exists
+- current operational proof is still weak and error-prone
+
+## Released-Funds Dependency Audit
+
+Critical truth:
+
+An order is not a success just because it was captured.
+A purchase is not a success just because supplier purchase was attempted.
+A delivered sale is not a valid profit proof if payout failed or if the sale is demo-like and excluded by truth logic.
+
+Live evidence:
+
+- one production sale is `DELIVERED` but tied to an unsafe product state and demo-like order identity
+- one production sale is `PAYOUT_FAILED`
+
+Therefore:
+
+- released marketplace funds are not yet proven on a commercially valid operation
+
+## Final Assessment
+
+What is already code-safe:
+
+- order truth
+- cancellation exclusion
+- fulfillment orchestration structure
+
+What is already operationally safe:
+
+- the platform avoids counting clearly invalid cases as commercial proof
+
+What has never been proven end-to-end:
+
+- validated listing -> real order -> automatic AliExpress purchase -> supplier-side PayPal completion -> tracking truth -> delivery truth -> released funds -> realized profit
+
+What still requires a real successful order:
+
+- real marketplace inbound event proof
+- commercially valid purchase execution proof
+- supplier-side PayPal settlement proof
+- released-funds proof
+- final realized-profit proof
+
+## Final Classification
+
+- Order capture maturity: `PARTIAL`
+- Post-sale truth maturity: `PARTIAL`
+- PayPal purchase maturity: `BROKEN`
+- Overall post-sale verdict: `STRONG TRUTH MODEL, BUT NOT OPERATIONALLY PROVEN`
+Archivo creado
+REAL_PROFIT_PROOF_GAP.md
++133
+-0
+
+# Real Profit Proof Gap
+
+Date: 2026-03-21
+Scope: Difference between estimated margin, realized profit, and released-funds truth
+
+## Executive Verdict
+
+Real profit is not proven.
+
+The software can estimate margin and can model realized profit conservatively, but it cannot currently prove a real profitable production operation that survived supplier purchase, payout release, and truth filters.
+
+Current classification: `ABSENT`
+
+## Profit Layers That Must Not Be Confused
+
+Projected profit:
+
+- estimated before publish based on product price, shipping, fees, and margin logic
+
+Publish-time estimated margin:
+
+- used to decide if a product is commercially viable enough to list
+
+Order-time estimated margin:
+
+- a stronger estimate after a sale exists but before supplier settlement and payout finality
+
+Realized profit after supplier purchase:
+
+- only valid after actual supplier cost is known and the supplier purchase truly happened
+
+Realized profit after marketplace funds release:
+
+- only valid after the marketplace payout was actually released and the order remained commercially valid
+
+## What The System Can Do Today
+
+Strengths:
+
+- the real-profit engine exists
+- it is conservative
+- it excludes demo, mock, and testlike order identities from production profit truth
+- it does not count clearly invalid operations as success
+
+This is good engineering discipline.
+
+## What Live Evidence Says Today
+
+From live DB and targeted queries:
+
+- one production sale is `DELIVERED`
+- one production sale is `PAYOUT_FAILED`
+- recent `PURCHASED` orders are synthetic
+- `successfulOperations` returned no real rows
+
+From the real-profit engine:
+
+- `moneyIn = 0`
+- `moneyOut.total = 0`
+- `totalProfit = 0`
+- `orderCount = 0`
+- `profitClassification = finalized`
+
+Interpretation:
+
+- after truth filters are applied, the system has zero recognized real production profit
+
+## Why The Existing Production Sales Do Not Count
+
+### Production DELIVERED sale
+
+Why it is weak:
+
+- tied to a demo-like order identity
+- linked product is still `LEGACY_UNVERIFIED`
+- linked product is missing shipping cost, import tax, total cost, and target country truth
+
+Conclusion:
+
+- this does not prove a safe profitable business operation
+
+### Production PAYOUT_FAILED sale
+
+Why it does not count:
+
+- payout failure means funds release is not proven
+- linked product is also not in safe validated-ready state
+
+Conclusion:
+
+- this cannot be counted as realized commercial success
+
+## Data Model and Truth Gaps
+
+Still missing for profit proof:
+
+- clean linkage from commercially valid order to actual supplier purchase cost
+- clean proof of supplier-side PayPal settlement
+- clean proof of marketplace payout release for a valid order
+- enough non-demo production rows to recognize real positive or negative unit economics
+
+## Why This Means The Software Is Not Finished
+
+The finish line is not "estimated margin exists".
+The finish line is not "a delivered-looking row exists".
+The finish line is not "a payout service exists".
+
+The finish line is:
+
+- valid order
+- valid supplier purchase
+- valid payout release
+- recognized net profit
+
+That chain has not been proven.
+
+## Exact Work Needed To Close The Gap
+
+1. Produce the first real `VALIDATED_READY` candidate
+2. Publish it safely on the lead marketplace
+3. Capture a valid non-demo order
+4. Execute a correct AliExpress purchase with actual supplier-side payment proof
+5. Persist the real supplier cost
+6. Track shipment truth to completion
+7. Confirm marketplace fund release
+8. Let the real-profit engine recognize the operation as finalized profit or loss
+
+## Final Classification
+
+- Projected profit maturity: `STRONG BUT INCOMPLETE`
+- Realized profit maturity: `PARTIAL`
+- Released-funds profit proof: `ABSENT`
+- Overall verdict: `SOFTWARE NOT YET FINISHED`
+Ya quedaron los documentos de realidad comercial. Ahora escribo el checklist de finish line y el plan priorizado para que el cierre sea accionable, no solo diagnostico.
+
+Archivo creado
+FINISH_LINE_CHECKLIST.md
++186
+-0
+
+# Finish Line Checklist
+
+Date: 2026-03-21
+Standard: The software is only finished when it can prove a real profitable AliExpress-only operation end-to-end
+
+## 1. First `VALIDATED_READY`
+
+Current status:
+
+- Not achieved
+
+Blocker:
+
+- no product survives destination, stock, shipping, SKU, cost, and margin truth
+
+Evidence:
+
+- `validatedReadyCount = 0`
+- user `1` validated-ready list is empty
+
+Exact work needed:
+
+- restore destination-first enrichment
+- require AliExpress SKU capture
+- persist shipping cost, import tax, and total cost before approval
+- tighten retry loop around the dominant rejection reasons
+
+## 2. First Safe Publish
+
+Current status:
+
+- Not achieved
+
+Blocker:
+
+- there is nothing safe to publish because `VALIDATED_READY = 0`
+
+Evidence:
+
+- live publish attempt failed after product was downgraded from `APPROVED` to `LEGACY_UNVERIFIED`
+- strict publish path requires `VALIDATED_READY`
+
+Exact work needed:
+
+- produce one real validated-ready product
+- remove stale publishable assumptions from legacy surfaces
+- verify marketplace auth health before reattempting publish
+
+## 3. First Valid Order
+
+Current status:
+
+- Not achieved on a commercially valid listing
+
+Blocker:
+
+- no safe listing has been published and inbound event proof is still missing on the real path
+
+Evidence:
+
+- stored webhook proof is historical, but current readiness fails
+- no valid validated listing exists to generate a commercial order
+
+Exact work needed:
+
+- recover eBay production token health
+- restore live webhook readiness
+- publish one validated-ready listing and wait for real order flow
+
+## 4. First Correct Automatic Supplier Purchase
+
+Current status:
+
+- Not proven
+
+Blocker:
+
+- existing `PURCHASED` and `PURCHASING` records are testlike or synthetic
+
+Evidence:
+
+- `TEST_FULFILLMENT_*` orders exist for user `1`
+- user `396` purchased orders use synthetic titles and example commerce paths
+
+Exact work needed:
+
+- tie first real order to a real AliExpress purchase attempt
+- persist purchase logs for the operation
+- prove payload accuracy using real buyer destination data
+
+## 5. First Truthful Post-Sale Lifecycle
+
+Current status:
+
+- Not proven
+
+Blocker:
+
+- no valid commercial order has completed tracking, delivery, and truth reconciliation
+
+Evidence:
+
+- tracking sync processed `5`, updated `0`, errors `5`
+- no successful operations were returned
+
+Exact work needed:
+
+- complete one real order through shipment and delivery
+- prove tracking ingestion and state transitions on that order
+- ensure cancellation and exception handling remain truth-preserving
+
+## 6. First Marketplace Fund Release
+
+Current status:
+
+- Not proven
+
+Blocker:
+
+- production payout proof is weak and one production sale is explicitly `PAYOUT_FAILED`
+
+Evidence:
+
+- production sale states include `DELIVERED` and `PAYOUT_FAILED`, but not a clean released-funds proof for a valid commercial order
+
+Exact work needed:
+
+- complete one valid sale with actual payout release
+- reconcile released funds against marketplace fees and supplier cost
+
+## 7. First Proven Net Profit
+
+Current status:
+
+- Not achieved
+
+Blocker:
+
+- real-profit engine recognizes zero finalized production profit
+
+Evidence:
+
+- `moneyIn = 0`
+- `moneyOut.total = 0`
+- `totalProfit = 0`
+- `orderCount = 0`
+
+Exact work needed:
+
+- complete one valid operation end-to-end
+- let the real-profit engine ingest the operation without excluding it as demo, failed, or invalid
+
+## 8. First Repeatable Success Path
+
+Current status:
+
+- Not achieved
+
+Blocker:
+
+- even the first real profitable loop is not yet proven
+
+Evidence:
+
+- zero validated-ready products
+- zero real finalized profit
+- degraded marketplace credential health
+- unproven supplier-side PayPal completion
+
+Exact work needed:
+
+- prove one successful loop
+- repeat it with another product or another cycle
+- show that automation can regenerate candidate flow without operator rescue
+
+## Finish-Line Conclusion
+
+The software is not finished.
+
+Closest next milestone:
+
+- first real `VALIDATED_READY` candidate tied to a live, healthy eBay publish path
+
+Critical dependency chain:
+
+- validated-ready -> safe publish -> valid order -> AliExpress purchase -> PayPal completion -> post-sale truth -> released funds -> net profit -> repeatability
+Archivo creado
+PRIORITIZED_IMPROVEMENT_PLAN_TO_REAL_PROFIT.md
++157
+-0
+
+# Prioritized Improvement Plan To Real Profit
+
+Date: 2026-03-21
+Goal: Reach the first truthful profitable AliExpress-only operation, then make it repeatable
+
+## P0 - Absolute Blockers To The First Profitable Operation
+
+### P0.1 Recover first `VALIDATED_READY` output
+
+- Exact issue: no product reaches validated-ready state
+- Why it matters for real profit: without a safe candidate, the business loop never starts
+- Affected subsystem: supplier validation, enrichment, pricing, pre-publish gate
+- Recommended fix: enforce destination-first enrichment, mandatory AliExpress SKU capture, and persistence of shipping cost, import tax, and total cost before approval
+- Expected business impact: restores the possibility of a truthful first listing
+- Validation proof required: at least one non-demo product in `VALIDATED_READY`
+
+### P0.2 Restore eBay production credential health
+
+- Exact issue: live eBay production token refresh is failing with HTTP `400`
+- Why it matters for real profit: even a valid product cannot be published or synchronized safely if lead-marketplace auth is broken
+- Affected subsystem: eBay OAuth, publish path, sync jobs
+- Recommended fix: audit production credential integrity, refresh-token validity, and environment wiring; then prove token refresh in runtime
+- Expected business impact: reopens the lead marketplace path
+- Validation proof required: successful production token refresh and successful authenticated API call in live runtime
+
+### P0.3 Restore live eBay webhook readiness
+
+- Exact issue: stored webhook proof is stronger than current live readiness
+- Why it matters for real profit: without real event flow, valid order capture and post-sale truth remain weak
+- Affected subsystem: eBay webhook config, endpoint, notification token, destination registry
+- Recommended fix: re-establish endpoint/token/config reachability and prove inbound event readiness
+- Expected business impact: enables trustworthy production event capture
+- Validation proof required: readiness check passes and first inbound production event is recorded from a valid listing
+
+### P0.4 Prove automatic AliExpress purchase on a valid order
+
+- Exact issue: current purchased orders are synthetic or testlike
+- Why it matters for real profit: the business model depends on truthful supplier purchase after real demand
+- Affected subsystem: paid-order processing, fulfillment, AliExpress auto-purchase
+- Recommended fix: run the first real order through the dropshipping API path with full purchase logging and order-to-product linkage
+- Expected business impact: validates the core dropshipping engine
+- Validation proof required: one valid marketplace order that results in a real AliExpress order ID and auditable purchase log
+
+### P0.5 Prove supplier-side PayPal settlement
+
+- Exact issue: PayPal purchase automation is not proven
+- Why it matters for real profit: order placement without payment completion is not fulfillment
+- Affected subsystem: AliExpress checkout path, PayPal integration, purchase reconciliation
+- Recommended fix: implement and verify automated supplier-side PayPal completion or explicit hard-stop logic if payment cannot complete safely
+- Expected business impact: closes the most critical unproven step in the commercial loop
+- Validation proof required: one valid order with confirmed supplier-side PayPal payment and persisted actual cost
+
+### P0.6 Prove released-funds and realized-profit recognition
+
+- Exact issue: real-profit engine currently recognizes zero finalized production profit
+- Why it matters for real profit: no business is finished without real money actually realized
+- Affected subsystem: sales ledger, payout recognition, real-profit engine
+- Recommended fix: wire the first valid operation cleanly through payout release and supplier-cost reconciliation
+- Expected business impact: converts technical workflow into real business proof
+- Validation proof required: one finalized production row with real positive or negative profit recognized by the engine
+
+## P1 - Blockers To Safe Repeatability
+
+### P1.1 Remove legacy readiness illusions
+
+- Exact issue: stale `publishable` assumptions and legacy listing states can make the system look more ready than it is
+- Why it matters for real profit: false readiness leads to operator confusion and unsafe retries
+- Affected subsystem: marketplace publish surfaces, listing reconciliation, product status model
+- Recommended fix: unify all publish surfaces around strict validated-ready semantics
+- Expected business impact: clearer operational truth and fewer wasted cycles
+- Validation proof required: no publish surface can enqueue a product that fails the strict gate
+
+### P1.2 Teach the optimizer from repeated rejection reasons
+
+- Exact issue: the system records meaningful rejection reasons but does not prove measurable learning from them
+- Why it matters for real profit: repeated failed discovery cycles waste time and API budget
+- Affected subsystem: optimizer, discovery ranking, candidate recovery
+- Recommended fix: persist failure-pattern penalties and destination-specific success weighting
+- Expected business impact: better validated-ready yield over time
+- Validation proof required: next discovery cycle shows lower rate of repeated high-confidence rejection causes
+
+### P1.3 Improve tracking truth and error recovery
+
+- Exact issue: current tracking sync processed rows but updated none and returned errors
+- Why it matters for real profit: repeatable operations need trustworthy post-sale state
+- Affected subsystem: fulfillment tracking sync, delivery reconciliation
+- Recommended fix: audit carrier mapping, retry handling, and data-shape assumptions for tracking updates
+- Expected business impact: stronger post-sale confidence and better payout timing truth
+- Validation proof required: successful tracking updates on real shipped orders
+
+### P1.4 Separate primary operator truth from cross-tenant contamination
+
+- Exact issue: synthetic or secondary-tenant data can distort business confidence
+- Why it matters for real profit: false positives around purchased or delivered states can hide real blockers
+- Affected subsystem: analytics, dashboards, reporting, audit scripts
+- Recommended fix: add stricter tenant-aware and commercial-proof-aware filters to operational reports
+- Expected business impact: cleaner decision-making
+- Validation proof required: primary-user dashboards and audits exclude synthetic cross-tenant noise by default
+
+## P2 - Blockers To High-Quality Automation
+
+### P2.1 Tighten ingestion quality
+
+- Exact issue: catalog scale is large, but commercial-grade attribute completeness is near-zero
+- Why it matters for real profit: automation quality depends on better inputs, not just more rows
+- Affected subsystem: product ingestion, enrichment, supplier mapping
+- Recommended fix: fail fast on missing destination, SKU, and cost essentials
+- Expected business impact: smaller but far more usable catalog
+- Validation proof required: materially improved attribute completeness ratios in newly ingested products
+
+### P2.2 Build a destination-first daily cycle
+
+- Exact issue: current automation runs, but not as a fully business-aware daily engine
+- Why it matters for real profit: discovery needs to search within the constraints that actually decide profitability
+- Affected subsystem: schedulers, trends, discovery, validation handoff
+- Recommended fix: run scheduled destination-scoped searches with direct handoff into strict validation
+- Expected business impact: higher candidate quality and less wasted processing
+- Validation proof required: daily cycle produces auditable candidate funnel metrics from discovery to validated-ready
+
+### P2.3 Persist real purchase telemetry
+
+- Exact issue: purchase logs and successful operations evidence are too weak
+- Why it matters for real profit: automation cannot be debugged or trusted without durable transaction traces
+- Affected subsystem: fulfillment, purchase logging, operations ledger
+- Recommended fix: log every supplier purchase attempt, payment outcome, and tracking acquisition in a commercial-proof ledger
+- Expected business impact: faster recovery and better auditability
+- Validation proof required: one full operation can be replayed from logs without ambiguity
+
+## P3 - Later Scaling Improvements
+
+### P3.1 Expand optimizer sophistication after first profit proof
+
+- Exact issue: optimization effort before first proof can become premature
+- Why it matters for real profit: scale features matter after the first profitable loop exists
+- Affected subsystem: ranking, trend blending, policy tuning
+- Recommended fix: add deeper learning, success weighting, and portfolio-style balancing only after first-profit proof
+- Expected business impact: better scaling without distracting from the real bottleneck
+- Validation proof required: repeatable profit loop already exists
+
+### P3.2 Improve multi-marketplace orchestration after eBay recovery
+
+- Exact issue: marketplace breadth is currently weaker than marketplace depth
+- Why it matters for real profit: scaling across channels only matters once one channel works honestly
+- Affected subsystem: marketplace abstraction, auth lifecycle, order normalization
+- Recommended fix: treat MercadoLibre and Amazon as second-wave work after eBay first-profit proof
+- Expected business impact: cleaner expansion path
+- Validation proof required: eBay path already produced real profit and repeatability
+
+## Final Priority Statement
+
+If the team does only three things next, they should be:
+
+1. get one real `VALIDATED_READY` product
+2. restore live eBay auth and webhook readiness
+3. prove one valid AliExpress purchase with supplier-side PayPal settlement and released-funds profit recognition
+
+Until those three are done, the software remains not finished.
+Los 7 archivos ya estan creados. Ahora hago una verificacion rapida de presencia y encabezados para asegurar que la entrega quedo completa en docs/.
+
+Se ejecutó Get-Item 'docs/MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md' | Select-Object Name,Length | Out-Stringpara 9s
+
+
+Se ejecutó Get-Item 'docs/ALIEXPRESS_ONLY_BUSINESS_GAP_MAP.md' | Select-Object Name,Length | Out-Stringpara 9s
+
+
+Se ejecutó Get-Item 'docs/MARKETPLACE_VS_SUPPLIER_REALITY_AUDIT.md' | Select-Object Name,Length | Out-Stringpara 9s
+
+
+Se ejecutó Get-Item 'docs/POST_SALE_AND_PAYPAL_AUDIT.md' | Select-Object Name,Length | Out-Stringpara 9s
+
+
+Se ejecutó Get-Item 'docs/FINISH_LINE_CHECKLIST.md' | Select-Object Name,Length | Out-Stringpara 11s
+
+
+Se ejecutó Get-Item 'docs/PRIORITIZED_IMPROVEMENT_PLAN_TO_REAL_PROFIT.md' | Select-Object Name,Length | Out-Stringpara 8s
+
+
+Se ejecutó Get-Item 'docs/REAL_PROFIT_PROOF_GAP.md' | Select-Object Name,Length | Out-Stringpara 8s
+
+
+La verificacion por shell esta devolviendo salida vacia con exit 1, asi que haré una comprobacion minima por lectura directa de los archivos para no dejar la entrega sin validar.
+
+Se ejecutó Get-Content 'docs/MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md' -TotalCount 3 | Out-Stringpara 2s
+
+
+Se ejecutó Get-Content 'docs/PRIORITIZED_IMPROVEMENT_PLAN_TO_REAL_PROFIT.md' -TotalCount 3 | Out-Stringpara 3s
+
+
+Procesado durante 16m 26s
+Quedo implementado en los 7 entregables: MASTER_AUDIT_REAL_PROFIT_OBJECTIVE.md, ALIEXPRESS_ONLY_BUSINESS_GAP_MAP.md, MARKETPLACE_VS_SUPPLIER_REALITY_AUDIT.md, POST_SALE_AND_PAYPAL_AUDIT.md, REAL_PROFIT_PROOF_GAP.md, FINISH_LINE_CHECKLIST.md y PRIORITIZED_IMPROVEMENT_PLAN_TO_REAL_PROFIT.md.
+
+La conclusion consolidada es dura pero limpia: la plataforma tiene bastante infraestructura real, pero hoy no puede probar un loop AliExpress-only con compra automatica valida, liberacion de fondos y beneficio neto real. Nota operativa: el shell de verificacion local devolvio exit 1 con salida vacia incluso en lecturas simples, asi que la confirmacion de escritura quedo respaldada por los apply_patch exitosos.
+
+MASTER AUDIT STATUS:
+
+TECHNICAL MATURITY: STRONG BUT INCOMPLETE
+ALIEXPRESS SUPPLIER MATURITY: STRONG BUT INCOMPLETE
+MARKETPLACE MATURITY: PARTIAL
+DISCOVERY/OPTIMIZER MATURITY: PARTIAL
+PRE-SALE SAFETY: STRONG BUT INCOMPLETE
+POST-SALE MATURITY: PARTIAL
+PAYPAL PURCHASE MATURITY: BROKEN
+REAL PROFIT PROOF: ABSENT
+END-TO-END AUTONOMY: PARTIAL
+SOFTWARE FINISH-LINE STATUS: MIDWAY
+TOP 10 BLOCKERS TO REAL PROFIT:
+
+VALIDATED_READY = 0, so no safe product can enter the real marketplace flow
+Shipping-cost and destination truth are missing for almost the entire catalog
+eBay production token refresh is failing with HTTP 400
+Current eBay webhook readiness is not live-safe despite stronger stored proof
+MercadoLibre auth is failing and cannot serve as a clean fallback
+Automated supplier-side PayPal completion is not proven
+Recent PURCHASED orders are synthetic and do not validate the real business loop
+Production delivered-sale evidence is commercially weak and tied to unsafe product truth
+Released marketplace funds are not proven on a valid operation
+The real-profit engine correctly reports zero real production profit
+TOP 10 STRENGTHS:
+
+Strict pre-publish validation logic exists and is commercially aware
+Rejection reasons map to real business constraints
+AliExpress is deeply integrated across discovery, validation, and purchase orchestration
+Order truth and cancellation-exclusion logic are strong
+Fulfillment orchestration is materially real
+The real-profit engine is conservative and does not inflate success
+Schedulers and operational jobs are running in production
+Historical eBay webhook verification work is materially real
+Alternative AliExpress supplier search exists inside the allowed supplier family
+The codebase already prefers truth over vanity readiness
+FINAL BUSINESS VERDICT:
+
+TECHNICALLY ADVANCED BUT NOT COMMERCIALLY READY

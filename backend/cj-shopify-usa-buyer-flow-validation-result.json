@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-04-20T19:25:47.056Z",
+  "storefrontCheck": {
+    "storeDomain": "ivanreseller-2.myshopify.com",
+    "productHandle": "neck-pillow-travel-pillow-cjjjjfzt00492-pink",
+    "storefrontUrl": "https://ivanreseller-2.myshopify.com/products/neck-pillow-travel-pillow-cjjjjfzt00492-pink",
+    "status": 200,
+    "finalUrl": "https://ivanreseller-2.myshopify.com/password",
+    "passwordGate": true,
+    "markers": [
+      "/password",
+      "Opening soon",
+      "password"
+    ],
+    "htmlSnippet": "<!doctype html> <html class=\"js full-height\" lang=\"es\"> <head> <meta charset=\"utf-8\"> <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\"> <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"> <meta name=\"theme-color\" content=\"\"> <link rel=\"canonical\" href=\"https://ivanreseller-2.myshopify.com/password\"><link rel=\"preconnect\" href=\"https://fonts.shopifycdn.com\" crossorigin><title>Iv"
+  },
+  "checkoutCheck": {
+    "canAccessCheckout": false,
+    "addToCartUrl": "https://ivanreseller-2.myshopify.com/cart/add?id=neck-pillow-travel-pillow-cjjjjfzt00492-pink&quantity=1",
+    "status": 200
+  },
+  "recommendations": {
+    "storefrontGateLiftable": false,
+    "manualActionRequired": true,
+    "actionDescription": "El password gate del storefront está ACTIVO y requiere acción manual en Shopify Admin.\n\nPASO MANUAL REQUERIDO:\n1. Acceder a: https://ivanreseller-2.myshopify.com/admin\n2. Navegar a: Online Store > Preferences\n3. En sección \"Password protection\", desmarcar \"Enable password\"\n4. Guardar cambios\n\nALTERNATIVA (via Shopify CLI si está configurado):\nshopify store:disable-password --store=ivanreseller-2.myshopify.com\n\nEVIDENCIA DEL BLOQUEO:\n- URL verificada: https://ivanreseller-2.myshopify.com/products/neck-pillow-travel-pillow-cjjjjfzt00492-pink\n- URL final: https://ivanreseller-2.myshopify.com/password\n- Status HTTP: 200\n- Marcadores encontrados: /password, Opening soon, password"
+  }
+}

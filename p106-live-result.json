@@ -1,0 +1,8 @@
+{
+  "productId": 32714,
+  "executedAt": "2026-03-27T20:09:13.197Z",
+  "pipeline": "P106 real supplement hero → persist → P103 isolation + gates → cover_main.png → optional ML replace",
+  "dryRun": false,
+  "fatalError": "p106_real_supplement_hero_missing",
+  "requiredInput": "Provide exactly one of: --url <https://...> (HTTPS only) or --workspace-path <absolute-or-relative-path-to-png-jpg-webp>. Do not use P105 --seed-from-pack-detail for P106 (detail clone is excluded)."
+}

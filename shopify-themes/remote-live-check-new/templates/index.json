@@ -1,0 +1,351 @@
+/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ *
+ * This file may be updated by the Shopify admin theme editor
+ * or related systems. Please exercise caution as any changes
+ * made to this file may be overwritten.
+ * ------------------------------------------------------------
+ */{
+  "sections": {
+    "ir_hero_final": {
+      "type": "ir-hero-live2",
+      "settings": {
+        "eyebrow": "Ivan Reseller",
+        "title": "Everyday tech, travel, and workspace essentials.",
+        "subtitle": "A cleaner catalog of practical gadgets and accessories selected to make daily routines easier to upgrade.",
+        "button_1_text": "Shop Useful Finds",
+        "button_1_link": "shopify://collections/all",
+        "button_2_text": "View Catalog",
+        "button_2_link": "shopify://collections/all",
+        "show_badges": true
+      }
+    },
+    "ir_trust_bar_main": {
+      "type": "ir-trust-bar",
+      "blocks": {
+        "ir_trust_item_shipping": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "01",
+            "label": "Clear Delivery",
+            "subtext": "Order updates without guessing"
+          }
+        },
+        "ir_trust_item_selection": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "02",
+            "label": "Useful Selection",
+            "subtext": "Products chosen for practical use"
+          }
+        },
+        "ir_trust_item_returns": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "03",
+            "label": "Easy Returns",
+            "subtext": "30-day support on eligible orders"
+          }
+        },
+        "ir_trust_item_secure": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "04",
+            "label": "Secure Checkout",
+            "subtext": "Protected payment options"
+          }
+        }
+      },
+      "block_order": [
+        "ir_trust_item_shipping",
+        "ir_trust_item_selection",
+        "ir_trust_item_returns",
+        "ir_trust_item_secure"
+      ],
+      "settings": {
+        "background_color": "#FFFFFF"
+      }
+    },
+    "product_list_fa6P9H": {
+      "type": "product-list",
+      "blocks": {
+        "static-header": {
+          "type": "_product-list-content",
+          "name": "t:names.header",
+          "static": true,
+          "settings": {
+            "content_direction": "row",
+            "vertical_on_mobile": false,
+            "horizontal_alignment": "space-between",
+            "vertical_alignment": "flex-end",
+            "align_baseline": true,
+            "horizontal_alignment_flex_direction_column": "flex-start",
+            "vertical_alignment_flex_direction_column": "center",
+            "gap": 12,
+            "width": "fill",
+            "custom_width": 100,
+            "width_mobile": "fill",
+            "custom_width_mobile": 100,
+            "height": "fit",
+            "custom_height": 100,
+            "inherit_color_scheme": true,
+            "color_scheme": "",
+            "background_media": "none",
+            "video_position": "cover",
+            "background_image_position": "cover",
+            "border": "none",
+            "border_width": 1,
+            "border_opacity": 100,
+            "border_radius": 0,
+            "padding-block-start": 0,
+            "padding-block-end": 0,
+            "padding-inline-start": 0,
+            "padding-inline-end": 0
+          },
+          "blocks": {
+            "product_list_text_YFtzcL": {
+              "type": "_product-list-text",
+              "name": "t:names.collection_title",
+              "settings": {
+                "text": "<h3>Shop practical upgrades</h3><p>Useful finds for travel, work, tech, home, and everyday routines.</p>",
+                "width": "fit-content",
+                "max_width": "normal",
+                "alignment": "left",
+                "type_preset": "h4",
+                "font": "var(--font-body--family)",
+                "font_size": "",
+                "line_height": "normal",
+                "letter_spacing": "normal",
+                "case": "none",
+                "wrap": "pretty",
+                "color": "var(--color-foreground)",
+                "background": false,
+                "background_color": "#00000026",
+                "corner_radius": 0,
+                "padding-block-start": 0,
+                "padding-block-end": 0,
+                "padding-inline-start": 0,
+                "padding-inline-end": 0
+              },
+              "blocks": {}
+            },
+            "product_list_button_MWeP9V": {
+              "type": "_product-list-button",
+              "name": "t:names.product_list_button",
+              "settings": {
+                "label": "View all products",
+                "open_in_new_tab": false,
+                "style_class": "link",
+                "width": "fit-content",
+                "custom_width": 100,
+                "width_mobile": "fit-content",
+                "custom_width_mobile": 100
+              },
+              "blocks": {}
+            }
+          },
+          "block_order": [
+            "product_list_text_YFtzcL",
+            "product_list_button_MWeP9V"
+          ]
+        },
+        "static-product-card": {
+          "type": "_product-card",
+          "name": "t:names.product_card",
+          "static": true,
+          "settings": {
+            "product_card_gap": 4,
+            "inherit_color_scheme": true,
+            "color_scheme": "",
+            "border": "none",
+            "border_width": 1,
+            "border_opacity": 100,
+            "border_radius": 0,
+            "padding-block-start": 0,
+            "padding-block-end": 0,
+            "padding-inline-start": 0,
+            "padding-inline-end": 0
+          },
+          "blocks": {
+            "product_card_gallery_677WP3": {
+              "type": "_product-card-gallery",
+              "name": "t:names.product_card_media",
+              "settings": {
+                "image_ratio": "adapt",
+                "border": "none",
+                "border_width": 1,
+                "border_opacity": 100,
+                "border_radius": 0,
+                "padding-block-start": 0,
+                "padding-block-end": 0,
+                "padding-inline-start": 0,
+                "padding-inline-end": 0
+              },
+              "blocks": {}
+            },
+            "product_title_YXxMTj": {
+              "type": "product-title",
+              "name": "t:names.product_title",
+              "settings": {
+                "width": "100%",
+                "max_width": "normal",
+                "alignment": "left",
+                "type_preset": "rte",
+                "font": "var(--font-body--family)",
+                "font_size": "1rem",
+                "line_height": "normal",
+                "letter_spacing": "normal",
+                "case": "none",
+                "wrap": "pretty",
+                "color": "var(--color-foreground)",
+                "background": false,
+                "background_color": "#00000026",
+                "corner_radius": 0,
+                "padding-block-start": 4,
+                "padding-block-end": 0,
+                "padding-inline-start": 0,
+                "padding-inline-end": 0
+              },
+              "blocks": {}
+            },
+            "price_JQzVV4": {
+              "type": "price",
+              "name": "t:names.product_price",
+              "settings": {
+                "show_sale_price_first": true,
+                "show_installments": false,
+                "show_tax_info": false,
+                "type_preset": "h6",
+                "width": "100%",
+                "alignment": "left",
+                "font": "var(--font-body--family)",
+                "font_size": "1rem",
+                "line_height": "normal",
+                "letter_spacing": "normal",
+                "case": "none",
+                "color": "var(--color-foreground)",
+                "padding-block-start": 0,
+                "padding-block-end": 0,
+                "padding-inline-start": 0,
+                "padding-inline-end": 0
+              },
+              "blocks": {}
+            }
+          },
+          "block_order": [
+            "product_card_gallery_677WP3",
+            "product_title_YXxMTj",
+            "price_JQzVV4"
+          ]
+        }
+      },
+      "name": "Featured collection",
+      "settings": {
+        "collection": "all",
+        "layout_type": "grid",
+        "carousel_on_mobile": false,
+        "max_products": 8,
+        "columns": 4,
+        "mobile_columns": "2",
+        "mobile_card_size": "60cqw",
+        "columns_gap": 8,
+        "rows_gap": 24,
+        "icons_style": "arrow",
+        "icons_shape": "none",
+        "section_width": "page-width",
+        "horizontal_alignment": "flex-start",
+        "gap": 28,
+        "color_scheme": "scheme-1",
+        "padding-block-start": 48,
+        "padding-block-end": 48
+      }
+    },
+    "ir_why_us_main": {
+      "type": "ir-why-us",
+      "blocks": {
+        "ir_value_card_selection": {
+          "type": "value_card",
+          "settings": {
+            "icon": "01",
+            "title": "Selected With Purpose",
+            "text": "The assortment is built around products that solve small, real problems across travel, work, and everyday life."
+          }
+        },
+        "ir_value_card_quality": {
+          "type": "value_card",
+          "settings": {
+            "icon": "02",
+            "title": "Clear Before Checkout",
+            "text": "Product pages are designed for fast evaluation with visible pricing, useful details, and clean trust cues."
+          }
+        },
+        "ir_value_card_experience": {
+          "type": "value_card",
+          "settings": {
+            "icon": "03",
+            "title": "Built For Confidence",
+            "text": "Secure checkout, straightforward support, and a more polished buying experience from first click to order."
+          }
+        }
+      },
+      "block_order": [
+        "ir_value_card_selection",
+        "ir_value_card_quality",
+        "ir_value_card_experience"
+      ],
+      "settings": {
+        "title": "A cleaner way to discover useful products.",
+        "subtitle": "Premium does not need to feel complicated. Ivan Reseller keeps the experience focused, practical, and easy to trust."
+      }
+    },
+    "ir_merch_story_main": {
+      "type": "ir-merchandising-story",
+      "blocks": {
+        "ir_merch_point_useful": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Useful by design",
+            "text": "Every pick needs a clear reason to exist in your bag, desk, home, or daily routine."
+          }
+        },
+        "ir_merch_point_easy": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Easy to evaluate",
+            "text": "Clean product pages, visible pricing, and straightforward trust cues help you decide faster."
+          }
+        },
+        "ir_merch_point_daily": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Made for everyday wins",
+            "text": "The assortment leans into small improvements that make travel, work, and daily life feel smoother."
+          }
+        }
+      },
+      "block_order": [
+        "ir_merch_point_useful",
+        "ir_merch_point_easy",
+        "ir_merch_point_daily"
+      ],
+      "settings": {
+        "eyebrow": "The Edit",
+        "title": "A tighter catalog. Less noise. Better everyday use.",
+        "text": "Ivan Reseller focuses on practical accessories, travel tools, workspace improvements, and useful gadgets that are easy to understand before checkout.",
+        "collection": "all",
+        "showcase_kicker": "Currently featured",
+        "showcase_title": "Small upgrades that earn their space.",
+        "button_text": "View all products",
+        "button_link": "shopify://collections/all"
+      }
+    }
+  },
+  "order": [
+    "ir_hero_final",
+    "ir_trust_bar_main",
+    "product_list_fa6P9H",
+    "ir_merch_story_main",
+    "ir_why_us_main"
+  ]
+}

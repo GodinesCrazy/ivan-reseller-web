@@ -1,0 +1,260 @@
+{
+  "productId": 32714,
+  "executedAt": "2026-03-27T00:09:04.450Z",
+  "publishPath": "MarketplaceService.publishProduct → publishToMercadoLibre → MercadoLibreService.createListing",
+  "blockNewPublications": null,
+  "userId": 1,
+  "prePublishSnapshot": {
+    "status": "VALIDATED_READY",
+    "isPublished": false,
+    "finalPrice": "12",
+    "suggestedPrice": "12",
+    "imagesFieldSample": "[\"https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg\",\"https://ae01.alicdn.com/kf/S4005cfbe2ecc4d22bd0f51da34bfc1c6M.jpg\",\"https://ae01.alicdn.com/kf/S574ecbca762045d0a6bc2a6da0f50ceb5."
+  },
+  "preflightRecheck": {
+    "overallState": "ready_to_publish",
+    "publishAllowed": true,
+    "blockers": [],
+    "listingSalePriceUsd": 12,
+    "mercadoLibreApi": {
+      "testConnectionOk": true,
+      "testConnectionMessage": "MercadoLibre connection successful",
+      "credentialEnvironment": "production"
+    },
+    "images": {
+      "publishSafe": true,
+      "blockingReason": null,
+      "imageCount": 2,
+      "packApproved": true,
+      "requiredAssets": [
+        {
+          "assetKey": "cover_main",
+          "approvalState": "approved",
+          "exists": true,
+          "localPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\cover_main.png",
+          "min1200": true,
+          "squareLike": true,
+          "notes": "P98 P65-pattern square 1536 catalog canvas; dimensions verified"
+        },
+        {
+          "assetKey": "detail_mount_interface",
+          "approvalState": "approved",
+          "exists": true,
+          "localPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\detail_mount_interface.png",
+          "min1200": true,
+          "squareLike": true,
+          "notes": "P98 P65-pattern detail square 1536 catalog canvas"
+        }
+      ]
+    }
+  },
+  "imageSwap": {
+    "originalStored": "string",
+    "temporaryPublishInputs": [
+      "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\cover_main.png",
+      "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\detail_mount_interface.png"
+    ]
+  },
+  "imagesRestoredToOriginal": true,
+  "publishAttempted": true,
+  "publishResult": {
+    "success": true,
+    "marketplace": "mercadolibre",
+    "listingId": "MLC3804135582",
+    "listingUrl": "https://articulo.mercadolibre.cl/MLC-3804135582-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM"
+  },
+  "persistence": {
+    "marketplaceListingLatest": {
+      "id": 1366,
+      "listingId": "MLC3804135582",
+      "listingUrl": "https://articulo.mercadolibre.cl/MLC-3804135582-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM",
+      "status": "active",
+      "publishedAt": "2026-03-27T00:09:49.659Z"
+    },
+    "productRowAfter": {
+      "id": 32714,
+      "status": "PUBLISHED",
+      "isPublished": true,
+      "publishedAt": "2026-03-27T00:09:52.002Z",
+      "images": "[\"https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg\",\"https://ae01.alicdn.com/kf/S4005cfbe2ecc4d22bd0f51da34bfc1c6M.jpg\",\"https://ae01.alicdn.com/kf/S574ecbca762045d0a6bc2a6da0f50ceb5.jpg\",\"https://ae01.alicdn.com/kf/S10ca44862d0f4f508d7ee342d162df4ai.jpg\",\"https://ae01.alicdn.com/kf/S80e97bb5f64349c2b69181ba42c91c4cB.jpg\",\"https://ae01.alicdn.com/kf/Sde88307b1549433e859ff52eb73e80d6g.jpg\",\"https://ae01.alicdn.com/kf/S4d28403f329442b281158c9d8695c54cC.jpg\"]"
+    }
+  },
+  "mlItemVerification": {
+    "id": "MLC3804135582",
+    "site_id": "MLC",
+    "title": "Rotating Table Cell Phone Holder Support Desktop Stand Fo...",
+    "family_name": null,
+    "seller_id": 194000595,
+    "category_id": "MLC159251",
+    "user_product_id": "MLCU3872065316",
+    "official_store_id": null,
+    "price": 11400,
+    "base_price": 11400,
+    "original_price": null,
+    "inventory_id": null,
+    "currency_id": "CLP",
+    "initial_quantity": 1,
+    "available_quantity": 1,
+    "sold_quantity": 0,
+    "sale_terms": [],
+    "buying_mode": "buy_it_now",
+    "listing_type_id": "gold_special",
+    "start_time": "2026-03-27T00:09:48.220Z",
+    "stop_time": "2046-03-21T04:00:00.000Z",
+    "end_time": "2046-03-21T04:00:00.000Z",
+    "expiration_time": "2026-06-15T00:09:48.277Z",
+    "condition": "new",
+    "permalink": "https://articulo.mercadolibre.cl/MLC-3804135582-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM",
+    "thumbnail_id": "687812-MLC109565451621_032026",
+    "thumbnail": "http://http2.mlstatic.com/D_687812-MLC109565451621_032026-I.jpg",
+    "pictures": [
+      {
+        "id": "687812-MLC109565451621_032026",
+        "url": "http://http2.mlstatic.com/D_687812-MLC109565451621_032026-O.jpg",
+        "secure_url": "https://http2.mlstatic.com/D_687812-MLC109565451621_032026-O.jpg",
+        "size": "500x500",
+        "max_size": "1200x1200",
+        "quality": ""
+      },
+      {
+        "id": "788539-MLC109565421875_032026",
+        "url": "http://http2.mlstatic.com/D_788539-MLC109565421875_032026-O.jpg",
+        "secure_url": "https://http2.mlstatic.com/D_788539-MLC109565421875_032026-O.jpg",
+        "size": "500x500",
+        "max_size": "1200x1200",
+        "quality": ""
+      }
+    ],
+    "video_id": null,
+    "descriptions": [],
+    "accepts_mercadopago": true,
+    "non_mercado_pago_payment_methods": [],
+    "shipping": {
+      "mode": "me2",
+      "methods": [],
+      "tags": [],
+      "dimensions": null,
+      "local_pick_up": false,
+      "free_shipping": false,
+      "logistic_type": "drop_off",
+      "store_pick_up": false
+    },
+    "international_delivery_mode": "none",
+    "seller_address": {
+      "comment": "102 Referencia: depto 102",
+      "address_line": "Avenida Inglesa 54",
+      "city": {
+        "id": "TUxDQ0NPTjYwZTdk",
+        "name": "Concepcion"
+      },
+      "state": {
+        "id": "CL-BI",
+        "name": "Biobío"
+      },
+      "country": {
+        "id": "CL",
+        "name": "Chile"
+      },
+      "search_location": {
+        "city": {
+          "id": "TUxDQ0NPTjYwZTdk",
+          "name": "Concepción"
+        },
+        "state": {
+          "id": "TUxDUERFTE9lODZj",
+          "name": "Biobío"
+        }
+      },
+      "latitude": -36.8526329,
+      "longitude": -73.0490112,
+      "id": 1415498212
+    },
+    "seller_contact": null,
+    "location": {},
+    "geolocation": {
+      "latitude": -36.8526329,
+      "longitude": -73.0490112
+    },
+    "coverage_areas": [],
+    "attributes": [
+      {
+        "id": "ITEM_CONDITION",
+        "name": "Condición del ítem",
+        "value_id": "2230284",
+        "value_name": "Nuevo",
+        "values": [
+          {
+            "id": "2230284",
+            "name": "Nuevo",
+            "struct": null
+          }
+        ],
+        "value_type": "list"
+      },
+      {
+        "id": "BRAND",
+        "name": "Marca del soporte",
+        "value_id": null,
+        "value_name": "Rotating",
+        "values": [
+          {
+            "id": null,
+            "name": "Rotating",
+            "struct": null
+          }
+        ],
+        "value_type": "string"
+      },
+      {
+        "id": "MODEL",
+        "name": "Modelo del soporte",
+        "value_id": null,
+        "value_name": "Rotating Table Cell",
+        "values": [
+          {
+            "id": null,
+            "name": "Rotating Table Cell",
+            "struct": null
+          }
+        ],
+        "value_type": "string"
+      }
+    ],
+    "warnings": [],
+    "listing_source": "",
+    "variations": [],
+    "status": "active",
+    "sub_status": [],
+    "tags": [
+      "good_quality_thumbnail",
+      "immediate_payment",
+      "cart_eligible"
+    ],
+    "warranty": null,
+    "catalog_product_id": null,
+    "domain_id": "MLC-TABLET_STANDS",
+    "seller_custom_field": null,
+    "parent_item_id": null,
+    "differential_pricing": null,
+    "deal_ids": [],
+    "automatic_relist": false,
+    "date_created": "2026-03-27T00:09:48.444Z",
+    "last_updated": "2026-03-27T00:09:48.444Z",
+    "health": null,
+    "catalog_listing": false,
+    "item_relations": [],
+    "channels": [
+      "marketplace"
+    ]
+  },
+  "mlItemStatusProbe": {
+    "status": "active",
+    "sub_status": [],
+    "health": null,
+    "permalink": "https://articulo.mercadolibre.cl/MLC-3804135582-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM"
+  },
+  "runtimeGates": {
+    "enableMlPublishBefore": null,
+    "enableMlPublishDuringExecution": "true"
+  }
+}

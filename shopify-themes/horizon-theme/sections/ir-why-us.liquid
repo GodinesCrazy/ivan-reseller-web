@@ -1,95 +1,11 @@
 {%- comment -%}
   IVAN RESELLER - Why Shop With Us Section
-  Three-card value proposition section
 {%- endcomment -%}
-
-<style>
-  .ir-why-section {
-    background: #F1F5F9;
-    padding: 80px 20px;
-  }
-
-  .ir-why__container {
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .ir-why__header {
-    text-align: center;
-    margin-bottom: 60px;
-  }
-
-  .ir-why__title {
-    font-size: clamp(28px, 4vw, 36px);
-    font-weight: 700;
-    margin-bottom: 16px;
-    color: #1E293B;
-  }
-
-  .ir-why__subtitle {
-    font-size: 18px;
-    color: #64748B;
-    max-width: 600px;
-    margin: 0 auto;
-  }
-
-  .ir-why__grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 32px;
-  }
-
-  .ir-why-card {
-    text-align: center;
-    padding: 48px 32px;
-    background: #FFFFFF;
-    border-radius: 16px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    transition: all 250ms ease;
-  }
-
-  .ir-why-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  }
-
-  .ir-why-card__icon {
-    width: 72px;
-    height: 72px;
-    background: #14B8A6;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 24px;
-    font-size: 32px;
-  }
-
-  .ir-why-card__title {
-    font-size: 24px;
-    font-weight: 600;
-    margin-bottom: 16px;
-    color: #1E293B;
-  }
-
-  .ir-why-card__text {
-    font-size: 16px;
-    color: #64748B;
-    line-height: 1.6;
-  }
-
-  @media (max-width: 900px) {
-    .ir-why__grid {
-      grid-template-columns: 1fr;
-      max-width: 500px;
-      margin: 0 auto;
-    }
-  }
-</style>
 
 <div class="ir-why-section">
   <div class="ir-why__container">
     <div class="ir-why__header">
+      <p class="ir-why__eyebrow">Why Ivan Reseller</p>
       {% if section.settings.title != blank %}
         <h2 class="ir-why__title">{{ section.settings.title }}</h2>
       {% endif %}
@@ -101,6 +17,8 @@
     <div class="ir-why__grid">
       {% for block in section.blocks %}
         <div class="ir-why-card" {{ block.shopify_attributes }}>
+          <span class="ir-why-card__step">0{{ forloop.index }}</span>
+
           {% if block.settings.icon != blank %}
             <div class="ir-why-card__icon">
               {{ block.settings.icon }}
@@ -160,7 +78,7 @@
           "type": "textarea",
           "id": "text",
           "label": "Card Text",
-          "default": "Our algorithms analyze trends to bring you products you'll love — before everyone else has them."
+          "default": "Our algorithms analyze trends to bring you products you'll love before everyone else has them."
         }
       ]
     }
@@ -174,7 +92,7 @@
           "settings": {
             "icon": "🤖",
             "title": "AI-Powered Discovery",
-            "text": "Our algorithms analyze trends to bring you products you'll love — before everyone else has them."
+            "text": "Our algorithms analyze trends to bring you products you'll love before everyone else has them."
           }
         },
         {
@@ -182,7 +100,7 @@
           "settings": {
             "icon": "⚡",
             "title": "Fast USA Shipping",
-            "text": "Most orders ship within 24 hours from US-based facilities. Track your order in real-time."
+            "text": "Most orders ship within 24 hours from US-based facilities. Track your order in real time."
           }
         },
         {

@@ -1,0 +1,1091 @@
+{
+  "id": "85202c53-8c73-4f6d-9b68-10378b3c057a",
+  "name": "ivan-reseller",
+  "deletedAt": null,
+  "workspace": {
+    "name": "godinescrazy's Projects"
+  },
+  "environments": {
+    "edges": [
+      {
+        "node": {
+          "id": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+          "name": "production",
+          "canAccess": true,
+          "deletedAt": null,
+          "serviceInstances": {
+            "edges": [
+              {
+                "node": {
+                  "id": "45aecd5f-11c1-4e4d-a052-cfd4515cad8e",
+                  "serviceId": "b9ac2869-e25d-42df-9ba7-cc42952bb413",
+                  "serviceName": "Redis",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "id": "26d6a6fd-8981-4f84-91df-b61cc0bd11f3",
+                    "meta": {
+                      "duration": 9117,
+                      "image": "redis:8.2.1",
+                      "imageDigest": "sha256:5fa2edb1e408fa8235e6db8fab01d1afaaae96c9403ba67b70feceb8661e8621",
+                      "logsV2": true,
+                      "patchId": "311fd645-e50a-481a-a117-945cf56ed35f",
+                      "reason": "deploy",
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": null,
+                          "buildEnvironment": null,
+                          "builder": "RAILPACK",
+                          "dockerfilePath": null,
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": null,
+                          "healthcheckTimeout": null,
+                          "limitOverride": null,
+                          "multiRegionConfig": {
+                            "us-west2": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": null,
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": null,
+                          "restartPolicyMaxRetries": 10,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": "/bin/sh -c \"rm -rf $RAILWAY_VOLUME_MOUNT_PATH/lost+found/ && exec docker-entrypoint.sh redis-server --requirepass $REDIS_PASSWORD --save 60 1 --dir $RAILWAY_VOLUME_MOUNT_PATH\"",
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "volumeMounts": [
+                        "/data"
+                      ]
+                    },
+                    "status": "SUCCESS",
+                    "createdAt": "2025-11-13T00:17:01.820Z",
+                    "deploymentStopped": false
+                  },
+                  "activeDeployments": [
+                    {
+                      "id": "26d6a6fd-8981-4f84-91df-b61cc0bd11f3",
+                      "status": "SUCCESS",
+                      "createdAt": "2025-11-13T00:17:01.820Z",
+                      "meta": {
+                        "duration": 9117,
+                        "image": "redis:8.2.1",
+                        "imageDigest": "sha256:5fa2edb1e408fa8235e6db8fab01d1afaaae96c9403ba67b70feceb8661e8621",
+                        "logsV2": true,
+                        "patchId": "311fd645-e50a-481a-a117-945cf56ed35f",
+                        "reason": "deploy",
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": null,
+                            "buildEnvironment": null,
+                            "builder": "RAILPACK",
+                            "dockerfilePath": null,
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": null,
+                            "healthcheckTimeout": null,
+                            "limitOverride": null,
+                            "multiRegionConfig": {
+                              "us-west2": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": null,
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": null,
+                            "restartPolicyMaxRetries": 10,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": "/bin/sh -c \"rm -rf $RAILWAY_VOLUME_MOUNT_PATH/lost+found/ && exec docker-entrypoint.sh redis-server --requirepass $REDIS_PASSWORD --save 60 1 --dir $RAILWAY_VOLUME_MOUNT_PATH\"",
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "volumeMounts": [
+                          "/data"
+                        ]
+                      }
+                    }
+                  ],
+                  "source": {
+                    "repo": null,
+                    "image": "redis:8.2.1"
+                  },
+                  "domains": {
+                    "serviceDomains": [],
+                    "customDomains": []
+                  },
+                  "cronSchedule": null,
+                  "nextCronRunAt": null,
+                  "startCommand": "/bin/sh -c \"rm -rf $RAILWAY_VOLUME_MOUNT_PATH/lost+found/ && exec docker-entrypoint.sh redis-server --requirepass $REDIS_PASSWORD --save 60 1 --dir $RAILWAY_VOLUME_MOUNT_PATH\""
+                }
+              },
+              {
+                "node": {
+                  "id": "4aefe5e4-d74c-484e-8085-2deda764fabb",
+                  "serviceId": "e9382361-2fc3-46d1-96ad-704ae7f349a7",
+                  "serviceName": "native-scraper",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "id": "506e471f-4a07-4878-8cfc-6810bff2eb8a",
+                    "meta": {
+                      "buildOnly": false,
+                      "configFile": null,
+                      "fileServiceManifest": {},
+                      "imageDigest": "sha256:5657f1ebac9061769e3d63dffa167f73bd0fcd1761bbbbb2a4802c6b5b734ed7",
+                      "logsV2": true,
+                      "nixpacksProviders": [
+                        "node"
+                      ],
+                      "propertyFileMapping": {},
+                      "railpackInfo": {
+                        "detectedProviders": [
+                          "node"
+                        ],
+                        "metadata": {
+                          "nodePackageManager": "npm",
+                          "nodeRuntime": "node",
+                          "providers": "node"
+                        },
+                        "railpackVersion": "0.17.1",
+                        "resolvedPackages": {
+                          "node": {
+                            "requestedVersion": "22",
+                            "resolvedVersion": "22.22.0"
+                          }
+                        }
+                      },
+                      "reason": "deploy",
+                      "rootDirectory": null,
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": null,
+                          "buildEnvironment": null,
+                          "builder": "RAILPACK",
+                          "dockerfilePath": null,
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": null,
+                          "healthcheckTimeout": null,
+                          "limitOverride": null,
+                          "multiRegionConfig": {
+                            "us-west2": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": null,
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": null,
+                          "restartPolicyMaxRetries": 10,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": null,
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "volumeMounts": []
+                    },
+                    "status": "SUCCESS",
+                    "createdAt": "2026-02-02T23:25:24.228Z",
+                    "deploymentStopped": false
+                  },
+                  "activeDeployments": [
+                    {
+                      "id": "506e471f-4a07-4878-8cfc-6810bff2eb8a",
+                      "status": "SUCCESS",
+                      "createdAt": "2026-02-02T23:25:24.228Z",
+                      "meta": {
+                        "buildOnly": false,
+                        "configFile": null,
+                        "fileServiceManifest": {},
+                        "imageDigest": "sha256:5657f1ebac9061769e3d63dffa167f73bd0fcd1761bbbbb2a4802c6b5b734ed7",
+                        "logsV2": true,
+                        "nixpacksProviders": [
+                          "node"
+                        ],
+                        "propertyFileMapping": {},
+                        "railpackInfo": {
+                          "detectedProviders": [
+                            "node"
+                          ],
+                          "metadata": {
+                            "nodePackageManager": "npm",
+                            "nodeRuntime": "node",
+                            "providers": "node"
+                          },
+                          "railpackVersion": "0.17.1",
+                          "resolvedPackages": {
+                            "node": {
+                              "requestedVersion": "22",
+                              "resolvedVersion": "22.22.0"
+                            }
+                          }
+                        },
+                        "reason": "deploy",
+                        "rootDirectory": null,
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": null,
+                            "buildEnvironment": null,
+                            "builder": "RAILPACK",
+                            "dockerfilePath": null,
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": null,
+                            "healthcheckTimeout": null,
+                            "limitOverride": null,
+                            "multiRegionConfig": {
+                              "us-west2": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": null,
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": null,
+                            "restartPolicyMaxRetries": 10,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": null,
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "volumeMounts": []
+                      }
+                    }
+                  ],
+                  "source": {
+                    "repo": null,
+                    "image": null
+                  },
+                  "domains": {
+                    "serviceDomains": [
+                      {
+                        "id": "2f5189b8-7655-451f-ada0-7923fd2585bc",
+                        "domain": "native-scraper-production.up.railway.app",
+                        "targetPort": null
+                      }
+                    ],
+                    "customDomains": []
+                  },
+                  "cronSchedule": null,
+                  "nextCronRunAt": null,
+                  "startCommand": null
+                }
+              },
+              {
+                "node": {
+                  "id": "a3b7de98-c6cf-4f91-8ef3-415fa6ea9952",
+                  "serviceId": "96660b0b-011d-43a4-a37a-08ba43f32a12",
+                  "serviceName": "scraper-bridge",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "id": "210fc15d-7dd3-4745-a6b1-ef1135df386d",
+                    "meta": {
+                      "buildOnly": false,
+                      "configFile": "railway.json",
+                      "fileServiceManifest": {
+                        "build": {
+                          "buildCommand": "npm install",
+                          "builder": "NIXPACKS"
+                        },
+                        "deploy": {
+                          "healthcheckPath": "/health",
+                          "healthcheckTimeout": 5000,
+                          "restartPolicyMaxRetries": 5,
+                          "restartPolicyType": "ON_FAILURE",
+                          "startCommand": "npm start"
+                        }
+                      },
+                      "imageDigest": "sha256:665d1647bb2871b5a3d360419f9e7f433ed0b6538d5c7760fa55355123c929ea",
+                      "logsV2": true,
+                      "nixpacksProviders": [
+                        "node"
+                      ],
+                      "propertyFileMapping": {
+                        "build.buildCommand": "$.build.buildCommand",
+                        "build.builder": "$.build.builder",
+                        "deploy.healthcheckPath": "$.deploy.healthcheckPath",
+                        "deploy.healthcheckTimeout": "$.deploy.healthcheckTimeout",
+                        "deploy.restartPolicyMaxRetries": "$.deploy.restartPolicyMaxRetries",
+                        "deploy.restartPolicyType": "$.deploy.restartPolicyType",
+                        "deploy.startCommand": "$.deploy.startCommand"
+                      },
+                      "reason": "deploy",
+                      "rootDirectory": null,
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": "npm install",
+                          "buildEnvironment": null,
+                          "builder": "NIXPACKS",
+                          "dockerfilePath": null,
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": "/health",
+                          "healthcheckTimeout": 5000,
+                          "limitOverride": null,
+                          "multiRegionConfig": {
+                            "us-west2": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": null,
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": null,
+                          "restartPolicyMaxRetries": 5,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": "npm start",
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "volumeMounts": []
+                    },
+                    "status": "SUCCESS",
+                    "createdAt": "2026-02-02T21:48:04.559Z",
+                    "deploymentStopped": false
+                  },
+                  "activeDeployments": [
+                    {
+                      "id": "210fc15d-7dd3-4745-a6b1-ef1135df386d",
+                      "status": "SUCCESS",
+                      "createdAt": "2026-02-02T21:48:04.559Z",
+                      "meta": {
+                        "buildOnly": false,
+                        "configFile": "railway.json",
+                        "fileServiceManifest": {
+                          "build": {
+                            "buildCommand": "npm install",
+                            "builder": "NIXPACKS"
+                          },
+                          "deploy": {
+                            "healthcheckPath": "/health",
+                            "healthcheckTimeout": 5000,
+                            "restartPolicyMaxRetries": 5,
+                            "restartPolicyType": "ON_FAILURE",
+                            "startCommand": "npm start"
+                          }
+                        },
+                        "imageDigest": "sha256:665d1647bb2871b5a3d360419f9e7f433ed0b6538d5c7760fa55355123c929ea",
+                        "logsV2": true,
+                        "nixpacksProviders": [
+                          "node"
+                        ],
+                        "propertyFileMapping": {
+                          "build.buildCommand": "$.build.buildCommand",
+                          "build.builder": "$.build.builder",
+                          "deploy.healthcheckPath": "$.deploy.healthcheckPath",
+                          "deploy.healthcheckTimeout": "$.deploy.healthcheckTimeout",
+                          "deploy.restartPolicyMaxRetries": "$.deploy.restartPolicyMaxRetries",
+                          "deploy.restartPolicyType": "$.deploy.restartPolicyType",
+                          "deploy.startCommand": "$.deploy.startCommand"
+                        },
+                        "reason": "deploy",
+                        "rootDirectory": null,
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": "npm install",
+                            "buildEnvironment": null,
+                            "builder": "NIXPACKS",
+                            "dockerfilePath": null,
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": "/health",
+                            "healthcheckTimeout": 5000,
+                            "limitOverride": null,
+                            "multiRegionConfig": {
+                              "us-west2": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": null,
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": null,
+                            "restartPolicyMaxRetries": 5,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": "npm start",
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "volumeMounts": []
+                      }
+                    }
+                  ],
+                  "source": {
+                    "repo": null,
+                    "image": null
+                  },
+                  "domains": {
+                    "serviceDomains": [
+                      {
+                        "id": "995a80f1-b69d-4aa1-b6b6-5b3d6c1ea700",
+                        "domain": "scraper-bridge-production.up.railway.app",
+                        "targetPort": null
+                      }
+                    ],
+                    "customDomains": []
+                  },
+                  "cronSchedule": null,
+                  "nextCronRunAt": null,
+                  "startCommand": null
+                }
+              },
+              {
+                "node": {
+                  "id": "bb3d27f3-e792-4dd9-96f7-e5cfe54279f8",
+                  "serviceId": "9797c8db-5ed0-4485-848e-3cf964bf0859",
+                  "serviceName": "ivan-reseller-web",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "id": "f4d17c61-14d5-46ae-866f-61a299748095",
+                    "meta": {
+                      "branch": "main",
+                      "buildOnly": false,
+                      "commitAuthor": "GodinesCrazy",
+                      "commitHash": "a83fb35ae7a1c4bb9af8b5f05d747d32858d47f2",
+                      "commitMessage": "Fix CJ Shopify live truth reconciliation",
+                      "configFile": "/railway.toml",
+                      "fileServiceManifest": {
+                        "build": {
+                          "buildCommand": "npm ci && npm run build"
+                        },
+                        "deploy": {
+                          "healthcheckPath": "/health",
+                          "healthcheckTimeout": 720,
+                          "startCommand": "npm run start"
+                        }
+                      },
+                      "logsV2": true,
+                      "nixpacksProviders": [],
+                      "plan": "pro",
+                      "propertyFileMapping": {
+                        "build.buildCommand": "$.build.buildCommand",
+                        "deploy.healthcheckPath": "$.deploy.healthcheckPath",
+                        "deploy.healthcheckTimeout": "$.deploy.healthcheckTimeout",
+                        "deploy.releaseCommand": "$.deploy.releaseCommand",
+                        "deploy.startCommand": "$.deploy.startCommand"
+                      },
+                      "reason": "deploy",
+                      "repo": "GodinesCrazy/ivan-reseller-web",
+                      "rootDirectory": "/backend",
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": "npm ci && npm run build",
+                          "buildEnvironment": "V3",
+                          "builder": "DOCKERFILE",
+                          "dockerfilePath": "/backend/Dockerfile",
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": "/health",
+                          "healthcheckTimeout": 720,
+                          "ipv6EgressEnabled": false,
+                          "limitOverride": {
+                            "containers": {
+                              "memoryBytes": 32000000000
+                            }
+                          },
+                          "multiRegionConfig": {
+                            "us-west2": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": [
+                            "npm install && npx prisma generate"
+                          ],
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": null,
+                          "restartPolicyMaxRetries": 10,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": "npm run start",
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "volumeMounts": []
+                    },
+                    "status": "FAILED",
+                    "createdAt": "2026-04-21T19:49:06.167Z",
+                    "deploymentStopped": true
+                  },
+                  "activeDeployments": [
+                    {
+                      "id": "1c2309a5-78c3-4fa5-8046-20765033c316",
+                      "status": "SUCCESS",
+                      "createdAt": "2026-04-20T18:27:42.665Z",
+                      "meta": {
+                        "branch": "main",
+                        "buildOnly": false,
+                        "commitAuthor": "GodinesCrazy",
+                        "commitHash": "225981db829344cf447c5d765d05fcb00ad8682e",
+                        "commitMessage": "docs(cj-shopify-usa): record production deploy validation",
+                        "configFile": "/railway.toml",
+                        "duration": 8,
+                        "fileServiceManifest": {
+                          "build": {
+                            "buildCommand": "npm ci && npm run build"
+                          },
+                          "deploy": {
+                            "healthcheckPath": "/health",
+                            "healthcheckTimeout": 720,
+                            "startCommand": "npm run start"
+                          }
+                        },
+                        "imageDigest": "sha256:6636436d92082411313a229de3298f3062c091462471ff071f23929fb373c0aa",
+                        "logsV2": true,
+                        "nixpacksProviders": [],
+                        "plan": "pro",
+                        "propertyFileMapping": {
+                          "build.buildCommand": "$.build.buildCommand",
+                          "deploy.healthcheckPath": "$.deploy.healthcheckPath",
+                          "deploy.healthcheckTimeout": "$.deploy.healthcheckTimeout",
+                          "deploy.releaseCommand": "$.deploy.releaseCommand",
+                          "deploy.startCommand": "$.deploy.startCommand"
+                        },
+                        "reason": "deploy",
+                        "repo": "GodinesCrazy/ivan-reseller-web",
+                        "rootDirectory": "/backend",
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": "npm ci && npm run build",
+                            "buildEnvironment": "V3",
+                            "builder": "DOCKERFILE",
+                            "dockerfilePath": "/backend/Dockerfile",
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": "/health",
+                            "healthcheckTimeout": 720,
+                            "ipv6EgressEnabled": false,
+                            "limitOverride": {
+                              "containers": {
+                                "memoryBytes": 32000000000
+                              }
+                            },
+                            "multiRegionConfig": {
+                              "us-west2": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": [
+                              "npm install && npx prisma generate"
+                            ],
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": null,
+                            "restartPolicyMaxRetries": 10,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": "npm run start",
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "volumeMounts": []
+                      }
+                    }
+                  ],
+                  "source": {
+                    "repo": "GodinesCrazy/ivan-reseller-web",
+                    "image": null
+                  },
+                  "domains": {
+                    "serviceDomains": [
+                      {
+                        "id": "b397ef97-bcf3-43e6-be75-ea0d53e6f555",
+                        "domain": "ivan-reseller-web-production.up.railway.app",
+                        "targetPort": 3000
+                      }
+                    ],
+                    "customDomains": []
+                  },
+                  "cronSchedule": null,
+                  "nextCronRunAt": null,
+                  "startCommand": "npm start"
+                }
+              },
+              {
+                "node": {
+                  "id": "c050465b-4c28-485a-9e3c-c567cca8b232",
+                  "serviceId": "03ba690b-efdf-4d1e-94cd-dcd40c311c75",
+                  "serviceName": "Postgres",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "id": "700511b3-7370-4057-aca6-72e54ec0da23",
+                    "meta": {
+                      "image": "ghcr.io/railwayapp-templates/postgres-ssl:17",
+                      "imageDigest": "sha256:c639e991e512d2ef53c4a00747aba1cf73dae888d332a837c75662a4bde3ad37",
+                      "logsV2": true,
+                      "patchId": "d8f6aa42-1d99-4c36-bcce-ad05ca77d627",
+                      "reason": "deploy",
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": null,
+                          "buildEnvironment": null,
+                          "builder": "RAILPACK",
+                          "dockerfilePath": null,
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": null,
+                          "healthcheckTimeout": null,
+                          "limitOverride": null,
+                          "multiRegionConfig": {
+                            "us-west2": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": null,
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": "/var/lib/postgresql/data",
+                          "restartPolicyMaxRetries": 10,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": null,
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "volumeMounts": [
+                        "/var/lib/postgresql/data"
+                      ]
+                    },
+                    "status": "SUCCESS",
+                    "createdAt": "2025-11-06T06:23:35.442Z",
+                    "deploymentStopped": false
+                  },
+                  "activeDeployments": [
+                    {
+                      "id": "700511b3-7370-4057-aca6-72e54ec0da23",
+                      "status": "SUCCESS",
+                      "createdAt": "2025-11-06T06:23:35.442Z",
+                      "meta": {
+                        "image": "ghcr.io/railwayapp-templates/postgres-ssl:17",
+                        "imageDigest": "sha256:c639e991e512d2ef53c4a00747aba1cf73dae888d332a837c75662a4bde3ad37",
+                        "logsV2": true,
+                        "patchId": "d8f6aa42-1d99-4c36-bcce-ad05ca77d627",
+                        "reason": "deploy",
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": null,
+                            "buildEnvironment": null,
+                            "builder": "RAILPACK",
+                            "dockerfilePath": null,
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": null,
+                            "healthcheckTimeout": null,
+                            "limitOverride": null,
+                            "multiRegionConfig": {
+                              "us-west2": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": null,
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": "/var/lib/postgresql/data",
+                            "restartPolicyMaxRetries": 10,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": null,
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "volumeMounts": [
+                          "/var/lib/postgresql/data"
+                        ]
+                      }
+                    }
+                  ],
+                  "source": {
+                    "repo": null,
+                    "image": "ghcr.io/railwayapp-templates/postgres-ssl:17"
+                  },
+                  "domains": {
+                    "serviceDomains": [],
+                    "customDomains": []
+                  },
+                  "cronSchedule": null,
+                  "nextCronRunAt": null,
+                  "startCommand": null
+                }
+              },
+              {
+                "node": {
+                  "id": "c5b1eec5-3330-4989-be1a-810a536b8781",
+                  "serviceId": "c13c8ecc-285c-41fd-a49b-ab7c1d2cfceb",
+                  "serviceName": "ivan-reseller-backend",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "latestDeployment": {
+                    "canRedeploy": true,
+                    "id": "b3722816-ff8c-4728-bd0c-cda61bc37e1e",
+                    "meta": {
+                      "branch": "main",
+                      "buildOnly": false,
+                      "commitAuthor": "GodinesCrazy",
+                      "commitHash": "a83fb35ae7a1c4bb9af8b5f05d747d32858d47f2",
+                      "commitMessage": "Fix CJ Shopify live truth reconciliation",
+                      "configFile": "backend/railway.json",
+                      "fileServiceManifest": {
+                        "build": {
+                          "buildCommand": "npm ci && npm run build"
+                        },
+                        "deploy": {
+                          "healthcheckPath": "/health",
+                          "healthcheckTimeout": 720,
+                          "startCommand": "node dist/server-bootstrap.js"
+                        }
+                      },
+                      "logsV2": true,
+                      "nixpacksProviders": [],
+                      "plan": "pro",
+                      "propertyFileMapping": {
+                        "build.buildCommand": "$.build.buildCommand",
+                        "deploy.healthcheckPath": "$.deploy.healthcheckPath",
+                        "deploy.healthcheckTimeout": "$.deploy.healthcheckTimeout",
+                        "deploy.startCommand": "$.deploy.startCommand"
+                      },
+                      "reason": "deploy",
+                      "repo": "GodinesCrazy/ivan-reseller-web",
+                      "rootDirectory": "backend",
+                      "runtime": "V2",
+                      "serviceManifest": {
+                        "build": {
+                          "buildCommand": "npm ci && npm run build",
+                          "buildEnvironment": null,
+                          "builder": "DOCKERFILE",
+                          "dockerfilePath": "backend/Dockerfile",
+                          "nixpacksConfigPath": null,
+                          "nixpacksPlan": null,
+                          "watchPatterns": []
+                        },
+                        "deploy": {
+                          "cronSchedule": null,
+                          "drainingSeconds": null,
+                          "healthcheckPath": "/health",
+                          "healthcheckTimeout": 720,
+                          "ipv6EgressEnabled": false,
+                          "limitOverride": null,
+                          "multiRegionConfig": {
+                            "us-west2": {
+                              "numReplicas": 1
+                            }
+                          },
+                          "numReplicas": 1,
+                          "overlapSeconds": null,
+                          "preDeployCommand": null,
+                          "region": null,
+                          "registryCredentials": null,
+                          "requiredMountPath": null,
+                          "restartPolicyMaxRetries": 10,
+                          "restartPolicyType": "ON_FAILURE",
+                          "runtime": "V2",
+                          "sleepApplication": false,
+                          "startCommand": "node dist/server-bootstrap.js",
+                          "useLegacyStacker": false
+                        }
+                      },
+                      "volumeMounts": []
+                    },
+                    "status": "FAILED",
+                    "createdAt": "2026-04-21T19:49:07.495Z",
+                    "deploymentStopped": true
+                  },
+                  "activeDeployments": [
+                    {
+                      "id": "09d13dee-123a-48bc-875e-6cf7739e2e82",
+                      "status": "SUCCESS",
+                      "createdAt": "2026-04-20T18:27:43.470Z",
+                      "meta": {
+                        "branch": "main",
+                        "buildOnly": false,
+                        "commitAuthor": "GodinesCrazy",
+                        "commitHash": "225981db829344cf447c5d765d05fcb00ad8682e",
+                        "commitMessage": "docs(cj-shopify-usa): record production deploy validation",
+                        "configFile": "backend/railway.json",
+                        "fileServiceManifest": {
+                          "build": {
+                            "buildCommand": "npm ci && npm run build"
+                          },
+                          "deploy": {
+                            "healthcheckPath": "/health",
+                            "healthcheckTimeout": 720,
+                            "startCommand": "node dist/server-bootstrap.js"
+                          }
+                        },
+                        "imageDigest": "sha256:e83fe758f88802f4227f402702e3e6747ac2a8a9cc4c5f8a9f672dfd3c90baf3",
+                        "logsV2": true,
+                        "nixpacksProviders": [],
+                        "plan": "pro",
+                        "propertyFileMapping": {
+                          "build.buildCommand": "$.build.buildCommand",
+                          "deploy.healthcheckPath": "$.deploy.healthcheckPath",
+                          "deploy.healthcheckTimeout": "$.deploy.healthcheckTimeout",
+                          "deploy.startCommand": "$.deploy.startCommand"
+                        },
+                        "reason": "deploy",
+                        "repo": "GodinesCrazy/ivan-reseller-web",
+                        "rootDirectory": "backend",
+                        "runtime": "V2",
+                        "serviceManifest": {
+                          "build": {
+                            "buildCommand": "npm ci && npm run build",
+                            "buildEnvironment": null,
+                            "builder": "DOCKERFILE",
+                            "dockerfilePath": "backend/Dockerfile",
+                            "nixpacksConfigPath": null,
+                            "nixpacksPlan": null,
+                            "watchPatterns": []
+                          },
+                          "deploy": {
+                            "cronSchedule": null,
+                            "drainingSeconds": null,
+                            "healthcheckPath": "/health",
+                            "healthcheckTimeout": 720,
+                            "ipv6EgressEnabled": false,
+                            "limitOverride": null,
+                            "multiRegionConfig": {
+                              "us-west2": {
+                                "numReplicas": 1
+                              }
+                            },
+                            "numReplicas": 1,
+                            "overlapSeconds": null,
+                            "preDeployCommand": null,
+                            "region": null,
+                            "registryCredentials": null,
+                            "requiredMountPath": null,
+                            "restartPolicyMaxRetries": 10,
+                            "restartPolicyType": "ON_FAILURE",
+                            "runtime": "V2",
+                            "sleepApplication": false,
+                            "startCommand": "node dist/server-bootstrap.js",
+                            "useLegacyStacker": false
+                          }
+                        },
+                        "volumeMounts": []
+                      }
+                    }
+                  ],
+                  "source": {
+                    "repo": "GodinesCrazy/ivan-reseller-web",
+                    "image": null
+                  },
+                  "domains": {
+                    "serviceDomains": [
+                      {
+                        "id": "a53edab8-3705-4014-b94d-924c526d37a4",
+                        "domain": "ivan-reseller-backend-production.up.railway.app",
+                        "targetPort": 8080
+                      }
+                    ],
+                    "customDomains": []
+                  },
+                  "cronSchedule": null,
+                  "nextCronRunAt": null,
+                  "startCommand": null
+                }
+              }
+            ]
+          },
+          "volumeInstances": {
+            "edges": [
+              {
+                "node": {
+                  "serviceId": null,
+                  "mountPath": "/var/lib/postgresql/data",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "currentSizeMB": 97.091584,
+                  "sizeMB": 500,
+                  "volume": {
+                    "name": "postgres-volume",
+                    "id": "14c11dd5-d397-4c00-b1eb-feabb8f0c62b"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "serviceId": "03ba690b-efdf-4d1e-94cd-dcd40c311c75",
+                  "mountPath": "/var/lib/postgresql/data",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "currentSizeMB": 364.83072,
+                  "sizeMB": 1000,
+                  "volume": {
+                    "name": "postgres-volume-kWVb",
+                    "id": "8bd2f1e9-ef61-4b30-ab98-dc7ec9f5ab09"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "serviceId": "b9ac2869-e25d-42df-9ba7-cc42952bb413",
+                  "mountPath": "/data",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "currentSizeMB": 65.929216,
+                  "sizeMB": 500,
+                  "volume": {
+                    "name": "redis-volume",
+                    "id": "d08a82a8-9cde-4d33-a948-9a24542ea66a"
+                  }
+                }
+              },
+              {
+                "node": {
+                  "serviceId": null,
+                  "mountPath": "/var/lib/postgresql/data",
+                  "environmentId": "9894411e-f351-4b52-b9fc-14acdf28c2bc",
+                  "currentSizeMB": 97.8944,
+                  "sizeMB": 500,
+                  "volume": {
+                    "name": "postgres-volume-vJUI",
+                    "id": "4c11bd6f-63f9-4448-9bbf-0ae03aacafe6"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "services": {
+    "edges": [
+      {
+        "node": {
+          "id": "03ba690b-efdf-4d1e-94cd-dcd40c311c75",
+          "name": "Postgres"
+        }
+      },
+      {
+        "node": {
+          "id": "96660b0b-011d-43a4-a37a-08ba43f32a12",
+          "name": "scraper-bridge"
+        }
+      },
+      {
+        "node": {
+          "id": "9797c8db-5ed0-4485-848e-3cf964bf0859",
+          "name": "ivan-reseller-web"
+        }
+      },
+      {
+        "node": {
+          "id": "b9ac2869-e25d-42df-9ba7-cc42952bb413",
+          "name": "Redis"
+        }
+      },
+      {
+        "node": {
+          "id": "c13c8ecc-285c-41fd-a49b-ab7c1d2cfceb",
+          "name": "ivan-reseller-backend"
+        }
+      },
+      {
+        "node": {
+          "id": "e9382361-2fc3-46d1-96ad-704ae7f349a7",
+          "name": "native-scraper"
+        }
+      }
+    ]
+  }
+}

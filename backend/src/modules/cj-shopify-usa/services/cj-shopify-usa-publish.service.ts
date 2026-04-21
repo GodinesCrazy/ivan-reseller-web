@@ -157,6 +157,14 @@ export const cjShopifyUsaPublishService = {
       estimatedShippingUsd,
     );
 
+    if (qualification.decision === 'REJECTED') {
+      throw new AppError(
+        `Product does not meet pricing criteria: ${qualification.reasons.join('; ')}`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
     const suggestedSellPriceUsd = Number(
       qualification.breakdown.suggestedSellPriceUsd.toFixed(2),
     );
@@ -188,8 +196,11 @@ export const cjShopifyUsaPublishService = {
       pricingSnapshot: {
         supplierCostUsd,
         shippingCostUsd: estimatedShippingUsd,
+        incidentBufferUsd: qualification.breakdown.incidentBufferUsd,
         paymentProcessingFeeUsd: qualification.breakdown.paymentProcessingFeeUsd,
         targetProfitUsd: qualification.breakdown.targetProfitUsd,
+        netProfitUsd: qualification.breakdown.netProfitUsd,
+        netMarginPct: qualification.breakdown.netMarginPct,
         suggestedSellPriceUsd,
       },
       shippingSnapshot: shippingQuote
@@ -387,6 +398,62 @@ export const cjShopifyUsaPublishService = {
         publicationId: publication.id,
       });
 
+      if (!upserted.productId || !upserted.variantId || !upserted.handle) {
+        throw new AppError(
+          'Shopify publish returned incomplete identifiers; product, variant, and handle are required.',
+          502,
+          ErrorCode.EXTERNAL_API_ERROR,
+        );
+      }
+
+      let storefrontVerification = await cjShopifyUsaAdminService.verifyStorefrontProductPage({
+        userId: input.userId,
+        productHandle: upserted.handle,
+      });
+
+      if (!storefrontVerification.buyerFacingOk) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        storefrontVerification = await cjShopifyUsaAdminService.verifyStorefrontProductPage({
+          userId: input.userId,
+          productHandle: upserted.handle,
+        });
+      }
+
+      if (!storefrontVerification.buyerFacingOk) {
+        const reason = [
+          `storefrontUrl=${storefrontVerification.storefrontUrl}`,
+          `status=${storefrontVerification.status ?? 'FETCH_ERROR'}`,
+          `finalUrl=${storefrontVerification.finalUrl ?? 'none'}`,
+          `passwordGate=${storefrontVerification.passwordGate}`,
+          `hasAddToCart=${storefrontVerification.hasAddToCart}`,
+          `hasPrice=${storefrontVerification.hasPrice}`,
+          storefrontVerification.error ? `error=${storefrontVerification.error}` : '',
+        ].filter(Boolean).join('; ');
+
+        const pending = await prisma.cjShopifyUsaListing.update({
+          where: { id: listing.id },
+          data: {
+            status: CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
+            shopifyProductId: upserted.productId,
+            shopifyVariantId: upserted.variantId,
+            shopifyHandle: upserted.handle,
+            shopifySku: String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim(),
+            lastSyncedAt: new Date(),
+            lastError: `Shopify product was created/published but buyer-facing storefront verification failed: ${reason}`,
+          },
+        });
+
+        await recordTrace(input.userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_RECONCILE_PENDING, 'listing.storefront.verify.failed', {
+          listingId: listing.id,
+          shopifyProductId: upserted.productId,
+          shopifyVariantId: upserted.variantId,
+          shopifyHandle: upserted.handle,
+          storefrontVerification,
+        } as Prisma.InputJsonValue);
+
+        return pending;
+      }
+
       const updated = await prisma.cjShopifyUsaListing.update({
         where: { id: listing.id },
         data: {
@@ -405,8 +472,10 @@ export const cjShopifyUsaPublishService = {
         listingId: listing.id,
         shopifyProductId: upserted.productId,
         shopifyVariantId: upserted.variantId,
+        shopifyHandle: upserted.handle,
         publicationId: publication.id,
         locationId: location.id,
+        storefrontVerification,
       } as Prisma.InputJsonValue);
 
       return updated;

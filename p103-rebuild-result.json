@@ -1,0 +1,215 @@
+{
+  "productId": 32714,
+  "executedAt": "2026-03-27T19:31:10.296Z",
+  "pipeline": "P103 rank → isolate → hero 1200 → strict+natural+hero+integrity",
+  "pictureOrderIntent": "portada_first: [cover_main.png, existing detail_mount_interface unchanged]",
+  "supplierImageUrlCount": 7,
+  "supplierImageUrlsSample": [
+    "https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg",
+    "https://ae01.alicdn.com/kf/S4005cfbe2ecc4d22bd0f51da34bfc1c6M.jpg",
+    "https://ae01.alicdn.com/kf/S574ecbca762045d0a6bc2a6da0f50ceb5.jpg",
+    "https://ae01.alicdn.com/kf/S10ca44862d0f4f508d7ee342d162df4ai.jpg",
+    "https://ae01.alicdn.com/kf/S80e97bb5f64349c2b69181ba42c91c4cB.jpg",
+    "https://ae01.alicdn.com/kf/Sde88307b1549433e859ff52eb73e80d6g.jpg"
+  ],
+  "p103AttemptOk": false,
+  "p103Trace": {
+    "rankedSources": [
+      {
+        "rank": 1,
+        "objectKey": "s4005cfbe2ecc4d22bd0f51da34bfc1c6m",
+        "url": "https://ae01.alicdn.com/kf/S4005cfbe2ecc4d22bd0f51da34bfc1c6M.jpg",
+        "combinedScore": 64.96,
+        "remediationFitness": 82.32,
+        "textLogoRisk": 100,
+        "backgroundSimplicity": 33.44,
+        "catalogLook": 35.05,
+        "reasons": [
+          "remFit_text_logo_risk_100",
+          "remFit_background_simplicity_33",
+          "remFit_pred_trim_area_1.000_extent_1.000",
+          "remFit_predicted_hero_pass"
+        ]
+      },
+      {
+        "rank": 2,
+        "objectKey": "sde88307b1549433e859ff52eb73e80d6g",
+        "url": "https://ae01.alicdn.com/kf/Sde88307b1549433e859ff52eb73e80d6g.jpg",
+        "combinedScore": 62.43,
+        "remediationFitness": 80.42,
+        "textLogoRisk": 100,
+        "backgroundSimplicity": 37.14,
+        "catalogLook": 36.71,
+        "reasons": [
+          "remFit_text_logo_risk_100",
+          "remFit_background_simplicity_37",
+          "remFit_pred_trim_area_1.000_extent_1.000",
+          "remFit_predicted_hero_pass"
+        ]
+      },
+      {
+        "rank": 3,
+        "objectKey": "s10ca44862d0f4f508d7ee342d162df4ai",
+        "url": "https://ae01.alicdn.com/kf/S10ca44862d0f4f508d7ee342d162df4ai.jpg",
+        "combinedScore": 63.31,
+        "remediationFitness": 80.3,
+        "textLogoRisk": 100,
+        "backgroundSimplicity": 29.41,
+        "catalogLook": 33.23,
+        "reasons": [
+          "remFit_text_logo_risk_100",
+          "remFit_background_simplicity_29",
+          "remFit_pred_trim_area_1.000_extent_1.000",
+          "remFit_predicted_hero_pass"
+        ]
+      },
+      {
+        "rank": 4,
+        "objectKey": "s4d28403f329442b281158c9d8695c54cc",
+        "url": "https://ae01.alicdn.com/kf/S4d28403f329442b281158c9d8695c54cC.jpg",
+        "combinedScore": 62.53,
+        "remediationFitness": 78.47,
+        "textLogoRisk": 100,
+        "backgroundSimplicity": 30.79,
+        "catalogLook": 33.86,
+        "reasons": [
+          "remFit_text_logo_risk_100",
+          "remFit_background_simplicity_31",
+          "remFit_pred_trim_area_1.000_extent_1.000",
+          "remFit_predicted_hero_pass"
+        ]
+      },
+      {
+        "rank": 5,
+        "objectKey": "s80e97bb5f64349c2b69181ba42c91c4cb",
+        "url": "https://ae01.alicdn.com/kf/S80e97bb5f64349c2b69181ba42c91c4cB.jpg",
+        "combinedScore": 62.72,
+        "remediationFitness": 77.45,
+        "textLogoRisk": 100,
+        "backgroundSimplicity": 26.06,
+        "catalogLook": 31.73,
+        "reasons": [
+          "remFit_text_logo_risk_100",
+          "remFit_background_simplicity_26",
+          "remFit_pred_trim_area_1.000_extent_1.000",
+          "remFit_predicted_hero_pass"
+        ]
+      },
+      {
+        "rank": 6,
+        "objectKey": "sfd8ecf61dd114748a07a5337170aa38di",
+        "url": "https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg",
+        "combinedScore": 55.91,
+        "remediationFitness": 76.79,
+        "textLogoRisk": 100,
+        "backgroundSimplicity": 35.16,
+        "catalogLook": 29.82,
+        "reasons": [
+          "remFit_text_logo_risk_100",
+          "remFit_background_simplicity_35",
+          "remFit_pred_trim_area_1.000_extent_1.000",
+          "remFit_predicted_hero_pass"
+        ]
+      },
+      {
+        "rank": 7,
+        "objectKey": "s574ecbca762045d0a6bc2a6da0f50ceb5",
+        "url": "https://ae01.alicdn.com/kf/S574ecbca762045d0a6bc2a6da0f50ceb5.jpg",
+        "combinedScore": 63.12,
+        "remediationFitness": 75.6,
+        "textLogoRisk": 100,
+        "backgroundSimplicity": 16.65,
+        "catalogLook": 27.49,
+        "reasons": [
+          "remFit_text_logo_risk_100",
+          "remFit_background_simplicity_17",
+          "remFit_pred_trim_area_1.000_extent_1.000",
+          "remFit_predicted_hero_pass"
+        ]
+      }
+    ],
+    "trials": [
+      {
+        "url": "https://ae01.alicdn.com/kf/S4005cfbe2ecc4d22bd0f51da34bfc1c6M.jpg",
+        "objectKey": "s4005cfbe2ecc4d22bd0f51da34bfc1c6m",
+        "rank": 1,
+        "isolationOk": true,
+        "strictNaturalPass": false,
+        "strictNaturalSignals": [
+          "portada_high_local_contrast_fragmentation_sticker_collage_risk",
+          "portada_white_background_insufficient_near_white_dominance",
+          "portada_natural_look_harsh_silhouette_vs_white_field_sticker_or_cutout_risk"
+        ]
+      },
+      {
+        "url": "https://ae01.alicdn.com/kf/Sde88307b1549433e859ff52eb73e80d6g.jpg",
+        "objectKey": "sde88307b1549433e859ff52eb73e80d6g",
+        "rank": 2,
+        "isolationOk": true,
+        "strictNaturalPass": false,
+        "strictNaturalSignals": [
+          "portada_high_local_contrast_fragmentation_sticker_collage_risk",
+          "portada_white_background_insufficient_near_white_dominance",
+          "portada_natural_look_harsh_silhouette_vs_white_field_sticker_or_cutout_risk"
+        ]
+      },
+      {
+        "url": "https://ae01.alicdn.com/kf/S10ca44862d0f4f508d7ee342d162df4ai.jpg",
+        "objectKey": "s10ca44862d0f4f508d7ee342d162df4ai",
+        "rank": 3,
+        "isolationOk": true,
+        "strictNaturalPass": false,
+        "strictNaturalSignals": [
+          "portada_high_local_contrast_fragmentation_sticker_collage_risk",
+          "portada_white_background_insufficient_near_white_dominance",
+          "portada_natural_look_harsh_silhouette_vs_white_field_sticker_or_cutout_risk"
+        ]
+      },
+      {
+        "url": "https://ae01.alicdn.com/kf/S4d28403f329442b281158c9d8695c54cC.jpg",
+        "objectKey": "s4d28403f329442b281158c9d8695c54cc",
+        "rank": 4,
+        "isolationOk": true,
+        "strictNaturalPass": false,
+        "strictNaturalSignals": [
+          "portada_natural_look_harsh_silhouette_vs_white_field_sticker_or_cutout_risk"
+        ]
+      },
+      {
+        "url": "https://ae01.alicdn.com/kf/S80e97bb5f64349c2b69181ba42c91c4cB.jpg",
+        "objectKey": "s80e97bb5f64349c2b69181ba42c91c4cb",
+        "rank": 5,
+        "isolationOk": true,
+        "strictNaturalPass": false,
+        "strictNaturalSignals": [
+          "portada_right_band_uncertain_fail_closed",
+          "portada_natural_look_harsh_silhouette_vs_white_field_sticker_or_cutout_risk"
+        ]
+      },
+      {
+        "url": "https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg",
+        "objectKey": "sfd8ecf61dd114748a07a5337170aa38di",
+        "rank": 6,
+        "isolationOk": true,
+        "strictNaturalPass": false,
+        "strictNaturalSignals": [
+          "portada_white_background_insufficient_near_white_dominance",
+          "portada_natural_look_harsh_silhouette_vs_white_field_sticker_or_cutout_risk"
+        ]
+      },
+      {
+        "url": "https://ae01.alicdn.com/kf/S574ecbca762045d0a6bc2a6da0f50ceb5.jpg",
+        "objectKey": "s574ecbca762045d0a6bc2a6da0f50ceb5",
+        "rank": 7,
+        "isolationOk": true,
+        "strictNaturalPass": false,
+        "strictNaturalSignals": [
+          "portada_natural_look_harsh_silhouette_vs_white_field_sticker_or_cutout_risk"
+        ]
+      }
+    ]
+  },
+  "winningUrl": null,
+  "winningObjectKey": null,
+  "fatalError": "p103_all_ranked_candidates_failed_gates_or_isolation"
+}

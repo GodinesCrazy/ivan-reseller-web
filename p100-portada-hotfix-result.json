@@ -1,0 +1,11 @@
+{
+  "productId": 32714,
+  "listingId": "MLC3804135582",
+  "newCoverPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\cover_main.png",
+  "listingStatusBeforeReplace": "inactive",
+  "packInspectApproved": true,
+  "putResponseSummary": {
+    "mode": "replaceListingPictures",
+    "error": "Cannot replace MercadoLibre pictures while listing status is \"inactive\". Reactivation via API failed: Cannot update item MLC3804135582 [status:inactive, has_bids:false]. Resolve moderation / policy holds in Mercado Libre seller center, then retry."
+  }
+}

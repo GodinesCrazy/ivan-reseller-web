@@ -80,16 +80,40 @@ See `docs/CJ_SHOPIFY_USA_LIVE_PRODUCT_VALIDATION.md` for the full evidence trail
 
 ## Primary Blockers Now
 
-1. `Storefront password gate`
-   The published product URL resolves to `/password`, so the PDP is not buyer-facing yet.
+1. `Storefront password gate` 🔒 **CONFIRMADO ACTIVO**
+   - **Estado:** El password gate está ACTIVO y bloqueando acceso público
+   - **Evidencia:** URL final redirige a `/password` con marcadores "Opening soon"
+   - **Producto afectado:** `neck-pillow-travel-pillow-cjjjjfzt00492-pink`
+   - **Impacto:** PDP no es buyer-facing, checkout bloqueado
+   - **Solución:** Acción manual requerida en Shopify Admin (Online Store > Preferences)
+   - **Referencia:** Ver `docs/CJ_SHOPIFY_USA_BUYER_FLOW_VALIDATION.md` para procedimiento completo
+
 2. `Controlled order validation`
    Order ingestion, tracking, and fulfillment cannot be validated as a buyer flow until public PDP / checkout access is available.
+   - **Preparación:** Completa (producto publicado, webhooks activos, endpoint sync listo)
+   - **Bloqueo:** Esperando levantamiento del password gate
 
 ## Next Correct Steps
 
-1. Remove or temporarily lift the Shopify storefront password gate, or provide a controlled buyer-access path for testing.
+### Inmediato (P0 - Bloqueante)
+1. **Lift storefront password gate** - Acción manual requerida
+   ```
+   1. Acceder https://ivanreseller-2.myshopify.com/admin
+   2. Online Store > Preferences
+   3. Desmarcar "Enable password"
+   4. Guardar
+   ```
+   Alternativa CLI: `shopify store:disable-password --store=ivanreseller-2.myshopify.com`
+
+### Post-Gate (P1 - Preparado)
 2. Place one controlled order against the published product and verify:
    - Shopify order visibility
    - webhook / manual sync ingestion
    - tracking / fulfillment propagation
 3. Capture the first real profit snapshot after the order exists.
+
+### Buyer Flow Verification Endpoint
+```
+GET /api/cj-shopify-usa/storefront-status?productHandle=neck-pillow-travel-pillow-cjjjjfzt00492-pink
+```
+Ver documentación completa en: `docs/CJ_SHOPIFY_USA_BUYER_FLOW_VALIDATION.md`

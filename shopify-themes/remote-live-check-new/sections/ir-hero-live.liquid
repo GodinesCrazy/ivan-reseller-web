@@ -1,0 +1,218 @@
+{%- comment -%}
+  IVAN RESELLER - Premium Hero Section Live
+  Clean, editorial, product-forward presentation
+{%- endcomment -%}
+
+{%- liquid
+  assign hero_collection = collections['all']
+  assign spotlight_product = blank
+  assign spotlight_description_image = blank
+  
+  if hero_collection != blank and hero_collection.all_products_count > 0
+    assign spotlight_product = hero_collection.products[0]
+  endif
+
+  if spotlight_product and spotlight_product.featured_image == blank and spotlight_product.description contains '<img'
+    assign spotlight_description_image = spotlight_product.description | split: 'src="' | last | split: '"' | first
+  endif
+-%}
+
+<div class="ir-hero-section">
+  <div class="ir-hero__shell">
+    <div class="ir-hero__grid">
+      <div class="ir-hero__content">
+        <div class="ir-hero__eyebrow-row">
+          {% if section.settings.eyebrow != blank %}
+            <p class="ir-hero__eyebrow">{{ section.settings.eyebrow }}</p>
+          {% endif %}
+          <span class="ir-hero__signal">New useful arrivals</span>
+        </div>
+
+        {% if section.settings.title != blank %}
+          <h1 class="ir-hero__title">
+            {{ section.settings.title }}
+          </h1>
+        {% endif %}
+
+        {% if section.settings.subtitle != blank %}
+          <p class="ir-hero__subtitle">{{ section.settings.subtitle }}</p>
+        {% endif %}
+
+        <div class="ir-hero__actions">
+          {% if section.settings.button_1_text != blank and section.settings.button_1_link != blank %}
+            <a href="{{ section.settings.button_1_link }}" class="ir-hero__btn ir-hero__btn--primary">
+              {{ section.settings.button_1_text }}
+            </a>
+          {% endif %}
+
+          {% if section.settings.button_2_text != blank and section.settings.button_2_link != blank %}
+            <a href="{{ section.settings.button_2_link }}" class="ir-hero__btn ir-hero__btn--secondary">
+              {{ section.settings.button_2_text }}
+            </a>
+          {% endif %}
+        </div>
+
+        <div class="ir-hero__proofs">
+          <div class="ir-hero__proof">
+            <strong>Curated Selection</strong>
+            <span>Useful products selected for everyday value.</span>
+          </div>
+          <div class="ir-hero__proof">
+            <strong>Clear Shopping</strong>
+            <span>Product pages built to make decisions easier.</span>
+          </div>
+          <div class="ir-hero__proof">
+            <strong>Buyer Support</strong>
+            <span>Transparent policies and secure checkout.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ir-hero__stage" aria-hidden="true">
+        <div class="ir-hero__spotlight">
+          {% if section.settings.image != blank %}
+            <div class="ir-hero__spotlight-media">
+              {{
+                section.settings.image
+                | image_url: width: 1200
+                | image_tag:
+                  loading: 'eager',
+                  widths: '600, 900, 1200',
+                  sizes: '(min-width: 990px) 50vw, 100vw',
+                  alt: section.settings.image.alt | default: 'Featured product'
+              }}
+            </div>
+          {% elsif spotlight_product and spotlight_product.featured_image != blank %}
+            <div class="ir-hero__spotlight-media">
+              {{
+                spotlight_product.featured_image
+                | image_url: width: 1200
+                | image_tag:
+                  loading: 'eager',
+                  widths: '600, 900, 1200',
+                  sizes: '(min-width: 990px) 50vw, 100vw',
+                  alt: spotlight_product.title
+              }}
+            </div>
+          {% elsif spotlight_description_image != blank %}
+            <div
+              class="ir-hero__spotlight-media ir-hero__spotlight-media--external"
+              style="background-image: url('{{ spotlight_description_image }}');"
+            >
+              <img
+                src="{{ spotlight_description_image }}"
+                width="900"
+                height="900"
+                loading="eager"
+                alt="{{ spotlight_product.title | escape }}"
+              >
+            </div>
+          {% else %}
+            <div class="ir-hero__spotlight-media ir-hero__spotlight-media--fallback">
+              <div class="ir-hero__fallback-grid">
+                <span>Smart Accessories</span>
+                <span>Travel Ready</span>
+                <span>Workspace Upgrades</span>
+                <span>Everyday Utility</span>
+              </div>
+            </div>
+          {% endif %}
+
+          <div class="ir-hero__spotlight-copy">
+            <span class="ir-hero__spotlight-kicker">Featured</span>
+            {% if spotlight_product %}
+              <p class="ir-hero__spotlight-title">{{ spotlight_product.title }}</p>
+              <div class="ir-hero__spotlight-meta">
+                <span class="ir-hero__spotlight-price">{{ spotlight_product.price | money }}</span>
+                <span class="ir-hero__spotlight-note">Selected for practical daily use.</span>
+              </div>
+            {% else %}
+              <p class="ir-hero__spotlight-title">Premium products selected for daily utility.</p>
+              <div class="ir-hero__spotlight-meta">
+                <span class="ir-hero__spotlight-note">Discover practical, well-designed essentials.</span>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="ir-hero__stats">
+          <div class="ir-hero__stat">
+            <span class="ir-hero__stat-value">{{ shop.products_count | default: '0' }}</span>
+            <span class="ir-hero__stat-label">Products selected for practical upgrades.</span>
+          </div>
+          <div class="ir-hero__stat">
+            <span class="ir-hero__stat-value">Clear</span>
+            <span class="ir-hero__stat-label">Checkout, policies, and product presentation.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "IR - Hero Live",
+  "tag": "section",
+  "class": "ir-hero-section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow Text",
+      "default": "IVAN RESELLER"
+    },
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Heading",
+      "default": "Everyday tech, travel, and workspace essentials."
+    },
+    {
+      "type": "textarea",
+      "id": "subtitle",
+      "label": "Subheading",
+      "default": "A cleaner catalog of practical gadgets and accessories selected to make daily routines easier to upgrade."
+    },
+    {
+      "type": "text",
+      "id": "button_1_text",
+      "label": "Primary Button Text",
+      "default": "Shop Best Sellers"
+    },
+    {
+      "type": "url",
+      "id": "button_1_link",
+      "label": "Primary Button Link"
+    },
+    {
+      "type": "text",
+      "id": "button_2_text",
+      "label": "Secondary Button Text",
+      "default": "Explore All Products"
+    },
+    {
+      "type": "url",
+      "id": "button_2_link",
+      "label": "Secondary Button Link"
+    },
+    {
+      "type": "image_picker",
+      "id": "image",
+      "label": "Hero Image"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_badges",
+      "label": "Show Floating Badges",
+      "default": true
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Hero Live",
+      "category": "Ivan Reseller"
+    }
+  ]
+}
+{% endschema %}

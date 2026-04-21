@@ -5,16 +5,21 @@ import { api } from '@/services/api';
 
 type OperabilityStatus = 'operable' | 'stock_unknown' | 'unavailable';
 type RelevanceTier = 'alta' | 'media' | 'baja';
+type LocalStockStatus = 'chile_local' | 'global_only' | 'stock_unknown' | 'out_of_stock';
 
 /** Result of fast inventory verify per product. */
-type VerifyStatus = 'pending' | 'has_stock' | 'no_stock' | 'error';
+type VerifyStatus = 'pending' | 'chile_local' | 'global_only' | 'stock_unknown' | 'out_of_stock' | 'error';
 
 interface BatchVerifyEntry {
   cjProductId: string;
+  status: LocalStockStatus;
+  operabilityStatus: OperabilityStatus;
+  warehouseChileConfirmed: boolean;
   hasAnyStock: boolean;
-  maxStock: number;
-  variantCount: number;
-  operableVariantCount: number;
+  localReadyVariantId?: string | null;
+  checkedVariantCount: number;
+  candidateVariantCount: number;
+  evidenceSource: string;
   error?: string;
 }
 
@@ -28,6 +33,10 @@ interface CjProductSummary {
   listPriceUsd?: number;
   inventoryTotal?: number;
   operabilityStatus?: OperabilityStatus;
+  localStockStatus?: LocalStockStatus;
+  warehouseChileConfirmed?: boolean;
+  localStockEvidenceSource?: string;
+  localReadyVariantId?: string;
   relevanceScore?: number;
   relevanceTier?: RelevanceTier;
 }
@@ -109,6 +118,13 @@ function operabilityOf(item: CjProductSummary): OperabilityStatus {
   return 'stock_unknown';
 }
 
+function localStockOf(item: CjProductSummary): LocalStockStatus {
+  if (item.localStockStatus) return item.localStockStatus;
+  if (item.operabilityStatus === 'operable') return 'chile_local';
+  if (item.inventoryTotal === 0) return 'out_of_stock';
+  return 'stock_unknown';
+}
+
 function groupItems(items: CjProductSummary[], verifyMap: Map<string, VerifyStatus>) {
   const readyToEvaluate: CjProductSummary[] = [];
   const stockUncertain: CjProductSummary[] = [];
@@ -123,9 +139,9 @@ function groupItems(items: CjProductSummary[], verifyMap: Map<string, VerifyStat
     } else if (op === 'unavailable') {
       noViable.push(item);
     } else {
-      // stock_unknown — reclassify based on fast-verify result
-      if (vs === 'has_stock') readyToEvaluate.push(item);
-      else if (vs === 'no_stock') noViable.push(item);
+      // stock_unknown — reclassify based on fast Chile-local verify result
+      if (vs === 'chile_local') readyToEvaluate.push(item);
+      else if (vs === 'global_only' || vs === 'out_of_stock') noViable.push(item);
       else stockUncertain.push(item); // pending, error, or not yet verified
     }
   }
@@ -206,11 +222,15 @@ function SectionHeader({ label, count, subtitle, tier }: { label: string; count:
 }
 
 function VerifiedBadge() {
-  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-600">✓ Verificado</span>;
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-600">✓ Chile local</span>;
 }
 
 function VerifyingBadge() {
   return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 animate-pulse">⟳ Verificando…</span>;
+}
+
+function GlobalOnlyBadge() {
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700">Solo stock global/CN</span>;
 }
 
 function ProductCard({
@@ -227,13 +247,18 @@ function ProductCard({
   onSelect: () => void;
 }) {
   const status = operabilityOf(item);
-  // After verification, stock_unknown with has_stock behaves like operable
+  const localStatus = localStockOf(item);
+  // After verification, stock_unknown becomes operable only with Chile-local proof.
   const effectiveStatus: OperabilityStatus =
-    status === 'stock_unknown' && verifyStatus === 'has_stock' ? 'operable'
-    : status === 'stock_unknown' && verifyStatus === 'no_stock' ? 'unavailable'
+    status === 'stock_unknown' && verifyStatus === 'chile_local' ? 'operable'
+    : status === 'stock_unknown' && (verifyStatus === 'global_only' || verifyStatus === 'out_of_stock') ? 'unavailable'
     : status;
   const isUnavailable = effectiveStatus === 'unavailable';
-  const isVerifiedOperable = status === 'stock_unknown' && verifyStatus === 'has_stock';
+  const effectiveLocalStatus: LocalStockStatus =
+    verifyStatus && verifyStatus !== 'pending' && verifyStatus !== 'error'
+      ? verifyStatus
+      : localStatus;
+  const isVerifiedOperable = status === 'stock_unknown' && verifyStatus === 'chile_local';
   const isVerifying = verifyStatus === 'pending';
   const estimatedCLP = item.listPriceUsd != null && fxRate != null ? Math.round(item.listPriceUsd * fxRate) : null;
 
@@ -294,6 +319,8 @@ function ProductCard({
           ? <VerifyingBadge />
           : isVerifiedOperable
             ? <VerifiedBadge />
+            : effectiveLocalStatus === 'global_only'
+              ? <GlobalOnlyBadge />
             : isUnavailable
               ? <NoViableBadge />
               : <WarehousePendingBadge />}
@@ -309,7 +336,17 @@ function ProductCard({
               ? 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
               : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
       }`}>
-        {isSelected ? '✓ Seleccionado' : effectiveStatus === 'operable' ? 'Seleccionar' : isUnavailable ? 'Sin stock' : isVerifying ? 'Verificando…' : 'Por confirmar'}
+        {isSelected
+          ? '✓ Seleccionado'
+          : effectiveStatus === 'operable'
+            ? 'Seleccionar'
+            : effectiveLocalStatus === 'global_only'
+              ? 'Solo global/CN'
+              : isUnavailable
+                ? 'Sin stock'
+                : isVerifying
+                  ? 'Verificando…'
+                  : 'Por confirmar'}
       </span>
     </button>
   );
@@ -380,6 +417,7 @@ export default function CjMlChileProductsPage() {
   // Pipeline blocked when: no variant selected, OR variant confirmed zero stock
   // (manual SKU fallback: selectedVariant is null → only blocked when variantId empty)
   const pipelineBlocked = !variantId || selectedVariantIsZeroStock;
+  const selectedVerifyStatus = selectedSummary ? verifyMap.get(selectedSummary.cjProductId) : undefined;
 
   async function search() {
     if (!query.trim()) return;
@@ -420,7 +458,7 @@ export default function CjMlChileProductsPage() {
         const m = new Map(prev);
         for (const entry of entries) {
           if (entry.error) m.set(entry.cjProductId, 'error');
-          else m.set(entry.cjProductId, entry.hasAnyStock ? 'has_stock' : 'no_stock');
+          else m.set(entry.cjProductId, entry.status);
         }
         return m;
       });
@@ -571,7 +609,7 @@ export default function CjMlChileProductsPage() {
                   {verifyingBatch && <span className="ml-1 animate-pulse">⟳</span>}
                 </span>
                 <span className="text-slate-500 dark:text-slate-400">● {grouped.stockUncertain.length} por confirmar</span>
-                <span className="text-amber-600 dark:text-amber-400">● {grouped.noViable.length} sin stock</span>
+                <span className="text-amber-600 dark:text-amber-400">● {grouped.noViable.length} sin stock local Chile</span>
               </>
             )}
             {searchResult.relevanceSummary && (
@@ -627,7 +665,7 @@ export default function CjMlChileProductsPage() {
               <SectionHeader
                 label="Listos para evaluar"
                 count={grouped.readyToEvaluate.length}
-                subtitle={verifyingBatch ? 'verificando inventario…' : 'stock confirmado o verificado'}
+                subtitle={verifyingBatch ? 'verificando stock local Chile…' : 'Chile local confirmado'}
                 tier="main"
               />
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -649,7 +687,7 @@ export default function CjMlChileProductsPage() {
           {grouped.readyToEvaluate.length === 0 && !verifyingBatch && (grouped.stockUncertain.length > 0 || grouped.noViable.length > 0) && (
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-4 space-y-1">
               <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Sin candidatos con stock verificable en esta búsqueda</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Prueba un término más amplio o diferente. Los resultados de abajo tienen stock incierto o nulo.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Prueba un término más amplio o diferente. Los resultados de abajo no tienen prueba de stock local Chile o quedaron sin disponibilidad.</p>
             </div>
           )}
 
@@ -667,7 +705,7 @@ export default function CjMlChileProductsPage() {
                 <SectionHeader
                   label="Stock por confirmar"
                   count={grouped.stockUncertain.length}
-                  subtitle="pendiente de verificación automática"
+                  subtitle="sin prueba local Chile todavía"
                   tier="secondary"
                 />
               </summary>
@@ -690,7 +728,7 @@ export default function CjMlChileProductsPage() {
           {grouped.noViable.length > 0 && (
             <details className="group rounded-xl border border-amber-100 dark:border-amber-900/30 bg-amber-50/30 dark:bg-amber-900/5 p-3">
               <summary className="cursor-pointer list-none">
-                <SectionHeader label="Sin stock / no viables" count={grouped.noViable.length} subtitle="descartados" tier="reference" />
+                <SectionHeader label="Sin stock local / no viables" count={grouped.noViable.length} subtitle="solo global/CN o sin stock" tier="reference" />
               </summary>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-2 opacity-60">
                 {grouped.noViable.map((item) => (
@@ -738,7 +776,13 @@ export default function CjMlChileProductsPage() {
                   ? <NoViableBadge />
                   : warehouseResult
                     ? <WarehouseConfirmedBadge confirmed={warehouseResult.warehouseChileConfirmed} />
-                    : <WarehousePendingBadge />}
+                    : selectedVerifyStatus === 'chile_local'
+                      ? <VerifiedBadge />
+                      : selectedVerifyStatus === 'global_only'
+                        ? <GlobalOnlyBadge />
+                        : selectedVerifyStatus === 'out_of_stock'
+                          ? <NoViableBadge />
+                          : <WarehousePendingBadge />}
               </div>
             </div>
           </div>

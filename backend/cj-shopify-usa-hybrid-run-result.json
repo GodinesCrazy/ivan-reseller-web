@@ -1,0 +1,766 @@
+{
+  "executedAt": "2026-04-20T18:11:53.521Z",
+  "productId": "479E2C57-73CA-4F63-B77E-6ABC5B2F32D5",
+  "evaluation": {
+    "title": "Neck Pillow Travel Pillow",
+    "shipping": {
+      "amountUsd": 6.11,
+      "method": "USPS+VIP",
+      "estimatedDays": 7,
+      "fulfillmentOrigin": "US",
+      "confidence": "known"
+    },
+    "qualification": {
+      "decision": "APPROVED",
+      "breakdown": {
+        "supplierCostUsd": 5.4,
+        "shippingCostUsd": 6.11,
+        "totalCostUsd": 11.510000000000002,
+        "paymentProcessingFeeUsd": 1.1011809045226133,
+        "targetProfitUsd": 2.2255025125628145,
+        "suggestedSellPriceUsd": 14.836683417085432
+      }
+    },
+    "bestVariant": {
+      "cjVid": "EA821FE6-E766-4F1E-9A50-04D7FBB313B7",
+      "cjSku": "CJJJJFZT00492-Pink",
+      "stock": 14432,
+      "attributes": {
+        "label": "Neck Pillow Travel Pillow Pink"
+      }
+    },
+    "variantStockTop5": [
+      {
+        "cjVid": "EA821FE6-E766-4F1E-9A50-04D7FBB313B7",
+        "cjSku": "CJJJJFZT00492-Pink",
+        "stock": 14432,
+        "attributes": {
+          "label": "Neck Pillow Travel Pillow Pink"
+        }
+      },
+      {
+        "cjVid": "B1B364DD-AEA8-44C6-BE22-41BC55A2A3F3",
+        "cjSku": "CJJJJFZT00492-Black",
+        "stock": 12654,
+        "attributes": {
+          "label": "Neck Pillow Travel Pillow Black"
+        }
+      },
+      {
+        "cjVid": "F168AA49-7AED-4478-BA7C-E2DABAA3A46F",
+        "cjSku": "CJJJJFZT00492-Gery",
+        "stock": 11702,
+        "attributes": {
+          "label": "Neck Pillow Travel Pillow Gery"
+        }
+      },
+      {
+        "cjVid": "7CB8AE1B-962B-48A6-B05E-379AFB597CAF",
+        "cjSku": "CJJJJFZT00492-Green",
+        "stock": 11638,
+        "attributes": {
+          "label": "Neck Pillow Travel Pillow Green"
+        }
+      },
+      {
+        "cjVid": "A8651FB2-C4C2-45D0-9A73-7A5D364CD73D",
+        "cjSku": "CJJJJFZT00492-Navy",
+        "stock": 11059,
+        "attributes": {
+          "label": "Neck Pillow Travel Pillow Navy"
+        }
+      }
+    ]
+  },
+  "importResult": {
+    "dbProductId": 5,
+    "listing": {
+      "id": 3,
+      "status": "DRAFT",
+      "listedPriceUsd": 14.62,
+      "shopifySku": "CJJJJFZT00492-Pink"
+    }
+  },
+  "authTest": {
+    "ok": true,
+    "authMode": "client_credentials",
+    "shopDomain": "ivanreseller-2.myshopify.com",
+    "accessTokenExpiresAt": "2026-04-21T17:59:24.625Z",
+    "grantedScopes": [
+      "read_fulfillments",
+      "write_fulfillments",
+      "write_inventory",
+      "read_inventory",
+      "read_locations",
+      "read_merchant_managed_fulfillment_orders",
+      "write_merchant_managed_fulfillment_orders",
+      "read_orders",
+      "read_products",
+      "write_products",
+      "read_publications",
+      "write_publications"
+    ],
+    "missingScopes": [],
+    "locations": [
+      {
+        "id": "gid://shopify/Location/91678998740",
+        "name": "Sucursal de la tienda",
+        "isActive": true,
+        "fulfillsOnlineOrders": true
+      }
+    ],
+    "publications": [
+      {
+        "id": "gid://shopify/Publication/192846201044",
+        "name": "Online Store",
+        "autoPublish": false,
+        "supportsFuturePublishing": true
+      },
+      {
+        "id": "gid://shopify/Publication/192846233812",
+        "name": "Point of Sale",
+        "autoPublish": false,
+        "supportsFuturePublishing": false
+      }
+    ],
+    "webhookSubscriptions": [
+      {
+        "id": "gid://shopify/WebhookSubscription/1693181051092",
+        "topic": "ORDERS_CREATE",
+        "uri": "https://ivanreseller.com/api/cj-shopify-usa/webhooks/orders-create"
+      },
+      {
+        "id": "gid://shopify/WebhookSubscription/1693181083860",
+        "topic": "APP_UNINSTALLED",
+        "uri": "https://ivanreseller.com/api/cj-shopify-usa/webhooks/app-uninstalled"
+      }
+    ],
+    "shopData": {
+      "name": "IvanReseller",
+      "currency": "USD",
+      "country": "CL",
+      "primaryDomainUrl": "https://ivanreseller-2.myshopify.com"
+    }
+  },
+  "listingsBeforePublishCount": 3,
+  "publish": {
+    "ok": true,
+    "listing": {
+      "id": 3,
+      "userId": 1,
+      "productId": 5,
+      "variantId": 10,
+      "shopifyProductId": "gid://shopify/Product/9145755435220",
+      "shopifyVariantId": "gid://shopify/ProductVariant/47823252390100",
+      "shopifyHandle": "neck-pillow-travel-pillow-cjjjjfzt00492-pink",
+      "shopifySku": "CJJJJFZT00492-Pink",
+      "status": "ACTIVE",
+      "listedPriceUsd": "14.62",
+      "quantity": 1,
+      "lastSyncedAt": "2026-04-20T18:11:49.218Z",
+      "draftPayload": {
+        "cjSku": "CJJJJFZT00492-Pink",
+        "cjVid": "EA821FE6-E766-4F1E-9A50-04D7FBB313B7",
+        "title": "Neck Pillow Travel Pillow",
+        "handle": "neck-pillow-travel-pillow-cjjjjfzt00492-pink",
+        "images": [
+          "https://cf.cjdropshipping.com/20200708/3128848935982.jpg"
+        ],
+        "vendor": "CJ Dropshipping",
+        "quantity": 1,
+        "cjProductId": "479E2C57-73CA-4F63-B77E-6ABC5B2F32D5",
+        "productType": "CJ Dropshipping",
+        "descriptionHtml": "<p>features:travel pillows</p><p>size：32*35 cm<br></p><p>Filler name: Honeysuckle</p><p><img src=\"https://cf.cjdropshipping.com/20200708/3128848935982.jpg\"><img src=\"https://cf.cjdropshipping.com/353ca44e-37bb-4893-9aac-ec26157345e3.png\" style=\"font-size: 14px; max-width: 100%;\"><img src=\"https://cf.cjdropshipping.com/aae82413-5d42-495f-b606-cec6b9e79437.png\" style=\"font-size: 14px; max-width: 100%;\"><img src=\"https://cf.cjdropshipping.com/f1a44f50-4fa9-4609-b0bd-ce9fa8d3aab0.png\" style=\"font-size: 14px; max-width: 100%;\"><img src=\"https://cf.cjdropshipping.com/b770688a-e720-47b4-9c09-7a687c1d3d71.png\" style=\"font-size: 14px; max-width: 100%;\"><br></p>",
+        "pricingSnapshot": {
+          "shippingCostUsd": 6.11,
+          "supplierCostUsd": 5.23,
+          "targetProfitUsd": 2.193467336683417,
+          "suggestedSellPriceUsd": 14.62,
+          "paymentProcessingFeeUsd": 1.08964824120603
+        },
+        "shippingSnapshot": {
+          "carrier": null,
+          "amountUsd": 6.11,
+          "serviceName": "USPS+VIP",
+          "estimatedMaxDays": 7,
+          "estimatedMinDays": null,
+          "originCountryCode": "US"
+        },
+        "variantAttributes": {
+          "label": "Neck Pillow Travel Pillow Pink"
+        }
+      },
+      "lastError": null,
+      "evaluationId": null,
+      "shippingQuoteId": null,
+      "handlingTimeDays": null,
+      "publishedAt": "2026-04-20T18:11:49.218Z",
+      "reconcileAttempts": 0,
+      "reconcileRetryAfter": null,
+      "createdAt": "2026-04-20T18:11:45.278Z",
+      "updatedAt": "2026-04-20T18:11:49.219Z"
+    }
+  },
+  "listingsAfterPublish": {
+    "ok": true,
+    "listings": [
+      {
+        "id": 3,
+        "userId": 1,
+        "productId": 5,
+        "variantId": 10,
+        "shopifyProductId": "gid://shopify/Product/9145755435220",
+        "shopifyVariantId": "gid://shopify/ProductVariant/47823252390100",
+        "shopifyHandle": "neck-pillow-travel-pillow-cjjjjfzt00492-pink",
+        "shopifySku": "CJJJJFZT00492-Pink",
+        "status": "ACTIVE",
+        "listedPriceUsd": "14.62",
+        "quantity": 1,
+        "lastSyncedAt": "2026-04-20T18:11:49.218Z",
+        "draftPayload": {
+          "cjSku": "CJJJJFZT00492-Pink",
+          "cjVid": "EA821FE6-E766-4F1E-9A50-04D7FBB313B7",
+          "title": "Neck Pillow Travel Pillow",
+          "handle": "neck-pillow-travel-pillow-cjjjjfzt00492-pink",
+          "images": [
+            "https://cf.cjdropshipping.com/20200708/3128848935982.jpg"
+          ],
+          "vendor": "CJ Dropshipping",
+          "quantity": 1,
+          "cjProductId": "479E2C57-73CA-4F63-B77E-6ABC5B2F32D5",
+          "productType": "CJ Dropshipping",
+          "descriptionHtml": "<p>features:travel pillows</p><p>size：32*35 cm<br></p><p>Filler name: Honeysuckle</p><p><img src=\"https://cf.cjdropshipping.com/20200708/3128848935982.jpg\"><img src=\"https://cf.cjdropshipping.com/353ca44e-37bb-4893-9aac-ec26157345e3.png\" style=\"font-size: 14px; max-width: 100%;\"><img src=\"https://cf.cjdropshipping.com/aae82413-5d42-495f-b606-cec6b9e79437.png\" style=\"font-size: 14px; max-width: 100%;\"><img src=\"https://cf.cjdropshipping.com/f1a44f50-4fa9-4609-b0bd-ce9fa8d3aab0.png\" style=\"font-size: 14px; max-width: 100%;\"><img src=\"https://cf.cjdropshipping.com/b770688a-e720-47b4-9c09-7a687c1d3d71.png\" style=\"font-size: 14px; max-width: 100%;\"><br></p>",
+          "pricingSnapshot": {
+            "shippingCostUsd": 6.11,
+            "supplierCostUsd": 5.23,
+            "targetProfitUsd": 2.193467336683417,
+            "suggestedSellPriceUsd": 14.62,
+            "paymentProcessingFeeUsd": 1.08964824120603
+          },
+          "shippingSnapshot": {
+            "carrier": null,
+            "amountUsd": 6.11,
+            "serviceName": "USPS+VIP",
+            "estimatedMaxDays": 7,
+            "estimatedMinDays": null,
+            "originCountryCode": "US"
+          },
+          "variantAttributes": {
+            "label": "Neck Pillow Travel Pillow Pink"
+          }
+        },
+        "lastError": null,
+        "evaluationId": null,
+        "shippingQuoteId": null,
+        "handlingTimeDays": null,
+        "publishedAt": "2026-04-20T18:11:49.218Z",
+        "reconcileAttempts": 0,
+        "reconcileRetryAfter": null,
+        "createdAt": "2026-04-20T18:11:45.278Z",
+        "updatedAt": "2026-04-20T18:11:49.219Z",
+        "product": {
+          "id": 5,
+          "cjProductId": "479E2C57-73CA-4F63-B77E-6ABC5B2F32D5",
+          "title": "Neck Pillow Travel Pillow"
+        },
+        "variant": {
+          "id": 10,
+          "cjSku": "CJJJJFZT00492-Pink",
+          "cjVid": "EA821FE6-E766-4F1E-9A50-04D7FBB313B7"
+        }
+      },
+      {
+        "id": 2,
+        "userId": 1,
+        "productId": 2,
+        "variantId": 5,
+        "shopifyProductId": "gid://shopify/Product/9145457803476",
+        "shopifyVariantId": "gid://shopify/ProductVariant/47821968474324",
+        "shopifyHandle": "wireless-tws-stereo-earbuds-cjej264155501az",
+        "shopifySku": "CJEJ264155501AZ",
+        "status": "ACTIVE",
+        "listedPriceUsd": "28.33",
+        "quantity": 1,
+        "lastSyncedAt": "2026-04-20T03:57:25.370Z",
+        "draftPayload": {
+          "cjSku": "CJEJ264155501AZ",
+          "cjVid": "1999395299687714817",
+          "title": "Wireless TWS Stereo Earbuds",
+          "handle": "wireless-tws-stereo-earbuds-cjej264155501az",
+          "images": [
+            "https://cf.cjdropshipping.com/a4c0bb7d-533e-475e-9984-b417b4c14119.jpg",
+            "https://cf.cjdropshipping.com/9f8b5bde-287e-477b-bf19-807664337577.jpg",
+            "https://cf.cjdropshipping.com/cbda5228-6437-4d78-8534-564a29f0c5d7.jpg",
+            "https://cf.cjdropshipping.com/9fc10435-7022-4f3b-bb70-3672beabb906.jpg",
+            "https://cf.cjdropshipping.com/7736d392-82dc-4a6b-84c2-024ab1dfde71.jpg",
+            "https://cf.cjdropshipping.com/03b8c13d-f04a-4abf-b250-1f9a9f5caad9.jpg",
+            "https://cf.cjdropshipping.com/a1a028ee-7110-420f-876f-e9b4f19bacb2.jpg",
+            "https://cf.cjdropshipping.com/5c2e13a4-45b2-4d77-a308-399e1f42c873.jpg",
+            "https://cf.cjdropshipping.com/61de92c9-1f70-416f-a0dd-78368de4aa5f.jpg",
+            "https://cf.cjdropshipping.com/520a9247-9ba5-4a24-914e-f1a16f2b3478.jpg",
+            "https://cf.cjdropshipping.com/19d9b38f-5e35-4030-b7bf-9128000dbfed.jpg",
+            "https://cf.cjdropshipping.com/509228f7-ebb2-4d72-81bf-ad4ce88d9b2a.jpg",
+            "https://cf.cjdropshipping.com/eda48cc1-eed5-483d-9687-233430c6c300.jpg"
+          ],
+          "vendor": "CJ Dropshipping",
+          "quantity": 1,
+          "cjProductId": "1999395299549302785",
+          "productType": "CJ Dropshipping",
+          "descriptionHtml": "<p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Features*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">Deliver crisp clear stereo sound </font></li>\n  <font size=\"3\" face=\"Times New Roman\">Easily pair with universal wireless-enabled device like smartphone,tablet,iPhone,iPad,laptop Built-in noise-reducing microphone One button answering/hanging up/rejecting hands-free calls and redialing the last number dialed </font>\n  <li><font size=\"3\" face=\"Times New Roman\">Automatic voice prompt including incoming phone number report </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Each of the earbuds can be used alone with full functionality </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Share your favorite tunes with friend anytime anywhere by sharing the earbuds </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Lightweight,snug and comfortable design </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Includes a charging pod for convenient charging and storage </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">CE and RoHS certified </font></li>\n </ul>\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Specifications*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">Earbuds: </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Wireless Version: V4.2+EDR </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Protocols Supported: HSP, HFP, A2DP, AVRCP </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Transmission Range: ≤12M/39ft </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Driver Unit: Ф7mm </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Impedance: 32ohm±15% </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Talk Time: (One Earbud): 5-6 hours; (Two Earbuds): 4-5 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Play Time: (One Earbud): 5-6 hours; (Two Earbuds): 4-5 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Standby: (One Earbud): 120 hours; (Two Earbuds): 70 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charge Time: 1-2 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Battery: built-in 3.7V 75mAh li-ion battery per earbud </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Size(per earbud): 0.94” x 0.71” x 1.1”/2.4 x 1.8 x 2.8cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Weight(per earbud): 5g/0.17oz </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Available Color: black, white </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charging Pod: </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Battery: built-in 3.7V 950mAh li-ion battery </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charging Voltage: DC 5V </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Size of Charging Pod: 3.27” x 1.5” x 1.3”/8.3 x 3.8 x 3.3cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Weight of Charging Pod: 42g/1.48oz </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Package size: 3.74” x 1.57” x 6.1”/9.5 x 4 x 15.5cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Package weight: 165g/0.36lbs</font></li>\n </ul>\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Package Lists*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">1 × Pair of Wireless Stereo TWS Earbuds </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 2 × Pair of Replacement Eartips </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 1 × USB Charging Cable </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 1 × User Manual</font></li>\n </ul>",
+          "pricingSnapshot": {
+            "shippingCostUsd": 0,
+            "supplierCostUsd": 22.25,
+            "targetProfitUsd": 4.249371859296483,
+            "suggestedSellPriceUsd": 28.33,
+            "paymentProcessingFeeUsd": 1.829773869346734
+          },
+          "shippingSnapshot": {
+            "carrier": null,
+            "amountUsd": 0,
+            "serviceName": "USPS US to US",
+            "estimatedMaxDays": 5,
+            "estimatedMinDays": null,
+            "originCountryCode": "US"
+          },
+          "variantAttributes": {}
+        },
+        "lastError": null,
+        "evaluationId": null,
+        "shippingQuoteId": null,
+        "handlingTimeDays": null,
+        "publishedAt": "2026-04-20T03:57:25.369Z",
+        "reconcileAttempts": 0,
+        "reconcileRetryAfter": null,
+        "createdAt": "2026-04-20T03:57:23.055Z",
+        "updatedAt": "2026-04-20T03:57:25.370Z",
+        "product": {
+          "id": 2,
+          "cjProductId": "1999395299549302785",
+          "title": "Wireless TWS Stereo Earbuds"
+        },
+        "variant": {
+          "id": 5,
+          "cjSku": "CJEJ264155501AZ",
+          "cjVid": "1999395299687714817"
+        }
+      },
+      {
+        "id": 1,
+        "userId": 1,
+        "productId": 1,
+        "variantId": 1,
+        "shopifyProductId": null,
+        "shopifyVariantId": null,
+        "shopifyHandle": null,
+        "shopifySku": "CJXFBXEJ02656-White",
+        "status": "FAILED",
+        "listedPriceUsd": "19.25",
+        "quantity": 1,
+        "lastSyncedAt": null,
+        "draftPayload": {
+          "cjSku": "CJXFBXEJ02656-White",
+          "cjVid": "C4EEFBA3-A9E2-4D97-BFA0-291C4D0B27C0",
+          "title": "Earbuds wireless bluetooth headset",
+          "handle": "earbuds-wireless-bluetooth-headset-cjxfbxej02656-white",
+          "images": [
+            "https://cf.cjdropshipping.com/203207/386132459951.jpg",
+            "https://cf.cjdropshipping.com/203207/5098518456629.jpg",
+            "https://cf.cjdropshipping.com/203207/1997542225641.jpg",
+            "https://cf.cjdropshipping.com/203207/1374339813797.jpg",
+            "https://cf.cjdropshipping.com/203207/1802047212405.jpg",
+            "https://cf.cjdropshipping.com/6d188161-dab8-48c4-a893-24fc4eb7dd57.png",
+            "https://cf.cjdropshipping.com/1a3b0fd4-83b2-46ed-b38b-277ea87c1695.png",
+            "https://cf.cjdropshipping.com/99024f80-c68e-45d0-9843-db927d0a16f6.png"
+          ],
+          "vendor": "CJ Dropshipping",
+          "quantity": 1,
+          "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+          "productType": "CJ Dropshipping",
+          "descriptionHtml": "<div class=\"detailmodule_dynamic\">\n <kse:widget data-widget-type=\"customText\" id=\"24845046\" title=\"\" type=\"custom\"></kse:widget>\n</div> \n<div class=\"detailmodule_html\">\n <div class=\"detail-desc-decorate-richtext\">\n  <p>Bluetooth protocol: 5.0</p>\n  <p>Channel: stereo<br/>How to use: Earplug type<br/>Single and double ears: bilateral three-dimensional</p>\n  <p><br/></p>\n  <p>description:<br/><br/>1. English voice prompt.<br/>2. Send out the phone number.<br/>3. Visualize the functions of the IOS system.<br/>4. Answer/reject the call.<br/>5. Redial the last number.<br/>6. HD voice quality.<br/>7. Solution: high-end solution.<br/>8. Compatibility mode: compatible with all versions of Bluetooth.<br/>9. Signal transmission channel: Cassl2.<br/>10. Usage: Semi-in-ear style.<br/>11. Microphone sensitivity: -42DB high-end transmitter.<br/>12. The longest transmission distance: 10-15 meters.</p>\n  <p><br/></p>\n  <p><img src=\"https://cf.cjdropshipping.com/379fb869-2ae0-4f52-a660-c4fb5d4ec9b7.jpg\" style=\"max-width:100%;\"/><img src=\"https://cf.cjdropshipping.com/50ecd72a-5875-4e4a-bd00-e0490a9429ed.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/308007cc-896c-4ff0-b03d-5c4a4a68ba0d.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/0832e28d-0d12-4cf6-9c65-c767c2e70f5b.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/49a36710-4f5a-46a1-8e21-06e3ce35bbab.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><br/></p> \n  <p style=\"box-sizing: border-box; margin: 0px; font-size: 14px; line-height: inherit; color: rgb(0, 0, 0); font-family: &quot;Open Sans&quot;, Arial, Helvetica, sans-serif, Heiti;\"><br/></p> \n </div>\n</div> \n<div class=\"detailmodule_dynamic\">\n <kse:widget data-widget-type=\"customText\" id=\"24841288\" title=\"\" type=\"custom\"></kse:widget>\n</div>",
+          "pricingSnapshot": {
+            "shippingCostUsd": 5.88,
+            "supplierCostUsd": 9.14,
+            "targetProfitUsd": 2.886934673366834,
+            "suggestedSellPriceUsd": 19.25,
+            "paymentProcessingFeeUsd": 1.339296482412061
+          },
+          "shippingSnapshot": {
+            "carrier": null,
+            "amountUsd": 5.88,
+            "serviceName": "USPS+VIP",
+            "estimatedMaxDays": 7,
+            "estimatedMinDays": null,
+            "originCountryCode": "US"
+          },
+          "variantAttributes": {
+            "label": "Earbuds wireless bluetooth headset White"
+          }
+        },
+        "lastError": "Shopify GraphQL returned errors: Variable $input of type InventorySetQuantitiesInput! was provided invalid value for ignoreCompareQuantity (Field is not defined on InventorySetQuantitiesInput), quantities.0.compareQuantity (Field is not defined on InventoryQuantityInput)",
+        "evaluationId": null,
+        "shippingQuoteId": null,
+        "handlingTimeDays": null,
+        "publishedAt": null,
+        "reconcileAttempts": 0,
+        "reconcileRetryAfter": null,
+        "createdAt": "2026-04-20T03:49:16.813Z",
+        "updatedAt": "2026-04-20T03:49:19.179Z",
+        "product": {
+          "id": 1,
+          "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+          "title": "Earbuds wireless bluetooth headset"
+        },
+        "variant": {
+          "id": 1,
+          "cjSku": "CJXFBXEJ02656-White",
+          "cjVid": "C4EEFBA3-A9E2-4D97-BFA0-291C4D0B27C0"
+        }
+      }
+    ]
+  },
+  "productsAfter": {
+    "ok": true,
+    "products": [
+      {
+        "id": 5,
+        "userId": 1,
+        "cjProductId": "479E2C57-73CA-4F63-B77E-6ABC5B2F32D5",
+        "title": "Neck Pillow Travel Pillow",
+        "description": "<p>features:travel pillows</p><p>size：32*35 cm<br></p><p>Filler name: Honeysuckle</p><p><img src=\"https://cf.cjdropshipping.com/20200708/3128848935982.jpg\"><img src=\"https://cf.cjdropshipping.com/353ca44e-37bb-4893-9aac-ec26157345e3.png\" style=\"font-size: 14px; max-width: 100%;\"><img src=\"https://cf.cjdropshipping.com/aae82413-5d42-495f-b606-cec6b9e79437.png\" style=\"font-size: 14px; max-width: 100%;\"><img src=\"https://cf.cjdropshipping.com/f1a44f50-4fa9-4609-b0bd-ce9fa8d3aab0.png\" style=\"font-size: 14px; max-width: 100%;\"><img src=\"https://cf.cjdropshipping.com/b770688a-e720-47b4-9c09-7a687c1d3d71.png\" style=\"font-size: 14px; max-width: 100%;\"><br></p>",
+        "images": [
+          "https://cf.cjdropshipping.com/20200708/3128848935982.jpg"
+        ],
+        "rawPayloadHash": null,
+        "snapshotStatus": "SYNCED",
+        "lastSyncedAt": "2026-04-20T18:11:38.333Z",
+        "createdAt": "2026-04-20T18:11:38.340Z",
+        "updatedAt": "2026-04-20T18:11:38.340Z",
+        "variants": [
+          {
+            "id": 10,
+            "cjSku": "CJJJJFZT00492-Pink",
+            "cjVid": "EA821FE6-E766-4F1E-9A50-04D7FBB313B7",
+            "unitCostUsd": "5.23",
+            "stockLastKnown": 14432,
+            "stockCheckedAt": "2026-04-20T18:11:43.760Z"
+          },
+          {
+            "id": 11,
+            "cjSku": "CJJJJFZT00492-Black",
+            "cjVid": "B1B364DD-AEA8-44C6-BE22-41BC55A2A3F3",
+            "unitCostUsd": "5.23",
+            "stockLastKnown": 12654,
+            "stockCheckedAt": "2026-04-20T18:11:38.769Z"
+          },
+          {
+            "id": 12,
+            "cjSku": "CJJJJFZT00492-Green",
+            "cjVid": "7CB8AE1B-962B-48A6-B05E-379AFB597CAF",
+            "unitCostUsd": "5.4",
+            "stockLastKnown": 11638,
+            "stockCheckedAt": "2026-04-20T18:11:38.768Z"
+          },
+          {
+            "id": 13,
+            "cjSku": "CJJJJFZT00492-Gery",
+            "cjVid": "F168AA49-7AED-4478-BA7C-E2DABAA3A46F",
+            "unitCostUsd": "5.23",
+            "stockLastKnown": 11702,
+            "stockCheckedAt": "2026-04-20T18:11:38.769Z"
+          },
+          {
+            "id": 14,
+            "cjSku": "CJJJJFZT00492-Navy",
+            "cjVid": "A8651FB2-C4C2-45D0-9A73-7A5D364CD73D",
+            "unitCostUsd": "5.23",
+            "stockLastKnown": 11059,
+            "stockCheckedAt": "2026-04-20T18:11:38.768Z"
+          }
+        ],
+        "evaluations": [],
+        "listings": [
+          {
+            "id": 3,
+            "status": "ACTIVE",
+            "shopifyProductId": "gid://shopify/Product/9145755435220"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "userId": 1,
+        "cjProductId": "1999395299549302785",
+        "title": "Wireless TWS Stereo Earbuds",
+        "description": "\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Features*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">Deliver crisp clear stereo sound </font></li>\n  <font size=\"3\" face=\"Times New Roman\">Easily pair with universal wireless-enabled device like smartphone,tablet,iPhone,iPad,laptop Built-in noise-reducing microphone One button answering/hanging up/rejecting hands-free calls and redialing the last number dialed </font>\n  <li><font size=\"3\" face=\"Times New Roman\">Automatic voice prompt including incoming phone number report </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Each of the earbuds can be used alone with full functionality </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Share your favorite tunes with friend anytime anywhere by sharing the earbuds </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Lightweight,snug and comfortable design </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">Includes a charging pod for convenient charging and storage </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\">CE and RoHS certified </font></li>\n </ul>\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Specifications*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">Earbuds: </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Wireless Version: V4.2+EDR </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Protocols Supported: HSP, HFP, A2DP, AVRCP </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Transmission Range: ≤12M/39ft </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Driver Unit: Ф7mm </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Impedance: 32ohm±15% </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Talk Time: (One Earbud): 5-6 hours; (Two Earbuds): 4-5 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Play Time: (One Earbud): 5-6 hours; (Two Earbuds): 4-5 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Standby: (One Earbud): 120 hours; (Two Earbuds): 70 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charge Time: 1-2 hours </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Battery: built-in 3.7V 75mAh li-ion battery per earbud </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Size(per earbud): 0.94” x 0.71” x 1.1”/2.4 x 1.8 x 2.8cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Weight(per earbud): 5g/0.17oz </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Available Color: black, white </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charging Pod: </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Battery: built-in 3.7V 950mAh li-ion battery </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Charging Voltage: DC 5V </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Size of Charging Pod: 3.27” x 1.5” x 1.3”/8.3 x 3.8 x 3.3cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Weight of Charging Pod: 42g/1.48oz </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Package size: 3.74” x 1.57” x 6.1”/9.5 x 4 x 15.5cm (L x W x H) </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> Package weight: 165g/0.36lbs</font></li>\n </ul>\n <p><font face=\"Times New Roman\" size=\"4\" color=\"#46acc8\"><b><i><u>*Package Lists*:</u></i></b></font></p>\n <ul>\n  <li><font size=\"3\" face=\"Times New Roman\">1 × Pair of Wireless Stereo TWS Earbuds </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 2 × Pair of Replacement Eartips </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 1 × USB Charging Cable </font></li>\n  <li><font size=\"3\" face=\"Times New Roman\"> 1 × User Manual</font></li>\n </ul>\n",
+        "images": [
+          "https://cf.cjdropshipping.com/a4c0bb7d-533e-475e-9984-b417b4c14119.jpg",
+          "https://cf.cjdropshipping.com/9f8b5bde-287e-477b-bf19-807664337577.jpg",
+          "https://cf.cjdropshipping.com/cbda5228-6437-4d78-8534-564a29f0c5d7.jpg",
+          "https://cf.cjdropshipping.com/9fc10435-7022-4f3b-bb70-3672beabb906.jpg",
+          "https://cf.cjdropshipping.com/7736d392-82dc-4a6b-84c2-024ab1dfde71.jpg",
+          "https://cf.cjdropshipping.com/03b8c13d-f04a-4abf-b250-1f9a9f5caad9.jpg",
+          "https://cf.cjdropshipping.com/a1a028ee-7110-420f-876f-e9b4f19bacb2.jpg",
+          "https://cf.cjdropshipping.com/5c2e13a4-45b2-4d77-a308-399e1f42c873.jpg",
+          "https://cf.cjdropshipping.com/61de92c9-1f70-416f-a0dd-78368de4aa5f.jpg",
+          "https://cf.cjdropshipping.com/520a9247-9ba5-4a24-914e-f1a16f2b3478.jpg",
+          "https://cf.cjdropshipping.com/19d9b38f-5e35-4030-b7bf-9128000dbfed.jpg",
+          "https://cf.cjdropshipping.com/509228f7-ebb2-4d72-81bf-ad4ce88d9b2a.jpg",
+          "https://cf.cjdropshipping.com/eda48cc1-eed5-483d-9687-233430c6c300.jpg"
+        ],
+        "rawPayloadHash": null,
+        "snapshotStatus": "SYNCED",
+        "lastSyncedAt": "2026-04-20T17:28:09.401Z",
+        "createdAt": "2026-04-20T03:57:21.984Z",
+        "updatedAt": "2026-04-20T17:28:09.402Z",
+        "variants": [
+          {
+            "id": 4,
+            "cjSku": "CJEJ264155502BY",
+            "cjVid": "1999395299687714818",
+            "unitCostUsd": "22.3",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T17:28:09.417Z"
+          },
+          {
+            "id": 5,
+            "cjSku": "CJEJ264155501AZ",
+            "cjVid": "1999395299687714817",
+            "unitCostUsd": "22.25",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T17:28:09.417Z"
+          }
+        ],
+        "evaluations": [],
+        "listings": [
+          {
+            "id": 2,
+            "status": "ACTIVE",
+            "shopifyProductId": "gid://shopify/Product/9145457803476"
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "userId": 1,
+        "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+        "title": "Earbuds wireless bluetooth headset",
+        "description": "<div class=\"detailmodule_dynamic\">\n <kse:widget data-widget-type=\"customText\" id=\"24845046\" title=\"\" type=\"custom\"></kse:widget>\n</div> \n<div class=\"detailmodule_html\">\n <div class=\"detail-desc-decorate-richtext\">\n  <p>Bluetooth protocol: 5.0</p>\n  <p>Channel: stereo<br/>How to use: Earplug type<br/>Single and double ears: bilateral three-dimensional</p>\n  <p><br/></p>\n  <p>description:<br/><br/>1. English voice prompt.<br/>2. Send out the phone number.<br/>3. Visualize the functions of the IOS system.<br/>4. Answer/reject the call.<br/>5. Redial the last number.<br/>6. HD voice quality.<br/>7. Solution: high-end solution.<br/>8. Compatibility mode: compatible with all versions of Bluetooth.<br/>9. Signal transmission channel: Cassl2.<br/>10. Usage: Semi-in-ear style.<br/>11. Microphone sensitivity: -42DB high-end transmitter.<br/>12. The longest transmission distance: 10-15 meters.</p>\n  <p><br/></p>\n  <p><img src=\"https://cf.cjdropshipping.com/379fb869-2ae0-4f52-a660-c4fb5d4ec9b7.jpg\" style=\"max-width:100%;\"/><img src=\"https://cf.cjdropshipping.com/50ecd72a-5875-4e4a-bd00-e0490a9429ed.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/308007cc-896c-4ff0-b03d-5c4a4a68ba0d.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/0832e28d-0d12-4cf6-9c65-c767c2e70f5b.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><img src=\"https://cf.cjdropshipping.com/49a36710-4f5a-46a1-8e21-06e3ce35bbab.jpg\" style=\"font-size: 14px; max-width: 100%;\"/><br/></p> \n  <p style=\"box-sizing: border-box; margin: 0px; font-size: 14px; line-height: inherit; color: rgb(0, 0, 0); font-family: &quot;Open Sans&quot;, Arial, Helvetica, sans-serif, Heiti;\"><br/></p> \n </div>\n</div> \n<div class=\"detailmodule_dynamic\">\n <kse:widget data-widget-type=\"customText\" id=\"24841288\" title=\"\" type=\"custom\"></kse:widget>\n</div>",
+        "images": [
+          "https://cf.cjdropshipping.com/203207/386132459951.jpg",
+          "https://cf.cjdropshipping.com/203207/5098518456629.jpg",
+          "https://cf.cjdropshipping.com/203207/1997542225641.jpg",
+          "https://cf.cjdropshipping.com/203207/1374339813797.jpg",
+          "https://cf.cjdropshipping.com/203207/1802047212405.jpg",
+          "https://cf.cjdropshipping.com/6d188161-dab8-48c4-a893-24fc4eb7dd57.png",
+          "https://cf.cjdropshipping.com/1a3b0fd4-83b2-46ed-b38b-277ea87c1695.png",
+          "https://cf.cjdropshipping.com/99024f80-c68e-45d0-9843-db927d0a16f6.png"
+        ],
+        "rawPayloadHash": null,
+        "snapshotStatus": "SYNCED",
+        "lastSyncedAt": "2026-04-20T03:49:15.159Z",
+        "createdAt": "2026-04-20T03:49:15.160Z",
+        "updatedAt": "2026-04-20T03:49:15.160Z",
+        "variants": [
+          {
+            "id": 1,
+            "cjSku": "CJXFBXEJ02656-White",
+            "cjVid": "C4EEFBA3-A9E2-4D97-BFA0-291C4D0B27C0",
+            "unitCostUsd": "9.14",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T03:49:15.168Z"
+          },
+          {
+            "id": 2,
+            "cjSku": "CJXFBXEJ02656-Skin",
+            "cjVid": "FD58FF5C-FBEB-417A-BA4F-85D0F1FD61F1",
+            "unitCostUsd": "9.14",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T03:49:15.168Z"
+          },
+          {
+            "id": 3,
+            "cjSku": "CJXFBXEJ02656-Black",
+            "cjVid": "E068A925-3F76-47EF-A206-21C863B77FB4",
+            "unitCostUsd": "9.14",
+            "stockLastKnown": 0,
+            "stockCheckedAt": "2026-04-20T03:49:15.168Z"
+          }
+        ],
+        "evaluations": [],
+        "listings": [
+          {
+            "id": 1,
+            "status": "FAILED",
+            "shopifyProductId": null
+          }
+        ]
+      }
+    ]
+  },
+  "ordersSync": {
+    "ok": true,
+    "count": 0,
+    "orders": []
+  },
+  "ordersAfter": {
+    "ok": true,
+    "orders": []
+  },
+  "logsAfter": {
+    "ok": true,
+    "traces": [
+      {
+        "id": "cmo7ihpwn00654ds067pszt1y",
+        "step": "listing.publish.success",
+        "message": "listing.publish.success",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:11:49.223Z"
+      },
+      {
+        "id": "cmo7ihoqm00634ds0sl4ni6dz",
+        "step": "listing.publish.start",
+        "message": "listing.publish.start",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:11:47.710Z"
+      },
+      {
+        "id": "cmo7ihn6u000512w55lqyz2xs",
+        "step": "listing.draft.created",
+        "message": "listing.draft.created",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:11:45.702Z"
+      },
+      {
+        "id": "cmo7ihk7g000312w53hl92lsf",
+        "step": "request.complete",
+        "message": "discover.import",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:11:41.836Z"
+      },
+      {
+        "id": "cmo7ihbiw000112w5df8hju0e",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:11:30.585Z"
+      },
+      {
+        "id": "cmo7ifx7u0007tptx7vh39ntn",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:10:25.386Z"
+      },
+      {
+        "id": "cmo7ifpyr0005tptxfbfv6wli",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:10:15.987Z"
+      },
+      {
+        "id": "cmo7ifi8k0003tptxjznzgore",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:10:05.972Z"
+      },
+      {
+        "id": "cmo7ifeli0001tptx4imjn8zr",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:10:01.251Z"
+      },
+      {
+        "id": "cmo7iawge00614ds0n52vniog",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:06:31.118Z"
+      },
+      {
+        "id": "cmo7iat3c005z4ds0e7rmb46b",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:06:26.761Z"
+      },
+      {
+        "id": "cmo7iaplq005x4ds00h8mn368",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:06:22.239Z"
+      },
+      {
+        "id": "cmo7ian5h005v4ds0xwdywbus",
+        "step": "request.complete",
+        "message": "discover.search",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:06:19.058Z"
+      },
+      {
+        "id": "cmo7ialt7005t4ds0bjz84pbj",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:06:17.323Z"
+      },
+      {
+        "id": "cmo7iai98005r4ds0j5detkck",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:06:12.716Z"
+      },
+      {
+        "id": "cmo7iaebk005p4ds0tgio1j53",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:06:07.617Z"
+      },
+      {
+        "id": "cmo7iabk2005n4ds0zf8jttl9",
+        "step": "request.complete",
+        "message": "discover.search",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:06:04.033Z"
+      },
+      {
+        "id": "cmo7iaa5f005l4ds00tmgfqvw",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:06:02.211Z"
+      },
+      {
+        "id": "cmo7ia6pg005j4ds0f4minb82",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:05:57.748Z"
+      },
+      {
+        "id": "cmo7ia3k8005h4ds0ocis3v3c",
+        "step": "request.complete",
+        "message": "discover.evaluate",
+        "correlationId": null,
+        "createdAt": "2026-04-20T18:05:53.672Z"
+      }
+    ],
+    "count": 20
+  },
+  "storefront": {
+    "storefrontUrl": "https://ivanreseller-2.myshopify.com/products/neck-pillow-travel-pillow-cjjjjfzt00492-pink",
+    "status": 200,
+    "finalUrl": "https://ivanreseller-2.myshopify.com/password",
+    "passwordGate": true,
+    "markers": [
+      "/password",
+      "Opening soon"
+    ],
+    "htmlSnippet": "<!doctype html> <html class=\"js full-height\" lang=\"es\"> <head> <meta charset=\"utf-8\"> <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\"> <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"> <meta name=\"theme-color\" content=\"\"> <link"
+  }
+}

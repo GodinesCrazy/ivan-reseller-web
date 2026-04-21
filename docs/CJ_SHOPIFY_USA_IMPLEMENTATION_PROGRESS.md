@@ -148,8 +148,19 @@ The PDP check returned:
 - HTTP status: `200`
 - final URL: `https://ivanreseller-2.myshopify.com/password`
 - `passwordGate = true`
+- markers found: `/password`, `Opening soon`, `password`
+
+**Conclusión:** The storefront password gate is **ACTIVE** and blocking public buyer access.
 
 So the product exists and is published, but the PDP is not publicly accessible to a buyer yet.
+
+#### Endpoint de verificación agregado
+
+```
+GET /api/cj-shopify-usa/storefront-status?productHandle=neck-pillow-travel-pillow-cjjjjfzt00492-pink
+```
+
+Ver documentación completa: `docs/CJ_SHOPIFY_USA_BUYER_FLOW_VALIDATION.md`
 
 ## Verification
 
@@ -162,5 +173,30 @@ So the product exists and is published, but the PDP is not publicly accessible t
 
 ## Remaining operational gaps
 
-1. `Storefront password gate` is now the main commercial blocker after successful publish.
-2. Controlled buyer order / fulfillment / tracking still needs a live pass after the storefront gate is opened.
+### 1. Storefront Password Gate 🔒 (Bloqueante)
+
+**Estado:** ACTIVO - Requiere acción manual
+**Impacto:** Bloquea buyer flow completo (PDP, checkout, order placement)
+**Evidencia:**
+- URL final: `/password`
+- Marcadores: `Opening soon`, `Enter store using password`
+
+**Solución manual requerida:**
+```
+1. https://ivanreseller-2.myshopify.com/admin
+2. Online Store > Preferences
+3. Desmarcar "Enable password"
+4. Guardar
+```
+
+### 2. Controlled Order Validation (Preparado, esperando gate)
+
+- Producto publicado: ✅ `neck-pillow-travel-pillow-cjjjjfzt00492-pink`
+- Webhooks: ✅ ORDERS_CREATE, APP_UNINSTALLED
+- Order sync endpoint: ✅ POST /api/cj-shopify-usa/orders/sync
+- Estado: **Listo para ejecutar post-gate**
+
+### 3. Payment Gateway (Pendiente post-gate)
+
+- Shopify Payments: ❌ No disponible para operador Chile
+- Requerido: Third-party gateway (Stripe, PayPal, etc.)

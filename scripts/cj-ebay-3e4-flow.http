@@ -1,0 +1,91 @@
+# CJ → eBay USA — corrida manual 3E.4 (REST Client / IntelliJ HTTP / similar)
+# NO ejecutar en bloque sin revisar: implica costes reales en CJ/eBay cuando el operador dispare los pasos.
+#
+# Placeholders:
+#   {{baseUrl}}     ej. http://localhost:3000
+#   {{token}}       JWT del usuario operador
+#   {{ebayOrderId}} id de orden en eBay (fulfillment)
+#   {{orderId}}     id interno devuelto por import (cj_ebay_orders.id)
+#
+# Orden operativo recomendado:
+#   1) system-readiness (sin llamadas externas)
+#   2) config (opcional)
+#   3) import
+#   4) operational-flow
+#   5) place → confirm → pay (si MANUAL)
+#   6) status (poll)
+#   7) sync-tracking (cuando haya tracking)
+#   8) evidence-summary (export / plantilla)
+
+@baseUrl = http://localhost:3000
+@token = YOUR_JWT_HERE
+@ebayOrderId = EBAY_ORDER_ID_HERE
+@orderId = INTERNAL_CJ_EBAY_ORDER_ID_HERE
+
+### 0 — Preparación (sin CJ/eBay HTTP)
+GET {{baseUrl}}/api/cj-ebay/system-readiness
+Authorization: Bearer {{token}}
+
+### 1 — Config (opcional)
+GET {{baseUrl}}/api/cj-ebay/config
+Authorization: Bearer {{token}}
+
+### 1b — Forzar checkout manual (opcional)
+# POST {{baseUrl}}/api/cj-ebay/config
+# Authorization: Bearer {{token}}
+# Content-Type: application/json
+#
+# {"cjPostCreateCheckoutMode": "MANUAL"}
+
+### 2 — Importar orden eBay
+POST {{baseUrl}}/api/cj-ebay/orders/import
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "ebayOrderId": "{{ebayOrderId}}"
+}
+
+### 3 — Inspección de gates (solo DB)
+GET {{baseUrl}}/api/cj-ebay/orders/{{orderId}}/operational-flow
+Authorization: Bearer {{token}}
+
+### 4 — Place (createOrderV2 payType=3) — REAL CJ
+POST {{baseUrl}}/api/cj-ebay/orders/{{orderId}}/place
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### 5 — Confirm — REAL CJ
+POST {{baseUrl}}/api/cj-ebay/orders/{{orderId}}/confirm
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### 6 — Pay balance — REAL CJ
+POST {{baseUrl}}/api/cj-ebay/orders/{{orderId}}/pay
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### 7 — Estado CJ (getOrderDetail)
+GET {{baseUrl}}/api/cj-ebay/orders/{{orderId}}/status
+Authorization: Bearer {{token}}
+
+### 8 — Sync tracking (+ submit eBay si aplica) — REAL
+POST {{baseUrl}}/api/cj-ebay/orders/{{orderId}}/sync-tracking
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### 9 — Resumen evidencia (sanitizado, solo DB)
+GET {{baseUrl}}/api/cj-ebay/orders/{{orderId}}/evidence-summary
+Authorization: Bearer {{token}}
+
+### 10 — Detalle orden local (incluye buyerPayload; no usar en evidencia pública)
+GET {{baseUrl}}/api/cj-ebay/orders/{{orderId}}
+Authorization: Bearer {{token}}

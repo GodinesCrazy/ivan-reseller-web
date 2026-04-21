@@ -1,0 +1,285 @@
+{%- comment -%}
+  IVAN RESELLER - Bento Category Grid
+  Modern, weighted grid for showcasing collections or product categories.
+{%- endcomment -%}
+
+<section class="ir-bento-section">
+  <div class="ir-bento-container">
+    <div class="ir-bento-header">
+      <h2 class="ir-bento-title">{{ section.settings.title }}</h2>
+      <p class="ir-bento-subtitle">{{ section.settings.subtitle }}</p>
+    </div>
+
+    <div class="ir-bento-grid">
+      {% for block in section.blocks %}
+        <div class="ir-bento-item ir-bento-item--{{ block.settings.size }}" {{ block.shopify_attributes }}>
+          <a href="{{ block.settings.link }}" class="ir-bento-link">
+            {% if block.settings.image != blank %}
+              <div class="ir-bento-image-wrap">
+                {{ block.settings.image | image_url: width: 1200 | image_tag: class: 'ir-bento-image', loading: 'lazy' }}
+              </div>
+            {% else %}
+              <div class="ir-bento-placeholder"></div>
+            {% endif %}
+            
+            <div class="ir-bento-content">
+              <span class="ir-bento-label">{{ block.settings.label }}</span>
+              <h3 class="ir-bento-heading">{{ block.settings.title }}</h3>
+              <p class="ir-bento-text">{{ block.settings.description }}</p>
+              <span class="ir-bento-button">Explore &rarr;</span>
+            </div>
+          </a>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<style>
+  .ir-bento-section {
+    padding: var(--ir-spacing-2xl) 0;
+    background: var(--ir-white);
+  }
+  
+  .ir-bento-container {
+    width: var(--ir-content-width);
+    margin: 0 auto;
+  }
+  
+  .ir-bento-header {
+    margin-bottom: var(--ir-spacing-xl);
+    max-width: 600px;
+  }
+  
+  .ir-bento-title {
+    font-size: clamp(1.75rem, 3vw, 2.5rem);
+    font-weight: 700;
+    color: var(--ir-navy);
+    margin-bottom: 8px;
+  }
+  
+  .ir-bento-subtitle {
+    color: var(--ir-gray-500);
+    font-size: 1.0625rem;
+  }
+  
+  .ir-bento-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: 240px;
+    gap: 20px;
+  }
+  
+  .ir-bento-item {
+    position: relative;
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--ir-gray-50);
+    border: 1px solid var(--ir-gray-100);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .ir-bento-item:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+  }
+  
+  .ir-bento-item--large {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+  
+  .ir-bento-item--wide {
+    grid-column: span 2;
+  }
+  
+  .ir-bento-item--tall {
+    grid-row: span 2;
+  }
+  
+  .ir-bento-link {
+    display: block;
+    width: 100%;
+    height: 100%;
+    text-decoration: none;
+    position: relative;
+  }
+  
+  .ir-bento-image-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+  
+  .ir-bento-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.6s ease;
+  }
+  
+  .ir-bento-item:hover .ir-bento-image {
+    transform: scale(1.05);
+  }
+  
+  .ir-bento-content {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.4) 100%);
+  }
+  
+  .ir-bento-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.8);
+    margin-bottom: 4px;
+  }
+  
+  .ir-bento-heading {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--ir-white);
+    margin: 0 0 8px;
+  }
+  
+  .ir-bento-text {
+    font-size: 0.9375rem;
+    color: rgba(255,255,255,0.7);
+    margin: 0 0 16px;
+    max-width: 280px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .ir-bento-button {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--ir-white);
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: all 0.3s ease 0.1s;
+  }
+  
+  .ir-bento-item:hover .ir-bento-button {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  
+  .ir-bento-placeholder {
+    width: 100%;
+    height: 100%;
+    background: #E2E8F0;
+  }
+  
+  @media screen and (max-width: 1100px) {
+    .ir-bento-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+  
+  @media screen and (max-width: 749px) {
+    .ir-bento-grid {
+      grid-template-columns: 1fr;
+      grid-auto-rows: minmax(300px, auto);
+    }
+    .ir-bento-item--large, 
+    .ir-bento-item--wide,
+    .ir-bento-item--tall {
+      grid-column: span 1;
+      grid-row: span 1;
+    }
+    .ir-bento-content {
+      padding: 24px;
+    }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "IR - Bento Grid",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Heading",
+      "default": "Shop by Category"
+    },
+    {
+      "type": "text",
+      "id": "subtitle",
+      "label": "Subheading",
+      "default": "Carefully selected upgrades for every part of your day."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "category_item",
+      "name": "Category Item",
+      "settings": [
+        {
+          "type": "select",
+          "id": "size",
+          "label": "Grid Size",
+          "options": [
+            { "value": "small", "label": "Small" },
+            { "value": "wide", "label": "Wide" },
+            { "value": "tall", "label": "Tall" },
+            { "value": "large", "label": "Large" }
+          ],
+          "default": "small"
+        },
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Image"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Small Label",
+          "default": "Essentials"
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Title",
+          "default": "Workspace"
+        },
+        {
+          "type": "textarea",
+          "id": "description",
+          "label": "Description",
+          "default": "Clean and functional tools for your desk."
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Link"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Bento Grid",
+      "category": "Ivan Reseller",
+      "blocks": [
+        { "type": "category_item", "settings": { "size": "large" } },
+        { "type": "category_item", "settings": { "size": "small" } },
+        { "type": "category_item", "settings": { "size": "small" } },
+        { "type": "category_item", "settings": { "size": "wide" } }
+      ]
+    }
+  ]
+}
+{% endschema %}

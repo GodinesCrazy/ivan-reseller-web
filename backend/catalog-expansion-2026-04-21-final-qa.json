@@ -1,0 +1,286 @@
+{
+  "finishedAt": "2026-04-21T06:57:54.640Z",
+  "replacementPublished": {
+    "title": "Rotary Digital Kitchen Timer",
+    "listingId": 33,
+    "shopifyProductId": "gid://shopify/Product/9146520862932",
+    "handle": "rotary-digital-kitchen-timer-33",
+    "price": 13.99,
+    "cost": 4.53,
+    "shipping": 5.06
+  },
+  "weakProductDrafted": {
+    "id": 9146516046036,
+    "title": "Drafted Beauty Organizer",
+    "body_html": "<p>Compact, space-saving, and perfect for organizing your beauty essentials.<br>24-SLOTS LIPSTICK ORGANIZER: This compact and functional organizer holds up to 24 items, such as lipsticks, liquid lipsticks, lip glosses, standard mascara tubes, small bottles, rollerball perfumes, small tubes, and highlighters.<br>DESIGN CONCEPT: The 4 rows × 6 columns stepped arrangement offers a neat and elegant display of your beauty essentials, ensuring easy access and exceptional stability to keep everything in order.<br>BOTH HOME &amp; COMMERCIAL: Suitable for organizing and showcasing cosmetics at home, in stores, or salons. A versatile solution for displaying lipsticks and small makeup essentials.<br>WASHABLE &amp; NICE GIFT: A practical and thoughtful gift for women, beauty enthusiasts, or loved ones for any occasion. Easy to clean by hand or dishwasher for hassle-free maintenance.</p>\n <p><br></p>\n <p><img src=\"https://cf.cjdropshipping.com/ac5f2704-9a3e-4a30-8fc0-d544481e6b6c.jpg\" style=\"max-width:100%;\" contenteditable=\"false\"></p>",
+    "vendor": "CJ Dropshipping",
+    "product_type": "CJ Dropshipping",
+    "created_at": "2026-04-21T02:54:21-04:00",
+    "handle": "drafted-beauty-organizer-32",
+    "updated_at": "2026-04-21T02:57:36-04:00",
+    "published_at": null,
+    "template_suffix": null,
+    "published_scope": "web",
+    "tags": "cj-product:1937397252993245185, cj-shopify-usa",
+    "status": "draft",
+    "admin_graphql_api_id": "gid://shopify/Product/9146516046036",
+    "variants": [
+      {
+        "id": 47825656545492,
+        "product_id": 9146516046036,
+        "title": "Default Title",
+        "price": "14.99",
+        "position": 1,
+        "inventory_policy": "deny",
+        "compare_at_price": null,
+        "option1": "Default Title",
+        "option2": null,
+        "option3": null,
+        "created_at": "2026-04-21T02:54:21-04:00",
+        "updated_at": "2026-04-21T02:54:41-04:00",
+        "taxable": true,
+        "barcode": null,
+        "fulfillment_service": "manual",
+        "grams": 0,
+        "inventory_management": "shopify",
+        "requires_shipping": true,
+        "sku": "CJSB240984904DW",
+        "weight": 0,
+        "weight_unit": "kg",
+        "inventory_item_id": 49943971758292,
+        "inventory_quantity": 1,
+        "old_inventory_quantity": 1,
+        "admin_graphql_api_id": "gid://shopify/ProductVariant/47825656545492",
+        "image_id": null
+      }
+    ],
+    "options": [
+      {
+        "id": 11496527364308,
+        "product_id": 9146516046036,
+        "name": "Title",
+        "position": 1,
+        "values": [
+          "Default Title"
+        ]
+      }
+    ],
+    "images": [
+      {
+        "id": 46769926996180,
+        "alt": null,
+        "position": 1,
+        "product_id": 9146516046036,
+        "created_at": "2026-04-21T02:54:25-04:00",
+        "updated_at": "2026-04-21T02:54:25-04:00",
+        "admin_graphql_api_id": "gid://shopify/MediaImage/38021451317460",
+        "width": 800,
+        "height": 800,
+        "src": "https://cdn.shopify.com/s/files/1/0826/5904/9684/files/4f565482-cfe3-4721-8910-f478a1a99097.jpg?v=1776754465",
+        "variant_ids": []
+      },
+      {
+        "id": 46769927323860,
+        "alt": null,
+        "position": 2,
+        "product_id": 9146516046036,
+        "created_at": "2026-04-21T02:54:29-04:00",
+        "updated_at": "2026-04-21T02:54:29-04:00",
+        "admin_graphql_api_id": "gid://shopify/MediaImage/38021451645140",
+        "width": 1500,
+        "height": 1500,
+        "src": "https://cdn.shopify.com/s/files/1/0826/5904/9684/files/43fcad07-c2a1-4da2-8a23-0698024d416a.jpg?v=1776754469",
+        "variant_ids": []
+      },
+      {
+        "id": 46769927651540,
+        "alt": null,
+        "position": 3,
+        "product_id": 9146516046036,
+        "created_at": "2026-04-21T02:54:31-04:00",
+        "updated_at": "2026-04-21T02:54:31-04:00",
+        "admin_graphql_api_id": "gid://shopify/MediaImage/38021451907284",
+        "width": 1500,
+        "height": 1500,
+        "src": "https://cdn.shopify.com/s/files/1/0826/5904/9684/files/dc3e7f7b-2c65-4c52-a052-677cd9f67bf2.jpg?v=1776754471",
+        "variant_ids": []
+      },
+      {
+        "id": 46769927815380,
+        "alt": null,
+        "position": 4,
+        "product_id": 9146516046036,
+        "created_at": "2026-04-21T02:54:34-04:00",
+        "updated_at": "2026-04-21T02:54:34-04:00",
+        "admin_graphql_api_id": "gid://shopify/MediaImage/38021452136660",
+        "width": 1500,
+        "height": 1500,
+        "src": "https://cdn.shopify.com/s/files/1/0826/5904/9684/files/e6a427fb-62e6-4528-8bb4-baa6d58955d1.jpg?v=1776754474",
+        "variant_ids": []
+      },
+      {
+        "id": 46769927946452,
+        "alt": null,
+        "position": 5,
+        "product_id": 9146516046036,
+        "created_at": "2026-04-21T02:54:36-04:00",
+        "updated_at": "2026-04-21T02:54:36-04:00",
+        "admin_graphql_api_id": "gid://shopify/MediaImage/38021452169428",
+        "width": 1500,
+        "height": 1500,
+        "src": "https://cdn.shopify.com/s/files/1/0826/5904/9684/files/598ecab7-8a5e-4406-a3c5-f5f8939b4f6c.jpg?v=1776754476",
+        "variant_ids": []
+      }
+    ],
+    "image": {
+      "id": 46769926996180,
+      "alt": null,
+      "position": 1,
+      "product_id": 9146516046036,
+      "created_at": "2026-04-21T02:54:25-04:00",
+      "updated_at": "2026-04-21T02:54:25-04:00",
+      "admin_graphql_api_id": "gid://shopify/MediaImage/38021451317460",
+      "width": 800,
+      "height": 800,
+      "src": "https://cdn.shopify.com/s/files/1/0826/5904/9684/files/4f565482-cfe3-4721-8910-f478a1a99097.jpg?v=1776754465",
+      "variant_ids": []
+    }
+  },
+  "titleUpdates": [
+    {
+      "listingId": 26,
+      "title": "6-Piece Travel Storage Bag Set",
+      "handle": "6-piece-travel-storage-bag-set-26"
+    },
+    {
+      "listingId": 27,
+      "title": "Travel Toiletry Organizer Bag",
+      "handle": "travel-toiletry-organizer-bag-27"
+    },
+    {
+      "listingId": 28,
+      "title": "Self-Adhesive Cable Organizer Clips",
+      "handle": "self-adhesive-cable-organizer-clips-28"
+    },
+    {
+      "listingId": 29,
+      "title": "Foldable Aluminum Tablet Stand",
+      "handle": "foldable-aluminum-tablet-stand-29"
+    },
+    {
+      "listingId": 30,
+      "title": "Keyboard and Mouse Wrist Rest Set",
+      "handle": "keyboard-and-mouse-wrist-rest-set-30"
+    },
+    {
+      "listingId": 18,
+      "title": "RFID Carbon Fiber Card Holder",
+      "handle": "rfid-carbon-fiber-card-holder-18"
+    },
+    {
+      "listingId": 31,
+      "title": "Car Seat Gap Organizer",
+      "handle": "car-seat-gap-organizer-31"
+    }
+  ],
+  "activeShopifyCjProductCount": 25,
+  "backendOverviewAfter": {
+    "ok": true,
+    "counts": {
+      "products": 33,
+      "variants": 180,
+      "evaluations": 0,
+      "evaluationsApproved": 0,
+      "evaluationsRejected": 0,
+      "evaluationsPending": 0,
+      "shippingQuotes": 43,
+      "listings": 33,
+      "listingsActive": 24,
+      "orders": 0,
+      "ordersOpen": 0,
+      "ordersWithTracking": 0,
+      "alertsOpen": 0,
+      "profitSnapshots": 0,
+      "tracesLast24h": 493
+    }
+  },
+  "collectionDistributionActiveOnly": {
+    "Travel Comfort & Organizers": 8,
+    "Desk / Workspace Upgrades": 8,
+    "Smart Everyday Accessories": 10
+  },
+  "storefrontQa": [
+    {
+      "handle": "rotary-digital-kitchen-timer-33",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/rotary-digital-kitchen-timer-33",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true,
+      "hasProductTitle": true
+    },
+    {
+      "handle": "6-piece-travel-storage-bag-set-26",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/6-piece-travel-storage-bag-set-26",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true,
+      "hasProductTitle": true
+    },
+    {
+      "handle": "travel-toiletry-organizer-bag-27",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/travel-toiletry-organizer-bag-27",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true,
+      "hasProductTitle": true
+    },
+    {
+      "handle": "self-adhesive-cable-organizer-clips-28",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/self-adhesive-cable-organizer-clips-28",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true,
+      "hasProductTitle": true
+    },
+    {
+      "handle": "foldable-aluminum-tablet-stand-29",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/foldable-aluminum-tablet-stand-29",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true,
+      "hasProductTitle": true
+    }
+  ],
+  "activeProductTitles": [
+    "10,000mAh Portable Power Bank",
+    "2-in-1 Screen Cleaner Kit",
+    "20W Universal Travel Adapter",
+    "6-Piece Travel Storage Bag Set",
+    "9-Piece Packing Cube Set",
+    "Adjustable Aluminum Laptop Stand",
+    "Anti-Fatigue Desk Mat",
+    "Bluetooth Key Finder",
+    "Cable Management Box",
+    "Car Seat Gap Organizer",
+    "Earbuds wireless bluetooth headset",
+    "Foldable Aluminum Tablet Stand",
+    "Foldable Phone and Tablet Stand",
+    "Keyboard and Mouse Wrist Rest Set",
+    "Magnetic Dashboard Phone Mount",
+    "Memory Foam Travel Neck Pillow",
+    "Portable Digital Luggage Scale",
+    "RFID Carbon Fiber Card Holder",
+    "Rotary Digital Kitchen Timer",
+    "Self-Adhesive Cable Organizer Clips",
+    "Silicone Travel Bottle Set",
+    "Soft Travel Neck Pillow",
+    "Travel Toiletry Organizer Bag",
+    "USB-C Multiport Hub",
+    "Wireless Stereo Earbuds"
+  ]
+}

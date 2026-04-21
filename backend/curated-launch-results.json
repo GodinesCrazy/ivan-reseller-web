@@ -1,0 +1,967 @@
+{
+  "startedAt": "2026-04-21T03:58:35.380Z",
+  "baseUrl": "https://ivan-reseller-backend-production.up.railway.app",
+  "loginUser": "admin",
+  "launchConfig": {
+    "travel": [
+      "universal travel adapter",
+      "packing cubes luggage organizer",
+      "neck pillow travel memory foam",
+      "travel bottles toiletry containers",
+      "luggage scale portable"
+    ],
+    "workspace": [
+      "usb c hub docking station",
+      "laptop stand adjustable aluminum",
+      "cable organizer management box",
+      "standing desk mat anti fatigue",
+      "wireless earbuds bluetooth"
+    ],
+    "everyday": [
+      "magnetic car phone holder mount",
+      "phone stand foldable desk",
+      "key finder bluetooth tracker",
+      "power bank 10000mah portable",
+      "screen cleaner kit electronics"
+    ]
+  },
+  "overviewBefore": {
+    "ok": true,
+    "counts": {
+      "products": 3,
+      "variants": 10,
+      "evaluations": 0,
+      "evaluationsApproved": 0,
+      "evaluationsRejected": 0,
+      "evaluationsPending": 0,
+      "shippingQuotes": 3,
+      "listings": 3,
+      "listingsActive": 2,
+      "orders": 0,
+      "ordersOpen": 0,
+      "ordersWithTracking": 0,
+      "alertsOpen": 0,
+      "profitSnapshots": 0,
+      "tracesLast24h": 148
+    }
+  },
+  "discovered": [
+    {
+      "cjProductId": "2602050314241608000",
+      "title": "PD 20W Universal Travel Adapter Plug",
+      "keyword": "universal travel adapter",
+      "collection": "travel"
+    },
+    {
+      "cjProductId": "1990664736726372353",
+      "title": "9Pcs Clothes Storage Bags Water-Resistant Travel Luggage Organizer Clothing Packing Cubes",
+      "keyword": "packing cubes luggage organizer",
+      "collection": "travel"
+    },
+    {
+      "cjProductId": "1645725464138358784",
+      "title": "U Shaped Pillow Travel Neck Pillow Memory Foam",
+      "keyword": "neck pillow travel memory foam",
+      "collection": "travel"
+    },
+    {
+      "cjProductId": "A863730C-A987-4543-B348-3AEAA3A7043E",
+      "title": "Bottled travel cosmetics silicone bottle storage bottle",
+      "keyword": "travel bottles toiletry containers",
+      "collection": "travel"
+    },
+    {
+      "cjProductId": "1429375206241210368",
+      "title": "Luggage Scale Portable Electronic Scale",
+      "keyword": "luggage scale portable",
+      "collection": "travel"
+    },
+    {
+      "cjProductId": "A8E4C408-6970-42DE-86C7-C5629D6AD36C",
+      "title": "USB C multi hub docking station",
+      "keyword": "usb c hub docking station",
+      "collection": "workspace"
+    },
+    {
+      "cjProductId": "1631221139164901376",
+      "title": "Simple Vertical Aluminum Laptop Stand Adjustable",
+      "keyword": "laptop stand adjustable aluminum",
+      "collection": "workspace"
+    },
+    {
+      "cjProductId": "1414780039492407296",
+      "title": "Dust-proof Storage Cable Management Box Hub Organizer Box",
+      "keyword": "cable organizer management box",
+      "collection": "workspace"
+    },
+    {
+      "cjProductId": "2509160959231628300",
+      "title": "Anti-Fatigue Rubber Floor Mat Dome Hollow Anti-static",
+      "keyword": "standing desk mat anti fatigue",
+      "collection": "workspace"
+    },
+    {
+      "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+      "title": "Earbuds wireless bluetooth headset",
+      "keyword": "wireless earbuds bluetooth",
+      "collection": "workspace"
+    },
+    {
+      "cjProductId": "1809888855471312896",
+      "title": "Magnetic Phone Holder For Car, Dashboard Car Phone Holder Mount Magnetic Stainless Steel Car Phone Holder - Dashboard Mount, Water-resistant, Rotatable",
+      "keyword": "magnetic car phone holder mount",
+      "collection": "everyday"
+    },
+    {
+      "cjProductId": "1426120141564940288",
+      "title": "Portable Phone Holder Stand Desk Tablet With Mirror Mobile Phone Bracket With Mirror Foldable Phone Holder",
+      "keyword": "phone stand foldable desk",
+      "collection": "everyday"
+    },
+    {
+      "cjProductId": "A6235D6D-EC07-4570-8057-E5A8773EF877",
+      "title": "bluetooth tracker key finder",
+      "keyword": "key finder bluetooth tracker",
+      "collection": "everyday"
+    },
+    {
+      "cjProductId": "CD9753E5-1CF4-4C44-AEBD-098F42A87EB7",
+      "title": "Portable Mini Large  Ccity 10000mAh Power Bank",
+      "keyword": "power bank 10000mah portable",
+      "collection": "everyday"
+    },
+    {
+      "cjProductId": "28191F94-A25B-4A64-A57B-E4674E560FAD",
+      "title": "2 In 1 Phone Computer Screen Cleaner Kit For Screen Dust Removal Microfiber Cloth Set",
+      "keyword": "screen cleaner kit electronics",
+      "collection": "everyday"
+    }
+  ],
+  "evaluated": [
+    {
+      "cjProductId": "2602050314241608000",
+      "title": "PD 20W Universal Travel Adapter Plug",
+      "keyword": "universal travel adapter",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "2602050314241609200",
+      "variantCjSku": "CJYD275457305EV",
+      "shipping": {
+        "amountUsd": 5.85,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 3.34,
+        "shippingCostUsd": 5.85,
+        "suggestedSellPriceUsd": 11.92211055276382
+      }
+    },
+    {
+      "cjProductId": "1990664736726372353",
+      "title": "9Pcs Clothes Storage Bags Water-Resistant Travel Luggage Organizer Clothing Packing Cubes",
+      "keyword": "packing cubes luggage organizer",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1990664736789286914",
+      "variantCjSku": "CJSB26015360001",
+      "shipping": {
+        "amountUsd": 0,
+        "method": "DHL US to US #3",
+        "estimatedDays": 5,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 14.09,
+        "shippingCostUsd": 0,
+        "suggestedSellPriceUsd": 18.077889447236185
+      }
+    },
+    {
+      "cjProductId": "1645725464138358784",
+      "title": "U Shaped Pillow Travel Neck Pillow Memory Foam",
+      "keyword": "neck pillow travel memory foam",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1645725464511651840",
+      "variantCjSku": "CJJT173163301AZ",
+      "shipping": {
+        "amountUsd": 7.66,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 3.08,
+        "shippingCostUsd": 7.66,
+        "suggestedSellPriceUsd": 13.869346733668344
+      }
+    },
+    {
+      "cjProductId": "A863730C-A987-4543-B348-3AEAA3A7043E",
+      "title": "Bottled travel cosmetics silicone bottle storage bottle",
+      "keyword": "travel bottles toiletry containers",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "A271FA5D-2897-41B6-82DA-A641E665D095",
+      "variantCjSku": "CJJJJTCC00174-blue",
+      "shipping": {
+        "amountUsd": 4.8,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 1.38,
+        "shippingCostUsd": 4.8,
+        "suggestedSellPriceUsd": 8.140703517587939
+      }
+    },
+    {
+      "cjProductId": "1429375206241210368",
+      "title": "Luggage Scale Portable Electronic Scale",
+      "keyword": "luggage scale portable",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1429375206312513536",
+      "variantCjSku": "CJJT126011601AZ",
+      "shipping": {
+        "amountUsd": 5.72,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 4.99,
+        "shippingCostUsd": 5.72,
+        "suggestedSellPriceUsd": 13.83165829145729
+      }
+    },
+    {
+      "cjProductId": "A8E4C408-6970-42DE-86C7-C5629D6AD36C",
+      "title": "USB C multi hub docking station",
+      "keyword": "usb c hub docking station",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "226C98BA-247D-4D5E-B2F6-BDC1A20220F9",
+      "variantCjSku": "CJXFLPYP00087-M9VC01",
+      "shipping": {
+        "amountUsd": 5.76,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 12.37,
+        "shippingCostUsd": 5.76,
+        "suggestedSellPriceUsd": 23.153266331658294
+      }
+    },
+    {
+      "cjProductId": "1631221139164901376",
+      "title": "Simple Vertical Aluminum Laptop Stand Adjustable",
+      "keyword": "laptop stand adjustable aluminum",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1631221139278147584",
+      "variantCjSku": "CJJT169656604DW",
+      "shipping": {
+        "amountUsd": 14.76,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 11.54,
+        "shippingCostUsd": 14.76,
+        "suggestedSellPriceUsd": 33.41708542713568
+      }
+    },
+    {
+      "cjProductId": "1414780039492407296",
+      "title": "Dust-proof Storage Cable Management Box Hub Organizer Box",
+      "keyword": "cable organizer management box",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1414786128950726656",
+      "variantCjSku": "CJCC121180401AZ",
+      "shipping": {
+        "amountUsd": 7.6,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 0.97,
+        "shippingCostUsd": 7.6,
+        "suggestedSellPriceUsd": 11.143216080402013
+      }
+    },
+    {
+      "cjProductId": "2509160959231628300",
+      "title": "Anti-Fatigue Rubber Floor Mat Dome Hollow Anti-static",
+      "keyword": "standing desk mat anti fatigue",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "2509160959231628500",
+      "variantCjSku": "CJYD253208001AZ",
+      "shipping": {
+        "amountUsd": 15.11,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 8.46,
+        "shippingCostUsd": 15.11,
+        "suggestedSellPriceUsd": 29.987437185929654
+      }
+    },
+    {
+      "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+      "title": "Earbuds wireless bluetooth headset",
+      "keyword": "wireless earbuds bluetooth",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "C4EEFBA3-A9E2-4D97-BFA0-291C4D0B27C0",
+      "variantCjSku": "CJXFBXEJ02656-White",
+      "shipping": {
+        "amountUsd": 5.88,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 9.14,
+        "shippingCostUsd": 5.88,
+        "suggestedSellPriceUsd": 19.246231155778897
+      }
+    },
+    {
+      "cjProductId": "1809888855471312896",
+      "title": "Magnetic Phone Holder For Car, Dashboard Car Phone Holder Mount Magnetic Stainless Steel Car Phone Holder - Dashboard Mount, Water-resistant, Rotatable",
+      "keyword": "magnetic car phone holder mount",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1809888855504867328",
+      "variantCjSku": "CJSJ207789801AZ",
+      "shipping": {
+        "amountUsd": 2,
+        "method": "Yunexpress CN to US",
+        "estimatedDays": 12,
+        "fulfillmentOrigin": "CN",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 10.98,
+        "shippingCostUsd": 2,
+        "suggestedSellPriceUsd": 16.683417085427138
+      }
+    },
+    {
+      "cjProductId": "1426120141564940288",
+      "title": "Portable Phone Holder Stand Desk Tablet With Mirror Mobile Phone Bracket With Mirror Foldable Phone Holder",
+      "keyword": "phone stand foldable desk",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1426120142869368832",
+      "variantCjSku": "CJJT125076603CX",
+      "shipping": {
+        "amountUsd": 5.84,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 1.32,
+        "shippingCostUsd": 5.84,
+        "suggestedSellPriceUsd": 9.371859296482413
+      }
+    },
+    {
+      "cjProductId": "A6235D6D-EC07-4570-8057-E5A8773EF877",
+      "title": "bluetooth tracker key finder",
+      "keyword": "key finder bluetooth tracker",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "06A008C3-0B73-4BB4-91E6-4DFFDE1D0004",
+      "variantCjSku": "CJJSAQJB00013-Champagne",
+      "shipping": {
+        "amountUsd": 4.67,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 10.91,
+        "shippingCostUsd": 4.67,
+        "suggestedSellPriceUsd": 19.949748743718597
+      }
+    },
+    {
+      "cjProductId": "CD9753E5-1CF4-4C44-AEBD-098F42A87EB7",
+      "title": "Portable Mini Large  Ccity 10000mAh Power Bank",
+      "keyword": "power bank 10000mah portable",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "12FE0741-7419-42ED-AD3A-425DC1F397D7",
+      "variantCjSku": "CJSJSJCD00363-White-10000mAh",
+      "shipping": {
+        "amountUsd": 6.27,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 3.2,
+        "shippingCostUsd": 6.27,
+        "suggestedSellPriceUsd": 12.273869346733669
+      }
+    },
+    {
+      "cjProductId": "28191F94-A25B-4A64-A57B-E4674E560FAD",
+      "title": "2 In 1 Phone Computer Screen Cleaner Kit For Screen Dust Removal Microfiber Cloth Set",
+      "keyword": "screen cleaner kit electronics",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1436288824501211136",
+      "variantCjSku": "CJSJSJSJ01181-2PC Grey",
+      "shipping": {
+        "amountUsd": 4.85,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 1.13,
+        "shippingCostUsd": 4.85,
+        "suggestedSellPriceUsd": 7.889447236180905
+      }
+    }
+  ],
+  "published": [
+    {
+      "cjProductId": "2602050314241608000",
+      "title": "PD 20W Universal Travel Adapter Plug",
+      "keyword": "universal travel adapter",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "2602050314241609200",
+      "variantCjSku": "CJYD275457305EV",
+      "shipping": {
+        "amountUsd": 5.85,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 3.34,
+        "shippingCostUsd": 5.85,
+        "suggestedSellPriceUsd": 11.92211055276382
+      },
+      "published": true,
+      "listingId": 4
+    },
+    {
+      "cjProductId": "1990664736726372353",
+      "title": "9Pcs Clothes Storage Bags Water-Resistant Travel Luggage Organizer Clothing Packing Cubes",
+      "keyword": "packing cubes luggage organizer",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1990664736789286914",
+      "variantCjSku": "CJSB26015360001",
+      "shipping": {
+        "amountUsd": 0,
+        "method": "DHL US to US #3",
+        "estimatedDays": 5,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 14.09,
+        "shippingCostUsd": 0,
+        "suggestedSellPriceUsd": 18.077889447236185
+      },
+      "published": true,
+      "listingId": 5
+    },
+    {
+      "cjProductId": "1645725464138358784",
+      "title": "U Shaped Pillow Travel Neck Pillow Memory Foam",
+      "keyword": "neck pillow travel memory foam",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1645725464511651840",
+      "variantCjSku": "CJJT173163301AZ",
+      "shipping": {
+        "amountUsd": 7.66,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 3.08,
+        "shippingCostUsd": 7.66,
+        "suggestedSellPriceUsd": 13.869346733668344
+      },
+      "published": true,
+      "listingId": 6
+    },
+    {
+      "cjProductId": "A863730C-A987-4543-B348-3AEAA3A7043E",
+      "title": "Bottled travel cosmetics silicone bottle storage bottle",
+      "keyword": "travel bottles toiletry containers",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "A271FA5D-2897-41B6-82DA-A641E665D095",
+      "variantCjSku": "CJJJJTCC00174-blue",
+      "shipping": {
+        "amountUsd": 4.8,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 1.38,
+        "shippingCostUsd": 4.8,
+        "suggestedSellPriceUsd": 8.140703517587939
+      },
+      "published": true,
+      "listingId": 7
+    },
+    {
+      "cjProductId": "1429375206241210368",
+      "title": "Luggage Scale Portable Electronic Scale",
+      "keyword": "luggage scale portable",
+      "collection": "travel",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1429375206312513536",
+      "variantCjSku": "CJJT126011601AZ",
+      "shipping": {
+        "amountUsd": 5.72,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 4.99,
+        "shippingCostUsd": 5.72,
+        "suggestedSellPriceUsd": 13.83165829145729
+      },
+      "published": true,
+      "listingId": 8
+    },
+    {
+      "cjProductId": "A8E4C408-6970-42DE-86C7-C5629D6AD36C",
+      "title": "USB C multi hub docking station",
+      "keyword": "usb c hub docking station",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "226C98BA-247D-4D5E-B2F6-BDC1A20220F9",
+      "variantCjSku": "CJXFLPYP00087-M9VC01",
+      "shipping": {
+        "amountUsd": 5.76,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 12.37,
+        "shippingCostUsd": 5.76,
+        "suggestedSellPriceUsd": 23.153266331658294
+      },
+      "published": true,
+      "listingId": 9
+    },
+    {
+      "cjProductId": "1631221139164901376",
+      "title": "Simple Vertical Aluminum Laptop Stand Adjustable",
+      "keyword": "laptop stand adjustable aluminum",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1631221139278147584",
+      "variantCjSku": "CJJT169656604DW",
+      "shipping": {
+        "amountUsd": 14.76,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 11.54,
+        "shippingCostUsd": 14.76,
+        "suggestedSellPriceUsd": 33.41708542713568
+      },
+      "published": true,
+      "listingId": 10
+    },
+    {
+      "cjProductId": "1414780039492407296",
+      "title": "Dust-proof Storage Cable Management Box Hub Organizer Box",
+      "keyword": "cable organizer management box",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1414786128950726656",
+      "variantCjSku": "CJCC121180401AZ",
+      "shipping": {
+        "amountUsd": 7.6,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 0.97,
+        "shippingCostUsd": 7.6,
+        "suggestedSellPriceUsd": 11.143216080402013
+      },
+      "published": true,
+      "listingId": 11
+    },
+    {
+      "cjProductId": "2509160959231628300",
+      "title": "Anti-Fatigue Rubber Floor Mat Dome Hollow Anti-static",
+      "keyword": "standing desk mat anti fatigue",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "2509160959231628500",
+      "variantCjSku": "CJYD253208001AZ",
+      "shipping": {
+        "amountUsd": 15.11,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 8.46,
+        "shippingCostUsd": 15.11,
+        "suggestedSellPriceUsd": 29.987437185929654
+      },
+      "published": true,
+      "listingId": 12
+    },
+    {
+      "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+      "title": "Earbuds wireless bluetooth headset",
+      "keyword": "wireless earbuds bluetooth",
+      "collection": "workspace",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "C4EEFBA3-A9E2-4D97-BFA0-291C4D0B27C0",
+      "variantCjSku": "CJXFBXEJ02656-White",
+      "shipping": {
+        "amountUsd": 5.88,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 9.14,
+        "shippingCostUsd": 5.88,
+        "suggestedSellPriceUsd": 19.246231155778897
+      },
+      "published": false,
+      "listingId": 1,
+      "publishError": "POST /api/cj-shopify-usa/listings/publish failed: Shopify product upsert failed: Handle 'earbuds-wireless-bluetooth-headset-cjxfbxej02656-white' already in use. Please provide a new handle."
+    },
+    {
+      "cjProductId": "1809888855471312896",
+      "title": "Magnetic Phone Holder For Car, Dashboard Car Phone Holder Mount Magnetic Stainless Steel Car Phone Holder - Dashboard Mount, Water-resistant, Rotatable",
+      "keyword": "magnetic car phone holder mount",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1809888855504867328",
+      "variantCjSku": "CJSJ207789801AZ",
+      "shipping": {
+        "amountUsd": 2,
+        "method": "Yunexpress CN to US",
+        "estimatedDays": 12,
+        "fulfillmentOrigin": "CN",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 10.98,
+        "shippingCostUsd": 2,
+        "suggestedSellPriceUsd": 16.683417085427138
+      },
+      "published": true,
+      "listingId": 13
+    },
+    {
+      "cjProductId": "1426120141564940288",
+      "title": "Portable Phone Holder Stand Desk Tablet With Mirror Mobile Phone Bracket With Mirror Foldable Phone Holder",
+      "keyword": "phone stand foldable desk",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1426120142869368832",
+      "variantCjSku": "CJJT125076603CX",
+      "shipping": {
+        "amountUsd": 5.84,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 1.32,
+        "shippingCostUsd": 5.84,
+        "suggestedSellPriceUsd": 9.371859296482413
+      },
+      "published": true,
+      "listingId": 14
+    },
+    {
+      "cjProductId": "A6235D6D-EC07-4570-8057-E5A8773EF877",
+      "title": "bluetooth tracker key finder",
+      "keyword": "key finder bluetooth tracker",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "06A008C3-0B73-4BB4-91E6-4DFFDE1D0004",
+      "variantCjSku": "CJJSAQJB00013-Champagne",
+      "shipping": {
+        "amountUsd": 4.67,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 10.91,
+        "shippingCostUsd": 4.67,
+        "suggestedSellPriceUsd": 19.949748743718597
+      },
+      "published": true,
+      "listingId": 15
+    },
+    {
+      "cjProductId": "CD9753E5-1CF4-4C44-AEBD-098F42A87EB7",
+      "title": "Portable Mini Large  Ccity 10000mAh Power Bank",
+      "keyword": "power bank 10000mah portable",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "12FE0741-7419-42ED-AD3A-425DC1F397D7",
+      "variantCjSku": "CJSJSJCD00363-White-10000mAh",
+      "shipping": {
+        "amountUsd": 6.27,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 3.2,
+        "shippingCostUsd": 6.27,
+        "suggestedSellPriceUsd": 12.273869346733669
+      },
+      "published": true,
+      "listingId": 16
+    },
+    {
+      "cjProductId": "28191F94-A25B-4A64-A57B-E4674E560FAD",
+      "title": "2 In 1 Phone Computer Screen Cleaner Kit For Screen Dust Removal Microfiber Cloth Set",
+      "keyword": "screen cleaner kit electronics",
+      "collection": "everyday",
+      "evaluated": true,
+      "eligible": true,
+      "hasStock": true,
+      "isApproved": true,
+      "hasShipping": true,
+      "variantCjVid": "1436288824501211136",
+      "variantCjSku": "CJSJSJSJ01181-2PC Grey",
+      "shipping": {
+        "amountUsd": 4.85,
+        "method": "USPS+VIP",
+        "estimatedDays": 7,
+        "fulfillmentOrigin": "US",
+        "confidence": "known"
+      },
+      "pricing": {
+        "supplierCostUsd": 1.13,
+        "shippingCostUsd": 4.85,
+        "suggestedSellPriceUsd": 7.889447236180905
+      },
+      "published": true,
+      "listingId": 17
+    }
+  ],
+  "overviewAfter": {
+    "ok": true,
+    "counts": {
+      "products": 17,
+      "variants": 70,
+      "evaluations": 0,
+      "evaluationsApproved": 0,
+      "evaluationsRejected": 0,
+      "evaluationsPending": 0,
+      "shippingQuotes": 18,
+      "listings": 17,
+      "listingsActive": 16,
+      "orders": 0,
+      "ordersOpen": 0,
+      "ordersWithTracking": 0,
+      "alertsOpen": 0,
+      "profitSnapshots": 0,
+      "tracesLast24h": 238
+    }
+  },
+  "summary": {
+    "discovered": 15,
+    "evaluated": 15,
+    "eligible": 15,
+    "attempted": 15,
+    "published": 14,
+    "byCollection": {
+      "travel": {
+        "discovered": 5,
+        "published": 5
+      },
+      "workspace": {
+        "discovered": 5,
+        "published": 4
+      },
+      "everyday": {
+        "discovered": 5,
+        "published": 5
+      }
+    }
+  },
+  "finishedAt": "2026-04-21T04:04:56.236Z"
+}

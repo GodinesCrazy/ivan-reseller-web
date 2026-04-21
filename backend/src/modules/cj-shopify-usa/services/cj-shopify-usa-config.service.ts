@@ -33,9 +33,14 @@ export class CjShopifyUsaConfigService {
       settings = await prisma.cjShopifyUsaAccountSettings.create({
         data: {
           userId,
-          minMarginPct: 15,
+          minMarginPct: 20,              // 20% margen mínimo saludable
+          minProfitUsd: 3.00,            // $3 profit mínimo por unidad (realista para low-ticket)
           minStock: 1,
           handlingBufferDays: 3,
+          incidentBufferPct: 3.0,        // 3% buffer de riesgo
+          maxShippingUsd: 8.00,          // Máximo $8 de envío
+          defaultPaymentFeePct: 5.4,     // PayPal Express cross-border
+          defaultPaymentFixedFeeUsd: 0.30,
         },
       });
     }

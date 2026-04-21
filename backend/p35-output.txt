@@ -1,0 +1,65 @@
+[BOOT] loading credentials-manager.service
+[BOOT] loading mercadolibre.service
+[BOOT] loading ebay.service
+[BOOT] loading amazon.service
+🔍 DATABASE_URL encontrada:
+   Variable: DATABASE_URL
+   postgresql://postgres:pzXS***xwiO@yamabiko.proxy.rlwy.net:35731/railway
+   Host: yamabiko.proxy.rlwy.net
+   Port: 35731
+   Database: railway
+   User: postgres
+   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)
+   💡 Si estás en Railway, considera usar DATABASE_URL con postgres.railway.internal
+   💡 La URL pública funciona pero puede ser más lenta
+🔍 REDIS_URL encontrada:
+   Variable: REDIS_URL
+   redis://default:****@shortline.proxy.rlwy.net:56022
+   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)
+   💡 Si estás en Railway, considera usar REDIS_URL con redis.railway.internal
+✅ ENCRYPTION_KEY validada (longitud: 64 caracteres)
+[BOOT] loading destination.service
+[BOOT] loading marketplace.service
+[P34] === close + re-bootstrap (multi-variant) + publish ===
+[P34] listingToClose=MLC1911071461 productId=32722 userId=1
+⚠️ Usando salt por defecto. Se recomienda configurar ENCRYPTION_SALT único.
+[P34] credentials_ok sellerId=(unknown) hasRefresh=true
+
+[P34] STEP 1: closing MLC1911071461…
+[P34] ✅ MLC1911071461 closed via ML API
+
+[P34] STEP 2: removing stale cover_main.jpg to force regeneration…
+[P34] deleted C:\Ivan_Reseller_Web\artifacts\ml-image-packs\product-32722\cover_main.jpg
+[P34] deleted C:\Ivan_Reseller_Web\artifacts\ml-image-packs\product-32722\ml-asset-pack.json
+
+[P34] STEP 3: re-bootstrapping image pack (multi-variant isolation)…
+[P34] product title: Soporte Escritorio Tel�fono Gatito Decorativo Minimalista Stand Celular
+[P34] imageUrls found: 4
+2026-04-02 18:46:54 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >95% white — trying next {"service":"ivan-reseller-backend","srcIdx":0,"variant":"p103_v1_default","whitePct":"99.3"}
+2026-04-02 18:46:55 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >95% white — trying next {"service":"ivan-reseller-backend","srcIdx":0,"variant":"p109_border_relaxed","whitePct":"100.0"}
+2026-04-02 18:46:55 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >95% white — trying next {"service":"ivan-reseller-backend","srcIdx":0,"variant":"p109_mask_minimal_spread","whitePct":"99.4"}
+2026-04-02 18:46:55 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >95% white — trying next {"service":"ivan-reseller-backend","srcIdx":0,"variant":"p109_soft_alpha_blur","whitePct":"99.4"}
+2026-04-02 18:46:56 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":1,"variant":"p103_v1_default","warmGrayPct":"22.1"}
+2026-04-02 18:46:56 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":1,"variant":"p109_border_relaxed","warmGrayPct":"22.7"}
+2026-04-02 18:46:57 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":1,"variant":"p109_mask_minimal_spread","warmGrayPct":"21.3"}
+2026-04-02 18:46:57 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":1,"variant":"p109_soft_alpha_blur","warmGrayPct":"21.5"}
+2026-04-02 18:46:58 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":2,"variant":"p103_v1_default","warmGrayPct":"8.1"}
+2026-04-02 18:46:58 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":2,"variant":"p109_border_relaxed","warmGrayPct":"8.1"}
+2026-04-02 18:46:59 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":2,"variant":"p109_mask_minimal_spread","warmGrayPct":"8.1"}
+2026-04-02 18:46:59 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":2,"variant":"p109_soft_alpha_blur","warmGrayPct":"8.2"}
+2026-04-02 18:46:59 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":3,"variant":"p103_v1_default","warmGrayPct":"9.7"}
+2026-04-02 18:47:00 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":3,"variant":"p109_border_relaxed","warmGrayPct":"9.6"}
+2026-04-02 18:47:00 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":3,"variant":"p109_mask_minimal_spread","warmGrayPct":"9.6"}
+2026-04-02 18:47:01 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] variant >5% warm-gray pollution — trying next {"service":"ivan-reseller-backend","srcIdx":3,"variant":"p109_soft_alpha_blur","warmGrayPct":"9.7"}
+2026-04-02 18:47:01 [[33mwarn[39m]: [autoGenerateSimpleProcessedPack] all isolation variants failed quality gate → soft background neutralization fallback {"service":"ivan-reseller-backend"}
+2026-04-02 18:47:01 [[32minfo[39m]: [autoGenerateSimpleProcessedPack] soft background neutralization applied → gray-bg portada {"service":"ivan-reseller-backend","bgMean":"232,228,224"}
+[P34] bootstrap result: generated=true packApproved=true
+
+[P34] STEP 4: publishing product 32722 to mercadolibre…
+[P34] publish result:
+{
+  "success": false,
+  "marketplace": "mercadolibre",
+  "error": "Cannot publish a product with status: PUBLISHED. Product must be VALIDATED_READY under the preventive engine."
+}
+[P34] ABORT: publish succeeded but no listing ID in response

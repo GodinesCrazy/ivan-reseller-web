@@ -1,0 +1,33 @@
+{
+  "productId": 32714,
+  "listingId": "MLC3804623142",
+  "fatalError": "no_white_background_cover_passed_strict_gate",
+  "tried": {
+    "supplierCount": 3,
+    "keeps": [
+      0.55,
+      0.62,
+      0.48
+    ],
+    "topFracs": [
+      0.5,
+      0.45,
+      0.38
+    ],
+    "nudges": [
+      0.028,
+      0,
+      -0.028
+    ],
+    "blurs": [
+      0.62,
+      0.52,
+      0.4
+    ],
+    "sats": [
+      0.54,
+      0.62,
+      0.72
+    ]
+  }
+}

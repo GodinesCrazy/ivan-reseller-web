@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-04-19T02:06:54.726Z",
+  "apiAttempts": [
+    {
+      "endpoint": "warehouse/detail",
+      "success": false,
+      "error": "CJ HTTP 400"
+    },
+    {
+      "endpoint": "logistic/getWarehouseList",
+      "success": false,
+      "error": "Interface not found"
+    },
+    {
+      "endpoint": "setting/getWarehouse",
+      "success": false,
+      "error": "Interface not found"
+    }
+  ],
+  "broadSearchAudit": {
+    "totalScanned": 100,
+    "clHits": 0,
+    "hits": []
+  }
+}

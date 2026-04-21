@@ -223,6 +223,8 @@ After the backend deploy, production was rechecked directly without the hybrid w
 
 ## Phase 3 - PDP buyer-facing verification
 
+### Verificación Realizada (2026-04-20)
+
 Storefront check result:
 
 - URL checked: `https://ivanreseller-2.myshopify.com/products/neck-pillow-travel-pillow-cjjjjfzt00492-pink`
@@ -232,18 +234,36 @@ Storefront check result:
 - markers found:
   - `/password`
   - `Opening soon`
+  - `password`
 
-Exact conclusion:
+### Conclusión Exacta
 
 - the Shopify product is published correctly
 - the buyer-facing PDP is **not** accessible publicly
 - the exact blocker is the Shopify storefront password gate
+- **Verificación automatizada:** Script `cj-shopify-usa-buyer-flow-validation.ts` ejecutado
+- **Endpoint de verificación:** `GET /api/cj-shopify-usa/storefront-status`
+
+### Evidencia Técnica
+
+```json
+{
+  "storefrontCheck": {
+    "storeDomain": "ivanreseller-2.myshopify.com",
+    "storefrontUrl": "https://ivanreseller-2.myshopify.com/products/neck-pillow-travel-pillow-cjjjjfzt00492-pink",
+    "status": 200,
+    "finalUrl": "https://ivanreseller-2.myshopify.com/password",
+    "passwordGate": true,
+    "markers": ["/password", "Opening soon", "password"]
+  }
+}
+```
 
 ## Phase 4 - Next real blocker
 
-The next real blocker is:
+### Bloqueador Actual: Shopify Storefront Password Gate 🔒
 
-- `Shopify storefront password gate`
+**Estado:** ACTIVO y confirmado mediante verificación automatizada
 
 Why this is the main blocker now:
 
@@ -251,40 +271,90 @@ Why this is the main blocker now:
 - Discover, Evaluate, Import Draft, and Publish have already been completed
 - the listing exists in Shopify
 - the buyer cannot reach the PDP because the storefront redirects to `/password`
+- **password gate NO puede ser levantado vía API** - requiere acción manual
 
-Secondary follow-up item:
+### Acción Requerida para Desbloquear
 
-- execute the first controlled buyer order after storefront access is opened
+```
+PASO MANUAL OBLIGATORIO:
+1. Acceder a: https://ivanreseller-2.myshopify.com/admin
+2. Navegar a: Online Store > Preferences
+3. En sección "Password protection", desmarcar "Enable password"
+4. Guardar cambios
 
-## Phase 5 - Controlled order possibility
+Alternativa (CLI):
+shopify store:disable-password --store=ivanreseller-2.myshopify.com
+```
 
-Current status:
+### Documentación Completa
+
+Ver: `docs/CJ_SHOPIFY_USA_BUYER_FLOW_VALIDATION.md`
+
+## Phase 5 - Controlled order preparation
+
+### Current Status
 
 - `POST /api/cj-shopify-usa/orders/sync` is live and works
 - sync result after publish: `ok = true`, `count = 0`
 - no Shopify orders exist yet for this vertical
+- **Order de prueba:** Preparada y lista para ejecución post-gate
 
-What blocks a real buyer-order validation right now:
+### Preparación Completada
+
+| Paso | Estado | Detalle |
+|------|--------|---------|
+| Producto seleccionado | ✅ | Neck Pillow Travel Pillow |
+| Stock verificado | ✅ | 14432 unidades |
+| Shipping calculado | ✅ | $6.11 USPS+VIP, 7 días |
+| Precio de venta | ✅ | $14.84 USD |
+| Producto publicado | ✅ | Shopify Product ID: 9145755435220 |
+| Webhooks registrados | ✅ | ORDERS_CREATE, APP_UNINSTALLED |
+| Order sync endpoint | ✅ | POST /api/cj-shopify-usa/orders/sync |
+
+### What blocks a real buyer-order validation right now:
 
 - the storefront password gate prevents a normal buyer-facing PDP / checkout path
+- **NO es un problema técnico del sistema** - es configuración Shopify
+
+### Procedimiento Post-Gate
 
 Therefore:
 
 - a controlled order should be executed only after the password gate is removed or controlled public access is provided
 - once that happens, the next exact validation should be:
-  - place one order on the published travel pillow product
-  - run/observe Shopify order ingestion
-  - verify tracking / fulfillment sync
+  1. **Verify storefront public:** Use `GET /api/cj-shopify-usa/storefront-status`
+  2. **Place one order:** On the published travel pillow product
+  3. **Verify order ingestion:** `POST /api/cj-shopify-usa/orders/sync` or webhook
+  4. **Check order in backend:** `GET /api/cj-shopify-usa/orders`
+  5. **Verify tracking / fulfillment sync** via CJ integration
 
 ## Validation summary
 
-- readiness live: PASS
-- discover live with broad keyword sweep: PASS
-- evaluate live: PASS after stock-truth correction
-- import-draft live: PASS
-- listings live: PASS
-- publish live: PASS
-- production Discover/Evaluate after deploy: PASS
-- Shopify product existence: PASS
-- buyer-facing PDP: FAIL because of storefront password gate
-- controlled order: NOT executed yet because storefront access is blocked
+| Componente | Estado | Notas |
+|------------|--------|-------|
+| readiness live | ✅ PASS | `ready: true` |
+| discover live with broad keyword sweep | ✅ PASS | 400 resultados, 40 evaluados |
+| evaluate live | ✅ PASS | Después de stock-truth correction |
+| import-draft live | ✅ PASS | Funcional |
+| listings live | ✅ PASS | Funcional |
+| publish live | ✅ PASS | Producto publicado correctamente |
+| production Discover/Evaluate after deploy | ✅ PASS | commit `93f9777` |
+| Shopify product existence | ✅ PASS | `gid://shopify/Product/9145755435220` |
+| **buyer-facing PDP** | 🔒 **BLOCKED** | Password gate activo en `/password` |
+| storefront password gate | 🔒 **ACTIVE** | Requiere acción manual en Shopify Admin |
+| controlled order | ⏸️ **PENDING** | Esperando levantamiento del gate |
+| order ingestion endpoint | ✅ READY | `POST /api/cj-shopify-usa/orders/sync` |
+| storefront verification endpoint | ✅ NEW | `GET /api/cj-shopify-usa/storefront-status` |
+
+### Evidencia de bloqueo
+
+- **URL verificada:** `https://ivanreseller-2.myshopify.com/products/neck-pillow-travel-pillow-cjjjjfzt00492-pink`
+- **URL final:** `https://ivanreseller-2.myshopify.com/password`
+- **Marcadores:** `/password`, `Opening soon`, `password`
+- **Status HTTP:** 200 (pero con redirección a password page)
+
+### Referencias
+
+- Documentación buyer flow: `docs/CJ_SHOPIFY_USA_BUYER_FLOW_VALIDATION.md`
+- Script de verificación: `backend/scripts/cj-shopify-usa-buyer-flow-validation.ts`
+- Endpoint de verificación: `GET /api/cj-shopify-usa/storefront-status`

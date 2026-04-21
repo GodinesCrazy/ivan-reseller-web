@@ -1,0 +1,80 @@
+{
+  "finishedAt": "2026-04-21T06:58:27.652Z",
+  "drafted": [
+    {
+      "id": 9145455837396,
+      "title": "Earbuds wireless bluetooth headset",
+      "handle": "earbuds-wireless-bluetooth-headset-cjxfbxej02656-white",
+      "status": "draft"
+    }
+  ],
+  "activeShopifyCjProductCount": 24,
+  "activeProductTitles": [
+    "10,000mAh Portable Power Bank",
+    "2-in-1 Screen Cleaner Kit",
+    "20W Universal Travel Adapter",
+    "6-Piece Travel Storage Bag Set",
+    "9-Piece Packing Cube Set",
+    "Adjustable Aluminum Laptop Stand",
+    "Anti-Fatigue Desk Mat",
+    "Bluetooth Key Finder",
+    "Cable Management Box",
+    "Car Seat Gap Organizer",
+    "Foldable Aluminum Tablet Stand",
+    "Foldable Phone and Tablet Stand",
+    "Keyboard and Mouse Wrist Rest Set",
+    "Magnetic Dashboard Phone Mount",
+    "Memory Foam Travel Neck Pillow",
+    "Portable Digital Luggage Scale",
+    "RFID Carbon Fiber Card Holder",
+    "Rotary Digital Kitchen Timer",
+    "Self-Adhesive Cable Organizer Clips",
+    "Silicone Travel Bottle Set",
+    "Soft Travel Neck Pillow",
+    "Travel Toiletry Organizer Bag",
+    "USB-C Multiport Hub",
+    "Wireless Stereo Earbuds"
+  ],
+  "storefrontQa": [
+    {
+      "handle": "rotary-digital-kitchen-timer-33",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/rotary-digital-kitchen-timer-33",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true
+    },
+    {
+      "handle": "6-piece-travel-storage-bag-set-26",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/6-piece-travel-storage-bag-set-26",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true
+    },
+    {
+      "handle": "travel-toiletry-organizer-bag-27",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/travel-toiletry-organizer-bag-27",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true
+    },
+    {
+      "handle": "self-adhesive-cable-organizer-clips-28",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/self-adhesive-cable-organizer-clips-28",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true
+    },
+    {
+      "handle": "foldable-aluminum-tablet-stand-29",
+      "status": 200,
+      "finalUrl": "https://ivanreseller-2.myshopify.com/products/foldable-aluminum-tablet-stand-29",
+      "passwordGate": false,
+      "hasAddToCart": true,
+      "hasPrice": true
+    }
+  ]
+}

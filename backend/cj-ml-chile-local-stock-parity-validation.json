@@ -1,0 +1,651 @@
+🔍 DATABASE_URL encontrada:
+   Variable: DATABASE_URL
+   postgresql://postgres:pzXS***xwiO@yamabiko.proxy.rlwy.net:35731/railway
+   Host: yamabiko.proxy.rlwy.net
+   Port: 35731
+   Database: railway
+   User: postgres
+   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)
+   💡 Si estás en Railway, considera usar DATABASE_URL con postgres.railway.internal
+   💡 La URL pública funciona pero puede ser más lenta
+✅ ENCRYPTION_KEY validada (longitud: 64 caracteres)
+[BOOT] loading credentials-manager.service
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+{
+  "generatedAt": "2026-04-19T00:40:54.684Z",
+  "userId": 1,
+  "pageSize": 12,
+  "verifyLimit": 6,
+  "rows": [
+    {
+      "query": "wireless earbuds",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "1999395299549302785",
+          "title": "Wireless TWS Stereo Earbuds",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+          "title": "Earbuds wireless bluetooth headset",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1519856087674138624",
+          "title": "SX991 Wireless Retractable Earbuds Headphones",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "432ECB81-B661-4F23-9990-AFC885CE6CE0",
+          "title": "Mini Bluetooth Headset Wireless Invisible Earbuds",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "2509230800541600400",
+          "title": "Simple Home Earbuds Wireless Bluetooth Headset",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1553932524244709376",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1378291333478879232",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2509230800541600400",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1467746365760212992",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "432ECB81-B661-4F23-9990-AFC885CE6CE0",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1553932524244709376",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1378291333478879232",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2509230800541600400",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1467746365760212992",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "432ECB81-B661-4F23-9990-AFC885CE6CE0",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "earbuds",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "D0DCA1A1-6206-4AAE-A10B-66C85A4FA786",
+          "title": "earbuds",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "2020076168886263810",
+          "title": "Translator Earbuds Online Two-Way Translation Earbuds BT 5.3 Headphones",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1732695683947311104",
+          "title": "Bluetooth Earbuds Cleaning Pen",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1999395299549302785",
+          "title": "Wireless TWS Stereo Earbuds",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+          "title": "Earbuds wireless bluetooth headset",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1732695683947311104",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "D0DCA1A1-6206-4AAE-A10B-66C85A4FA786",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2407300940021603400",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2020076168886263810",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1519856087674138624",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1732695683947311104",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "95114A85-CB4B-49B8-ACBC-0CDFA082E2B5",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "D0DCA1A1-6206-4AAE-A10B-66C85A4FA786",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2407300940021603400",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2020076168886263810",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1519856087674138624",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "smartphone holder",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "1606196287202930688",
+          "title": "Wireless Shutter Smartphone Holder",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "2512261006141624500",
+          "title": "Wireless Smartphone Holder With Bluetooth-sensing Speaker",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1624747514299691008",
+          "title": "Desktop Phone Holder Stand Smartphone Support Tablet Mount Bracket",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1385497265229139968",
+          "title": "Mobile Phone Screen Magnifier 3D HD Video Bluetooth Amplifier Smartphone Stand Amplifier Smartphone Stand Holder Gift",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "7BE889B5-A49D-40E1-9492-C811628BE18E",
+          "title": "Magnetic Car Phone Holder Air Vent Magnet Mount Smartphone Phone Holder Car Rotation Bracket",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "2512261006141624500",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2512120515531619900",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1606196287202930688",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1504657705758371840",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1388011476912050176",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1384028691251728384",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "2512261006141624500",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2512120515531619900",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1606196287202930688",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1504657705758371840",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1388011476912050176",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1384028691251728384",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "charger",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "1372736044037967872",
+          "title": "Universal Colorful LED Angel Wings Qi Wireless Charger Charge Dock For Mobile Phone Fast Charger",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "0C95F414-0EED-4822-BCFA-0BC1791DD518",
+          "title": "PS4 multi-function charger charger",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "2508040753321612300",
+          "title": "Automobile Battery Charger Motorcycle Battery Charger",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "30374992-ED67-4194-841C-1871167D9B28",
+          "title": "Car wireless charger magic array charger",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1736990508808937472",
+          "title": "Folding Magnetic Wireless Charger Charger Desktop Bracket",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1372736044037967872",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "30374992-ED67-4194-841C-1871167D9B28",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1736990508808937472",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1367820390436573184",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1381856492235395072",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2508040753321612300",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1372736044037967872",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "30374992-ED67-4194-841C-1871167D9B28",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1736990508808937472",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1367820390436573184",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1381856492235395072",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2508040753321612300",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "phone case",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "1398816627469979648",
+          "title": "Sexy Beauty Phone Case Fashion Personalized Print Mobile Phone Case",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1356875251300044800",
+          "title": "Compatible With  , Snap Phone Case",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1510595256222494720",
+          "title": "Panda Magnetic Ring Holder Phone Case Cover",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1397427680512708608",
+          "title": "Cell Phone Case Cell Phone Leather Case Cell Phone Protective Case Cell Phone Case",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1501035259100672000",
+          "title": "Quicksand Phone Case Colorful Plastic Shell Phone Case Phone Case",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1501035259100672000",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2506130902241614600",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2505080642021625500",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1789506349777301504",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1537724113467486208",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1398816627469979648",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1501035259100672000",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2506130902241614600",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2505080642021625500",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1789506349777301504",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1537724113467486208",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1398816627469979648",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "ring",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "1397364526055297024",
+          "title": "Retro Domineering Dragon Scale Ring Punk Tide Ring",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1397086858827141120",
+          "title": "Zircon Gold Dragon Ring Ring For Couples",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1397760634292146176",
+          "title": "Resin Gold Foil Ring Diy Handmade Dried Flower Epoxy Ring",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1397367346628268032",
+          "title": "Personalized Retro Domineering Dragon Ring Ring",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "B27178E7-A185-48FB-8186-DAA0F73D9AFA",
+          "title": "Cut Out Cross Ring",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "2E8C00AF-2D46-460F-A88E-D2B6ABE737F0",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "C4B77B31-58D8-4C18-B06E-CE456559A81B",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1397364526055297024",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1397086858827141120",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1397760634292146176",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1397367346628268032",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "2E8C00AF-2D46-460F-A88E-D2B6ABE737F0",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "C4B77B31-58D8-4C18-B06E-CE456559A81B",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1397364526055297024",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1397086858827141120",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1397760634292146176",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1397367346628268032",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    }
+  ]
+}

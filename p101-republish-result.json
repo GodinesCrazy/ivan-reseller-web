@@ -1,0 +1,361 @@
+{
+  "productId": 32714,
+  "executedAt": "2026-03-27T03:37:48.487Z",
+  "publishPath": "MarketplaceService.publishProduct → publishToMercadoLibre → MercadoLibreService.createListing",
+  "pictureOrderIntent": "portada_first: [cover_main.png local path, detail_mount_interface.png local path]",
+  "duplicateListing": true,
+  "blockNewPublications": null,
+  "packInspection": {
+    "packApproved": true,
+    "missingRequired": [],
+    "invalidRequired": [],
+    "unapprovedRequired": [],
+    "coverAsset": {
+      "assetKey": "cover_main",
+      "required": true,
+      "exists": true,
+      "localPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\cover_main.png",
+      "promptPath": null,
+      "width": 1200,
+      "height": 1200,
+      "squareLike": true,
+      "min1200": true,
+      "approvalState": "approved",
+      "assetSource": "p102_white_background_padding_recovery",
+      "notes": "P102 white-background recovery from prior clean portada by 0.75 white padding; strict+white gate passed"
+    },
+    "detailAsset": {
+      "assetKey": "detail_mount_interface",
+      "required": true,
+      "exists": true,
+      "localPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\detail_mount_interface.png",
+      "promptPath": null,
+      "width": 1536,
+      "height": 1536,
+      "squareLike": true,
+      "min1200": true,
+      "approvalState": "approved",
+      "assetSource": "preserved_existing_pack",
+      "notes": "unchanged for P100 listing picture replace"
+    }
+  },
+  "portadaStrictGate": {
+    "pass": true,
+    "signals": [],
+    "metrics": {
+      "edgeTop": 0.5975641990135795,
+      "edgeMid": 27.826256543179195,
+      "edgeBot": 0.5975641990135794,
+      "edgeLeft": 10.630488054587412,
+      "edgeRight": 4.99440713980568,
+      "ratioTop": 0.021474832523243417,
+      "ratioBot": 0.021474832523243413,
+      "ratioLeft": 0.32747115166211993,
+      "ratioRight": 0.15385222668454032,
+      "highContrastBlockPct": 0.27,
+      "topBusyRowFrac": 0,
+      "frameCoreRatio": 0.021003247917928257,
+      "seamRatio": 4.40952298434697,
+      "nearWhiteDominance": 0.6056206597222222,
+      "pureWhiteDominance": 0.4383376736111111,
+      "borderNearWhiteRatio": 1,
+      "cornerNearWhiteTopLeft": 1,
+      "cornerNearWhiteTopRight": 1,
+      "cornerNearWhiteBottomLeft": 1,
+      "cornerNearWhiteBottomRight": 1,
+      "cornerMinNearWhite": 1,
+      "borderMeanLuma": 254.99999999999994,
+      "borderLumaStd": 0.000003814697265625,
+      "borderDarkRatio": 0
+    }
+  },
+  "userId": 1,
+  "prePublishSnapshot": {
+    "status": "VALIDATED_READY",
+    "isPublished": false,
+    "finalPrice": "12"
+  },
+  "preflightRecheck": {
+    "overallState": "ready_to_publish",
+    "publishAllowed": true,
+    "blockers": [],
+    "listingSalePriceUsd": 12,
+    "mercadoLibreApi": {
+      "testConnectionOk": true,
+      "testConnectionMessage": "MercadoLibre connection successful",
+      "credentialEnvironment": "production"
+    },
+    "images": {
+      "publishSafe": true,
+      "blockingReason": null,
+      "imageCount": 2,
+      "packApproved": true,
+      "requiredAssets": [
+        {
+          "assetKey": "cover_main",
+          "approvalState": "approved",
+          "exists": true,
+          "localPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\cover_main.png",
+          "min1200": true,
+          "squareLike": true,
+          "notes": "P102 white-background recovery from prior clean portada by 0.75 white padding; strict+white gate passed"
+        },
+        {
+          "assetKey": "detail_mount_interface",
+          "approvalState": "approved",
+          "exists": true,
+          "localPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\detail_mount_interface.png",
+          "min1200": true,
+          "squareLike": true,
+          "notes": "unchanged for P100 listing picture replace"
+        }
+      ]
+    }
+  },
+  "mlPublishPayloadImageOrder": [
+    {
+      "position": 0,
+      "role": "portada_cover_main",
+      "absolutePath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\cover_main.png",
+      "sha256": "6917d000588a295d3100417fef277148a1208bbb8639274a65026f1ad2343ac1"
+    },
+    {
+      "position": 1,
+      "role": "detail_mount_interface",
+      "absolutePath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\detail_mount_interface.png",
+      "sha256": "7c0197a5c00fb5b607f365c528da248e02dd2eef57de253014f70adc1a667c13"
+    }
+  ],
+  "imageSwap": {
+    "temporaryPublishInputs": [
+      "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\cover_main.png",
+      "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\detail_mount_interface.png"
+    ]
+  },
+  "imagesRestoredToOriginal": true,
+  "publishAttempted": true,
+  "publishResult": {
+    "success": true,
+    "marketplace": "mercadolibre",
+    "listingId": "MLC3805190796",
+    "listingUrl": "https://articulo.mercadolibre.cl/MLC-3805190796-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM"
+  },
+  "persistence": {
+    "marketplaceListingLatest": {
+      "id": 1368,
+      "listingId": "MLC3805190796",
+      "listingUrl": "https://articulo.mercadolibre.cl/MLC-3805190796-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM",
+      "status": "active",
+      "publishedAt": "2026-03-27T03:38:35.901Z"
+    },
+    "productRowAfter": {
+      "id": 32714,
+      "status": "PUBLISHED",
+      "isPublished": true,
+      "publishedAt": "2026-03-27T03:38:38.257Z",
+      "images": "[\"https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg\",\"https://ae01.alicdn.com/kf/S4005cfbe2ecc4d22bd0f51da34bfc1c6M.jpg\",\"https://ae01.alicdn.com/kf/S574ecbca762045d0a6bc2a6da0f50ceb5.jpg\",\"https://ae01.alicdn.com/kf/S10ca44862d0f4f508d7ee342d162df4ai.jpg\",\"https://ae01.alicdn.com/kf/S80e97bb5f64349c2b69181ba42c91c4cB.jpg\",\"https://ae01.alicdn.com/kf/Sde88307b1549433e859ff52eb73e80d6g.jpg\",\"https://ae01.alicdn.com/kf/S4d28403f329442b281158c9d8695c54cC.jpg\"]"
+    }
+  },
+  "liveListingValidation": {
+    "listingIdUsed": "MLC3805190796",
+    "permalink": "https://articulo.mercadolibre.cl/MLC-3805190796-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM",
+    "status": "active",
+    "sub_status": [],
+    "warnings": [],
+    "picturesCount": 2,
+    "imageModerationHint": "no_warnings_array_in_item_payload"
+  },
+  "mlItemVerification": {
+    "id": "MLC3805190796",
+    "site_id": "MLC",
+    "title": "Rotating Table Cell Phone Holder Support Desktop Stand Fo...",
+    "family_name": null,
+    "seller_id": 194000595,
+    "category_id": "MLC159251",
+    "user_product_id": "MLCU3872370224",
+    "official_store_id": null,
+    "price": 11400,
+    "base_price": 11400,
+    "original_price": null,
+    "inventory_id": null,
+    "currency_id": "CLP",
+    "initial_quantity": 1,
+    "available_quantity": 1,
+    "sold_quantity": 0,
+    "sale_terms": [],
+    "buying_mode": "buy_it_now",
+    "listing_type_id": "gold_special",
+    "start_time": "2026-03-27T03:38:34.616Z",
+    "stop_time": "2046-03-21T04:00:00.000Z",
+    "end_time": "2046-03-21T04:00:00.000Z",
+    "expiration_time": "2026-06-15T03:38:34.668Z",
+    "condition": "new",
+    "permalink": "https://articulo.mercadolibre.cl/MLC-3805190796-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM",
+    "thumbnail_id": "859475-MLC108758131826_032026",
+    "thumbnail": "http://http2.mlstatic.com/D_859475-MLC108758131826_032026-I.jpg",
+    "pictures": [
+      {
+        "id": "859475-MLC108758131826_032026",
+        "url": "http://http2.mlstatic.com/D_859475-MLC108758131826_032026-O.jpg",
+        "secure_url": "https://http2.mlstatic.com/D_859475-MLC108758131826_032026-O.jpg",
+        "size": "500x500",
+        "max_size": "826x826",
+        "quality": ""
+      },
+      {
+        "id": "913248-MLC109574926733_032026",
+        "url": "http://http2.mlstatic.com/D_913248-MLC109574926733_032026-O.jpg",
+        "secure_url": "https://http2.mlstatic.com/D_913248-MLC109574926733_032026-O.jpg",
+        "size": "500x500",
+        "max_size": "1200x1200",
+        "quality": ""
+      }
+    ],
+    "video_id": null,
+    "descriptions": [],
+    "accepts_mercadopago": true,
+    "non_mercado_pago_payment_methods": [],
+    "shipping": {
+      "mode": "me2",
+      "methods": [],
+      "tags": [],
+      "dimensions": null,
+      "local_pick_up": false,
+      "free_shipping": false,
+      "logistic_type": "drop_off",
+      "store_pick_up": false
+    },
+    "international_delivery_mode": "none",
+    "seller_address": {
+      "comment": "102 Referencia: depto 102",
+      "address_line": "Avenida Inglesa 54",
+      "city": {
+        "id": "TUxDQ0NPTjYwZTdk",
+        "name": "Concepcion"
+      },
+      "state": {
+        "id": "CL-BI",
+        "name": "Biobío"
+      },
+      "country": {
+        "id": "CL",
+        "name": "Chile"
+      },
+      "search_location": {
+        "city": {
+          "id": "TUxDQ0NPTjYwZTdk",
+          "name": "Concepción"
+        },
+        "state": {
+          "id": "TUxDUERFTE9lODZj",
+          "name": "Biobío"
+        }
+      },
+      "latitude": -36.8526329,
+      "longitude": -73.0490112,
+      "id": 1415498212
+    },
+    "seller_contact": null,
+    "location": {},
+    "geolocation": {
+      "latitude": -36.8526329,
+      "longitude": -73.0490112
+    },
+    "coverage_areas": [],
+    "attributes": [
+      {
+        "id": "ITEM_CONDITION",
+        "name": "Condición del ítem",
+        "value_id": "2230284",
+        "value_name": "Nuevo",
+        "values": [
+          {
+            "id": "2230284",
+            "name": "Nuevo",
+            "struct": null
+          }
+        ],
+        "value_type": "list"
+      },
+      {
+        "id": "BRAND",
+        "name": "Marca del soporte",
+        "value_id": null,
+        "value_name": "Rotating",
+        "values": [
+          {
+            "id": null,
+            "name": "Rotating",
+            "struct": null
+          }
+        ],
+        "value_type": "string"
+      },
+      {
+        "id": "MODEL",
+        "name": "Modelo del soporte",
+        "value_id": null,
+        "value_name": "Rotating Table Cell",
+        "values": [
+          {
+            "id": null,
+            "name": "Rotating Table Cell",
+            "struct": null
+          }
+        ],
+        "value_type": "string"
+      }
+    ],
+    "warnings": [],
+    "listing_source": "",
+    "variations": [],
+    "status": "active",
+    "sub_status": [],
+    "tags": [
+      "good_quality_thumbnail",
+      "immediate_payment",
+      "cart_eligible"
+    ],
+    "warranty": null,
+    "catalog_product_id": null,
+    "domain_id": "MLC-TABLET_STANDS",
+    "seller_custom_field": null,
+    "parent_item_id": null,
+    "differential_pricing": null,
+    "deal_ids": [],
+    "automatic_relist": false,
+    "date_created": "2026-03-27T03:38:34.807Z",
+    "last_updated": "2026-03-27T03:38:34.807Z",
+    "health": null,
+    "catalog_listing": false,
+    "item_relations": [],
+    "channels": [
+      "marketplace"
+    ]
+  },
+  "mlItemStatusProbe": {
+    "status": "active",
+    "sub_status": [],
+    "health": null,
+    "permalink": "https://articulo.mercadolibre.cl/MLC-3805190796-rotating-table-cell-phone-holder-support-desktop-stand-fo-_JM"
+  },
+  "identity": {
+    "packDir": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714",
+    "coverPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\cover_main.png",
+    "detailPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\detail_mount_interface.png",
+    "coverExists": true,
+    "detailExists": true,
+    "coverSha256": "6917d000588a295d3100417fef277148a1208bbb8639274a65026f1ad2343ac1",
+    "coverBytes": 561974,
+    "detailSha256": "7c0197a5c00fb5b607f365c528da248e02dd2eef57de253014f70adc1a667c13",
+    "detailBytes": 1450729,
+    "manifestCoverAssetSource": "p102_white_background_padding_recovery",
+    "manifestCoverApprovalState": "approved",
+    "manifestListingIdStale": "MLC3804623142"
+  },
+  "runtimeGates": {
+    "enableMlPublishBefore": null,
+    "enableMlPublishDuringExecution": "true"
+  },
+  "manifestListingIdUpdated": true
+}

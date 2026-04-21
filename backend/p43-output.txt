@@ -1,0 +1,229 @@
+[BOOT] loading credentials-manager.service
+[BOOT] loading mercadolibre.service
+[BOOT] loading ebay.service
+[BOOT] loading amazon.service
+🔍 DATABASE_URL encontrada:
+   Variable: DATABASE_URL
+   postgresql://postgres:pzXS***xwiO@yamabiko.proxy.rlwy.net:35731/railway
+   Host: yamabiko.proxy.rlwy.net
+   Port: 35731
+   Database: railway
+   User: postgres
+   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)
+   💡 Si estás en Railway, considera usar DATABASE_URL con postgres.railway.internal
+   💡 La URL pública funciona pero puede ser más lenta
+🔍 REDIS_URL encontrada:
+   Variable: REDIS_URL
+   redis://default:****@shortline.proxy.rlwy.net:56022
+   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)
+   💡 Si estás en Railway, considera usar REDIS_URL con redis.railway.internal
+✅ ENCRYPTION_KEY validada (longitud: 64 caracteres)
+[BOOT] loading destination.service
+[BOOT] loading marketplace.service
+[P43] === republish product 32722 with new cover ===
+
+prisma:query SELECT "public"."products"."id", "public"."products"."status", "public"."products"."isPublished" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+[P43] DB state: status=PUBLISHED isPublished=true
+prisma:query UPDATE "public"."products" SET "status" = $1, "isPublished" = $2, "updatedAt" = $3 WHERE ("public"."products"."id" = $4 AND 1=1) RETURNING "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt"
+[P43] reset to VALIDATED_READY
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+2026-04-03 00:43:50 [[33mwarn[39m]: Retry condition not met {"service":"ivan-reseller-backend","attempts":1,"error":"Request failed with status code 400"}
+[P43] token refresh warning: MercadoLibre token refresh error: Failed to refresh token after retries: Request failed with status code 400 — proceeding with existing token
+
+[P43] publishing via MarketplaceService...
+prisma:query SELECT "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND "public"."products"."userId" = $2) LIMIT $3 OFFSET $4
+[BOOT] loading workflow-config.service
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."apiName" = $1 AND "public"."api_credentials"."environment" = $2 AND "public"."api_credentials"."scope" = CAST($3::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $4) LIMIT $5 OFFSET $6
+[BOOT] loading aliexpress-dropshipping-api.service
+[BOOT] loading fx.service
+[BOOT] loading cost-calculator.service
+[BOOT] loading tax-calculator.service
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+2026-04-03 00:43:52 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] Getting product info {"service":"ivan-reseller-backend","productId":"3256810079300907","localCountry":"CL"}
+2026-04-03 00:43:54 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] makeRequest product-info extraction debug {"service":"ivan-reseller-backend","method":"aliexpress.offer.ds.product.simplequery","responseTopKeys":["aliexpress_offer_ds_product_simplequery_response"],"resultTopKeys":["request_id","_trace_id_"],"hasResultProduct":false,"resultProductKeys":[],"resultPreview":"{\"request_id\":\"0bb4a80e17751878337858743\",\"_trace_id_\":\"213bf77217751878337832741ee859\"}"}
+2026-04-03 00:43:54 [[33mwarn[39m]: [ALIEXPRESS-DROPSHIPPING-API] Primary getProductInfo returned no product fields; trying aliexpress.ds.product.get {"service":"ivan-reseller-backend","productId":"3256810079300907"}
+2026-04-03 00:43:54 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] ds.product.get result shape {"service":"ivan-reseller-backend","resultResultKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info"],"ae_item_sku_info_dtosType":"object","ae_item_sku_info_dtosKeys":["ae_item_sku_info_d_t_o"]}
+2026-04-03 00:43:54 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] getProductInfo product shape (skus) {"service":"ivan-reseller-backend","productKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info","product_id","product_title"],"hasSkus":false,"hasAeSkuDtos":true,"skuArrayLength":3,"hasClassicShippingInfo":false,"hasLogisticsInfoDto":true,"logisticsInfoKeys":["delivery_time","ship_to_country"],"normalizedShippingMethodCount":0}
+2026-04-03 00:43:54 [[32minfo[39m]: [PREVENTIVE-SUPPLIER] Using persisted ML Chile freight truth for original supplier validation {"service":"ivan-reseller-backend","productId":"3256810079300907","shipToCountry":"CL","shippingUsd":1.99,"selectedServiceName":"AliExpress Standard Shipping","checkedAt":"2026-04-01T21:32:05.000Z","ageHours":30.196444166666666}
+2026-04-03 00:43:54 [[32minfo[39m]: FXService: rates refreshed from provider {"service":"ivan-reseller-backend","base":"USD","providerUrl":"https://open.er-api.com/v6/latest/{base}","lastUpdated":"2026-04-03T00:02:31.000Z"}
+✅ Redis connected
+prisma:query UPDATE "public"."products" SET "finalPrice" = $1, "suggestedPrice" = $2, "totalCost" = $3, "shippingCost" = $4, "importTax" = $5, "updatedAt" = $6 WHERE ("public"."products"."id" = $7 AND 1=1) RETURNING "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt"
+2026-04-03 00:43:55 [[32minfo[39m]: [PRE-PUBLISH] persisted validated listing sale price (before ML image gate) {"service":"ivan-reseller-backend","productId":32722,"listingSalePriceUsd":11305,"totalCostUsd":1360.99,"canonicalUpliftApplied":false}
+2026-04-03 00:43:55 [[32minfo[39m]: [ML-IMAGE-POLICY] audited {"service":"ivan-reseller-backend","productId":32722,"status":"ml_image_manual_review_required","hardBlockers":[],"manualReviewReasons":["supplier_raw_images_require_reviewed_ml_cover"],"primaryImageUrl":"https://ae-pic-a1.aliexpress-media.com/kf/S0b0e7a4e560347d9bdf1eeced8ac2aa65.jpg","imageCount":4}
+2026-04-03 00:44:01 [[32minfo[39m]: [ML-IMAGE-REMEDIATION] evaluated {"service":"ivan-reseller-backend","productId":32722,"decision":"manual_review_required","remediationPathSelected":"canonical_pipeline_v1","publishSafe":true,"integrationLayerOutcome":"legacy_approved_pack","packApproved":true,"blockingReasons":["ml_canonical_dual_gate_failed_all_candidates_and_remediations","last_try:square_white_catalog_jpeg:policy=false:conv=false:hero=true:integrity=true"]}
+2026-04-03 00:44:01 [[32minfo[39m]: [PRE-PUBLISH] preventive preparation ready {"service":"ivan-reseller-backend","productId":32722,"marketplace":"mercadolibre","shipCountry":"CL","selectedSupplierId":"3256810079300907","supplierReliabilityScore":7,"fallbackSuppliers":0,"netProfitUsd":9944.01,"marginRatio":0.8796116296934287}
+prisma:query SELECT "public"."products"."id", "public"."products"."productData" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query UPDATE "public"."products" SET "aliexpressUrl" = $1, "aliexpressSku" = $2, "aliexpressPrice" = $3, "shippingCost" = $4, "importTax" = $5, "totalCost" = $6, "targetCountry" = $7, "supplierStock" = $8, "supplierStockCheckedAt" = $9, "productData" = $10, "finalPrice" = $11, "suggestedPrice" = $12, "updatedAt" = $13 WHERE ("public"."products"."id" = $14 AND 1=1) RETURNING "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt"
+prisma:query SELECT "public"."user_workflow_configs"."id", "public"."user_workflow_configs"."userId", "public"."user_workflow_configs"."environment", "public"."user_workflow_configs"."workflowMode", "public"."user_workflow_configs"."stageScrape", "public"."user_workflow_configs"."stageAnalyze", "public"."user_workflow_configs"."stagePublish", "public"."user_workflow_configs"."stagePurchase", "public"."user_workflow_configs"."stageFulfillment", "public"."user_workflow_configs"."stageCustomerService", "public"."user_workflow_configs"."autoApproveThreshold", "public"."user_workflow_configs"."autoPublishThreshold", "public"."user_workflow_configs"."maxAutoInvestment", "public"."user_workflow_configs"."workingCapital", "public"."user_workflow_configs"."minProfitUsd", "public"."user_workflow_configs"."minRoiPct", "public"."user_workflow_configs"."createdAt", "public"."user_workflow_configs"."updatedAt" FROM "public"."user_workflow_configs" WHERE ("public"."user_workflow_configs"."userId" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT 1
+prisma:query INSERT INTO "public"."api_credentials" ("userId","apiName","environment","credentials","isActive","createdAt","updatedAt","scope","sharedById") VALUES ($1,$2,$3,$4,$5,$6,$7,CAST($8::text AS "public"."CredentialScope"),$9) ON CONFLICT ("userId","apiName","environment","scope") DO UPDATE SET "credentials" = $10, "sharedById" = $11, "updatedAt" = $12 WHERE (("public"."api_credentials"."userId" = $13 AND "public"."api_credentials"."apiName" = $14 AND "public"."api_credentials"."environment" = $15 AND "public"."api_credentials"."scope" = CAST($16::text AS "public"."CredentialScope")) AND 1=1) RETURNING "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById"
+2026-04-03 00:44:04 [[32minfo[39m]: [ML Publish] Token refreshed before publish {"service":"ivan-reseller-backend","userId":1}
+2026-04-03 00:44:04 [[32minfo[39m]: [MercadoLibre] Category predicted via domain_discovery {"service":"ivan-reseller-backend","title":"Soporte Escritorio Tel�fono Gatito Decorativo Mini","categoryId":"MLC439917","site":"MLC"}
+2026-04-03 00:44:04 [[32minfo[39m]: [ML Publish] Using pre-publish ML-compliant image inputs {"service":"ivan-reseller-backend","count":2}
+2026-04-03 00:44:04 [[32minfo[39m]: [ML Publish] Origin CN → Destination {"service":"ivan-reseller-backend","siteId":"MLC","countryCode":"CL","currency":"CLP"}
+2026-04-03 00:44:04 [[32minfo[39m]: [ML Publish] Price already in target currency — no FX conversion {"service":"ivan-reseller-backend","price":11305,"targetCurrency":"CLP","productCurrency":"CLP","siteId":"MLC"}
+prisma:query SELECT "public"."competitor_insights"."id", "public"."competitor_insights"."keywordPatterns" FROM "public"."competitor_insights" WHERE ("public"."competitor_insights"."userId" = $1 AND "public"."competitor_insights"."marketplace" = $2) ORDER BY "public"."competitor_insights"."analyzedAt" DESC LIMIT $3 OFFSET $4
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+prisma:query SELECT "public"."marketplace_listings"."id", "public"."marketplace_listings"."productId", "public"."marketplace_listings"."userId", "public"."marketplace_listings"."marketplace", "public"."marketplace_listings"."listingId", "public"."marketplace_listings"."listingUrl", "public"."marketplace_listings"."supplierUrl", "public"."marketplace_listings"."sku", "public"."marketplace_listings"."viewCount", "public"."marketplace_listings"."publishedAt", "public"."marketplace_listings"."createdAt", "public"."marketplace_listings"."updatedAt", "public"."marketplace_listings"."status", "public"."marketplace_listings"."lastReconciledAt" FROM "public"."marketplace_listings" WHERE ("public"."marketplace_listings"."userId" = $1 AND "public"."marketplace_listings"."marketplace" = $2) OFFSET $3
+prisma:query SELECT "public"."products"."id", "public"."products"."title" FROM "public"."products" WHERE "public"."products"."id" IN ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$80,$81,$82,$83,$84,$85,$86,$87,$88,$89,$90,$91,$92,$93,$94,$95,$96,$97,$98,$99,$100,$101,$102,$103,$104,$105,$106,$107,$108,$109,$110,$111,$112,$113,$114,$115,$116,$117,$118,$119,$120,$121,$122,$123,$124,$125,$126,$127,$128,$129,$130,$131,$132,$133,$134,$135,$136,$137,$138,$139,$140,$141,$142,$143,$144,$145,$146,$147,$148,$149,$150,$151,$152,$153,$154,$155,$156,$157,$158,$159,$160,$161,$162,$163,$164,$165,$166,$167,$168,$169,$170,$171,$172,$173,$174,$175,$176,$177,$178,$179,$180,$181,$182,$183,$184,$185,$186,$187,$188,$189,$190,$191,$192,$193,$194,$195,$196,$197,$198,$199,$200,$201,$202,$203,$204,$205,$206,$207,$208,$209,$210,$211,$212,$213,$214,$215,$216,$217,$218,$219,$220,$221,$222,$223,$224,$225,$226,$227,$228,$229,$230,$231,$232,$233,$234,$235,$236,$237,$238,$239,$240,$241,$242,$243,$244,$245,$246,$247,$248,$249,$250,$251,$252,$253,$254,$255,$256,$257,$258,$259,$260,$261,$262,$263,$264,$265,$266,$267,$268,$269,$270,$271,$272,$273,$274,$275,$276,$277,$278,$279,$280,$281,$282,$283,$284,$285,$286,$287,$288,$289,$290,$291,$292,$293,$294,$295,$296,$297,$298,$299,$300,$301,$302,$303,$304,$305,$306,$307,$308,$309,$310,$311,$312,$313,$314,$315,$316,$317,$318,$319,$320,$321,$322,$323,$324,$325,$326,$327,$328,$329,$330,$331,$332,$333,$334,$335,$336,$337,$338,$339,$340,$341,$342,$343,$344,$345,$346,$347,$348,$349,$350,$351,$352,$353,$354) OFFSET $355
+2026-04-03 00:44:07 [[32minfo[39m]: [ML Publish] Auto-resolved required attributes {"service":"ivan-reseller-backend","categoryId":"MLC439917","attributeCount":1,"attrs":"BRAND"}
+2026-04-03 00:44:07 [[32minfo[39m]: Publishing product to MercadoLibre with multiple images {"service":"ivan-reseller-backend","productId":32722,"imageCount":2,"categoryId":"MLC439917","price":11305}
+2026-04-03 00:44:08 [[33mwarn[39m]: [MercadoLibre] Cover image below 1200x1200 recommended by ML {"service":"ivan-reseller-backend","pictureId":"797909-MLC109989301947_042026","maxSize":"1056x1057"}
+2026-04-03 00:44:08 [[32minfo[39m]: [MercadoLibre] Image uploaded successfully {"service":"ivan-reseller-backend","pictureId":"797909-MLC109989301947_042026","maxSize":"1056x1057","bytes":75698}
+2026-04-03 00:44:09 [[32minfo[39m]: [MercadoLibre] Image uploaded successfully {"service":"ivan-reseller-backend","pictureId":"732456-MLC109147832874_042026","maxSize":"1200x1200","bytes":98944}
+2026-04-03 00:44:09 [[32minfo[39m]: [MercadoLibre] Using pre-uploaded images {"service":"ivan-reseller-backend","count":2}
+2026-04-03 00:44:10 [[33mwarn[39m]: [MercadoLibre] Pre-validation reported issues {"service":"ivan-reseller-backend","errors":["Validation error","validation_error","shipping.lost_me1_by_user: User has not mode me1"]}
+2026-04-03 00:44:10 [[32minfo[39m]: [MercadoLibre] createListing attempt {"service":"ivan-reseller-backend","title":"Soporte Escritorio Decorativo Gatito para Celular...","category_id":"MLC439917","price":11305,"currency_id":"CLP","listing_type_id":"gold_special","pictureCount":2,"attributeCount":1,"siteId":"MLC"}
+prisma:query SELECT "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."marketplace_listings"."id", "public"."marketplace_listings"."productId", "public"."marketplace_listings"."userId", "public"."marketplace_listings"."marketplace", "public"."marketplace_listings"."listingId", "public"."marketplace_listings"."listingUrl", "public"."marketplace_listings"."supplierUrl", "public"."marketplace_listings"."sku", "public"."marketplace_listings"."viewCount", "public"."marketplace_listings"."publishedAt", "public"."marketplace_listings"."createdAt", "public"."marketplace_listings"."updatedAt", "public"."marketplace_listings"."status", "public"."marketplace_listings"."lastReconciledAt" FROM "public"."marketplace_listings" WHERE ("public"."marketplace_listings"."marketplace" = $1 AND "public"."marketplace_listings"."listingId" = $2) LIMIT $3 OFFSET $4
+prisma:query INSERT INTO "public"."marketplace_listings" ("productId","userId","marketplace","listingId","listingUrl","supplierUrl","sku","viewCount","publishedAt","createdAt","updatedAt","status") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING "public"."marketplace_listings"."id", "public"."marketplace_listings"."productId", "public"."marketplace_listings"."userId", "public"."marketplace_listings"."marketplace", "public"."marketplace_listings"."listingId", "public"."marketplace_listings"."listingUrl", "public"."marketplace_listings"."supplierUrl", "public"."marketplace_listings"."sku", "public"."marketplace_listings"."viewCount", "public"."marketplace_listings"."publishedAt", "public"."marketplace_listings"."createdAt", "public"."marketplace_listings"."updatedAt", "public"."marketplace_listings"."status", "public"."marketplace_listings"."lastReconciledAt"
+[BOOT] loading product.service
+prisma:query SELECT "public"."products"."id", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."title", "public"."products"."userId", "public"."products"."targetCountry", "public"."products"."currency", "public"."products"."aliexpressSku", "public"."products"."totalCost", "public"."products"."shippingCost" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."marketplace_listings"."id", "public"."marketplace_listings"."status", "public"."marketplace_listings"."listingId", "public"."marketplace_listings"."publishedAt", "public"."marketplace_listings"."productId" FROM "public"."marketplace_listings" WHERE "public"."marketplace_listings"."productId" IN ($1) OFFSET $2
+prisma:query BEGIN
+prisma:query UPDATE "public"."products" SET "status" = $1, "isPublished" = $2, "updatedAt" = $3 WHERE ("public"."products"."id" = $4 AND 1=1) RETURNING "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt"
+prisma:query SELECT "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt" FROM "public"."products" WHERE "public"."products"."id" = $1 LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."users"."id", "public"."users"."username", "public"."users"."email" FROM "public"."users" WHERE "public"."users"."id" IN ($1) OFFSET $2
+prisma:query COMMIT
+prisma:query INSERT INTO "public"."activities" ("userId","action","description","metadata","createdAt") VALUES ($1,$2,$3,$4,$5) RETURNING "public"."activities"."id", "public"."activities"."userId", "public"."activities"."action", "public"."activities"."description", "public"."activities"."ipAddress", "public"."activities"."userAgent", "public"."activities"."metadata", "public"."activities"."createdAt"
+prisma:query INSERT INTO "public"."activities" ("userId","action","description","metadata","createdAt") VALUES ($1,$2,$3,$4,$5) RETURNING "public"."activities"."id", "public"."activities"."userId", "public"."activities"."action", "public"."activities"."description", "public"."activities"."ipAddress", "public"."activities"."userAgent", "public"."activities"."metadata", "public"."activities"."createdAt"
+[P43] publish result:
+{
+  "success": true,
+  "marketplace": "mercadolibre",
+  "listingId": "MLC1911535343",
+  "listingUrl": "https://articulo.mercadolibre.cl/MLC-1911535343-soporte-escritorio-decorativo-gatito-para-celular-_JM"
+}
+
+[P43] new listing: MLC1911535343
+[P43] waiting 90s for ML async review...
+prisma:query SELECT 1
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+
+[POST-PUBLISH STATUS]
+{
+  "id": "MLC1911535343",
+  "status": "active",
+  "health": null,
+  "sub_status": [],
+  "permalink": "https://articulo.mercadolibre.cl/MLC-1911535343-soporte-escritorio-decorativo-gatito-para-celular-_JM",
+  "pictures": [
+    {
+      "id": "797909-MLC109989301947_042026"
+    },
+    {
+      "id": "732456-MLC109147832874_042026"
+    }
+  ]
+}
+
+=== OUTCOME ===
+SUCCESS: listing ACTIVE
+
+[P43] done
+❌ Redis error: Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+❌ Redis error: Error: getaddrinfo ENOTFOUND shortline.proxy.rlwy.net
+    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26) {
+  errno: -3008,
+  code: 'ENOTFOUND',
+  syscall: 'getaddrinfo',
+  hostname: 'shortline.proxy.rlwy.net'
+}
+✅ Redis connected

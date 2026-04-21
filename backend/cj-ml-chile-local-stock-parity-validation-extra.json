@@ -1,0 +1,861 @@
+🔍 DATABASE_URL encontrada:
+   Variable: DATABASE_URL
+   postgresql://postgres:pzXS***xwiO@yamabiko.proxy.rlwy.net:35731/railway
+   Host: yamabiko.proxy.rlwy.net
+   Port: 35731
+   Database: railway
+   User: postgres
+   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)
+   💡 Si estás en Railway, considera usar DATABASE_URL con postgres.railway.internal
+   💡 La URL pública funciona pero puede ser más lenta
+✅ ENCRYPTION_KEY validada (longitud: 64 caracteres)
+[BOOT] loading credentials-manager.service
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+{
+  "generatedAt": "2026-04-19T00:45:53.305Z",
+  "userId": 1,
+  "pageSize": 12,
+  "verifyLimit": 6,
+  "rows": [
+    {
+      "query": "organizer",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "2034091570015694850",
+          "title": "Book Organizer, Toy Storage Cabinet Organizer, White",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "60A52A6C-FCD0-4F83-AC5B-5A02DF29F1EF",
+          "title": "Drawer organizer",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1486628156034125824",
+          "title": "Kitchen Storage Drawer Organizer Box Food Sandwich Wrapper Organizer",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "F0F0177B-5044-48AA-98DA-F25569962CA8",
+          "title": "Makeup Storage Organizer",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1400291887922941952",
+          "title": "Glass Makeup Organizer Bathroom Cosmetic Organizer With Golden",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "BE61D2DD-2A88-4C38-AD8B-D199EBA784A4",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1486628156034125824",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1400291887922941952",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "F0F0177B-5044-48AA-98DA-F25569962CA8",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "95DDE130-2223-474D-8E5A-CEB8636FD83A",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "D08D702F-BBA8-48DD-A5D8-CF7C4CF345FD",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "BE61D2DD-2A88-4C38-AD8B-D199EBA784A4",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1486628156034125824",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1400291887922941952",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "F0F0177B-5044-48AA-98DA-F25569962CA8",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "95DDE130-2223-474D-8E5A-CEB8636FD83A",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "D08D702F-BBA8-48DD-A5D8-CF7C4CF345FD",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "adhesive hook",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "64B8AA50-1C12-4F30-8D7D-7A4977EB5BD9",
+          "title": "adhesive hook",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "2508251239381610000",
+          "title": "Self-adhesive Hook Bathroom Kitchen Hook",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1479000996263890944",
+          "title": "Adhesive Hook Wall Hook Stainless Steel Hook Jacket",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1754066063270092800",
+          "title": "Strong Adhesive Sticking Hook",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "A6BD04F5-77AC-47C2-8F95-5AF446319818",
+          "title": "Single strong adhesive hook",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1479000996263890944",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1393411410540761088",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "64B8AA50-1C12-4F30-8D7D-7A4977EB5BD9",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2508251239381610000",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "CF06EAF9-7528-4444-94AA-319A61A095F8",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "A6BD04F5-77AC-47C2-8F95-5AF446319818",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1479000996263890944",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1393411410540761088",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "64B8AA50-1C12-4F30-8D7D-7A4977EB5BD9",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2508251239381610000",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "CF06EAF9-7528-4444-94AA-319A61A095F8",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "A6BD04F5-77AC-47C2-8F95-5AF446319818",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "drawer organizer",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "60A52A6C-FCD0-4F83-AC5B-5A02DF29F1EF",
+          "title": "Drawer organizer",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1394852779960438784",
+          "title": "Retractable Kitchen Drawer Organizer",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1486628156034125824",
+          "title": "Kitchen Storage Drawer Organizer Box Food Sandwich Wrapper Organizer",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "2512170402291608000",
+          "title": "Stylish Personalized Drawer Organizer Tray",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1645299750608048128",
+          "title": "Office Drawer Desktop Organizer Box",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "60A52A6C-FCD0-4F83-AC5B-5A02DF29F1EF",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1486628156034125824",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1636606276920684544",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1549631012597149696",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1394852779960438784",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2512170402291608000",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "60A52A6C-FCD0-4F83-AC5B-5A02DF29F1EF",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1486628156034125824",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1636606276920684544",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1549631012597149696",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1394852779960438784",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2512170402291608000",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "storage basket",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "1383992671969873920",
+          "title": "Japanese Style Linen Table Top Sundries Storage Basket",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1683451816446533632",
+          "title": "Cotton Rope Storage Basket Snack Rectangular Storage Basket Sundries Storage Basket Organizing Basket Storage Basket Des",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1365183132801830912",
+          "title": "Storage Basket Sundries Basket Mini Basket Small Basket Desktop Storage Jewelry Storage",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1420269744514273280",
+          "title": "Iron Storage Basket Desktop Storage Basket",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "6867517C-B1BD-4CEC-9593-91442A769187",
+          "title": "Creative basket storage basket",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1365183132801830912",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1790988220449165312",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1383992671969873920",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1683451816446533632",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1CDADE3D-551B-4DF5-B03A-C8C2F60F11A7",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1367350696155942912",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1365183132801830912",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1790988220449165312",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1383992671969873920",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1683451816446533632",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1CDADE3D-551B-4DF5-B03A-C8C2F60F11A7",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1367350696155942912",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "desk organizer",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "1990533495448051713",
+          "title": "Desk Organizer 34.5x15.5x35.5 cm Wood-based material   Desk Organizer",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1990533469342838785",
+          "title": "Desk Organizer 36x26x29.5 cm Wood-based material   Desk Organizer Sonoma Oak",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1990533434634838017",
+          "title": "Desk Organizer 44.5x Wood-based material   Desk Organizer 44.5x Wood-based material",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "53718B87-5689-44CB-8400-7F82D84F2C31",
+          "title": "Multi-layered Office Desk File Organizer",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1405066913557647360",
+          "title": "Organizer Storage Container Desk Organizer Stationery Plastic Transparent Box",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1990533495448051713",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1990533469342838785",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1990533434634838017",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "D9D6ECDD-60C3-4991-BA2F-CDA4AF43F6BB",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1405066913557647360",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1528697411206656000",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1990533495448051713",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1990533469342838785",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1990533434634838017",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "D9D6ECDD-60C3-4991-BA2F-CDA4AF43F6BB",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1405066913557647360",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1528697411206656000",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "bracelet",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "1FDD5D11-6E22-458B-A9C0-92593636F2E9",
+          "title": "Fashion watch bracelet bracelet",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "B4F10C6F-B484-4C0B-8E4E-73963AAE0E62",
+          "title": "Fashion ladies bracelet bracelet watch",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "F96C425A-9F12-411A-922F-DD288B2C9EC9",
+          "title": "Bracelet watch sequin bracelet watch",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "0278FB51-66A3-41F4-B407-967AEB569395",
+          "title": "Retro fashion watch bracelet bracelet watch",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1712757A-804A-4713-A180-06374A9FCF3F",
+          "title": "Rhinestone Vintage Watch Bracelet Bracelet Watch",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "F96C425A-9F12-411A-922F-DD288B2C9EC9",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "30077AD9-6CFA-409B-9B98-8D538289E223",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "0278FB51-66A3-41F4-B407-967AEB569395",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1712757A-804A-4713-A180-06374A9FCF3F",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "7DF79B7C-3177-4810-8ACD-042F147E7F1A",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1559813496118980608",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "F96C425A-9F12-411A-922F-DD288B2C9EC9",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "30077AD9-6CFA-409B-9B98-8D538289E223",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "0278FB51-66A3-41F4-B407-967AEB569395",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1712757A-804A-4713-A180-06374A9FCF3F",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "7DF79B7C-3177-4810-8ACD-042F147E7F1A",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1559813496118980608",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "necklace",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "D2B1AF9C-6446-4351-B9FD-D07F7EE6D781",
+          "title": "Simple necklace retro clavicle necklace",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "72F5F78B-536D-4619-9BD1-4DD0BBDF81CE",
+          "title": "Handmade crystal bead necklace",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1380396343218016256",
+          "title": "Sterling Silver Necklace Diamond Lock Net Red INS Popular Necklace Short Neck Chain",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "4C230F4E-2D64-4A96-ACDE-08CB58E8AD93",
+          "title": "Vintage wooden cross pendant necklace",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1365486507829366784",
+          "title": "Alloy Diamond Short Necklace Crystal Necklace",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "4C230F4E-2D64-4A96-ACDE-08CB58E8AD93",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1380396343218016256",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1407913294907445248",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1397065699729477632",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "72F5F78B-536D-4619-9BD1-4DD0BBDF81CE",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1365486507829366784",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "4C230F4E-2D64-4A96-ACDE-08CB58E8AD93",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1380396343218016256",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1407913294907445248",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1397065699729477632",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "72F5F78B-536D-4619-9BD1-4DD0BBDF81CE",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1365486507829366784",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    },
+    {
+      "query": "watch",
+      "rawCount": 12,
+      "searchTop": [
+        {
+          "cjProductId": "2603110719301626000",
+          "title": "Small-waist Butterfly-clasp Watch Strap",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "2602090404221610200",
+          "title": "Comfortable Flat Interface Slub Pattern Watch Accessories Leather Strap",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "2604181003571623700",
+          "title": "20mm22mm Compatible GT2 Pro Smart Watch 3 Pro Quick-Release Silicone Strap",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "351C41FF-53BF-498A-A029-3CA857D71B4A",
+          "title": "Bracelet Watch Little Girl Watch",
+          "inventoryTotal": null
+        },
+        {
+          "cjProductId": "1380391825503817728",
+          "title": "Automatic Mechanical Watch Creative Hollow Male Watch Generation Silicone Band Watch",
+          "inventoryTotal": null
+        }
+      ],
+      "before": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1382216624429469696",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2604181003571623700",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2602090404221610200",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "1380385293034721280",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "2603110719301626000",
+            "hasStockByVariantQuery": false
+          },
+          {
+            "cjProductId": "735C512F-4788-4763-A25C-7560D72BD365",
+            "hasStockByVariantQuery": false
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      },
+      "after": {
+        "operabilitySummary": {
+          "operable": 0,
+          "stockUnknown": 12,
+          "unavailable": 0
+        },
+        "fastVerify": [
+          {
+            "cjProductId": "1382216624429469696",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2604181003571623700",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2602090404221610200",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "1380385293034721280",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "2603110719301626000",
+            "localStockStatus": "global_only"
+          },
+          {
+            "cjProductId": "735C512F-4788-4763-A25C-7560D72BD365",
+            "localStockStatus": "global_only"
+          }
+        ],
+        "mainFlowCount": 0,
+        "falsePositives": 0,
+        "chileUsableReady": 0,
+        "mainFlowTop": []
+      }
+    }
+  ]
+}

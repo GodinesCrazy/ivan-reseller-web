@@ -1,0 +1,4 @@
+{
+  "fatalError": "\n\u001b[31mInvalid \u001b[1m`prisma.product.findUnique()`\u001b[22m invocation in\u001b[39m\n\u001b[4mC:\\Ivan_Reseller_Web\\backend\\scripts\\p95-file-output.ts:52:40\u001b[24m\n\n  \u001b[2m\u001b[90m49\u001b[39m \u001b[34m}\u001b[39m\u001b[34m;\u001b[39m\u001b[22m\n  \u001b[2m\u001b[90m50\u001b[39m \u001b[22m\n  \u001b[2m\u001b[90m51\u001b[39m \u001b[90m// ─── 1. Read current product state ───\u001b[39m\u001b[22m\n\u001b[1m\u001b[31m→\u001b[39m\u001b[22m \u001b[2m\u001b[90m52\u001b[39m \u001b[36mconst\u001b[39m product = \u001b[36mawait\u001b[39m prisma\u001b[34m.\u001b[39mproduct\u001b[34m.\u001b[39m\u001b[36mfindUnique\u001b[39m\u001b[34m(\u001b[39m\u001b[22m\nTimed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 5)",
+  "success": false
+}

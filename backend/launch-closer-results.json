@@ -1,0 +1,383 @@
+{
+  "startedAt": "2026-04-21T04:17:00.142Z",
+  "baseUrl": "https://ivan-reseller-backend-production.up.railway.app",
+  "shopifyStore": "ivanreseller-2.myshopify.com",
+  "verifiedProducts": [
+    {
+      "cjProductId": "2602050314241608000",
+      "title": "PD 20W Universal Travel Adapter Plug",
+      "listingId": 4,
+      "pricing": {
+        "cost": 3.34,
+        "shipping": 5.85,
+        "sellPrice": 11.92
+      },
+      "violations": [
+        "Profit $1.79 < $3 minimum",
+        "Margin 15.0% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "1990664736726372353",
+      "title": "9Pcs Clothes Storage Bags",
+      "listingId": 5,
+      "pricing": {
+        "cost": 14.09,
+        "shipping": 0,
+        "sellPrice": 18.08
+      },
+      "violations": [
+        "Profit $2.71 < $3 minimum",
+        "Margin 15.0% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "1645725464138358784",
+      "title": "U Shaped Pillow Travel Neck Pillow",
+      "listingId": 6,
+      "pricing": {
+        "cost": 3.94,
+        "shipping": 5.45,
+        "sellPrice": 11.95
+      },
+      "violations": [
+        "Profit $1.61 < $3 minimum",
+        "Margin 13.5% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "A863730C-A987-4543-B348-3AEAA3A7043E",
+      "title": "Bottled travel cosmetics silicone bottle",
+      "listingId": 7,
+      "pricing": {
+        "cost": 2.39,
+        "shipping": 5.99,
+        "sellPrice": 10.83
+      },
+      "violations": [
+        "Profit $1.57 < $3 minimum",
+        "Margin 14.5% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "1429375206241210368",
+      "title": "Luggage Scale Portable",
+      "listingId": 8,
+      "pricing": {
+        "cost": 3.68,
+        "shipping": 4.24,
+        "sellPrice": 10.23
+      },
+      "violations": [
+        "Profit $1.46 < $3 minimum",
+        "Margin 14.2% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "A8E4C408-6970-42DE-86C7-C5629D6AD36C",
+      "title": "USB C multi hub docking station",
+      "listingId": 9,
+      "pricing": {
+        "cost": 7.42,
+        "shipping": 4.72,
+        "sellPrice": 15.54
+      },
+      "violations": [
+        "Profit $2.26 < $3 minimum",
+        "Margin 14.5% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "1631221139164901376",
+      "title": "Simple Vertical Aluminum Laptop Stand",
+      "listingId": 10,
+      "pricing": {
+        "cost": 5.79,
+        "shipping": 5.01,
+        "sellPrice": 13.86
+      },
+      "violations": [
+        "Profit $2.01 < $3 minimum",
+        "Margin 14.5% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "1414780039492407296",
+      "title": "Dust-proof Storage Cable Management Box",
+      "listingId": 11,
+      "pricing": {
+        "cost": 4.45,
+        "shipping": 4.11,
+        "sellPrice": 11.08
+      },
+      "violations": [
+        "Profit $1.62 < $3 minimum",
+        "Margin 14.6% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "2509160959231628300",
+      "title": "Anti-Fatigue Rubber Floor Mat",
+      "listingId": 12,
+      "pricing": {
+        "cost": 8.5,
+        "shipping": 6.17,
+        "sellPrice": 18.71
+      },
+      "violations": [
+        "Profit $2.73 < $3 minimum",
+        "Margin 14.6% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "1809888855471312896",
+      "title": "Magnetic Phone Holder For Car",
+      "listingId": 13,
+      "pricing": {
+        "cost": 6.67,
+        "shipping": 5.81,
+        "sellPrice": 15.99
+      },
+      "violations": [
+        "Profit $2.35 < $3 minimum",
+        "Margin 14.7% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "1426120141564940288",
+      "title": "Portable Phone Holder Stand Desk",
+      "listingId": 14,
+      "pricing": {
+        "cost": 1.32,
+        "shipping": 5.84,
+        "sellPrice": 9.37
+      },
+      "violations": [
+        "Price $9.37 < $9.99 minimum",
+        "Profit $1.40 < $3 minimum",
+        "Margin 15.0% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "A6235D6D-EC07-4570-8057-E5A8773EF877",
+      "title": "bluetooth tracker key finder",
+      "listingId": 15,
+      "pricing": {
+        "cost": 10.91,
+        "shipping": 4.67,
+        "sellPrice": 19.95
+      },
+      "violations": [
+        "Profit $2.99 < $3 minimum",
+        "Margin 15.0% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "CD9753E5-1CF4-4C44-AEBD-098F42A87EB7",
+      "title": "Portable Mini 10000mAh Power Bank",
+      "listingId": 16,
+      "pricing": {
+        "cost": 3.2,
+        "shipping": 6.27,
+        "sellPrice": 12.27
+      },
+      "violations": [
+        "Profit $1.84 < $3 minimum",
+        "Margin 15.0% < 20% minimum"
+      ],
+      "needsCorrection": true
+    },
+    {
+      "cjProductId": "28191F94-A25B-4A64-A57B-E4674E560FAD",
+      "title": "2 In 1 Phone Computer Screen Cleaner Kit",
+      "listingId": 17,
+      "pricing": {
+        "cost": 1.13,
+        "shipping": 4.85,
+        "sellPrice": 7.89
+      },
+      "violations": [
+        "Price $7.89 < $9.99 minimum",
+        "Profit $1.18 < $3 minimum",
+        "Margin 15.0% < 20% minimum"
+      ],
+      "needsCorrection": true
+    }
+  ],
+  "violationsFound": 14,
+  "correctedListings": [],
+  "failedCorrections": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "collectionsCreated": [],
+  "collectionsFailed": [
+    "travel-comfort-organizers",
+    "desk-workspace-upgrades",
+    "smart-everyday-accessories"
+  ],
+  "collectionAssignments": [
+    {
+      "product": "PD 20W Universal Travel Adapter Plug",
+      "collection": "Travel Comfort & Organizers",
+      "success": false
+    },
+    {
+      "product": "9Pcs Clothes Storage Bags",
+      "collection": "Travel Comfort & Organizers",
+      "success": false
+    },
+    {
+      "product": "U Shaped Pillow Travel Neck Pillow",
+      "collection": "Travel Comfort & Organizers",
+      "success": false
+    },
+    {
+      "product": "Bottled travel cosmetics silicone bottle",
+      "collection": "Travel Comfort & Organizers",
+      "success": false
+    },
+    {
+      "product": "Luggage Scale Portable",
+      "collection": "Travel Comfort & Organizers",
+      "success": false
+    },
+    {
+      "product": "USB C multi hub docking station",
+      "collection": "Desk / Workspace Upgrades",
+      "success": false
+    },
+    {
+      "product": "Simple Vertical Aluminum Laptop Stand",
+      "collection": "Desk / Workspace Upgrades",
+      "success": false
+    },
+    {
+      "product": "Dust-proof Storage Cable Management Box",
+      "collection": "Desk / Workspace Upgrades",
+      "success": false
+    },
+    {
+      "product": "Anti-Fatigue Rubber Floor Mat",
+      "collection": "Desk / Workspace Upgrades",
+      "success": false
+    },
+    {
+      "product": "Magnetic Phone Holder For Car",
+      "collection": "Smart Everyday Accessories",
+      "success": false
+    },
+    {
+      "product": "Portable Phone Holder Stand Desk",
+      "collection": "Smart Everyday Accessories",
+      "success": false
+    },
+    {
+      "product": "bluetooth tracker key finder",
+      "collection": "Smart Everyday Accessories",
+      "success": false
+    },
+    {
+      "product": "Portable Mini 10000mAh Power Bank",
+      "collection": "Smart Everyday Accessories",
+      "success": false
+    },
+    {
+      "product": "2 In 1 Phone Computer Screen Cleaner Kit",
+      "collection": "Smart Everyday Accessories",
+      "success": false
+    }
+  ],
+  "finalOverview": {
+    "ok": true,
+    "counts": {
+      "products": 17,
+      "variants": 70,
+      "evaluations": 0,
+      "evaluationsApproved": 0,
+      "evaluationsRejected": 0,
+      "evaluationsPending": 0,
+      "shippingQuotes": 18,
+      "listings": 17,
+      "listingsActive": 16,
+      "orders": 0,
+      "ordersOpen": 0,
+      "ordersWithTracking": 0,
+      "alertsOpen": 0,
+      "profitSnapshots": 0,
+      "tracesLast24h": 236
+    }
+  },
+  "storefrontUrl": "https://ivanreseller-2.myshopify.com",
+  "summary": {
+    "totalProducts": 14,
+    "verifiedProducts": 14,
+    "violationsFound": 14,
+    "corrected": 0,
+    "correctionsFailed": 14,
+    "collectionsAttempted": 3,
+    "collectionsCreated": 0,
+    "collectionsFailed": 3,
+    "assignmentsAttempted": 14,
+    "assignmentsSuccessful": 0,
+    "storefrontUrl": "https://ivanreseller-2.myshopify.com",
+    "finalProductCount": 17,
+    "finalActiveListings": 16
+  },
+  "manualChecklist": {
+    "storefrontUrl": "https://ivanreseller-2.myshopify.com",
+    "productPaths": [
+      "/products/pd-20w-universal-travel-adapter-plug",
+      "/products/9pcs-clothes-storage-bags",
+      "/products/u-shaped-pillow-travel-neck-pillow",
+      "/products/bottled-travel-cosmetics-silicone-bottle",
+      "/products/luggage-scale-portable",
+      "/products/usb-c-multi-hub-docking-station",
+      "/products/simple-vertical-aluminum-laptop-stand",
+      "/products/dust-proof-storage-cable-management-box",
+      "/products/anti-fatigue-rubber-floor-mat",
+      "/products/magnetic-phone-holder-for-car",
+      "/products/portable-phone-holder-stand-desk",
+      "/products/bluetooth-tracker-key-finder",
+      "/products/portable-mini-10000mah-power-bank",
+      "/products/2-in-1-phone-computer-screen-cleaner-kit"
+    ],
+    "collectionsToVerify": [
+      "/collections/travel-comfort-organizers",
+      "/collections/desk-workspace-upgrades",
+      "/collections/smart-everyday-accessories"
+    ],
+    "tasks": [
+      "Verify product cards show correct prices",
+      "Verify PDPs load images and descriptions",
+      "Verify add-to-cart button is clickable",
+      "Verify collections show correct products",
+      "Verify homepage does not show weak products"
+    ]
+  },
+  "finishedAt": "2026-04-21T04:17:17.855Z"
+}

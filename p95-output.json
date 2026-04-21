@@ -1,0 +1,216 @@
+[BOOT] loading aliexpress-dropshipping-api.service
+[BOOT] loading credentials-manager.service
+­ƒöì DATABASE_URL encontrada:
+   Variable: DATABASE_URL
+   postgresql://postgres:pzXS***xwiO@yamabiko.proxy.rlwy.net:35731/railway
+   Host: yamabiko.proxy.rlwy.net
+   Port: 35731
+   Database: railway
+   User: postgres
+   ÔÜá´©Å  Tipo: URL P├ÜBLICA (para conexiones externas)
+   ­ƒÆí Si est├ís en Railway, considera usar DATABASE_URL con postgres.railway.internal
+   ­ƒÆí La URL p├║blica funciona pero puede ser m├ís lenta
+­ƒöì REDIS_URL encontrada:
+   Variable: REDIS_URL
+   redis://default:****@shortline.proxy.rlwy.net:56022
+   ÔÜá´©Å  Tipo: URL P├ÜBLICA (para conexiones externas)
+   ­ƒÆí Si est├ís en Railway, considera usar REDIS_URL con redis.railway.internal
+Ô£à ENCRYPTION_KEY validada (longitud: 64 caracteres)
+[BOOT] loading fx.service
+[BOOT] loading cost-calculator.service
+[BOOT] loading tax-calculator.service
+[BOOT] loading destination.service
+[BOOT] loading ebay.service
+[BOOT] loading mercadolibre.service
+[BOOT] loading amazon.service
+[BOOT] loading marketplace.service
+[BOOT] loading product.service
+[BOOT] loading api-availability.service
+prisma:query SELECT "public"."products"."id", "public"."products"."userId", "public"."products"."status", "public"."products"."isPublished", "public"."products"."title", "public"."products"."category", "public"."products"."aliexpressUrl", "public"."products"."aliexpressSku", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."currency", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."images", "public"."products"."productData", "public"."products"."updatedAt" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."users"."id", "public"."users"."username", "public"."users"."email" FROM "public"."users" WHERE "public"."users"."id" IN ($1) OFFSET $2
+prisma:query SELECT "public"."sales"."id", "public"."sales"."userId", "public"."sales"."productId", "public"."sales"."orderId", "public"."sales"."marketplace", "public"."sales"."salePrice", "public"."sales"."aliexpressCost", "public"."sales"."marketplaceFee", "public"."sales"."grossProfit", "public"."sales"."commissionAmount", "public"."sales"."netProfit", "public"."sales"."currency", "public"."sales"."status", "public"."sales"."trackingNumber", "public"."sales"."isCompleteCycle", "public"."sales"."completedAt", "public"."sales"."adminPayoutId", "public"."sales"."userPayoutId", "public"."sales"."payoutExecuted", "public"."sales"."buyerEmail", "public"."sales"."buyerName", "public"."sales"."shippingAddress", "public"."sales"."environment", "public"."sales"."createdAt", "public"."sales"."updatedAt" FROM "public"."sales" WHERE "public"."sales"."productId" IN ($1) OFFSET $2
+[BOOT] loading workflow-config.service
+prisma:query SELECT "public"."user_workflow_configs"."id", "public"."user_workflow_configs"."userId", "public"."user_workflow_configs"."environment", "public"."user_workflow_configs"."workflowMode", "public"."user_workflow_configs"."stageScrape", "public"."user_workflow_configs"."stageAnalyze", "public"."user_workflow_configs"."stagePublish", "public"."user_workflow_configs"."stagePurchase", "public"."user_workflow_configs"."stageFulfillment", "public"."user_workflow_configs"."stageCustomerService", "public"."user_workflow_configs"."autoApproveThreshold", "public"."user_workflow_configs"."autoPublishThreshold", "public"."user_workflow_configs"."maxAutoInvestment", "public"."user_workflow_configs"."workingCapital", "public"."user_workflow_configs"."minProfitUsd", "public"."user_workflow_configs"."minRoiPct", "public"."user_workflow_configs"."createdAt", "public"."user_workflow_configs"."updatedAt" FROM "public"."user_workflow_configs" WHERE ("public"."user_workflow_configs"."userId" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."apiName" = $1 AND "public"."api_credentials"."environment" = $2 AND "public"."api_credentials"."scope" = CAST($3::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $4) LIMIT $5 OFFSET $6
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."apiName" = $1 AND "public"."api_credentials"."isActive" = $2 AND "public"."api_credentials"."userId" = $3) ORDER BY "public"."api_credentials"."updatedAt" DESC LIMIT $4 OFFSET $5
+2026-03-26 17:09:52 [[33mwarn[39m]: [MARKETPLACE] MercadoLibre testConnection failed {"service":"ivan-reseller-backend","error":"MercadoLibre no tiene access token o userId v´┐¢lido. Completa OAuth en API Settings."}
+2026-03-26 17:09:52 [[32minfo[39m]: [ML-IMAGE-POLICY] audited {"service":"ivan-reseller-backend","productId":32714,"status":"ml_image_policy_fail","hardBlockers":["primary_image_not_square_like"],"manualReviewReasons":["supplier_raw_images_require_reviewed_ml_cover"],"primaryImageUrl":"https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg","imageCount":7}
+2026-03-26 17:09:59 [[32minfo[39m]: [ML-IMAGE-REMEDIATION] evaluated {"service":"ivan-reseller-backend","productId":32714,"decision":"manual_review_required","remediationPathSelected":"canonical_pipeline_v1","publishSafe":false,"integrationLayerOutcome":"human_review_required","packApproved":false,"blockingReasons":["ml_canonical_dual_gate_failed_all_candidates_and_remediations","remediation_simulation_all_weak_preview","last_try:square_white_catalog_jpeg:policy=false:conv=false:hero=true:integrity=true","missing_required_assets:cover_main,detail_mount_interface","unapproved_required_assets:cover_main,detail_mount_interface"]}
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."userId" = $1 AND "public"."api_credentials"."apiName" = $2 AND "public"."api_credentials"."environment" = $3 AND "public"."api_credentials"."scope" = CAST($4::text AS "public"."CredentialScope") AND "public"."api_credentials"."isActive" = $5) LIMIT $6 OFFSET $7
+2026-03-26 17:09:59 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] Getting product info {"service":"ivan-reseller-backend","productId":"1005009130509159","localCountry":"CL"}
+2026-03-26 17:10:01 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] makeRequest product-info extraction debug {"service":"ivan-reseller-backend","method":"aliexpress.offer.ds.product.simplequery","responseTopKeys":["aliexpress_offer_ds_product_simplequery_response"],"resultTopKeys":["request_id","_trace_id_"],"hasResultProduct":false,"resultProductKeys":[],"resultPreview":"{\"request_id\":\"0baf714817745558003552455\",\"_trace_id_\":\"21413d5a17745558003543793e2cf2\"}"}
+2026-03-26 17:10:01 [[33mwarn[39m]: [ALIEXPRESS-DROPSHIPPING-API] Primary getProductInfo returned no product fields; trying aliexpress.ds.product.get {"service":"ivan-reseller-backend","productId":"1005009130509159"}
+2026-03-26 17:10:01 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] ds.product.get result shape {"service":"ivan-reseller-backend","resultResultKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info"],"ae_item_sku_info_dtosType":"object","ae_item_sku_info_dtosKeys":["ae_item_sku_info_d_t_o"]}
+2026-03-26 17:10:01 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] getProductInfo product shape (skus) {"service":"ivan-reseller-backend","productKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info","product_id","product_title"],"hasSkus":false,"hasAeSkuDtos":true,"skuArrayLength":2,"hasClassicShippingInfo":false,"hasLogisticsInfoDto":true,"logisticsInfoKeys":["delivery_time","ship_to_country"],"normalizedShippingMethodCount":0}
+2026-03-26 17:10:01 [[32minfo[39m]: [PREVENTIVE-SUPPLIER] Using persisted ML Chile freight truth for original supplier validation {"service":"ivan-reseller-backend","productId":"1005009130509159","shipToCountry":"CL","shippingUsd":3.12,"selectedServiceName":"CAINIAO_STANDARD","checkedAt":"2026-03-26T20:08:56.947Z","ageHours":0.017451388888888888}
+2026-03-26 17:10:01 [[32minfo[39m]: FXService: rates refreshed from provider {"service":"ivan-reseller-backend","base":"USD","providerUrl":"https://open.er-api.com/v6/latest/{base}","lastUpdated":"2026-03-26T00:02:31.000Z"}
+Ô£à Redis connected
+prisma:query SELECT "public"."api_status_snapshots"."id", "public"."api_status_snapshots"."apiName", "public"."api_status_snapshots"."isConfigured", "public"."api_status_snapshots"."isAvailable", "public"."api_status_snapshots"."status", "public"."api_status_snapshots"."lastChecked", "public"."api_status_snapshots"."error", "public"."api_status_snapshots"."message", "public"."api_status_snapshots"."environment", "public"."api_status_snapshots"."latency", "public"."api_status_snapshots"."trustScore" FROM "public"."api_status_snapshots" WHERE ("public"."api_status_snapshots"."userId" = $1 AND "public"."api_status_snapshots"."environment" = $2) ORDER BY "public"."api_status_snapshots"."lastChecked" DESC OFFSET $3
+prisma:query SELECT "public"."system_configs"."id", "public"."system_configs"."value", "public"."system_configs"."key" FROM "public"."system_configs" WHERE "public"."system_configs"."key" IN ($1,$2,$3) OFFSET $4
+2026-03-26 17:10:02 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] Calculating buyer freight {"service":"ivan-reseller-backend","productId":"1005009130509159","countryCode":"CL","sendGoodsCountryCode":"CN","productNum":1,"hasSkuId":true}
+2026-03-26 17:10:03 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] Buyer freight calculation normalized {"service":"ivan-reseller-backend","productId":"1005009130509159","countryCode":"CL","sendGoodsCountryCode":"CN","variant":"sync_access_token","endpoint":"https://api-sg.aliexpress.com/sync","freightOptionsCount":4,"rawTopKeys":["success","aeop_freight_calculate_result_for_buyer_d_t_o_list"],"rawOptionNodeCount":4}
+2026-03-26 17:10:25 [[33mwarn[39m]: [ALIEXPRESS-DROPSHIPPING-API] Freight API error_response {"service":"ivan-reseller-backend","variant":"top_session_eco","endpoint":"https://eco.taobao.com/router/rest","code":29,"sub_code":"isv.appkey-not-exists","msg":"Invalid app Key","signMethod":"md5","tokenParamName":"session","signedParamKeys":["app_key","format","method","param_aeop_freight_calculate_for_buyer_d_t_o","session","sign_method","timestamp","v"],"appKeyPrefix":"522578...","appSecretFingerprint":"503cee3e4a68","credentialSource":null,"tokenSource":null,"algorithmMatchesDeclared":true,"stringToSignPreview":"<app_secret>app_key522578formatjsonmethodaliexpress.logistics.buyer.freight.calculateparam_aeop_freight_calculate_for_buyer_d_t_o{\"country_code\":\"CL\",\"product_id\":1005009130509159,\"product_num\":1,\"send_goods_country_code\":\"CN\",\"sku_id\":\"120..."}
+2026-03-26 17:10:27 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] Buyer freight calculation normalized {"service":"ivan-reseller-backend","productId":"1005009130509159","countryCode":"CL","sendGoodsCountryCode":"CN","variant":"sync_access_token","endpoint":"https://api-sg.aliexpress.com/sync","freightOptionsCount":4,"rawTopKeys":["success","aeop_freight_calculate_result_for_buyer_d_t_o_list"],"rawOptionNodeCount":4}
+prisma:query SELECT 1
+prisma:query UPDATE "public"."products" SET "shippingCost" = $1, "importTax" = $2, "totalCost" = $3, "productData" = $4, "updatedAt" = $5 WHERE ("public"."products"."id" = $6 AND 1=1) RETURNING "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt"
+prisma:query SELECT "public"."products"."id", "public"."products"."userId", "public"."products"."status", "public"."products"."isPublished", "public"."products"."title", "public"."products"."category", "public"."products"."aliexpressUrl", "public"."products"."aliexpressSku", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."currency", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."images", "public"."products"."productData" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+2026-03-26 17:10:28 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] Getting product info {"service":"ivan-reseller-backend","productId":"1005009130509159","localCountry":"CL"}
+2026-03-26 17:10:28 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] makeRequest product-info extraction debug {"service":"ivan-reseller-backend","method":"aliexpress.offer.ds.product.simplequery","responseTopKeys":["aliexpress_offer_ds_product_simplequery_response"],"resultTopKeys":["request_id","_trace_id_"],"hasResultProduct":false,"resultProductKeys":[],"resultPreview":"{\"request_id\":\"2102f38b17745558277463561\",\"_trace_id_\":\"2102e09d17745558277452697edfd1\"}"}
+2026-03-26 17:10:28 [[33mwarn[39m]: [ALIEXPRESS-DROPSHIPPING-API] Primary getProductInfo returned no product fields; trying aliexpress.ds.product.get {"service":"ivan-reseller-backend","productId":"1005009130509159"}
+2026-03-26 17:10:28 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] ds.product.get result shape {"service":"ivan-reseller-backend","resultResultKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info"],"ae_item_sku_info_dtosType":"object","ae_item_sku_info_dtosKeys":["ae_item_sku_info_d_t_o"]}
+2026-03-26 17:10:28 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] getProductInfo product shape (skus) {"service":"ivan-reseller-backend","productKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info","product_id","product_title"],"hasSkus":false,"hasAeSkuDtos":true,"skuArrayLength":2,"hasClassicShippingInfo":false,"hasLogisticsInfoDto":true,"logisticsInfoKeys":["delivery_time","ship_to_country"],"normalizedShippingMethodCount":0}
+2026-03-26 17:10:28 [[32minfo[39m]: [PREVENTIVE-SUPPLIER] Using persisted ML Chile freight truth for original supplier validation {"service":"ivan-reseller-backend","productId":"1005009130509159","shipToCountry":"CL","shippingUsd":3.12,"selectedServiceName":"CAINIAO_STANDARD","checkedAt":"2026-03-26T20:10:27.049Z","ageHours":0.00029583333333333333}
+prisma:query SELECT "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."users"."id", "public"."users"."username", "public"."users"."email" FROM "public"."users" WHERE "public"."users"."id" IN ($1) OFFSET $2
+prisma:query SELECT "public"."sales"."id", "public"."sales"."userId", "public"."sales"."productId", "public"."sales"."orderId", "public"."sales"."marketplace", "public"."sales"."salePrice", "public"."sales"."aliexpressCost", "public"."sales"."marketplaceFee", "public"."sales"."grossProfit", "public"."sales"."commissionAmount", "public"."sales"."netProfit", "public"."sales"."currency", "public"."sales"."status", "public"."sales"."trackingNumber", "public"."sales"."isCompleteCycle", "public"."sales"."completedAt", "public"."sales"."adminPayoutId", "public"."sales"."userPayoutId", "public"."sales"."payoutExecuted", "public"."sales"."buyerEmail", "public"."sales"."buyerName", "public"."sales"."shippingAddress", "public"."sales"."environment", "public"."sales"."createdAt", "public"."sales"."updatedAt" FROM "public"."sales" WHERE "public"."sales"."productId" IN ($1) OFFSET $2
+prisma:query SELECT "public"."products"."id", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."title", "public"."products"."userId", "public"."products"."targetCountry", "public"."products"."currency", "public"."products"."aliexpressSku", "public"."products"."totalCost", "public"."products"."shippingCost" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."marketplace_listings"."id", "public"."marketplace_listings"."status", "public"."marketplace_listings"."listingId", "public"."marketplace_listings"."publishedAt", "public"."marketplace_listings"."productId" FROM "public"."marketplace_listings" WHERE "public"."marketplace_listings"."productId" IN ($1) OFFSET $2
+2026-03-26 17:10:30 [[33mwarn[39m]: Unsafe publish-semantic status downgraded during updateProductStatusSafely {"service":"ivan-reseller-backend","productId":32714,"requestedStatus":"APPROVED","normalizedStatus":"VALIDATED_READY","userId":1}
+prisma:query BEGIN
+prisma:query UPDATE "public"."products" SET "status" = $1, "isPublished" = $2, "publishedAt" = $3, "updatedAt" = $4 WHERE ("public"."products"."id" = $5 AND 1=1) RETURNING "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt"
+prisma:query SELECT "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt" FROM "public"."products" WHERE "public"."products"."id" = $1 LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."users"."id", "public"."users"."username", "public"."users"."email" FROM "public"."users" WHERE "public"."users"."id" IN ($1) OFFSET $2
+prisma:query COMMIT
+prisma:query INSERT INTO "public"."activities" ("userId","action","description","metadata","createdAt") VALUES ($1,$2,$3,$4,$5) RETURNING "public"."activities"."id", "public"."activities"."userId", "public"."activities"."action", "public"."activities"."description", "public"."activities"."ipAddress", "public"."activities"."userAgent", "public"."activities"."metadata", "public"."activities"."createdAt"
+prisma:query INSERT INTO "public"."activities" ("userId","action","description","metadata","createdAt") VALUES ($1,$2,$3,$4,$5) RETURNING "public"."activities"."id", "public"."activities"."userId", "public"."activities"."action", "public"."activities"."description", "public"."activities"."ipAddress", "public"."activities"."userAgent", "public"."activities"."metadata", "public"."activities"."createdAt"
+prisma:query INSERT INTO "public"."activities" ("userId","action","description","metadata","createdAt") VALUES ($1,$2,$3,$4,$5) RETURNING "public"."activities"."id", "public"."activities"."userId", "public"."activities"."action", "public"."activities"."description", "public"."activities"."ipAddress", "public"."activities"."userAgent", "public"."activities"."metadata", "public"."activities"."createdAt"
+prisma:query INSERT INTO "public"."activities" ("userId","action","description","metadata","createdAt") VALUES ($1,$2,$3,$4,$5) RETURNING "public"."activities"."id", "public"."activities"."userId", "public"."activities"."action", "public"."activities"."description", "public"."activities"."ipAddress", "public"."activities"."userAgent", "public"."activities"."metadata", "public"."activities"."createdAt"
+prisma:query SELECT "public"."products"."id", "public"."products"."userId", "public"."products"."aliexpressUrl", "public"."products"."title", "public"."products"."description", "public"."products"."aliexpressPrice", "public"."products"."suggestedPrice", "public"."products"."finalPrice", "public"."products"."currency", "public"."products"."category", "public"."products"."images", "public"."products"."productData", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."targetCountry", "public"."products"."originCountry", "public"."products"."status", "public"."products"."isPublished", "public"."products"."publishedAt", "public"."products"."approvalId", "public"."products"."winnerDetectedAt", "public"."products"."supplierStock", "public"."products"."supplierStockCheckedAt", "public"."products"."aliexpressSku", "public"."products"."createdAt", "public"."products"."updatedAt" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."users"."id", "public"."users"."username", "public"."users"."email" FROM "public"."users" WHERE "public"."users"."id" IN ($1) OFFSET $2
+prisma:query SELECT "public"."sales"."id", "public"."sales"."userId", "public"."sales"."productId", "public"."sales"."orderId", "public"."sales"."marketplace", "public"."sales"."salePrice", "public"."sales"."aliexpressCost", "public"."sales"."marketplaceFee", "public"."sales"."grossProfit", "public"."sales"."commissionAmount", "public"."sales"."netProfit", "public"."sales"."currency", "public"."sales"."status", "public"."sales"."trackingNumber", "public"."sales"."isCompleteCycle", "public"."sales"."completedAt", "public"."sales"."adminPayoutId", "public"."sales"."userPayoutId", "public"."sales"."payoutExecuted", "public"."sales"."buyerEmail", "public"."sales"."buyerName", "public"."sales"."shippingAddress", "public"."sales"."environment", "public"."sales"."createdAt", "public"."sales"."updatedAt" FROM "public"."sales" WHERE "public"."sales"."productId" IN ($1) OFFSET $2
+prisma:query SELECT "public"."user_workflow_configs"."id", "public"."user_workflow_configs"."userId", "public"."user_workflow_configs"."environment", "public"."user_workflow_configs"."workflowMode", "public"."user_workflow_configs"."stageScrape", "public"."user_workflow_configs"."stageAnalyze", "public"."user_workflow_configs"."stagePublish", "public"."user_workflow_configs"."stagePurchase", "public"."user_workflow_configs"."stageFulfillment", "public"."user_workflow_configs"."stageCustomerService", "public"."user_workflow_configs"."autoApproveThreshold", "public"."user_workflow_configs"."autoPublishThreshold", "public"."user_workflow_configs"."maxAutoInvestment", "public"."user_workflow_configs"."workingCapital", "public"."user_workflow_configs"."minProfitUsd", "public"."user_workflow_configs"."minRoiPct", "public"."user_workflow_configs"."createdAt", "public"."user_workflow_configs"."updatedAt" FROM "public"."user_workflow_configs" WHERE ("public"."user_workflow_configs"."userId" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."api_credentials"."id", "public"."api_credentials"."userId", "public"."api_credentials"."apiName", "public"."api_credentials"."environment", "public"."api_credentials"."credentials", "public"."api_credentials"."isActive", "public"."api_credentials"."createdAt", "public"."api_credentials"."updatedAt", "public"."api_credentials"."scope"::text, "public"."api_credentials"."sharedById" FROM "public"."api_credentials" WHERE ("public"."api_credentials"."apiName" = $1 AND "public"."api_credentials"."isActive" = $2 AND "public"."api_credentials"."userId" = $3) ORDER BY "public"."api_credentials"."updatedAt" DESC LIMIT $4 OFFSET $5
+2026-03-26 17:10:33 [[33mwarn[39m]: [MARKETPLACE] MercadoLibre testConnection failed {"service":"ivan-reseller-backend","error":"MercadoLibre no tiene access token o userId v´┐¢lido. Completa OAuth en API Settings."}
+2026-03-26 17:10:34 [[32minfo[39m]: [ML-IMAGE-POLICY] audited {"service":"ivan-reseller-backend","productId":32714,"status":"ml_image_policy_fail","hardBlockers":["primary_image_not_square_like"],"manualReviewReasons":["supplier_raw_images_require_reviewed_ml_cover"],"primaryImageUrl":"https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg","imageCount":7}
+2026-03-26 17:10:41 [[32minfo[39m]: [ML-IMAGE-REMEDIATION] evaluated {"service":"ivan-reseller-backend","productId":32714,"decision":"manual_review_required","remediationPathSelected":"canonical_pipeline_v1","publishSafe":false,"integrationLayerOutcome":"human_review_required","packApproved":false,"blockingReasons":["ml_canonical_dual_gate_failed_all_candidates_and_remediations","remediation_simulation_all_weak_preview","last_try:square_white_catalog_jpeg:policy=false:conv=false:hero=true:integrity=true","missing_required_assets:cover_main,detail_mount_interface","unapproved_required_assets:cover_main,detail_mount_interface"]}
+2026-03-26 17:10:41 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] Getting product info {"service":"ivan-reseller-backend","productId":"1005009130509159","localCountry":"CL"}
+2026-03-26 17:10:42 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] makeRequest product-info extraction debug {"service":"ivan-reseller-backend","method":"aliexpress.offer.ds.product.simplequery","responseTopKeys":["aliexpress_offer_ds_product_simplequery_response"],"resultTopKeys":["request_id","_trace_id_"],"hasResultProduct":false,"resultProductKeys":[],"resultPreview":"{\"request_id\":\"0bb4a80e17745558414873775\",\"_trace_id_\":\"21411b6217745558414854711e46ae\"}"}
+2026-03-26 17:10:42 [[33mwarn[39m]: [ALIEXPRESS-DROPSHIPPING-API] Primary getProductInfo returned no product fields; trying aliexpress.ds.product.get {"service":"ivan-reseller-backend","productId":"1005009130509159"}
+2026-03-26 17:10:42 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] ds.product.get result shape {"service":"ivan-reseller-backend","resultResultKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info"],"ae_item_sku_info_dtosType":"object","ae_item_sku_info_dtosKeys":["ae_item_sku_info_d_t_o"]}
+2026-03-26 17:10:42 [[32minfo[39m]: [ALIEXPRESS-DROPSHIPPING-API] getProductInfo product shape (skus) {"service":"ivan-reseller-backend","productKeys":["ae_item_sku_info_dtos","ae_multimedia_info_dto","package_info_dto","logistics_info_dto","product_id_converter_result","ae_item_base_info_dto","has_whole_sale","ae_item_properties","ae_store_info","product_id","product_title"],"hasSkus":false,"hasAeSkuDtos":true,"skuArrayLength":2,"hasClassicShippingInfo":false,"hasLogisticsInfoDto":true,"logisticsInfoKeys":["delivery_time","ship_to_country"],"normalizedShippingMethodCount":0}
+2026-03-26 17:10:42 [[32minfo[39m]: [PREVENTIVE-SUPPLIER] Using persisted ML Chile freight truth for original supplier validation {"service":"ivan-reseller-backend","productId":"1005009130509159","shipToCountry":"CL","shippingUsd":3.12,"selectedServiceName":"CAINIAO_STANDARD","checkedAt":"2026-03-26T20:10:27.049Z","ageHours":0.003939722222222222}
+prisma:query SELECT 1
+prisma:query SELECT "public"."api_status_snapshots"."id", "public"."api_status_snapshots"."apiName", "public"."api_status_snapshots"."isConfigured", "public"."api_status_snapshots"."isAvailable", "public"."api_status_snapshots"."status", "public"."api_status_snapshots"."lastChecked", "public"."api_status_snapshots"."error", "public"."api_status_snapshots"."message", "public"."api_status_snapshots"."environment", "public"."api_status_snapshots"."latency", "public"."api_status_snapshots"."trustScore" FROM "public"."api_status_snapshots" WHERE ("public"."api_status_snapshots"."userId" = $1 AND "public"."api_status_snapshots"."environment" = $2) ORDER BY "public"."api_status_snapshots"."lastChecked" DESC OFFSET $3
+prisma:query SELECT "public"."system_configs"."id", "public"."system_configs"."value", "public"."system_configs"."key" FROM "public"."system_configs" WHERE "public"."system_configs"."key" IN ($1,$2,$3) OFFSET $4
+prisma:query SELECT "public"."products"."id", "public"."products"."status", "public"."products"."isPublished", "public"."products"."shippingCost", "public"."products"."importTax", "public"."products"."totalCost", "public"."products"."productData", "public"."products"."updatedAt" FROM "public"."products" WHERE ("public"."products"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+{
+  "productId": 32714,
+  "at": "2026-03-26T20:09:46.816Z",
+  "before": {
+    "status": "VALIDATED_READY",
+    "shippingCost": "3.12",
+    "importTax": "1.2",
+    "totalCost": "7.51",
+    "productData": {
+      "p92StagingCandidate": true,
+      "aeProductId": "1005009130509159",
+      "variantIntent": "white",
+      "mlChileFreight": {
+        "freightSummaryCode": "freight_quote_found_for_cl",
+        "checkedAt": "2026-03-26T20:08:56.947Z",
+        "targetCountry": "CL",
+        "sendGoodsCountryCode": "CN",
+        "freightOptionsCount": 4,
+        "rawOptionNodeCount": 4,
+        "rawTopKeys": [
+          "success",
+          "aeop_freight_calculate_result_for_buyer_d_t_o_list"
+        ],
+        "selectedServiceName": "CAINIAO_STANDARD",
+        "selectedFreightAmount": 3.12,
+        "selectedFreightCurrency": "USD",
+        "selectedEstimatedDeliveryTime": 11,
+        "selectionReason": "Selected the cheapest tracked/standard-like freight option."
+      },
+      "mlChileLandedCost": {
+        "costCurrency": "USD",
+        "importTaxMethod": "cl_vat_19_product_plus_shipping_low_value",
+        "importTaxAmount": 1.2,
+        "totalCost": 7.51,
+        "landedCostCompleteness": "complete",
+        "checkedAt": "2026-03-26T20:08:56.947Z"
+      }
+    }
+  },
+  "preflightBefore": {
+    "overallState": "blocked_marketplace_connection",
+    "publishAllowed": false,
+    "blockers": [
+      "mercadolibre_test_connection_failed",
+      "images:ml_canonical_dual_gate_failed_all_candidates_and_remediations",
+      "pricing:real profit -2.07 must be > 0 (sale 7.02 vs total cost 9.09)"
+    ],
+    "nextAction": "Refresh Mercado Libre token or fix API credentials; test connection from settings."
+  },
+  "mlChileFreightRecovery": {
+    "persisted": true,
+    "selectedServiceName": "CAINIAO_STANDARD",
+    "selectedFreightAmount": 3.12,
+    "selectedFreightCurrency": "USD",
+    "shippingUsd": 3.12,
+    "shippingCostPersisted": 3.12,
+    "importTaxPersisted": 1.2,
+    "totalCostPersisted": 7.51
+  },
+  "listingSalePriceUsd": 7.02,
+  "preventivePreparation": {
+    "ok": false,
+    "error": "Product not valid for publishing: real profit -2.07 must be > 0 (sale 7.02 vs total cost 9.09)"
+  },
+  "statusTransition": {
+    "requested": "APPROVED",
+    "resultingStatus": "VALIDATED_READY",
+    "resultingIsPublished": false
+  },
+  "preflightAfter": {
+    "overallState": "blocked_marketplace_connection",
+    "publishAllowed": false,
+    "blockers": [
+      "mercadolibre_test_connection_failed",
+      "images:ml_canonical_dual_gate_failed_all_candidates_and_remediations",
+      "pricing:real profit -2.07 must be > 0 (sale 7.02 vs total cost 9.09)"
+    ],
+    "nextAction": "Refresh Mercado Libre token or fix API credentials; test connection from settings."
+  },
+  "after": {
+    "status": "VALIDATED_READY",
+    "isPublished": false,
+    "shippingCost": "3.12",
+    "importTax": "1.2",
+    "totalCost": "7.51",
+    "productData": {
+      "p92StagingCandidate": true,
+      "aeProductId": "1005009130509159",
+      "variantIntent": "white",
+      "mlChileFreight": {
+        "freightSummaryCode": "freight_quote_found_for_cl",
+        "checkedAt": "2026-03-26T20:10:27.049Z",
+        "targetCountry": "CL",
+        "sendGoodsCountryCode": "CN",
+        "freightOptionsCount": 4,
+        "rawOptionNodeCount": 4,
+        "rawTopKeys": [
+          "success",
+          "aeop_freight_calculate_result_for_buyer_d_t_o_list"
+        ],
+        "selectedServiceName": "CAINIAO_STANDARD",
+        "selectedFreightAmount": 3.12,
+        "selectedFreightCurrency": "USD",
+        "selectedEstimatedDeliveryTime": 11,
+        "selectionReason": "Selected the cheapest tracked/standard-like freight option."
+      },
+      "mlChileLandedCost": {
+        "costCurrency": "USD",
+        "importTaxMethod": "cl_vat_19_product_plus_shipping_low_value",
+        "importTaxAmount": 1.2,
+        "totalCost": 7.51,
+        "landedCostCompleteness": "complete",
+        "checkedAt": "2026-03-26T20:10:27.049Z"
+      }
+    },
+    "updatedAt": "2026-03-26T20:10:30.384Z"
+  }
+}

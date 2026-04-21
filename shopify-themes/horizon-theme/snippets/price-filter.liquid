@@ -13,6 +13,15 @@
 {%- liquid
   assign is_horizontal = false
   assign is_vertical = false
+  assign filter_label = filter.label
+
+  case filter.label | downcase
+    when 'disponibilidad'
+      assign filter_label = 'Availability'
+    when 'precio'
+      assign filter_label = 'Price'
+  endcase
+
   if filter_style == 'horizontal'
     assign is_horizontal = true
   elsif filter_style == 'vertical'
@@ -33,7 +42,7 @@
       class="facets__summary"
       data-testid="price-filter"
     >
-      <span class="facets__label">{{ filter.label }}</span>
+      <span class="facets__label">{{ filter_label }}</span>
       <facet-status-component class="facets__status">
         <template ref="moneyFormat">{{ shop.money_format }}</template>
 
@@ -92,7 +101,7 @@
               <input
                 class="field__input price-facet__input"
                 name="{{ filter.min_value.param_name }}"
-                id="{{ filter.label | escape }}-GTE-{{ id_prefix }}"
+                id="{{ filter_label | escape }}-GTE-{{ id_prefix }}"
                 {%- if filter.min_value.value -%}
                   value="{{ filter.min_value.value | money_without_currency }}"
                 {%- endif -%}
@@ -108,7 +117,7 @@
 
               <label
                 class="field__label price-facet__label"
-                for="{{ filter.label | escape }}-GTE-{{ id_prefix }}"
+                for="{{ filter_label | escape }}-GTE-{{ id_prefix }}"
               >
                 {{ cart.currency.symbol }}
               </label>
@@ -120,7 +129,7 @@
               <input
                 class="field__input price-facet__input"
                 name="{{ filter.max_value.param_name }}"
-                id="{{ filter.label | escape }}-LTE-{{ id_prefix }}"
+                id="{{ filter_label | escape }}-LTE-{{ id_prefix }}"
                 {%- if filter.max_value.value -%}
                   value="{{ filter.max_value.value | money_without_currency }}"
                 {%- endif -%}
@@ -135,7 +144,7 @@
               >
               <label
                 class="field__label price-facet__label"
-                for="{{ filter.label | escape }}-LTE-{{ id_prefix }}"
+                for="{{ filter_label | escape }}-LTE-{{ id_prefix }}"
               >
                 {{ cart.currency.symbol }}
               </label>

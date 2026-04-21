@@ -31,6 +31,24 @@ export interface CjProductSummary {
    * Only populated for items that received a warehouse probe in the search handler.
    */
   fulfillmentOrigin?: 'US' | 'CN' | 'UNKNOWN';
+  /**
+   * Optional destination-specific inventory slices observed in CJ search/list payloads.
+   * Some CJ responses expose per-country rows with fields such as `countryCode`,
+   * `verifiedWarehouse`, `totalInventory`, `cjInventory`, and `factoryInventory`.
+   *
+   * Search flows may use this as an early destination-local hint, but it is never
+   * treated as stronger than live variant stock + destination freight confirmation.
+   */
+  destinationInventories?: CjDestinationInventorySummary[];
+}
+
+export interface CjDestinationInventorySummary {
+  countryCode: string;
+  verifiedWarehouse?: boolean;
+  totalInventoryNum?: number;
+  cjInventoryNum?: number;
+  factoryInventoryNum?: number;
+  sourcePath?: string;
 }
 
 export interface CjSearchQuery {

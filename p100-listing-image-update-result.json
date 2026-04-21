@@ -1,0 +1,57 @@
+{
+  "productId": 32714,
+  "listingId": "MLC3804135582",
+  "executedAt": "2026-03-27T01:15:10.853Z",
+  "supplierImageUrlsCount": 7,
+  "oldCoverPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32714\\cover_main.png",
+  "supplierScoringRank": [
+    {
+      "textLogoRisk": 100,
+      "policyFitness": 44.77,
+      "urlSample": "https://ae01.alicdn.com/kf/S574ecbca762045d0a6bc2a6da0f50ceb5.jpg"
+    },
+    {
+      "textLogoRisk": 100,
+      "policyFitness": 44.38,
+      "urlSample": "https://ae01.alicdn.com/kf/S80e97bb5f64349c2b69181ba42c91c4cB.jpg"
+    },
+    {
+      "textLogoRisk": 100,
+      "policyFitness": 44.15,
+      "urlSample": "https://ae01.alicdn.com/kf/S4d28403f329442b281158c9d8695c54cC.jpg"
+    },
+    {
+      "textLogoRisk": 100,
+      "policyFitness": 43.43,
+      "urlSample": "https://ae01.alicdn.com/kf/Sde88307b1549433e859ff52eb73e80d6g.jpg"
+    },
+    {
+      "textLogoRisk": 100,
+      "policyFitness": 43,
+      "urlSample": "https://ae01.alicdn.com/kf/S4005cfbe2ecc4d22bd0f51da34bfc1c6M.jpg"
+    },
+    {
+      "textLogoRisk": 100,
+      "policyFitness": 43,
+      "urlSample": "https://ae01.alicdn.com/kf/S10ca44862d0f4f508d7ee342d162df4ai.jpg"
+    },
+    {
+      "textLogoRisk": 100,
+      "policyFitness": 35.29,
+      "urlSample": "https://ae01.alicdn.com/kf/Sfd8ecf61dd114748a07a5337170aa38dI.jpg"
+    }
+  ],
+  "lastFailedCandidate": {
+    "url": "https://ae01.alicdn.com/kf/S4d28403f329442b281158c9d8695c54cC.jpg",
+    "centerKeep": 0.4,
+    "insetFraction": 0.18,
+    "bandWhitewash": 0.11,
+    "reasons": [
+      "portada_policy:policy_fitness_65_below_68",
+      "portada_policy:text_logo_risk_high_100",
+      "portada_text_logo_risk_100.0_max_74"
+    ],
+    "textLogoRisk": 100
+  },
+  "error": "no_supplier_candidate_passed_portada_gate"
+}

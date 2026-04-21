@@ -1,19 +1,21 @@
 /**
  * CJ → ML Chile — calificación + evaluate (MVP).
  *
- * REGLA DE ORO: solo productos con warehouse Chile confirmado (originCountryCode=CL).
- * Probing: se llama a CJ freightCalculate con startCountryCode=CL y se verifica respuesta.
+ * REGLA DE ORO: solo productos con warehouse Chile confirmado por freightCalculate CL -> CL.
+ * Probing: se llama a CJ freightCalculate con startCountryCode=CL y endCountryCode=CL.
  * Si CJ no devuelve quote CL → NOT_VIABLE (no REJECTED, es out-of-scope MVP).
  */
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
-import { createCjMlChileSupplierAdapter, CJ_CHILE_DEST_COUNTRY, CJ_CHILE_PROBE_POSTAL } from '../adapters/cj-ml-chile-supplier.adapter';
+import { createCjMlChileSupplierAdapter } from '../adapters/cj-ml-chile-supplier.adapter';
 import { cjMlChileTraceService } from './cj-ml-chile-trace.service';
 import { cjMlChileConfigService } from './cj-ml-chile-config.service';
-import { computeMlChilePricing, pricingBreakdownForResponse, resolveMlChileFees } from './cj-ml-chile-pricing.service';
+import { computeMlChilePricing, pricingBreakdownForResponse } from './cj-ml-chile-pricing.service';
 import { CJ_ML_CHILE_TRACE_STEP, CJ_ML_CHILE_EVAL_DECISION } from '../cj-ml-chile.constants';
 import type { CjProductDetail, CjVariantDetail } from '../../cj-ebay/adapters/cj-supplier.adapter.interface';
+import { CjSupplierError } from '../../cj-ebay/adapters/cj-supplier.errors';
+import { quoteShippingToChileLocalWarehouse } from './cj-ml-chile-local-stock.service';
 
 export interface CjMlChileEvaluateInput {
   userId: number;
@@ -177,8 +179,8 @@ export const cjMlChileQualificationService = {
     const fromApi = stockMap.get(input.variantId);
     const stockLive = fromApi !== undefined && Number.isFinite(fromApi) ? fromApi : Math.floor(variant.stock);
 
-    // Probe warehouse Chile
-    let chileFreight: Awaited<ReturnType<typeof adapter.quoteShippingToUsReal>> | null = null;
+    // Probe Chile-local stock with CL -> CL freightCalculate.
+    let chileFreight: Awaited<ReturnType<typeof quoteShippingToChileLocalWarehouse>> | null = null;
     let warehouseChileConfirmed = false;
 
     try {
@@ -187,32 +189,23 @@ export const cjMlChileQualificationService = {
         correlationId: input.correlationId,
         route: input.route,
         step: CJ_ML_CHILE_TRACE_STEP.CJ_FREIGHT_REQUEST,
-        message: 'Probing CJ freight for Chile (startCountryCode=CL)',
+        message: 'Probing CJ freight for Chile with startCountryCode=CL and endCountryCode=CL',
         meta: { productId: input.productId, variantId: input.variantId },
       });
 
-      // Use quoteShippingToUsReal with CL destination override via the postal code
-      // CJ freightCalculate accepts startCountryCode; we pass CL to probe Chile warehouse
-      const chileAdapter = adapter as typeof adapter & { quoteShippingToChile?: (input: Parameters<typeof adapter.quoteShippingToUsReal>[0]) => ReturnType<typeof adapter.quoteShippingToUsReal> };
-
-      // Standard call — CJ will return quote from closest warehouse to Chile
-      chileFreight = await adapter.quoteShippingToUsReal({
+      chileFreight = await quoteShippingToChileLocalWarehouse(adapter, {
         variantId: input.variantId,
         productId: input.productId,
         quantity: input.quantity,
-        destPostalCode: CJ_CHILE_PROBE_POSTAL,
       });
-
-      // Only startCountryCode=CL confirms Chile warehouse. cost>0 alone is insufficient
-      // (CJ also returns cost>0 for CN-origin quotes).
-      warehouseChileConfirmed = chileFreight.quote.startCountryCode === 'CL';
+      warehouseChileConfirmed = true;
 
       await cjMlChileTraceService.record({
         userId: input.userId,
         correlationId: input.correlationId,
         route: input.route,
-        step: warehouseChileConfirmed ? CJ_ML_CHILE_TRACE_STEP.WAREHOUSE_CHILE_CONFIRMED : CJ_ML_CHILE_TRACE_STEP.WAREHOUSE_CHILE_NOT_FOUND,
-        message: warehouseChileConfirmed ? 'Warehouse Chile confirmado' : 'No hay freight quote Chile — NOT_VIABLE para MVP',
+        step: CJ_ML_CHILE_TRACE_STEP.WAREHOUSE_CHILE_CONFIRMED,
+        message: 'Warehouse Chile confirmado por freightCalculate CL->CL',
         meta: { startCountryCode: chileFreight.quote.startCountryCode, cost: chileFreight.quote.cost },
       });
     } catch (e) {
@@ -222,7 +215,10 @@ export const cjMlChileQualificationService = {
         route: input.route,
         step: CJ_ML_CHILE_TRACE_STEP.CJ_FREIGHT_ERROR,
         message: e instanceof Error ? e.message : String(e),
-        meta: { stage: 'chile-freight-probe' },
+        meta: {
+          stage: 'chile-freight-probe',
+          errorCode: e instanceof CjSupplierError ? e.code : 'UNKNOWN',
+        },
       });
       warehouseChileConfirmed = false;
     }
@@ -294,18 +290,17 @@ export const cjMlChileQualificationService = {
     const fromApi = stockMap.get(input.variantId);
     const stockLive = fromApi !== undefined && Number.isFinite(fromApi) ? fromApi : Math.floor(variant.stock);
 
-    // Probe warehouse Chile
-    let chileFreight: Awaited<ReturnType<typeof adapter.quoteShippingToUsReal>> | null = null;
+    // Probe warehouse Chile with CL -> CL freightCalculate.
+    let chileFreight: Awaited<ReturnType<typeof quoteShippingToChileLocalWarehouse>> | null = null;
     let warehouseChileConfirmed = false;
 
     try {
-      chileFreight = await adapter.quoteShippingToUsReal({
+      chileFreight = await quoteShippingToChileLocalWarehouse(adapter, {
         variantId: input.variantId,
         productId: input.productId,
         quantity: input.quantity,
-        destPostalCode: CJ_CHILE_PROBE_POSTAL,
       });
-      warehouseChileConfirmed = chileFreight.quote.startCountryCode === 'CL';
+      warehouseChileConfirmed = true;
     } catch {
       warehouseChileConfirmed = false;
     }

@@ -22,9 +22,14 @@ import type { CjProductSummary } from '../../cj-ebay/adapters/cj-supplier.adapte
 
 export type RelevanceTier = 'alta' | 'media' | 'baja';
 export type MlChileOperabilityStatus = 'operable' | 'stock_unknown' | 'unavailable';
+export type MlChileLocalStockStatus = 'chile_local' | 'global_only' | 'stock_unknown' | 'out_of_stock';
 
 export interface RankedCjProduct extends CjProductSummary {
   operabilityStatus: MlChileOperabilityStatus;
+  localStockStatus?: MlChileLocalStockStatus;
+  warehouseChileConfirmed?: boolean;
+  localStockEvidenceSource?: string;
+  localReadyVariantId?: string;
   relevanceScore: number;    // 0–100: textual match quality
   relevanceTier: RelevanceTier;
 }
@@ -253,12 +258,12 @@ const OPERABILITY_RANK: Record<MlChileOperabilityStatus, number> = {
  */
 export function rankMlChileSearchResults(
   rawQuery: string,
-  items: CjProductSummary[],
+  items: Array<CjProductSummary & Partial<RankedCjProduct>>,
 ): { rankedItems: RankedCjProduct[]; query: NormalizedQuery } {
   const nq = expandQuery(rawQuery);
 
   const enriched: RankedCjProduct[] = items.map(item => {
-    const operabilityStatus = classifyInventory(item.inventoryTotal);
+    const operabilityStatus = item.operabilityStatus ?? classifyInventory(item.inventoryTotal);
     const relScore = textRelevanceScore(nq, item.title ?? '');
     return {
       ...item,

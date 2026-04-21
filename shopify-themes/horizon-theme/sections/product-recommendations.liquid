@@ -60,7 +60,7 @@
       {% content_for 'blocks' %}
     </div>
 
-    {%- if recommendations.performed or section.settings.product == blank -%}
+    {%- if recommendations.performed or section.settings.product == blank or product != blank -%}
       {% liquid
         if section.settings.product == blank
           assign products = null
@@ -69,6 +69,8 @@
             assign products = products | append: ', '
             assign products = products | split: ','
           endfor
+        elsif recommendations.performed == false and product != blank
+          assign products = collections.all.products | reject: 'id', product.id
         elsif recommendations.performed and recommendations.products_count == 0
           # No recommendations found, pull from catalog
           if section.settings.recommendation_type == 'related'

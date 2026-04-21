@@ -8,17 +8,16 @@
  * ------------------------------------------------------------
  */{
   "sections": {
-    "ir_hero_main": {
-      "type": "ir-hero",
+    "ir_hero_ultra_main": {
+      "type": "ir-hero-ultra",
       "settings": {
-        "eyebrow": "IVAN RESELLER",
-        "title": "Smart Shopping, Curated by AI",
-        "subtitle": "Discover practical, trending products for everyday life — selected with intelligence, designed for convenience, and delivered with confidence.",
-        "button_1_text": "Shop now",
-        "button_1_link": "shopify://collections/all",
-        "button_2_text": "Explore products",
-        "button_2_link": "shopify://collections/all",
-        "show_badges": false
+        "eyebrow": "Curated by AI, Selected for Quality",
+        "title": "Everyday tools, thoughtfully elevated.",
+        "description": "Discover practical tech accessories, workspace upgrades, and travel essentials that simplify your daily routine. Each product is carefully selected for quality, utility, and lasting value.",
+        "button_text": "Shop the Collection",
+        "button_link": "shopify://collections/all",
+        "secondary_button_text": "Explore Best Sellers",
+        "secondary_button_link": "shopify://collections/all"
       }
     },
     "ir_trust_bar_main": {
@@ -28,282 +27,156 @@
           "type": "trust_item",
           "settings": {
             "icon": "🚚",
-            "label": "Free Shipping",
-            "subtext": "On qualifying orders"
+            "label": "Fast Shipping",
+            "subtext": "Free delivery on orders over $50"
           }
         },
-        "ir_trust_item_delivery": {
+        "ir_trust_item_guarantee": {
           "type": "trust_item",
           "settings": {
-            "icon": "⚡",
-            "label": "Fast Delivery",
-            "subtext": "Reliable U.S. fulfillment"
+            "icon": "🛡️",
+            "label": "30-Day Guarantee",
+            "subtext": "Easy returns, no questions asked"
           }
         },
-        "ir_trust_item_returns": {
+        "ir_trust_item_secure": {
           "type": "trust_item",
           "settings": {
-            "icon": "🔄",
-            "label": "Easy Returns",
-            "subtext": "Straightforward support"
+            "icon": "🔒",
+            "label": "Secure Checkout",
+            "subtext": "256-bit SSL encryption"
           }
         },
-        "ir_trust_item_curated": {
+        "ir_trust_item_support": {
           "type": "trust_item",
           "settings": {
-            "icon": "🤖",
-            "label": "AI Curated",
-            "subtext": "Practical trend discovery"
+            "icon": "💬",
+            "label": "24/7 Support",
+            "subtext": "We're here to help anytime"
           }
         }
       },
       "block_order": [
         "ir_trust_item_shipping",
-        "ir_trust_item_delivery",
-        "ir_trust_item_returns",
-        "ir_trust_item_curated"
+        "ir_trust_item_guarantee",
+        "ir_trust_item_secure",
+        "ir_trust_item_support"
       ],
       "settings": {
         "background_color": "#FFFFFF"
       }
     },
-    "product_list_fa6P9H": {
-      "type": "product-list",
+    "ir_bento_grid_categories": {
+      "type": "ir-bento-grid",
       "blocks": {
-        "static-header": {
-          "type": "_product-list-content",
-          "name": "t:names.header",
-          "static": true,
+        "bento_workspace": {
+          "type": "category_item",
           "settings": {
-            "content_direction": "row",
-            "vertical_on_mobile": false,
-            "horizontal_alignment": "space-between",
-            "vertical_alignment": "flex-end",
-            "align_baseline": true,
-            "horizontal_alignment_flex_direction_column": "flex-start",
-            "vertical_alignment_flex_direction_column": "center",
-            "gap": 12,
-            "width": "fill",
-            "custom_width": 100,
-            "width_mobile": "fill",
-            "custom_width_mobile": 100,
-            "height": "fit",
-            "custom_height": 100,
-            "inherit_color_scheme": true,
-            "color_scheme": "",
-            "background_media": "none",
-            "video_position": "cover",
-            "background_image_position": "cover",
-            "border": "none",
-            "border_width": 1,
-            "border_opacity": 100,
-            "border_radius": 0,
-            "padding-block-start": 0,
-            "padding-block-end": 0,
-            "padding-inline-start": 0,
-            "padding-inline-end": 0
-          },
-          "blocks": {
-            "product_list_text_YFtzcL": {
-              "type": "_product-list-text",
-              "name": "t:names.collection_title",
-              "settings": {
-                "text": "<h3>Popular picks for smarter shopping</h3>",
-                "width": "fit-content",
-                "max_width": "normal",
-                "alignment": "left",
-                "type_preset": "h4",
-                "font": "var(--font-body--family)",
-                "font_size": "",
-                "line_height": "normal",
-                "letter_spacing": "normal",
-                "case": "none",
-                "wrap": "pretty",
-                "color": "var(--color-foreground)",
-                "background": false,
-                "background_color": "#00000026",
-                "corner_radius": 0,
-                "padding-block-start": 0,
-                "padding-block-end": 0,
-                "padding-inline-start": 0,
-                "padding-inline-end": 0
-              },
-              "blocks": {}
-            },
-            "product_list_button_MWeP9V": {
-              "type": "_product-list-button",
-              "name": "t:names.product_list_button",
-              "settings": {
-                "label": "Explore products",
-                "open_in_new_tab": false,
-                "style_class": "link",
-                "width": "fit-content",
-                "custom_width": 100,
-                "width_mobile": "fit-content",
-                "custom_width_mobile": 100
-              },
-              "blocks": {}
-            }
-          },
-          "block_order": [
-            "product_list_text_YFtzcL",
-            "product_list_button_MWeP9V"
-          ]
+            "size": "large",
+            "label": "Workspace",
+            "title": "Minimalist Productivity",
+            "description": "Tools and accessories designed to keep your desk clear and your focus sharp.",
+            "link": "shopify://collections/all"
+          }
         },
-        "static-product-card": {
-          "type": "_product-card",
-          "name": "t:names.product_card",
-          "static": true,
+        "bento_travel": {
+          "type": "category_item",
           "settings": {
-            "product_card_gap": 4,
-            "inherit_color_scheme": true,
-            "color_scheme": "",
-            "border": "none",
-            "border_width": 1,
-            "border_opacity": 100,
-            "border_radius": 0,
-            "padding-block-start": 0,
-            "padding-block-end": 0,
-            "padding-inline-start": 0,
-            "padding-inline-end": 0
-          },
-          "blocks": {
-            "product_card_gallery_677WP3": {
-              "type": "_product-card-gallery",
-              "name": "t:names.product_card_media",
-              "settings": {
-                "image_ratio": "adapt",
-                "border": "none",
-                "border_width": 1,
-                "border_opacity": 100,
-                "border_radius": 0,
-                "padding-block-start": 0,
-                "padding-block-end": 0,
-                "padding-inline-start": 0,
-                "padding-inline-end": 0
-              },
-              "blocks": {}
-            },
-            "product_title_YXxMTj": {
-              "type": "product-title",
-              "name": "t:names.product_title",
-              "settings": {
-                "width": "100%",
-                "max_width": "normal",
-                "alignment": "left",
-                "type_preset": "rte",
-                "font": "var(--font-body--family)",
-                "font_size": "1rem",
-                "line_height": "normal",
-                "letter_spacing": "normal",
-                "case": "none",
-                "wrap": "pretty",
-                "color": "var(--color-foreground)",
-                "background": false,
-                "background_color": "#00000026",
-                "corner_radius": 0,
-                "padding-block-start": 4,
-                "padding-block-end": 0,
-                "padding-inline-start": 0,
-                "padding-inline-end": 0
-              },
-              "blocks": {}
-            },
-            "price_JQzVV4": {
-              "type": "price",
-              "name": "t:names.product_price",
-              "settings": {
-                "show_sale_price_first": true,
-                "show_installments": false,
-                "show_tax_info": false,
-                "type_preset": "h6",
-                "width": "100%",
-                "alignment": "left",
-                "font": "var(--font-body--family)",
-                "font_size": "1rem",
-                "line_height": "normal",
-                "letter_spacing": "normal",
-                "case": "none",
-                "color": "var(--color-foreground)",
-                "padding-block-start": 0,
-                "padding-block-end": 0,
-                "padding-inline-start": 0,
-                "padding-inline-end": 0
-              },
-              "blocks": {}
-            }
-          },
-          "block_order": [
-            "product_card_gallery_677WP3",
-            "product_title_YXxMTj",
-            "price_JQzVV4"
-          ]
+            "size": "tall",
+            "label": "Travel",
+            "title": "On The Move",
+            "description": "Pack lighter and travel smarter with our curated carry essentials.",
+            "link": "shopify://collections/all"
+          }
+        },
+        "bento_tech": {
+          "type": "category_item",
+          "settings": {
+            "size": "wide",
+            "label": "Tech Accessories",
+            "title": "Smart Protection",
+            "description": "Premium cables, cases, and charging solutions that last.",
+            "link": "shopify://collections/all"
+          }
+        },
+        "bento_new": {
+          "type": "category_item",
+          "settings": {
+            "size": "small",
+            "label": "Latest",
+            "title": "New Arrivals",
+            "description": "The newest practical upgrades for your daily routine.",
+            "link": "shopify://collections/all"
+          }
         }
       },
-      "name": "Featured collection",
+      "block_order": [
+        "bento_workspace",
+        "bento_travel",
+        "bento_tech",
+        "bento_new"
+      ],
       "settings": {
+        "title": "Selected by Purpose.",
+        "subtitle": "Discover the categories that define our commitment to practical utility."
+      }
+    },
+    "ir_premium_products_featured": {
+      "type": "ir-premium-product-card",
+      "settings": {
+        "eyebrow": "Featured Collection",
+        "title": "Customer Favorites",
         "collection": "all",
-        "layout_type": "grid",
-        "carousel_on_mobile": false,
-        "max_products": 8,
+        "products_to_show": 8,
         "columns": 4,
-        "mobile_columns": "2",
-        "mobile_card_size": "60cqw",
-        "columns_gap": 8,
-        "rows_gap": 24,
-        "icons_style": "arrow",
-        "icons_shape": "none",
-        "section_width": "page-width",
-        "horizontal_alignment": "flex-start",
-        "gap": 28,
-        "color_scheme": "scheme-1",
-        "padding-block-start": 48,
-        "padding-block-end": 48
+        "show_view_all": true,
+        "view_all_text": "Shop All Products"
       }
     },
     "ir_why_us_main": {
       "type": "ir-why-us",
       "blocks": {
-        "ir_value_card_curated": {
+        "ir_value_card_selection": {
           "type": "value_card",
           "settings": {
-            "icon": "🤖",
-            "title": "AI-led selection",
-            "text": "We filter trends for practical products that feel useful, current, and easy to buy with confidence."
+            "icon": "01",
+            "title": "Selected With Purpose",
+            "text": "The assortment is built around products that solve small, real problems across travel, work, and everyday life."
           }
         },
-        "ir_value_card_shipping": {
+        "ir_value_card_quality": {
           "type": "value_card",
           "settings": {
-            "icon": "⚡",
-            "title": "Fast fulfillment",
-            "text": "Responsive fulfillment and straightforward delivery updates help shoppers know what to expect."
+            "icon": "02",
+            "title": "Clear Before Checkout",
+            "text": "Product pages are designed for fast evaluation with visible pricing, useful details, and clean trust cues."
           }
         },
-        "ir_value_card_confidence": {
+        "ir_value_card_experience": {
           "type": "value_card",
           "settings": {
-            "icon": "🛡️",
-            "title": "Buyer confidence",
-            "text": "Clear policies, dependable checkout, and product trust cues make the buying experience feel stronger end to end."
+            "icon": "03",
+            "title": "Built For Confidence",
+            "text": "Secure checkout, straightforward support, and a more polished buying experience from first click to order."
           }
         }
       },
       "block_order": [
-        "ir_value_card_curated",
-        "ir_value_card_shipping",
-        "ir_value_card_confidence"
+        "ir_value_card_selection",
+        "ir_value_card_quality",
+        "ir_value_card_experience"
       ],
       "settings": {
-        "title": "Why shoppers choose Ivan Reseller",
-        "subtitle": "A cleaner, more confident storefront built to make discovery easier and buying friction lower."
+        "title": "A cleaner way to discover useful products.",
+        "subtitle": "Premium does not need to feel complicated. Ivan Reseller keeps the experience focused, practical, and easy to trust."
       }
     }
   },
   "order": [
-    "ir_hero_main",
+    "ir_hero_ultra_main",
     "ir_trust_bar_main",
-    "product_list_fa6P9H",
+    "ir_bento_grid_categories",
+    "ir_premium_products_featured",
     "ir_why_us_main"
   ]
 }

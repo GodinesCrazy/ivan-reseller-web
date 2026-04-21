@@ -30,6 +30,7 @@ import {
 import type {
   ICjSupplierAdapter,
   CjSearchQuery,
+  CjDestinationInventorySummary,
   CjProductSummary,
   CjProductDetail,
   CjVariantDetail,
@@ -161,7 +162,15 @@ function rowToSummary(row: Record<string, unknown>): CjProductSummary | null {
           return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
         })()
       : undefined;
-  return { cjProductId: pid, title, mainImageUrl, listPriceUsd, inventoryTotal };
+  const destinationInventories = extractDestinationInventories(row);
+  return {
+    cjProductId: pid,
+    title,
+    mainImageUrl,
+    listPriceUsd,
+    inventoryTotal,
+    destinationInventories: destinationInventories.length > 0 ? destinationInventories : undefined,
+  };
 }
 
 /** `product/listV2` returns `{ content: [{ productList: [...] }] }` per CJ Open API 2.0 docs. */
@@ -207,6 +216,112 @@ function parseVariantRow(v: Record<string, unknown>): CjVariantDetail | null {
     unitCostUsd,
     stock,
   };
+}
+
+function maybeFiniteInventory(value: unknown): number | undefined {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
+}
+
+function maybeBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n'].includes(normalized)) return false;
+  }
+  return undefined;
+}
+
+function asDestinationInventoryRow(
+  row: Record<string, unknown>,
+  sourcePath: string
+): CjDestinationInventorySummary | null {
+  const rawCountry =
+    row.countryCode ?? row.country ?? row.country_code ?? row.destinationCountryCode ?? row.destinationCountry;
+  const countryCode = typeof rawCountry === 'string' ? rawCountry.trim().toUpperCase() : '';
+  if (!countryCode || countryCode.length !== 2) {
+    return null;
+  }
+
+  const totalInventoryNum = maybeFiniteInventory(
+    row.totalInventoryNum ?? row.totalInventory ?? row.inventoryTotal ?? row.inventoryNum
+  );
+  const cjInventoryNum = maybeFiniteInventory(row.cjInventoryNum ?? row.cjInventory);
+  const factoryInventoryNum = maybeFiniteInventory(row.factoryInventoryNum ?? row.factoryInventory);
+  const verifiedWarehouse = maybeBoolean(
+    row.verifiedWarehouse ?? row.warehouseVerified ?? row.verified ?? row.isVerifiedWarehouse
+  );
+
+  if (
+    totalInventoryNum === undefined &&
+    cjInventoryNum === undefined &&
+    factoryInventoryNum === undefined &&
+    verifiedWarehouse === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    countryCode,
+    verifiedWarehouse,
+    totalInventoryNum,
+    cjInventoryNum,
+    factoryInventoryNum,
+    sourcePath,
+  };
+}
+
+function extractDestinationInventories(root: Record<string, unknown>): CjDestinationInventorySummary[] {
+  const out: CjDestinationInventorySummary[] = [];
+  const seen = new Set<string>();
+  const queue: Array<{ value: unknown; path: string; depth: number }> = [
+    { value: root, path: 'root', depth: 0 },
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+    const { value, path, depth } = current;
+    if (depth > 4 || value == null) continue;
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        queue.push({ value: item, path: `${path}[${index}]`, depth: depth + 1 });
+      });
+      continue;
+    }
+
+    const row = asRecord(value);
+    if (!row) continue;
+
+    const normalized = asDestinationInventoryRow(row, path);
+    if (normalized) {
+      const key = [
+        normalized.countryCode,
+        normalized.verifiedWarehouse == null ? '' : String(normalized.verifiedWarehouse),
+        normalized.totalInventoryNum ?? '',
+        normalized.cjInventoryNum ?? '',
+        normalized.factoryInventoryNum ?? '',
+      ].join('|');
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(normalized);
+      }
+    }
+
+    for (const [key, child] of Object.entries(row)) {
+      if (child == null || typeof child !== 'object') continue;
+      queue.push({ value: child, path: `${path}.${key}`, depth: depth + 1 });
+    }
+  }
+
+  return out;
 }
 
 /**
@@ -694,7 +809,7 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
     const usPayload = { ...buildOfficialFreightCalculatePayload({
       vid,
       quantity: q,
-      endCountryCode: String(input.destCountryCode || 'US').trim() || 'US',
+      endCountryCode: 'US',
       startCountryCode: 'US',
       zip: input.destPostalCode,
     }) } as Record<string, unknown>;
@@ -721,7 +836,7 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
     const cnPayload = { ...buildOfficialFreightCalculatePayload({
       vid,
       quantity: q,
-      endCountryCode: String(input.destCountryCode || 'US').trim() || 'US',
+      endCountryCode: 'US',
       startCountryCode: 'CN',
       zip: input.destPostalCode,
     }) } as Record<string, unknown>;

@@ -1,0 +1,1746 @@
+﻿[BOOT] loading credentials-manager.service
+2026-03-25 20:16:39 [[32minfo[39m]: [ML-IMAGE-POLICY] audited {"service":"ivan-reseller-backend","productId":32690,"status":"ml_image_manual_review_required","hardBlockers":[],"manualReviewReasons":["supplier_raw_images_require_reviewed_ml_cover"],"primaryImageUrl":"https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg","imageCount":7}
+2026-03-25 20:16:54 [[32minfo[39m]: [ML-IMAGE-REMEDIATION] evaluated {"service":"ivan-reseller-backend","productId":32690,"decision":"auto_remediate","remediationPathSelected":"canonical_pipeline_v1","publishSafe":true,"integrationLayerOutcome":"remediated_pass","packApproved":true,"blockingReasons":[]}
+{
+  "productId": 32690,
+  "title": "Soporte organizador de enchufes montado en la pared, estante de gesti├│n de cables de escritorio, estante de almacenamiento requerido sin perforaci├│n para uso en el hogar y la Oficina",
+  "status": "APPROVED",
+  "isPublished": false,
+  "persisted": false,
+  "p77Summary": {
+    "integrationLayerOutcome": "remediated_pass",
+    "rejectHardStalePackOverrideActive": false,
+    "canonicalExecuted": true,
+    "traceFinalOutcome": "remediated_pass",
+    "candidateInventoryCount": 5,
+    "rankedCount": 5,
+    "directGateRows": 5,
+    "remediationAttempts": 10,
+    "winningRecipeId": "inset_white_catalog_png",
+    "winningRemediationCandidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+    "remediationSimulationRows": 14,
+    "remediationSimulationWinner": {
+      "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+      "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+      "recipeId": "inset_white_catalog_png",
+      "simScore": 1466523.69,
+      "simAllCorePass": true
+    },
+    "remediationSimulationAllWeak": false,
+    "remediationSimulationHiFiInvoked": true,
+    "remediationSimulationHiFiRowCount": 4,
+    "finalCoverPreferenceEnabled": true,
+    "finalCoverPreferenceMaxFinalists": 3,
+    "finalCoverPreferencePlanSlots": 3,
+    "finalCoverPreferenceFinalistsCount": 2,
+    "finalCoverPreferenceWinner": {
+      "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+      "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+      "recipeId": "inset_white_catalog_png",
+      "preferenceScore": 128938.67
+    },
+    "finalCoverPreferenceBeatReasons": [
+      "compared_2_finalists",
+      "winner_score_128938.67",
+      "final_readability_65.7",
+      "final_silhouette_62.02",
+      "final_center_signal_0.5696",
+      "final_washout_penalty_0.300",
+      "beat_sd63839aaf0834ce88fe4e594b8e2f590m_inset_white_catalog_png_by_74499.28"
+    ],
+    "chosenDirectUrl": null
+  },
+  "remediation": {
+    "decision": "auto_remediate",
+    "remediationPathSelected": "canonical_pipeline_v1",
+    "executor": null,
+    "publishSafe": true,
+    "compliantPackPresent": true,
+    "reviewedProofState": "files_ready_pending_manual_upload",
+    "blockingReasons": [],
+    "rawAudit": {
+      "status": "ml_image_manual_review_required",
+      "checkedAt": "2026-03-25T23:16:39.552Z",
+      "primaryImageUrl": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+      "allSupplierRawImages": true,
+      "imageCount": 7,
+      "hardBlockers": [],
+      "manualReviewReasons": [
+        "supplier_raw_images_require_reviewed_ml_cover"
+      ],
+      "qualityRequirements": [],
+      "detectedVisualSignals": [],
+      "inspectedImages": [
+        {
+          "url": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+          "sourceFamily": "aliexpress_supplier",
+          "suspiciousTerms": [],
+          "width": 1200,
+          "height": 1200,
+          "metadataAvailable": true,
+          "squareLike": true
+        },
+        {
+          "url": "https://ae01.alicdn.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+          "sourceFamily": "aliexpress_supplier",
+          "suspiciousTerms": [],
+          "width": 1200,
+          "height": 1200,
+          "metadataAvailable": true,
+          "squareLike": true
+        },
+        {
+          "url": "https://ae01.alicdn.com/kf/Scdf80a1900764667b3e4c3b600f79325U.jpg",
+          "sourceFamily": "aliexpress_supplier",
+          "suspiciousTerms": [],
+          "width": 1200,
+          "height": 1200,
+          "metadataAvailable": true,
+          "squareLike": true
+        }
+      ],
+      "storedProof": {
+        "status": "ml_image_manual_review_required",
+        "reviewedAt": null,
+        "reviewedBy": null,
+        "reviewedByAgent": null,
+        "assetSource": null,
+        "primaryImageUrl": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+        "visualSignals": [],
+        "notes": "supplier_raw_images_require_reviewed_ml_cover; single_cover_image_requires_manual_review; native compliant asset pack generation required; unapproved_required_assets:cover_main,detail_mount_interface",
+        "remediationPathUsed": "internal_generated_asset_pack",
+        "assetPackDir": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690",
+        "packApproved": false
+      }
+    },
+    "assetPack": {
+      "rootDir": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690",
+      "manifestPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690\\ml-asset-pack.json",
+      "manifestPresent": true,
+      "packApproved": true,
+      "readyForUpload": true,
+      "missingRequired": [],
+      "invalidRequired": [],
+      "unapprovedRequired": [],
+      "assets": [
+        {
+          "assetKey": "cover_main",
+          "required": true,
+          "exists": true,
+          "localPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690\\cover_main.png",
+          "promptPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690\\cover_main.prompt.txt",
+          "width": 1536,
+          "height": 1536,
+          "squareLike": true,
+          "min1200": true,
+          "approvalState": "approved",
+          "assetSource": "canonical_ml_pipeline_v1",
+          "notes": "P76 canonical dual-gate pipeline (policy + conversion)"
+        },
+        {
+          "assetKey": "detail_mount_interface",
+          "required": true,
+          "exists": true,
+          "localPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690\\detail_mount_interface.png",
+          "promptPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690\\detail_mount_interface.prompt.txt",
+          "width": 1536,
+          "height": 1536,
+          "squareLike": true,
+          "min1200": true,
+          "approvalState": "approved",
+          "assetSource": "canonical_ml_pipeline_v1",
+          "notes": "P76 canonical pipeline detail (square JPEG)"
+        },
+        {
+          "assetKey": "usage_context_clean",
+          "required": false,
+          "exists": true,
+          "localPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690\\usage_context_clean.png",
+          "promptPath": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690\\usage_context_clean.prompt.txt",
+          "width": 1536,
+          "height": 1536,
+          "squareLike": true,
+          "min1200": true,
+          "approvalState": "present_unapproved",
+          "assetSource": "unknown",
+          "notes": "optional asset not generated by canonical pipeline"
+        }
+      ]
+    },
+    "complianceProof": {
+      "status": "ml_image_policy_pass",
+      "reviewedAt": "2026-03-25T23:16:54.307Z",
+      "reviewedBy": "ml_image_remediation_pipeline",
+      "reviewedByAgent": "ml_image_remediation_pipeline",
+      "assetSource": "canonical_ml_pipeline_v1",
+      "primaryImageUrl": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690\\cover_main.png",
+      "visualSignals": [],
+      "notes": "approved by native MercadoLibre image remediation pipeline",
+      "remediationPathUsed": "canonical_pipeline_v1",
+      "assetPackDir": "C:\\Ivan_Reseller_Web\\artifacts\\ml-image-packs\\product-32690",
+      "packApproved": true
+    },
+    "mlChileCanonicalPipeline": {
+      "checkedAt": "2026-03-25T23:16:54.307Z",
+      "executed": true,
+      "trace": {
+        "version": 1,
+        "profileId": "mercadolibre_mlc_v1",
+        "steps": [
+          "canonical_v1_start",
+          "ranked_5_candidates",
+          "dual_gate_direct:s2eee0bfe21604c31b468ed75b002ecdc8:policy=false:conv=true:hero=false:integrity=true",
+          "dual_gate_direct:sd8adf1f1f796411e96d94f9f8c6d45440:policy=false:conv=true:hero=true:integrity=true",
+          "dual_gate_direct:seebee46f53de44599a422ea0e4309288x:policy=false:conv=false:hero=true:integrity=true",
+          "dual_gate_direct:sc2ae6d73152646a682a9cf82c78ef794o:policy=false:conv=false:hero=true:integrity=true",
+          "dual_gate_direct:sd63839aaf0834ce88fe4e594b8e2f590m:policy=false:conv=true:hero=true:integrity=true",
+          "direct_pass_exhausted_try_remediation",
+          "remediation_simulation:shortlist=5:rows=14:allWeak=false:hifi=true:hifiRows=4",
+          "remediation_simulation_rank:sd8adf1f1f796411e96d94f9f8c6d45440>sd63839aaf0834ce88fe4e594b8e2f590m>seebee46f53de44599a422ea0e4309288x>sc2ae6d73152646a682a9cf82c78ef794o>s2eee0bfe21604c31b468ed75b002ecdc8",
+          "remediation_attempt:sd8adf1f1f796411e96d94f9f8c6d45440:inset_white_catalog_png:remFit=83.01",
+          "remediation:inset_white_catalog_png:sd8adf1f1f796411e96d94f9f8c6d45440:policy=true:conv=true:hero=true:integrity=true",
+          "remediation_attempt:sd63839aaf0834ce88fe4e594b8e2f590m:inset_white_catalog_png:remFit=81.42",
+          "remediation:inset_white_catalog_png:sd63839aaf0834ce88fe4e594b8e2f590m:policy=true:conv=true:hero=true:integrity=true",
+          "remediation_attempt:sd63839aaf0834ce88fe4e594b8e2f590m:square_white_catalog_jpeg:remFit=81.42",
+          "remediation:square_white_catalog_jpeg:sd63839aaf0834ce88fe4e594b8e2f590m:policy=false:conv=false:hero=true:integrity=true",
+          "remediation_attempt:sd8adf1f1f796411e96d94f9f8c6d45440:square_white_catalog_jpeg:remFit=83.01",
+          "remediation:square_white_catalog_jpeg:sd8adf1f1f796411e96d94f9f8c6d45440:policy=false:conv=true:hero=true:integrity=true",
+          "remediation_attempt:seebee46f53de44599a422ea0e4309288x:square_white_catalog_jpeg:remFit=76.23",
+          "remediation:square_white_catalog_jpeg:seebee46f53de44599a422ea0e4309288x:policy=false:conv=false:hero=true:integrity=true",
+          "remediation_attempt:seebee46f53de44599a422ea0e4309288x:inset_white_catalog_png:remFit=76.23",
+          "remediation:inset_white_catalog_png:seebee46f53de44599a422ea0e4309288x:policy=false:conv=false:hero=true:integrity=true",
+          "remediation_attempt:sc2ae6d73152646a682a9cf82c78ef794o:square_white_catalog_jpeg:remFit=81.80",
+          "remediation:square_white_catalog_jpeg:sc2ae6d73152646a682a9cf82c78ef794o:policy=false:conv=false:hero=true:integrity=true",
+          "remediation_attempt:sc2ae6d73152646a682a9cf82c78ef794o:inset_white_catalog_png:remFit=81.80",
+          "remediation:inset_white_catalog_png:sc2ae6d73152646a682a9cf82c78ef794o:policy=false:conv=true:hero=true:integrity=true",
+          "remediation_attempt:s2eee0bfe21604c31b468ed75b002ecdc8:square_white_catalog_jpeg:remFit=85.33",
+          "remediation:square_white_catalog_jpeg:s2eee0bfe21604c31b468ed75b002ecdc8:policy=false:conv=true:hero=false:integrity=true",
+          "remediation_attempt:s2eee0bfe21604c31b468ed75b002ecdc8:inset_white_catalog_png:remFit=85.33",
+          "remediation:inset_white_catalog_png:s2eee0bfe21604c31b468ed75b002ecdc8:policy=false:conv=true:hero=false:integrity=true",
+          "final_cover_preference:attempts=10:passing=2:plan=3",
+          "final_cover_preference_winner:inset_white_catalog_png:sd8adf1f1f796411e96d94f9f8c6d45440:score=128938.67"
+        ],
+        "rankedCandidates": [
+          {
+            "url": "https://ae01.alicdn.com/kf/S2eee0bfe21604c31b468ed75b002ecdc8.jpg",
+            "objectKey": "s2eee0bfe21604c31b468ed75b002ecdc8",
+            "policyFitness": 54.81,
+            "conversionFitness": 69.75
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+            "policyFitness": 55.66,
+            "conversionFitness": 67.07
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Seebee46f53de44599a422ea0e4309288X.jpg",
+            "objectKey": "seebee46f53de44599a422ea0e4309288x",
+            "policyFitness": 44.7,
+            "conversionFitness": 69.75
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Sc2ae6d73152646a682a9cf82c78ef794O.jpg",
+            "objectKey": "sc2ae6d73152646a682a9cf82c78ef794o",
+            "policyFitness": 43.57,
+            "conversionFitness": 68.37
+          },
+          {
+            "url": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "objectKey": "sd63839aaf0834ce88fe4e594b8e2f590m",
+            "policyFitness": 45.56,
+            "conversionFitness": 65.31
+          }
+        ],
+        "rankedCandidateDetails": [
+          {
+            "url": "https://ae01.alicdn.com/kf/S2eee0bfe21604c31b468ed75b002ecdc8.jpg",
+            "objectKey": "s2eee0bfe21604c31b468ed75b002ecdc8",
+            "policyFitness": 54.81,
+            "conversionFitness": 69.75,
+            "combinedScore": 61.98,
+            "scores": {
+              "textLogoRisk": 100,
+              "backgroundSimplicity": 73.7,
+              "centeringBalance": 100,
+              "productOccupancy": 68.33,
+              "clutterPackagingRisk": 77.36,
+              "catalogLook": 53.17,
+              "conversionAttractiveness": 87.52,
+              "remediationFitness": 85.33,
+              "remediationPotential": 49.64
+            },
+            "remediationFitnessReasons": [
+              "remFit_text_logo_risk_100",
+              "remFit_background_simplicity_74",
+              "remFit_pred_trim_area_1.000_extent_1.000",
+              "remFit_predicted_hero_pass"
+            ]
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+            "policyFitness": 55.66,
+            "conversionFitness": 67.07,
+            "combinedScore": 61.14,
+            "scores": {
+              "textLogoRisk": 100,
+              "backgroundSimplicity": 69.92,
+              "centeringBalance": 100,
+              "productOccupancy": 58.23,
+              "clutterPackagingRisk": 66.76,
+              "catalogLook": 51.46,
+              "conversionAttractiveness": 83.39,
+              "remediationFitness": 83.01,
+              "remediationPotential": 45.93
+            },
+            "remediationFitnessReasons": [
+              "remFit_text_logo_risk_100",
+              "remFit_background_simplicity_70",
+              "remFit_pred_trim_area_1.000_extent_1.000",
+              "remFit_predicted_hero_pass"
+            ]
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Seebee46f53de44599a422ea0e4309288X.jpg",
+            "objectKey": "seebee46f53de44599a422ea0e4309288x",
+            "policyFitness": 44.7,
+            "conversionFitness": 69.75,
+            "combinedScore": 56.72,
+            "scores": {
+              "textLogoRisk": 100,
+              "backgroundSimplicity": 20.1,
+              "centeringBalance": 100,
+              "productOccupancy": 79.48,
+              "clutterPackagingRisk": 78.79,
+              "catalogLook": 29.04,
+              "conversionAttractiveness": 82.98,
+              "remediationFitness": 76.23,
+              "remediationPotential": 23.61
+            },
+            "remediationFitnessReasons": [
+              "remFit_text_logo_risk_100",
+              "remFit_background_simplicity_20",
+              "remFit_pred_trim_area_1.000_extent_1.000",
+              "remFit_predicted_hero_pass"
+            ]
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Sc2ae6d73152646a682a9cf82c78ef794O.jpg",
+            "objectKey": "sc2ae6d73152646a682a9cf82c78ef794o",
+            "policyFitness": 43.57,
+            "conversionFitness": 68.37,
+            "combinedScore": 55.47,
+            "scores": {
+              "textLogoRisk": 100,
+              "backgroundSimplicity": 48.76,
+              "centeringBalance": 100,
+              "productOccupancy": 77.09,
+              "clutterPackagingRisk": 92.84,
+              "catalogLook": 41.94,
+              "conversionAttractiveness": 86.66,
+              "remediationFitness": 81.8,
+              "remediationPotential": 40.11
+            },
+            "remediationFitnessReasons": [
+              "remFit_text_logo_risk_100",
+              "remFit_background_simplicity_49",
+              "remFit_pred_trim_area_1.000_extent_1.000",
+              "remFit_predicted_hero_pass"
+            ]
+          },
+          {
+            "url": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "objectKey": "sd63839aaf0834ce88fe4e594b8e2f590m",
+            "policyFitness": 45.56,
+            "conversionFitness": 65.31,
+            "combinedScore": 55.04,
+            "scores": {
+              "textLogoRisk": 100,
+              "backgroundSimplicity": 63.32,
+              "centeringBalance": 100,
+              "productOccupancy": 56.1,
+              "clutterPackagingRisk": 67.98,
+              "catalogLook": 48.5,
+              "conversionAttractiveness": 81.61,
+              "remediationFitness": 81.42,
+              "remediationPotential": 42.91
+            },
+            "remediationFitnessReasons": [
+              "remFit_text_logo_risk_100",
+              "remFit_background_simplicity_63",
+              "remFit_pred_trim_area_1.000_extent_1.000",
+              "remFit_predicted_hero_pass"
+            ]
+          }
+        ],
+        "candidateInventory": [
+          {
+            "url": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "objectKey": "sd63839aaf0834ce88fe4e594b8e2f590m"
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/S2eee0bfe21604c31b468ed75b002ecdc8.jpg",
+            "objectKey": "s2eee0bfe21604c31b468ed75b002ecdc8"
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Seebee46f53de44599a422ea0e4309288X.jpg",
+            "objectKey": "seebee46f53de44599a422ea0e4309288x"
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440"
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Sc2ae6d73152646a682a9cf82c78ef794O.jpg",
+            "objectKey": "sc2ae6d73152646a682a9cf82c78ef794o"
+          }
+        ],
+        "directPathGateEvaluations": [
+          {
+            "url": "https://ae01.alicdn.com/kf/S2eee0bfe21604c31b468ed75b002ecdc8.jpg",
+            "objectKey": "s2eee0bfe21604c31b468ed75b002ecdc8",
+            "policyPass": false,
+            "conversionPass": true,
+            "policyFailures": [
+              "policy_fitness_54.81_below_68",
+              "text_logo_risk_high_100"
+            ],
+            "conversionFailures": [],
+            "heroPass": false,
+            "heroFailures": [
+              "hero_subject_area_ratio_0.408_below_0.42"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.4082,
+              "subjectWidthRatio": 0.4412,
+              "subjectHeightRatio": 0.925,
+              "extentBalance": 0.477,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 230.725,
+              "luminanceStdev": 50.8824,
+              "signalPixelRatio": 0.22218,
+              "nearWhitePixelRatio": 0.77307,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+            "policyPass": false,
+            "conversionPass": true,
+            "policyFailures": [
+              "policy_fitness_55.66_below_68",
+              "text_logo_risk_high_100"
+            ],
+            "conversionFailures": [],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.9084,
+              "subjectWidthRatio": 0.96,
+              "subjectHeightRatio": 0.9463,
+              "extentBalance": 0.9857,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 219.181,
+              "luminanceStdev": 43.3159,
+              "signalPixelRatio": 0.59348,
+              "nearWhitePixelRatio": 0.40019,
+              "luminanceRange": 252,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Seebee46f53de44599a422ea0e4309288X.jpg",
+            "objectKey": "seebee46f53de44599a422ea0e4309288x",
+            "policyPass": false,
+            "conversionPass": false,
+            "policyFailures": [
+              "policy_fitness_44.7_below_68",
+              "text_logo_risk_high_100",
+              "background_not_simple_20.1"
+            ],
+            "conversionFailures": [
+              "catalog_look_weak_29.04"
+            ],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.8425,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 0.8425,
+              "extentBalance": 0.8425,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 63.56,
+              "luminanceStdev": 54.2876,
+              "signalPixelRatio": 0.99693,
+              "nearWhitePixelRatio": 0.00188,
+              "luminanceRange": 250.114,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "url": "https://ae01.alicdn.com/kf/Sc2ae6d73152646a682a9cf82c78ef794O.jpg",
+            "objectKey": "sc2ae6d73152646a682a9cf82c78ef794o",
+            "policyPass": false,
+            "conversionPass": false,
+            "policyFailures": [
+              "policy_fitness_43.57_below_68",
+              "text_logo_risk_high_100"
+            ],
+            "conversionFailures": [
+              "catalog_look_weak_41.94"
+            ],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.97,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 0.97,
+              "extentBalance": 0.97,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 152.166,
+              "luminanceStdev": 63.0656,
+              "signalPixelRatio": 0.91603,
+              "nearWhitePixelRatio": 0.08008,
+              "luminanceRange": 254,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "url": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "objectKey": "sd63839aaf0834ce88fe4e594b8e2f590m",
+            "policyPass": false,
+            "conversionPass": true,
+            "policyFailures": [
+              "policy_fitness_45.56_below_68",
+              "text_logo_risk_high_100"
+            ],
+            "conversionFailures": [],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 1,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 1,
+              "extentBalance": 1,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 203.515,
+              "luminanceStdev": 41.8811,
+              "signalPixelRatio": 0.9874,
+              "nearWhitePixelRatio": 0.0004,
+              "luminanceRange": 251.832,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          }
+        ],
+        "chosenDirectUrl": null,
+        "remediationAttempts": [
+          {
+            "recipeId": "inset_white_catalog_png",
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "policyPass": true,
+            "conversionPass": true,
+            "policyFailures": [],
+            "conversionFailures": [],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.7039,
+              "subjectWidthRatio": 0.8216,
+              "subjectHeightRatio": 0.8568,
+              "extentBalance": 0.959,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 231.448,
+              "luminanceStdev": 35.2889,
+              "signalPixelRatio": 0.44856,
+              "nearWhitePixelRatio": 0.54546,
+              "luminanceRange": 236,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "recipeId": "inset_white_catalog_png",
+            "candidateUrl": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "policyPass": true,
+            "conversionPass": true,
+            "policyFailures": [],
+            "conversionFailures": [],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.7016,
+              "subjectWidthRatio": 0.8164,
+              "subjectHeightRatio": 0.8594,
+              "extentBalance": 0.95,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 244.432,
+              "luminanceStdev": 29.5787,
+              "signalPixelRatio": 0.16382,
+              "nearWhitePixelRatio": 0.82901,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "recipeId": "square_white_catalog_jpeg",
+            "candidateUrl": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "policyPass": false,
+            "conversionPass": false,
+            "policyFailures": [
+              "output_edge_texture_high_48.5"
+            ],
+            "conversionFailures": [
+              "output_global_dim_197.9"
+            ],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 1,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 1,
+              "extentBalance": 1,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 203.452,
+              "luminanceStdev": 42.0984,
+              "signalPixelRatio": 0.98907,
+              "nearWhitePixelRatio": 0.00011,
+              "luminanceRange": 252.843,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "recipeId": "square_white_catalog_jpeg",
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "policyPass": false,
+            "conversionPass": true,
+            "policyFailures": [
+              "output_edge_texture_high_47.4"
+            ],
+            "conversionFailures": [],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.9096,
+              "subjectWidthRatio": 0.9617,
+              "subjectHeightRatio": 0.9458,
+              "extentBalance": 0.9835,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 218.812,
+              "luminanceStdev": 43.6788,
+              "signalPixelRatio": 0.59512,
+              "nearWhitePixelRatio": 0.40102,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "recipeId": "square_white_catalog_jpeg",
+            "candidateUrl": "https://ae01.alicdn.com/kf/Seebee46f53de44599a422ea0e4309288X.jpg",
+            "policyPass": false,
+            "conversionPass": false,
+            "policyFailures": [
+              "output_edge_not_light_62.7",
+              "output_edge_texture_high_56.3"
+            ],
+            "conversionFailures": [
+              "output_global_dim_62.7"
+            ],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.8425,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 0.8425,
+              "extentBalance": 0.8425,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 63.366,
+              "luminanceStdev": 54.4923,
+              "signalPixelRatio": 0.99591,
+              "nearWhitePixelRatio": 0.0036,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "recipeId": "inset_white_catalog_png",
+            "candidateUrl": "https://ae01.alicdn.com/kf/Seebee46f53de44599a422ea0e4309288X.jpg",
+            "policyPass": false,
+            "conversionPass": false,
+            "policyFailures": [
+              "output_edge_not_light_144.4",
+              "output_edge_texture_high_97.3"
+            ],
+            "conversionFailures": [
+              "output_global_dim_144.4"
+            ],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.6445,
+              "subjectWidthRatio": 0.8594,
+              "subjectHeightRatio": 0.75,
+              "extentBalance": 0.8727,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 144.487,
+              "luminanceStdev": 95.7876,
+              "signalPixelRatio": 0.63741,
+              "nearWhitePixelRatio": 0.36104,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "recipeId": "square_white_catalog_jpeg",
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sc2ae6d73152646a682a9cf82c78ef794O.jpg",
+            "policyPass": false,
+            "conversionPass": false,
+            "policyFailures": [
+              "output_edge_not_light_152.3",
+              "output_edge_texture_high_66.2"
+            ],
+            "conversionFailures": [
+              "output_global_dim_152.3"
+            ],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.97,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 0.97,
+              "extentBalance": 0.97,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 151.768,
+              "luminanceStdev": 63.2174,
+              "signalPixelRatio": 0.91772,
+              "nearWhitePixelRatio": 0.08084,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "recipeId": "inset_white_catalog_png",
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sc2ae6d73152646a682a9cf82c78ef794O.jpg",
+            "policyPass": false,
+            "conversionPass": true,
+            "policyFailures": [
+              "output_edge_texture_high_72.9"
+            ],
+            "conversionFailures": [],
+            "heroPass": true,
+            "heroFailures": [],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.7016,
+              "subjectWidthRatio": 0.8164,
+              "subjectHeightRatio": 0.8594,
+              "extentBalance": 0.95,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 204.641,
+              "luminanceStdev": 71.9948,
+              "signalPixelRatio": 0.37054,
+              "nearWhitePixelRatio": 0.6282,
+              "luminanceRange": 205,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "recipeId": "square_white_catalog_jpeg",
+            "candidateUrl": "https://ae01.alicdn.com/kf/S2eee0bfe21604c31b468ed75b002ecdc8.jpg",
+            "policyPass": false,
+            "conversionPass": true,
+            "policyFailures": [
+              "output_edge_texture_high_55.1"
+            ],
+            "conversionFailures": [],
+            "heroPass": false,
+            "heroFailures": [
+              "hero_subject_area_ratio_0.409_below_0.42"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.4089,
+              "subjectWidthRatio": 0.4417,
+              "subjectHeightRatio": 0.9258,
+              "extentBalance": 0.477,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 230.591,
+              "luminanceStdev": 51.1785,
+              "signalPixelRatio": 0.22255,
+              "nearWhitePixelRatio": 0.77321,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          },
+          {
+            "recipeId": "inset_white_catalog_png",
+            "candidateUrl": "https://ae01.alicdn.com/kf/S2eee0bfe21604c31b468ed75b002ecdc8.jpg",
+            "policyPass": false,
+            "conversionPass": true,
+            "policyFailures": [
+              "output_edge_texture_high_51.2"
+            ],
+            "conversionFailures": [],
+            "heroPass": false,
+            "heroFailures": [
+              "hero_subject_area_ratio_0.316_below_0.42",
+              "hero_subject_width_ratio_0.367_below_0.42"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.3156,
+              "subjectWidthRatio": 0.3672,
+              "subjectHeightRatio": 0.8594,
+              "extentBalance": 0.4273,
+              "trimThreshold": 14
+            },
+            "integrityPass": true,
+            "integrityFailures": [],
+            "integrityMetrics": {
+              "meanLuminance": 223.554,
+              "luminanceStdev": 49.3386,
+              "signalPixelRatio": 0.30658,
+              "nearWhitePixelRatio": 0.69293,
+              "luminanceRange": 232.712,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            }
+          }
+        ],
+        "finalOutcome": "remediated_pass",
+        "winningRecipeId": "inset_white_catalog_png",
+        "winningRemediationCandidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+        "remediationSimulation": [
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/S2eee0bfe21604c31b468ed75b002ecdc8.jpg",
+            "objectKey": "s2eee0bfe21604c31b468ed75b002ecdc8",
+            "recipeId": "square_white_catalog_jpeg",
+            "fidelityTier": "low",
+            "simPolicyPass": false,
+            "simConversionPass": true,
+            "simBothPass": false,
+            "simHeroPass": false,
+            "simIntegrityPass": true,
+            "simScoreBase": 153578.25,
+            "simScore": 172705.53,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.5924,
+              "centerSignalRatio": 0.50854,
+              "globalLuminanceStdev": 55.03,
+              "edgeTextureStdev": 55.03,
+              "washoutIndex": 0.4252,
+              "silhouetteStrength": 47.2652,
+              "readabilityEstimate": 47.68
+            },
+            "calibratedReasons": [
+              "cal_readability_47.7",
+              "cal_silhouette_47.27",
+              "cal_center_signal_0.5085",
+              "cal_washout_penalty_0.425",
+              "cal_dead_space_0.592",
+              "cal_subject_min_wh_0.441",
+              "cal_edge_texture_penalty_15.0"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.4076,
+              "subjectWidthRatio": 0.4406,
+              "subjectHeightRatio": 0.925,
+              "extentBalance": 0.4764,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 230.6,
+              "luminanceStdev": 51.1408,
+              "signalPixelRatio": 0.2229,
+              "nearWhitePixelRatio": 0.77303,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_texture_high_55.0"
+            ],
+            "conversionFailures": [],
+            "heroFailures": [
+              "hero_subject_area_ratio_0.408_below_0.42"
+            ],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/S2eee0bfe21604c31b468ed75b002ecdc8.jpg",
+            "objectKey": "s2eee0bfe21604c31b468ed75b002ecdc8",
+            "recipeId": "inset_white_catalog_png",
+            "fidelityTier": "low",
+            "simPolicyPass": false,
+            "simConversionPass": true,
+            "simBothPass": false,
+            "simHeroPass": false,
+            "simIntegrityPass": true,
+            "simScoreBase": 144425.39,
+            "simScore": 162913.16,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.7513,
+              "centerSignalRatio": 0.54718,
+              "globalLuminanceStdev": 47.369,
+              "edgeTextureStdev": 47.369,
+              "washoutIndex": 0.4165,
+              "silhouetteStrength": 45.3045,
+              "readabilityEstimate": 43.92
+            },
+            "calibratedReasons": [
+              "cal_readability_43.9",
+              "cal_silhouette_45.30",
+              "cal_center_signal_0.5472",
+              "cal_washout_penalty_0.416",
+              "cal_dead_space_0.751",
+              "cal_subject_min_wh_0.326",
+              "cal_edge_texture_penalty_7.4"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.2487,
+              "subjectWidthRatio": 0.3255,
+              "subjectHeightRatio": 0.7639,
+              "extentBalance": 0.4261,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 230.189,
+              "luminanceStdev": 45.5707,
+              "signalPixelRatio": 0.24226,
+              "nearWhitePixelRatio": 0.75725,
+              "luminanceRange": 234.473,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_texture_high_47.4"
+            ],
+            "conversionFailures": [],
+            "heroFailures": [
+              "hero_subject_area_ratio_0.249_below_0.42",
+              "hero_subject_width_ratio_0.326_below_0.42"
+            ],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+            "recipeId": "square_white_catalog_jpeg",
+            "fidelityTier": "low",
+            "simPolicyPass": false,
+            "simConversionPass": true,
+            "simBothPass": false,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 433057.15,
+            "simScore": 564018.23,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.0916,
+              "centerSignalRatio": 0.8186,
+              "globalLuminanceStdev": 47.342,
+              "edgeTextureStdev": 47.342,
+              "washoutIndex": 0.2201,
+              "silhouetteStrength": 77.1933,
+              "readabilityEstimate": 80.06
+            },
+            "calibratedReasons": [
+              "cal_readability_80.1",
+              "cal_silhouette_77.19",
+              "cal_center_signal_0.8186",
+              "cal_washout_penalty_0.220",
+              "cal_dead_space_0.092",
+              "cal_subject_min_wh_0.947",
+              "cal_edge_texture_penalty_7.3"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.9084,
+              "subjectWidthRatio": 0.9594,
+              "subjectHeightRatio": 0.9469,
+              "extentBalance": 0.987,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 218.824,
+              "luminanceStdev": 43.5951,
+              "signalPixelRatio": 0.59538,
+              "nearWhitePixelRatio": 0.40013,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_texture_high_47.3"
+            ],
+            "conversionFailures": [],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+            "recipeId": "inset_white_catalog_png",
+            "fidelityTier": "low",
+            "simPolicyPass": true,
+            "simConversionPass": true,
+            "simBothPass": true,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 1388730,
+            "simScore": 1460051.08,
+            "simAllCorePass": true,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.4442,
+              "centerSignalRatio": 0.58685,
+              "globalLuminanceStdev": 34.476,
+              "edgeTextureStdev": 34.476,
+              "washoutIndex": 0.3514,
+              "silhouetteStrength": 57.276,
+              "readabilityEstimate": 61.65
+            },
+            "calibratedReasons": [
+              "cal_readability_61.6",
+              "cal_silhouette_57.28",
+              "cal_center_signal_0.5868",
+              "cal_washout_penalty_0.351",
+              "cal_dead_space_0.444",
+              "cal_subject_min_wh_0.730"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.5558,
+              "subjectWidthRatio": 0.73,
+              "subjectHeightRatio": 0.7613,
+              "extentBalance": 0.959,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 236.442,
+              "luminanceStdev": 32.5961,
+              "signalPixelRatio": 0.3578,
+              "nearWhitePixelRatio": 0.63896,
+              "luminanceRange": 244,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [],
+            "conversionFailures": [],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sc2ae6d73152646a682a9cf82c78ef794O.jpg",
+            "objectKey": "sc2ae6d73152646a682a9cf82c78ef794o",
+            "recipeId": "square_white_catalog_jpeg",
+            "fidelityTier": "low",
+            "simPolicyPass": false,
+            "simConversionPass": false,
+            "simBothPass": false,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 469384.1,
+            "simScore": 632080.42,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.0302,
+              "centerSignalRatio": 0.99725,
+              "globalLuminanceStdev": 66.161,
+              "edgeTextureStdev": 66.161,
+              "washoutIndex": 0.0445,
+              "silhouetteStrength": 95.8264,
+              "readabilityEstimate": 91.12
+            },
+            "calibratedReasons": [
+              "cal_readability_91.1",
+              "cal_silhouette_95.83",
+              "cal_center_signal_0.9972",
+              "cal_washout_penalty_0.044",
+              "cal_dead_space_0.030",
+              "cal_subject_min_wh_0.970",
+              "cal_edge_texture_penalty_26.2"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.9698,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 0.9698,
+              "extentBalance": 0.9698,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 151.748,
+              "luminanceStdev": 63.1655,
+              "signalPixelRatio": 0.91777,
+              "nearWhitePixelRatio": 0.08086,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_not_light_152.2",
+              "sim_output_edge_texture_high_66.2"
+            ],
+            "conversionFailures": [
+              "sim_output_global_dim_152.2"
+            ],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sc2ae6d73152646a682a9cf82c78ef794O.jpg",
+            "objectKey": "sc2ae6d73152646a682a9cf82c78ef794o",
+            "recipeId": "inset_white_catalog_png",
+            "fidelityTier": "low",
+            "simPolicyPass": false,
+            "simConversionPass": true,
+            "simBothPass": false,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 377458.89,
+            "simScore": 404427.17,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.4457,
+              "centerSignalRatio": 0.48853,
+              "globalLuminanceStdev": 67.915,
+              "edgeTextureStdev": 67.915,
+              "washoutIndex": 0.3888,
+              "silhouetteStrength": 41.3516,
+              "readabilityEstimate": 60.63
+            },
+            "calibratedReasons": [
+              "cal_readability_60.6",
+              "cal_silhouette_41.35",
+              "cal_center_signal_0.4885",
+              "cal_washout_penalty_0.389",
+              "cal_dead_space_0.446",
+              "cal_subject_min_wh_0.726",
+              "cal_edge_texture_penalty_27.9"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.5543,
+              "subjectWidthRatio": 0.7257,
+              "subjectHeightRatio": 0.7639,
+              "extentBalance": 0.95,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 215.293,
+              "luminanceStdev": 67.1531,
+              "signalPixelRatio": 0.29123,
+              "nearWhitePixelRatio": 0.70691,
+              "luminanceRange": 195.228,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_texture_high_67.9"
+            ],
+            "conversionFailures": [],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "objectKey": "sd63839aaf0834ce88fe4e594b8e2f590m",
+            "recipeId": "square_white_catalog_jpeg",
+            "fidelityTier": "low",
+            "simPolicyPass": false,
+            "simConversionPass": false,
+            "simBothPass": false,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 479286.67,
+            "simScore": 664894.31,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0,
+              "centerSignalRatio": 0.97186,
+              "globalLuminanceStdev": 48.462,
+              "edgeTextureStdev": 48.462,
+              "washoutIndex": 0,
+              "silhouetteStrength": 98.5563,
+              "readabilityEstimate": 91.09
+            },
+            "calibratedReasons": [
+              "cal_readability_91.1",
+              "cal_silhouette_98.56",
+              "cal_center_signal_0.9719",
+              "cal_washout_penalty_0.000",
+              "cal_dead_space_0.000",
+              "cal_subject_min_wh_1.000",
+              "cal_edge_texture_penalty_8.5"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 1,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 1,
+              "extentBalance": 1,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 203.45,
+              "luminanceStdev": 42.0802,
+              "signalPixelRatio": 0.98837,
+              "nearWhitePixelRatio": 0.00005,
+              "luminanceRange": 252.729,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_texture_high_48.5"
+            ],
+            "conversionFailures": [
+              "sim_output_global_dim_197.9"
+            ],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "objectKey": "sd63839aaf0834ce88fe4e594b8e2f590m",
+            "recipeId": "inset_white_catalog_png",
+            "fidelityTier": "low",
+            "simPolicyPass": true,
+            "simConversionPass": true,
+            "simBothPass": true,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 1365296.95,
+            "simScore": 1376548.7,
+            "simAllCorePass": true,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.4457,
+              "centerSignalRatio": 0.15607,
+              "globalLuminanceStdev": 30.716,
+              "edgeTextureStdev": 30.716,
+              "washoutIndex": 0.4765,
+              "silhouetteStrength": 36.0194,
+              "readabilityEstimate": 46.59
+            },
+            "calibratedReasons": [
+              "cal_readability_46.6",
+              "cal_silhouette_36.02",
+              "cal_center_signal_0.1561",
+              "cal_washout_penalty_0.476",
+              "cal_dead_space_0.446",
+              "cal_subject_min_wh_0.726"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.5543,
+              "subjectWidthRatio": 0.7257,
+              "subjectHeightRatio": 0.7639,
+              "extentBalance": 0.95,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 246.681,
+              "luminanceStdev": 26.5861,
+              "signalPixelRatio": 0.12924,
+              "nearWhitePixelRatio": 0.86629,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [],
+            "conversionFailures": [],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/Seebee46f53de44599a422ea0e4309288X.jpg",
+            "objectKey": "seebee46f53de44599a422ea0e4309288x",
+            "recipeId": "square_white_catalog_jpeg",
+            "fidelityTier": "low",
+            "simPolicyPass": false,
+            "simConversionPass": false,
+            "simBothPass": false,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 467403.25,
+            "simScore": 635506.49,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.1573,
+              "centerSignalRatio": 0.99347,
+              "globalLuminanceStdev": 56.25,
+              "edgeTextureStdev": 56.25,
+              "washoutIndex": 0.002,
+              "silhouetteStrength": 99.8248,
+              "readabilityEstimate": 85.98
+            },
+            "calibratedReasons": [
+              "cal_readability_86.0",
+              "cal_silhouette_99.82",
+              "cal_center_signal_0.9935",
+              "cal_washout_penalty_0.002",
+              "cal_dead_space_0.157",
+              "cal_subject_min_wh_0.843",
+              "cal_edge_texture_penalty_16.3"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.8427,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 0.8427,
+              "extentBalance": 0.8427,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 63.358,
+              "luminanceStdev": 54.4613,
+              "signalPixelRatio": 0.996,
+              "nearWhitePixelRatio": 0.00371,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_not_light_62.7",
+              "sim_output_edge_texture_high_56.2"
+            ],
+            "conversionFailures": [
+              "sim_output_global_dim_62.7"
+            ],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/Seebee46f53de44599a422ea0e4309288X.jpg",
+            "objectKey": "seebee46f53de44599a422ea0e4309288x",
+            "recipeId": "inset_white_catalog_png",
+            "fidelityTier": "low",
+            "simPolicyPass": false,
+            "simConversionPass": false,
+            "simBothPass": false,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 399748.35,
+            "simScore": 463190.59,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.4907,
+              "centerSignalRatio": 0.97723,
+              "globalLuminanceStdev": 97.476,
+              "edgeTextureStdev": 97.476,
+              "washoutIndex": 0.2737,
+              "silhouetteStrength": 70.871,
+              "readabilityEstimate": 76.6
+            },
+            "calibratedReasons": [
+              "cal_readability_76.6",
+              "cal_silhouette_70.87",
+              "cal_center_signal_0.9772",
+              "cal_washout_penalty_0.274",
+              "cal_dead_space_0.491",
+              "cal_subject_min_wh_0.667",
+              "cal_edge_texture_penalty_57.5"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.5093,
+              "subjectWidthRatio": 0.7639,
+              "subjectHeightRatio": 0.6667,
+              "extentBalance": 0.8727,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 167.703,
+              "luminanceStdev": 96.0038,
+              "signalPixelRatio": 0.50177,
+              "nearWhitePixelRatio": 0.49757,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_not_light_167.6",
+              "sim_output_edge_texture_high_97.5"
+            ],
+            "conversionFailures": [
+              "sim_output_global_dim_167.6"
+            ],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+            "recipeId": "square_white_catalog_jpeg",
+            "fidelityTier": "high",
+            "simPolicyPass": false,
+            "simConversionPass": true,
+            "simBothPass": false,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 432949.2,
+            "simScore": 563721.08,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.0916,
+              "centerSignalRatio": 0.81818,
+              "globalLuminanceStdev": 47.388,
+              "edgeTextureStdev": 47.388,
+              "washoutIndex": 0.2206,
+              "silhouetteStrength": 77.1615,
+              "readabilityEstimate": 80.01
+            },
+            "calibratedReasons": [
+              "cal_readability_80.0",
+              "cal_silhouette_77.16",
+              "cal_center_signal_0.8182",
+              "cal_washout_penalty_0.221",
+              "cal_dead_space_0.092",
+              "cal_subject_min_wh_0.946",
+              "cal_edge_texture_penalty_7.4"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.9084,
+              "subjectWidthRatio": 0.9601,
+              "subjectHeightRatio": 0.9462,
+              "extentBalance": 0.9855,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 218.865,
+              "luminanceStdev": 43.6574,
+              "signalPixelRatio": 0.59489,
+              "nearWhitePixelRatio": 0.40108,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_texture_high_47.4"
+            ],
+            "conversionFailures": [],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+            "recipeId": "inset_white_catalog_png",
+            "fidelityTier": "high",
+            "simPolicyPass": true,
+            "simConversionPass": true,
+            "simBothPass": true,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 1391849.55,
+            "simScore": 1466523.69,
+            "simAllCorePass": true,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.4184,
+              "centerSignalRatio": 0.58386,
+              "globalLuminanceStdev": 35.021,
+              "edgeTextureStdev": 35.021,
+              "washoutIndex": 0.3422,
+              "silhouetteStrength": 58.9663,
+              "readabilityEstimate": 62.38
+            },
+            "calibratedReasons": [
+              "cal_readability_62.4",
+              "cal_silhouette_58.97",
+              "cal_center_signal_0.5839",
+              "cal_washout_penalty_0.342",
+              "cal_dead_space_0.418",
+              "cal_subject_min_wh_0.747"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.5816,
+              "subjectWidthRatio": 0.7472,
+              "subjectHeightRatio": 0.7784,
+              "extentBalance": 0.9599,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 235.507,
+              "luminanceStdev": 33.1819,
+              "signalPixelRatio": 0.37311,
+              "nearWhitePixelRatio": 0.62225,
+              "luminanceRange": 246,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [],
+            "conversionFailures": [],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "objectKey": "sd63839aaf0834ce88fe4e594b8e2f590m",
+            "recipeId": "square_white_catalog_jpeg",
+            "fidelityTier": "high",
+            "simPolicyPass": false,
+            "simConversionPass": false,
+            "simBothPass": false,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 479380.37,
+            "simScore": 665315.91,
+            "simAllCorePass": false,
+            "simulationQuality": {
+              "deadSpaceRatio": 0,
+              "centerSignalRatio": 0.97388,
+              "globalLuminanceStdev": 48.476,
+              "edgeTextureStdev": 48.476,
+              "washoutIndex": 0.0001,
+              "silhouetteStrength": 98.9558,
+              "readabilityEstimate": 91.15
+            },
+            "calibratedReasons": [
+              "cal_readability_91.2",
+              "cal_silhouette_98.96",
+              "cal_center_signal_0.9739",
+              "cal_washout_penalty_0.000",
+              "cal_dead_space_0.000",
+              "cal_subject_min_wh_1.000",
+              "cal_edge_texture_penalty_8.5"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 1,
+              "subjectWidthRatio": 1,
+              "subjectHeightRatio": 1,
+              "extentBalance": 1,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 203.504,
+              "luminanceStdev": 42.0894,
+              "signalPixelRatio": 0.98856,
+              "nearWhitePixelRatio": 0.00011,
+              "luminanceRange": 253.729,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [
+              "sim_output_edge_texture_high_48.5"
+            ],
+            "conversionFailures": [
+              "sim_output_global_dim_197.9"
+            ],
+            "heroFailures": [],
+            "integrityFailures": []
+          },
+          {
+            "candidateUrl": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "objectKey": "sd63839aaf0834ce88fe4e594b8e2f590m",
+            "recipeId": "inset_white_catalog_png",
+            "fidelityTier": "high",
+            "simPolicyPass": true,
+            "simConversionPass": true,
+            "simBothPass": true,
+            "simHeroPass": true,
+            "simIntegrityPass": true,
+            "simScoreBase": 1367364.25,
+            "simScore": 1380591.75,
+            "simAllCorePass": true,
+            "simulationQuality": {
+              "deadSpaceRatio": 0.4202,
+              "centerSignalRatio": 0.14697,
+              "globalLuminanceStdev": 31.33,
+              "edgeTextureStdev": 31.33,
+              "washoutIndex": 0.4714,
+              "silhouetteStrength": 36.9797,
+              "readabilityEstimate": 47.05
+            },
+            "calibratedReasons": [
+              "cal_readability_47.0",
+              "cal_silhouette_36.98",
+              "cal_center_signal_0.1470",
+              "cal_washout_penalty_0.471",
+              "cal_dead_space_0.420",
+              "cal_subject_min_wh_0.742"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.5798,
+              "subjectWidthRatio": 0.7422,
+              "subjectHeightRatio": 0.7813,
+              "extentBalance": 0.95,
+              "trimThreshold": 14
+            },
+            "integrityMetrics": {
+              "meanLuminance": 246.278,
+              "luminanceStdev": 27.1573,
+              "signalPixelRatio": 0.13625,
+              "nearWhitePixelRatio": 0.85703,
+              "luminanceRange": 255,
+              "sampleWidth": 256,
+              "sampleHeight": 256
+            },
+            "policyFailures": [],
+            "conversionFailures": [],
+            "heroFailures": [],
+            "integrityFailures": []
+          }
+        ],
+        "remediationSimulationWinner": {
+          "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+          "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+          "recipeId": "inset_white_catalog_png",
+          "simScore": 1466523.69,
+          "simAllCorePass": true
+        },
+        "remediationSimulationAllWeak": false,
+        "remediationSimulationHiFiInvoked": true,
+        "remediationSimulationHiFiRowCount": 4,
+        "finalCoverPreferenceEnabled": true,
+        "finalCoverPreferenceMaxFinalists": 3,
+        "finalCoverPreferencePlanSlots": 3,
+        "finalCoverPreferenceFinalists": [
+          {
+            "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+            "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+            "recipeId": "inset_white_catalog_png",
+            "preferenceScore": 128938.67,
+            "finalCoverQuality": {
+              "deadSpaceRatio": 0.2961,
+              "centerSignalRatio": 0.56958,
+              "globalLuminanceStdev": 37.192,
+              "edgeTextureStdev": 37.192,
+              "washoutIndex": 0.3,
+              "silhouetteStrength": 62.0189,
+              "readabilityEstimate": 65.67
+            },
+            "preferenceReasons": [
+              "final_readability_65.7",
+              "final_silhouette_62.02",
+              "final_center_signal_0.5696",
+              "final_washout_penalty_0.300",
+              "final_dead_space_0.296",
+              "final_subject_min_wh_0.822",
+              "final_subject_area_0.704",
+              "final_extent_balance_0.959"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.7039,
+              "subjectWidthRatio": 0.8216,
+              "subjectHeightRatio": 0.8568,
+              "extentBalance": 0.959,
+              "trimThreshold": 14
+            }
+          },
+          {
+            "candidateUrl": "https://ae-pic-a1.aliexpress-media.com/kf/Sd63839aaf0834ce88fe4e594b8e2f590M.jpg",
+            "objectKey": "sd63839aaf0834ce88fe4e594b8e2f590m",
+            "recipeId": "inset_white_catalog_png",
+            "preferenceScore": 54439.39,
+            "finalCoverQuality": {
+              "deadSpaceRatio": 0.2984,
+              "centerSignalRatio": 0.11127,
+              "globalLuminanceStdev": 34.054,
+              "edgeTextureStdev": 34.054,
+              "washoutIndex": 0.456,
+              "silhouetteStrength": 40.5364,
+              "readabilityEstimate": 49.26
+            },
+            "preferenceReasons": [
+              "final_readability_49.3",
+              "final_silhouette_40.54",
+              "final_center_signal_0.1113",
+              "final_washout_penalty_0.456",
+              "final_dead_space_0.298",
+              "final_subject_min_wh_0.816",
+              "final_subject_area_0.702",
+              "final_extent_balance_0.950"
+            ],
+            "heroMetrics": {
+              "subjectAreaRatio": 0.7016,
+              "subjectWidthRatio": 0.8164,
+              "subjectHeightRatio": 0.8594,
+              "extentBalance": 0.95,
+              "trimThreshold": 14
+            }
+          }
+        ],
+        "finalCoverPreferenceWinner": {
+          "candidateUrl": "https://ae01.alicdn.com/kf/Sd8adf1f1f796411e96d94f9f8c6d45440.jpg",
+          "objectKey": "sd8adf1f1f796411e96d94f9f8c6d45440",
+          "recipeId": "inset_white_catalog_png",
+          "preferenceScore": 128938.67
+        },
+        "finalCoverPreferenceBeatReasons": [
+          "compared_2_finalists",
+          "winner_score_128938.67",
+          "final_readability_65.7",
+          "final_silhouette_62.02",
+          "final_center_signal_0.5696",
+          "final_washout_penalty_0.300",
+          "beat_sd63839aaf0834ce88fe4e594b8e2f590m_inset_white_catalog_png_by_74499.28"
+        ]
+      },
+      "traceFinalOutcome": "remediated_pass",
+      "appliedToPublishDecision": true,
+      "handledKind": "pack",
+      "unusedTraceOnlyBecauseRejectHard": false
+    }
+  }
+}
