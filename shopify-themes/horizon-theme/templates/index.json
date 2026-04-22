@@ -22,16 +22,84 @@
         "color_scheme": "scheme-5"
       }
     },
-    "ir_hero_ultra_main": {
-      "type": "ir-hero-ultra",
+    "ir_retail_hero_main": {
+      "type": "ir-retail-hero",
+      "blocks": {
+        "retail_cat_power": {
+          "type": "category",
+          "settings": {
+            "title": "Power",
+            "caption": "Chargers and banks",
+            "collection": "all",
+            "link": "shopify://collections/all"
+          }
+        },
+        "retail_cat_phones": {
+          "type": "category",
+          "settings": {
+            "title": "Phones",
+            "caption": "Smart accessories",
+            "collection": "all",
+            "link": "shopify://collections/all"
+          }
+        },
+        "retail_cat_workspace": {
+          "type": "category",
+          "settings": {
+            "title": "Workspace",
+            "caption": "Desk utility",
+            "collection": "all",
+            "link": "shopify://collections/all"
+          }
+        },
+        "retail_cat_travel": {
+          "type": "category",
+          "settings": {
+            "title": "Travel",
+            "caption": "Carry smarter",
+            "collection": "all",
+            "link": "shopify://collections/all"
+          }
+        },
+        "retail_cat_audio": {
+          "type": "category",
+          "settings": {
+            "title": "Audio",
+            "caption": "Daily essentials",
+            "collection": "all",
+            "link": "shopify://collections/all"
+          }
+        },
+        "retail_cat_deals": {
+          "type": "category",
+          "settings": {
+            "title": "Deals",
+            "caption": "Featured offers",
+            "collection": "all",
+            "link": "shopify://collections/all"
+          }
+        }
+      },
+      "block_order": [
+        "retail_cat_power",
+        "retail_cat_phones",
+        "retail_cat_workspace",
+        "retail_cat_travel",
+        "retail_cat_audio",
+        "retail_cat_deals"
+      ],
       "settings": {
-        "eyebrow": "Curated by AI, Selected for Quality",
-        "title": "Everyday tools, thoughtfully elevated.",
-        "description": "Discover practical tech accessories, workspace upgrades, and travel essentials that simplify your daily routine. Each product is carefully selected for quality, utility, and lasting value.",
-        "button_text": "Shop the Collection",
-        "button_link": "shopify://collections/all",
-        "secondary_button_text": "Explore Best Sellers",
-        "secondary_button_link": "shopify://collections/all"
+        "collection": "all",
+        "eyebrow": "IvanReseller deal room",
+        "title": "Tech savings, made easier.",
+        "description": "Shop practical electronics, travel accessories, workspace tools, and everyday gadgets in one focused storefront.",
+        "button_text": "Shop the catalog",
+        "primary_link": "shopify://collections/all",
+        "discount_text": "45%",
+        "side_eyebrow": "Featured picks",
+        "side_title": "You will love",
+        "side_text": "Practical upgrades with clear pricing and fast product discovery.",
+        "side_link": "shopify://collections/all"
       }
     },
     "ir_trust_bar_main": {
@@ -242,7 +310,7 @@
   },
   "order": [
     "ir_announcement_bar",
-    "ir_hero_ultra_main",
+    "ir_retail_hero_main",
     "ir_trust_bar_main",
     "ir_bento_grid_categories",
     "ir_premium_products_featured",
