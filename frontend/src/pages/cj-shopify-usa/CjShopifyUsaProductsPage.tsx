@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
+import { Link } from 'react-router-dom';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -154,6 +155,22 @@ export default function CjShopifyUsaProductsPage() {
     }
   }
 
+  async function publishDraft(listingId: number, productId: number) {
+    setBusyId(productId);
+    setActionMsg(null);
+    setError(null);
+    try {
+      await api.post('/api/cj-shopify-usa/listings/publish', { listingId });
+      setActionMsg(`Publicación iniciada para listing #${listingId}. Revisa Store Products para el estado final.`);
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, 'Error al publicar draft.'));
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const filtered = products.filter((p) => {
     if (filterDecision === 'ALL') return true;
     if (filterDecision === 'NO_EVAL') return p.evaluations.length === 0;
@@ -234,6 +251,7 @@ export default function CjShopifyUsaProductsPage() {
                 const activeListing = row.listings.find((l) => l.status === 'ACTIVE');
                 const verifiedActiveListing = row.listings.find((l) => l.status === 'ACTIVE' && l.publishTruth?.buyerFacingVerified);
                 const hasDraft = row.listings.some((l) => l.status === 'DRAFT');
+                const draftListing = row.listings.find((l) => l.status === 'DRAFT') ?? null;
                 const hasShopifyLinkedListing = row.listings.some((l) => Boolean(l.shopifyProductId));
                 const canDraft = ev?.decision === 'APPROVED' && !hasDraft && !activeListing && !hasShopifyLinkedListing;
 
@@ -278,6 +296,24 @@ export default function CjShopifyUsaProductsPage() {
                           >
                             {busyId === row.id ? '…' : 'Crear draft'}
                           </button>
+                        )}
+                        {draftListing && (
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            className="text-xs font-medium text-violet-600 dark:text-violet-400 disabled:opacity-40"
+                            onClick={() => void publishDraft(draftListing.id, row.id)}
+                          >
+                            {busyId === row.id ? '…' : 'Publicar draft'}
+                          </button>
+                        )}
+                        {draftListing && (
+                          <Link
+                            to="/cj-shopify-usa/listings"
+                            className="text-xs text-slate-500 underline"
+                          >
+                            Ir a Store Products
+                          </Link>
                         )}
                         {verifiedActiveListing && (
                           <span className="text-xs text-emerald-600 dark:text-emerald-400">Shopify buyer-ready</span>

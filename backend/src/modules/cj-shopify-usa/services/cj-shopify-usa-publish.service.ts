@@ -157,6 +157,18 @@ export const cjShopifyUsaPublishService = {
       estimatedShippingUsd,
     );
 
+    const evaluation = await prisma.cjShopifyUsaProductEvaluation.create({
+      data: {
+        userId: input.userId,
+        productId: product.id,
+        variantId: variant.id,
+        shippingQuoteId: shippingQuote?.id ?? null,
+        decision: qualification.decision,
+        reasons: qualification.reasons as Prisma.InputJsonValue,
+        estimatedMarginPct: qualification.breakdown.netMarginPct,
+      },
+    });
+
     if (qualification.decision === 'REJECTED') {
       throw new AppError(
         `Product does not meet pricing criteria: ${qualification.reasons.join('; ')}`,
@@ -233,6 +245,8 @@ export const cjShopifyUsaPublishService = {
             listedPriceUsd: suggestedSellPriceUsd,
             quantity: safeQuantity,
             shopifySku: variant.cjSku,
+            evaluationId: evaluation.id,
+            shippingQuoteId: shippingQuote?.id ?? null,
             draftPayload,
             lastError: null,
           },
@@ -246,6 +260,8 @@ export const cjShopifyUsaPublishService = {
             listedPriceUsd: suggestedSellPriceUsd,
             quantity: safeQuantity,
             shopifySku: variant.cjSku,
+            evaluationId: evaluation.id,
+            shippingQuoteId: shippingQuote?.id ?? null,
             draftPayload,
           },
         });
