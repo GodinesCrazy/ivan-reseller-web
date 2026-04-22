@@ -21,6 +21,7 @@ import {
   cjShopifyUsaDiscoverSearchSchema,
   cjShopifyUsaDiscoverEvaluateBodySchema,
   cjShopifyUsaDiscoverImportDraftBodySchema,
+  cjShopifyUsaDiscoverAiSuggestionsBodySchema,
 } from './schemas/cj-shopify-usa.schemas';
 import { cjShopifyUsaDiscoverService } from './services/cj-shopify-usa-discover.service';
 import {
@@ -479,6 +480,21 @@ router.post('/discover/import-draft', async (req: Request, res: Response, next: 
       body.quantity,
       body.destPostalCode,
     );
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/discover/ai-suggestions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const body = cjShopifyUsaDiscoverAiSuggestionsBodySchema.parse(req.body || {});
+    const result = await cjShopifyUsaDiscoverService.aiSuggestions(userId, {
+      count: body.count,
+      destPostalCode: body.destPostalCode,
+      keywords: body.keywords,
+    });
     res.json({ ok: true, ...result });
   } catch (error) {
     next(error);

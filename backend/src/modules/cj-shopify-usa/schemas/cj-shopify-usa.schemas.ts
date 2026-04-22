@@ -77,3 +77,9 @@ export const cjShopifyUsaDiscoverImportDraftBodySchema = z.object({
   quantity: z.number().int().min(1).default(1),
   destPostalCode: z.string().optional(),
 });
+
+export const cjShopifyUsaDiscoverAiSuggestionsBodySchema = z.object({
+  count: z.number().int().min(3).max(12).optional(),
+  destPostalCode: z.string().optional(),
+  keywords: z.array(z.string().min(2).max(80)).max(10).optional(),
+});

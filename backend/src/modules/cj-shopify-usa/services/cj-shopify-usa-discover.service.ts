@@ -68,6 +68,7 @@ export interface DiscoverEvaluationResult {
   shipping: DiscoverShippingResult | null;
   qualification: {
     decision: string;
+    reasons?: string[];
     breakdown: {
       supplierCostUsd: number;
       shippingCostUsd: number;
@@ -78,6 +79,65 @@ export interface DiscoverEvaluationResult {
     };
   } | null;
   shippingError?: string;
+}
+
+export interface DiscoverAiSuggestionItem {
+  cjProductId: string;
+  title: string;
+  mainImageUrl?: string;
+  keyword: string;
+  score: number;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  reason: string;
+  fulfillmentOrigin: 'US' | 'CN' | 'UNKNOWN';
+  stock: number;
+  shippingUsd: number;
+  suggestedSellPriceUsd: number;
+  netMarginPct: number;
+}
+
+export interface DiscoverAiSuggestionsResult {
+  generatedAt: string;
+  totalAnalyzed: number;
+  suggestions: DiscoverAiSuggestionItem[];
+}
+
+const SHOPIFY_USA_AI_DISCOVERY_KEYWORDS = [
+  'car phone holder',
+  'kitchen organizer',
+  'pet grooming',
+  'travel accessories',
+  'fitness resistance bands',
+  'led strip lights',
+  'portable blender',
+  'desk organizer',
+];
+
+function clamp(num: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, num));
+}
+
+function confidenceFromScore(score: number): 'HIGH' | 'MEDIUM' | 'LOW' {
+  if (score >= 75) return 'HIGH';
+  if (score >= 58) return 'MEDIUM';
+  return 'LOW';
+}
+
+function buildSuggestionReason(input: {
+  fulfillmentOrigin: 'US' | 'CN' | 'UNKNOWN';
+  shippingUsd: number;
+  marginPct: number;
+  stock: number;
+}): string {
+  const originText =
+    input.fulfillmentOrigin === 'US'
+      ? 'origen US'
+      : input.fulfillmentOrigin === 'CN'
+      ? 'origen CN'
+      : 'origen no confirmado';
+  return `Margen estimado ${input.marginPct.toFixed(1)}%, envío ${input.shippingUsd.toFixed(
+    2,
+  )} USD, stock ${input.stock}, ${originText}.`;
 }
 
 export interface DiscoverImportDraftResult {
@@ -316,6 +376,125 @@ export const cjShopifyUsaDiscoverService = {
         listedPriceUsd: listing.listedPriceUsd ? Number(listing.listedPriceUsd) : null,
         shopifySku: listing.shopifySku,
       },
+    };
+  },
+
+  async aiSuggestions(
+    userId: number,
+    input?: { count?: number; destPostalCode?: string; keywords?: string[] },
+  ): Promise<DiscoverAiSuggestionsResult> {
+    const adapter = createCjSupplierAdapter(userId);
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const minStock = Math.max(0, Number(settings.minStock ?? 1));
+    const maxItems = clamp(Number(input?.count ?? 6), 3, 12);
+    const keywordPool = (input?.keywords && input.keywords.length > 0
+      ? input.keywords
+      : SHOPIFY_USA_AI_DISCOVERY_KEYWORDS
+    ).slice(0, 10);
+
+    const ranked: DiscoverAiSuggestionItem[] = [];
+    let analyzed = 0;
+
+    for (const keyword of keywordPool) {
+      const searchResults = await adapter.searchProducts({
+        keyword,
+        page: 1,
+        pageSize: 10,
+      });
+
+      for (const summary of searchResults.slice(0, 3)) {
+        if (ranked.length >= maxItems * 2) break;
+        analyzed += 1;
+
+        try {
+          const detail = await enrichProductDetailWithLiveStock(
+            adapter,
+            await adapter.getProductById(summary.cjProductId),
+          );
+          const variant =
+            (detail.variants.find((v) => hasMinimumStock(v.stock, minStock)) as CjVariantDetail | undefined) ||
+            (detail.variants[0] as CjVariantDetail | undefined);
+          if (!variant || variant.unitCostUsd <= 0) continue;
+
+          let shippingUsd = 0;
+          let fulfillmentOrigin: 'US' | 'CN' | 'UNKNOWN' = 'UNKNOWN';
+          let estimatedDays: number | null = null;
+          try {
+            const shipping = await adapter.quoteShippingToUsWarehouseAware({
+              variantId: variant.cjVid,
+              productId: detail.cjProductId,
+              quantity: 1,
+              destPostalCode: input?.destPostalCode,
+              destCountryCode: 'US',
+            });
+            shippingUsd = shipping.quote.cost;
+            fulfillmentOrigin = shipping.fulfillmentOrigin;
+            estimatedDays = shipping.quote.estimatedDays;
+          } catch {
+            // keep shipping at zero if quote is unavailable; qualification will reflect risk
+          }
+
+          const qualification = await cjShopifyUsaQualificationService.evaluate(
+            userId,
+            variant.unitCostUsd,
+            shippingUsd,
+          );
+          if (qualification.decision !== 'APPROVED') continue;
+          if (!hasMinimumStock(variant.stock, minStock)) continue;
+
+          const marginPct = qualification.breakdown.netMarginPct;
+          const baseScore =
+            45 +
+            Math.min(20, marginPct) +
+            (fulfillmentOrigin === 'US' ? 14 : fulfillmentOrigin === 'CN' ? 8 : 4) +
+            Math.max(0, 12 - shippingUsd) +
+            Math.min(8, (variant.stock ?? 0) / 25) +
+            (estimatedDays != null ? Math.max(0, 4 - Math.floor(estimatedDays / 5)) : 0);
+
+          const score = clamp(Math.round(baseScore), 1, 99);
+
+          ranked.push({
+            cjProductId: detail.cjProductId,
+            title: detail.title,
+            mainImageUrl: detail.imageUrls?.[0],
+            keyword,
+            score,
+            confidence: confidenceFromScore(score),
+            reason: buildSuggestionReason({
+              fulfillmentOrigin,
+              shippingUsd,
+              marginPct,
+              stock: Number(variant.stock ?? 0),
+            }),
+            fulfillmentOrigin,
+            stock: Number(variant.stock ?? 0),
+            shippingUsd,
+            suggestedSellPriceUsd: qualification.breakdown.suggestedSellPriceUsd,
+            netMarginPct: marginPct,
+          });
+        } catch {
+          // skip invalid/unavailable candidate silently
+        }
+      }
+    }
+
+    const deduped = Array.from(
+      new Map(ranked.map((item) => [item.cjProductId, item])).values(),
+    )
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxItems);
+
+    await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_COMPLETE, 'discover.ai_suggestions', {
+      requestedCount: maxItems,
+      analyzed,
+      suggestedCount: deduped.length,
+      keywords: keywordPool,
+    } as Prisma.InputJsonValue);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      totalAnalyzed: analyzed,
+      suggestions: deduped,
     };
   },
 };
