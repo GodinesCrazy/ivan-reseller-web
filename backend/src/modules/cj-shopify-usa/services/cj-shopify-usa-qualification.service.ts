@@ -22,9 +22,9 @@ const PRICING_DEFAULTS = {
   paymentFeePct: 5.4,           // PayPal Express cross-border
   paymentFixedFeeUsd: 0.30,     // Fixed fee per transaction
   incidentBufferPct: 3.0,       // Risk buffer on cost+shipping
-  minMarginPct: 20,             // Minimum healthy margin (raised from 15%)
-  minProfitUsd: 3.00,           // Minimum $3 profit per unit (realistic for low-ticket)
-  maxShippingUsd: 8.00,         // Reject if shipping exceeds this
+  minMarginPct: 12,             // Operational default to avoid over-rejecting valid candidates
+  minProfitUsd: 1.50,           // Operational default for low-ticket discovery phase
+  maxShippingUsd: 15.00,        // Allow broader candidate set before operator filtering
   minSellPriceUsd: 9.99,        // Psychological floor for viable product
   maxSellPriceUsd: 150.00,      // Upper sanity limit for initial catalog
 } as const;
@@ -72,6 +72,7 @@ export class CjShopifyUsaQualificationService {
     const incidentBufferPct = Number(settings.incidentBufferPct ?? PRICING_DEFAULTS.incidentBufferPct);
     const marginPct = Number(settings.minMarginPct ?? PRICING_DEFAULTS.minMarginPct);
     const maxShippingUsd = Number(settings.maxShippingUsd ?? PRICING_DEFAULTS.maxShippingUsd);
+    const minProfitUsd = Number(settings.minProfitUsd ?? PRICING_DEFAULTS.minProfitUsd);
 
     // === CÁLCULO DE COSTOS BASE ===
     const baseCostUsd = cjCostUsd + estimatedShippingUsd;
@@ -155,8 +156,8 @@ export class CjShopifyUsaQualificationService {
     const netMarginPct = suggestedSellPriceUsd > 0 ? roundMoney((netProfitUsd / suggestedSellPriceUsd) * 100) : 0;
 
     // 3. Rechazar si el margen neto real es insuficiente
-    if (netMarginPct < PRICING_DEFAULTS.minMarginPct) {
-      reasons.push(`Net margin too low: ${netMarginPct.toFixed(1)}% < ${PRICING_DEFAULTS.minMarginPct}% minimum`);
+    if (netMarginPct < marginPct) {
+      reasons.push(`Net margin too low: ${netMarginPct.toFixed(1)}% < ${marginPct.toFixed(1)}% minimum`);
       return {
         decision: 'REJECTED',
         reasons,
@@ -164,8 +165,8 @@ export class CjShopifyUsaQualificationService {
       };
     }
 
-    if (netProfitUsd < PRICING_DEFAULTS.minProfitUsd) {
-      reasons.push(`Net profit too low: $${netProfitUsd.toFixed(2)} < $${PRICING_DEFAULTS.minProfitUsd} minimum`);
+    if (netProfitUsd < minProfitUsd) {
+      reasons.push(`Net profit too low: $${netProfitUsd.toFixed(2)} < $${minProfitUsd.toFixed(2)} minimum`);
       return {
         decision: 'REJECTED',
         reasons,

@@ -1,6 +1,18 @@
 import { prisma } from '../../../config/database';
 import { env } from '../../../config/env';
 
+const CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS = {
+  minMarginPct: 12,
+  minProfitUsd: 1.5,
+  maxShippingUsd: 15,
+} as const;
+
+const CJ_SHOPIFY_USA_LEGACY_STRICT_DEFAULTS = {
+  minMarginPct: 20,
+  minProfitUsd: 3,
+  maxShippingUsd: 8,
+} as const;
+
 type ShopifySettingsUpdateInput = Partial<
   Parameters<typeof prisma.cjShopifyUsaAccountSettings.update>[0]['data']
 >;
@@ -33,16 +45,34 @@ export class CjShopifyUsaConfigService {
       settings = await prisma.cjShopifyUsaAccountSettings.create({
         data: {
           userId,
-          minMarginPct: 20,              // 20% margen mínimo saludable
-          minProfitUsd: 3.00,            // $3 profit mínimo por unidad (realista para low-ticket)
+          minMarginPct: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.minMarginPct,
+          minProfitUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.minProfitUsd,
           minStock: 1,
           handlingBufferDays: 3,
           incidentBufferPct: 3.0,        // 3% buffer de riesgo
-          maxShippingUsd: 8.00,          // Máximo $8 de envío
+          maxShippingUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.maxShippingUsd,
           defaultPaymentFeePct: 5.4,     // PayPal Express cross-border
           defaultPaymentFixedFeeUsd: 0.30,
         },
       });
+    } else {
+      // Auto-upgrade legacy strict defaults to recommended values once.
+      // Do not overwrite customized operator settings.
+      const usesLegacyDefaults =
+        Number(settings.minMarginPct ?? 0) === CJ_SHOPIFY_USA_LEGACY_STRICT_DEFAULTS.minMarginPct &&
+        Number(settings.minProfitUsd ?? 0) === CJ_SHOPIFY_USA_LEGACY_STRICT_DEFAULTS.minProfitUsd &&
+        Number(settings.maxShippingUsd ?? 0) === CJ_SHOPIFY_USA_LEGACY_STRICT_DEFAULTS.maxShippingUsd;
+
+      if (usesLegacyDefaults) {
+        settings = await prisma.cjShopifyUsaAccountSettings.update({
+          where: { id: settings.id },
+          data: {
+            minMarginPct: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.minMarginPct,
+            minProfitUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.minProfitUsd,
+            maxShippingUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.maxShippingUsd,
+          },
+        });
+      }
     }
 
     return settings;

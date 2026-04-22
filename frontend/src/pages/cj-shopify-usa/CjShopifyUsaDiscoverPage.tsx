@@ -38,7 +38,7 @@ type EvaluationResult = {
   imageUrls: string[];
   variants: Array<{ cjSku: string; cjVid?: string; unitCostUsd: number; stock: number; attributes: Record<string, string> }>;
   shipping: ShippingInfo | null;
-  qualification: { decision: string; breakdown: Breakdown } | null;
+  qualification: { decision: string; reasons?: string[]; breakdown: Breakdown } | null;
   shippingError?: string;
 };
 
@@ -115,6 +115,22 @@ function PricingBreakdown({ b, decision }: { b: Breakdown; decision: string }) {
   );
 }
 
+function QualificationReasons({ reasons }: { reasons?: string[] }) {
+  if (!reasons || reasons.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-1">
+      {reasons.slice(0, 3).map((reason, idx) => (
+        <p
+          key={`${reason}-${idx}`}
+          className="text-[11px] leading-4 text-red-600 dark:text-red-400"
+        >
+          {reason}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 // ── Product Card ──────────────────────────────────────────────────────────────
 
 type CardState =
@@ -155,10 +171,33 @@ function ProductCard({
   }
 
   async function handleCreateDraft() {
-    setCardState((prev) => {
-      if (prev.kind === 'evaluated') return prev;
-      return prev;
-    });
+    let evaluation: EvaluationResult | null = null;
+    if (cardState.kind === 'evaluated') {
+      evaluation = cardState.data;
+    } else {
+      setCardState({ kind: 'evaluating' });
+      setShowEval(true);
+      try {
+        const evalRes = await api.post('/api/cj-shopify-usa/discover/evaluate', {
+          cjProductId: product.cjProductId,
+          quantity: 1,
+        });
+        evaluation = evalRes.data as EvaluationResult;
+        setCardState({ kind: 'evaluated', data: evaluation });
+      } catch (e) {
+        setCardState({ kind: 'eval_error', msg: extractApiError(e) });
+        return;
+      }
+    }
+
+    if (evaluation?.qualification?.decision === 'REJECTED') {
+      setCardState({
+        kind: 'draft_error',
+        msg: 'Producto rechazado por pricing/stock. Revisa el detalle de evaluación antes de crear draft.',
+      });
+      return;
+    }
+
     setCardState({ kind: 'drafting' });
     try {
       const res = await api.post('/api/cj-shopify-usa/discover/import-draft', {
@@ -174,6 +213,7 @@ function ProductCard({
   }
 
   const evalData = cardState.kind === 'evaluated' ? cardState.data : null;
+  const isRejected = evalData?.qualification?.decision === 'REJECTED';
   const isDrafted = cardState.kind === 'drafted';
   const isDrafting = cardState.kind === 'drafting';
   const isEvaluating = cardState.kind === 'evaluating';
@@ -230,7 +270,10 @@ function ProductCard({
               </div>
             )}
             {evalData?.qualification && (
-              <PricingBreakdown b={evalData.qualification.breakdown} decision={evalData.qualification.decision} />
+              <>
+                <PricingBreakdown b={evalData.qualification.breakdown} decision={evalData.qualification.decision} />
+                <QualificationReasons reasons={evalData.qualification.reasons} />
+              </>
             )}
             {evalData && !evalData.qualification && (
               <div className="text-xs text-slate-500 py-2">
@@ -280,8 +323,9 @@ function ProductCard({
 
           <button
             onClick={handleCreateDraft}
-            disabled={isDrafting || isDrafted}
+            disabled={isDrafting || isDrafted || isRejected}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-colors disabled:opacity-50"
+            title={isRejected ? 'Producto rechazado por pricing. Ajusta configuración o elige otro producto.' : undefined}
           >
             {isDrafting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
             {isDrafted ? '✓ Draft creado' : isDrafting ? 'Creando…' : 'Crear Draft'}
