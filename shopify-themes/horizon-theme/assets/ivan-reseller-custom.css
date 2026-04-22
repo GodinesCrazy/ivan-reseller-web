@@ -4057,3 +4057,160 @@ product-information {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Retail PDP clean pass - 2026-04-22 */
+.product-information {
+  width: min(1240px, calc(100vw - 48px)) !important;
+  margin-inline: auto !important;
+}
+
+.product-information h1 {
+  max-width: 12ch;
+  font-size: clamp(2.15rem, 4vw, 4.7rem) !important;
+  line-height: 1.03 !important;
+}
+
+.product-information .media-gallery,
+.product-information media-gallery {
+  max-width: 760px;
+}
+
+.product-information .media-gallery__grid,
+.product-information [data-presentation='grid'] .media-gallery__grid {
+  gap: 12px !important;
+}
+
+.product-information .media-gallery img,
+.product-information .product-media img {
+  border-radius: 16px !important;
+  object-fit: cover !important;
+}
+
+.ir-product-trust-section {
+  background: #f7f8fa !important;
+  padding: 1.5rem 0 2rem !important;
+}
+
+.ir-product-trust-section .ir-product-trust__panel {
+  width: min(1240px, calc(100vw - 48px)) !important;
+  margin-inline: auto !important;
+  padding: clamp(1.25rem, 2.4vw, 2rem) !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+
+.ir-product-trust__eyebrow,
+.ir-payment-trust__text {
+  color: #64748b !important;
+}
+
+.ir-product-trust__heading {
+  max-width: 780px;
+  color: #111827 !important;
+  font-size: clamp(1.25rem, 2vw, 1.75rem) !important;
+  line-height: 1.2 !important;
+}
+
+.ir-guarantee-badge,
+.ir-product-benefits__item,
+.ir-product-trust__item,
+.ir-stock-indicator,
+.ir-payment-trust {
+  background: #f8fafc !important;
+  border: 1px solid #e5e7eb !important;
+  color: #334155 !important;
+}
+
+.ir-product-benefits {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 0.75rem !important;
+}
+
+.ir-product-benefits__item,
+.ir-product-trust__item {
+  min-height: 0 !important;
+}
+
+.ir-guarantee-badge__title,
+.ir-product-benefits__text,
+.ir-stock-indicator__text,
+.ir-product-trust__item {
+  color: #1f2937 !important;
+}
+
+.ir-guarantee-badge__text,
+.ir-stock-indicator__subtext {
+  color: #64748b !important;
+}
+
+.ir-guarantee-badge__icon,
+.ir-product-benefits__check,
+.ir-product-trust__icon {
+  background: #0f766e !important;
+  color: #ffffff !important;
+}
+
+.ir-product-trust__bar {
+  margin-top: 0.75rem !important;
+}
+
+.ir-payment-trust {
+  padding: 0.875rem 1rem !important;
+}
+
+.ir-premium-footer__main {
+  padding: 2.25rem 0 1.75rem !important;
+}
+
+.ir-premium-footer__container {
+  width: min(1240px, calc(100vw - 48px)) !important;
+  grid-template-columns: minmax(15rem, 1fr) minmax(22rem, 1.8fr) !important;
+  gap: 2rem !important;
+}
+
+.ir-premium-footer__newsletter,
+.ir-premium-footer__trust {
+  display: none !important;
+}
+
+.ir-premium-footer__brand {
+  max-width: 380px !important;
+}
+
+.ir-premium-footer__description {
+  margin-bottom: 0 !important;
+}
+
+.ir-premium-footer__bottom {
+  padding: 0.9rem 0 1.2rem !important;
+}
+
+@media screen and (max-width: 989px) {
+  .product-information h1 {
+    max-width: none;
+  }
+
+  .ir-product-benefits,
+  .ir-product-trust__bar {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ir-premium-footer__container {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media screen and (max-width: 749px) {
+  .product-information,
+  .ir-product-trust-section .ir-product-trust__panel,
+  .ir-premium-footer__container {
+    width: calc(100vw - 28px) !important;
+  }
+
+  .product-information {
+    padding-block-start: 1rem !important;
+  }
+}

@@ -4,12 +4,12 @@
 
 <div class="ir-product-trust-section">
   <div class="ir-product-trust__panel">
-    <p class="ir-product-trust__eyebrow">Before checkout</p>
-    <h2 class="ir-product-trust__heading">Clear product details, protected payment, and simple support.</h2>
+    <p class="ir-product-trust__eyebrow">Shopping confidence</p>
+    <h2 class="ir-product-trust__heading">Simple checkout, clear support, and product details that stay easy to scan.</h2>
 
     {%- if section.settings.show_guarantee -%}
       <div class="ir-guarantee-badge">
-        <span class="ir-guarantee-badge__icon">OK</span>
+        <span class="ir-guarantee-badge__icon">✓</span>
         <div class="ir-guarantee-badge__content">
           <div class="ir-guarantee-badge__title">{{ section.settings.guarantee_title }}</div>
           <div class="ir-guarantee-badge__text">{{ section.settings.guarantee_text }}</div>
@@ -31,11 +31,11 @@
     {%- endif -%}
 
     {%- if section.settings.show_stock_indicator -%}
-      <div class="ir-stock-indicator">
+      <p class="ir-stock-indicator">
         <span class="ir-stock-indicator__dot"></span>
         <span class="ir-stock-indicator__text">{{ section.settings.stock_text }}</span>
         <span class="ir-stock-indicator__subtext">{{ section.settings.stock_subtext }}</span>
-      </div>
+      </p>
     {%- endif -%}
 
     {%- if section.settings.show_trust_bar -%}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
 import { Link } from 'react-router-dom';
+import { CheckCircle2, ExternalLink, Eye, FileText, Send, ShieldAlert } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -286,14 +287,16 @@ export default function CjShopifyUsaProductsPage() {
                         )}
                       </td>
                       <td className="px-3 py-2 text-xs text-slate-400">{fmtDate(row.lastSyncedAt)}</td>
-                      <td className="px-3 py-2 space-x-2 whitespace-nowrap">
+                      <td className="px-3 py-2">
+                        <div className="flex min-w-[260px] flex-wrap items-center gap-1.5">
                         {canDraft && (
                           <button
                             type="button"
                             disabled={busyId === row.id}
-                            className="text-xs font-medium text-primary-600 dark:text-primary-400 disabled:opacity-40"
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2.5 text-xs font-medium text-primary-700 transition hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-primary-800/70 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-900/40"
                             onClick={() => void createDraft(row)}
                           >
+                            <FileText className="h-3.5 w-3.5" aria-hidden="true" />
                             {busyId === row.id ? '…' : 'Crear draft'}
                           </button>
                         )}
@@ -301,36 +304,49 @@ export default function CjShopifyUsaProductsPage() {
                           <button
                             type="button"
                             disabled={busyId === row.id}
-                            className="text-xs font-medium text-violet-600 dark:text-violet-400 disabled:opacity-40"
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-800/70 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/40"
                             onClick={() => void publishDraft(draftListing.id, row.id)}
                           >
+                            <Send className="h-3.5 w-3.5" aria-hidden="true" />
                             {busyId === row.id ? '…' : 'Publicar draft'}
                           </button>
                         )}
                         {draftListing && (
                           <Link
                             to="/cj-shopify-usa/listings"
-                            className="text-xs text-slate-500 underline"
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                           >
-                            Ir a Store Products
+                            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                            Store Products
                           </Link>
                         )}
                         {verifiedActiveListing && (
-                          <span className="text-xs text-emerald-600 dark:text-emerald-400">Shopify buyer-ready</span>
+                          <span className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-medium text-emerald-700 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-300">
+                            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            Shopify buyer-ready
+                          </span>
                         )}
                         {activeListing && !verifiedActiveListing && (
-                          <span className="text-xs text-amber-600 dark:text-amber-400">Shopify no verificado</span>
+                          <span className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300">
+                            <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                            Shopify no verificado
+                          </span>
                         )}
                         {!activeListing && hasShopifyLinkedListing && (
-                          <span className="text-xs text-amber-600 dark:text-amber-400">Revisar Shopify truth</span>
+                          <span className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300">
+                            <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                            Revisar truth
+                          </span>
                         )}
                         <button
                           type="button"
-                          className="text-xs text-slate-500 underline"
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                           onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}
                         >
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                           {expandedId === row.id ? 'Ocultar' : 'Detalle'}
                         </button>
+                        </div>
                       </td>
                     </tr>
                     {expandedId === row.id && (
