@@ -90,6 +90,9 @@
             "label": "Workspace",
             "title": "Minimalist Productivity",
             "description": "Tools and accessories designed to keep your desk clear and your focus sharp.",
+            "visual_style": "workspace",
+            "visual_badge_1": "Desk Edit",
+            "visual_badge_2": "Work Ready",
             "link": "shopify://collections/all"
           }
         },
@@ -100,6 +103,9 @@
             "label": "Travel",
             "title": "On The Move",
             "description": "Pack lighter and travel smarter with our curated carry essentials.",
+            "visual_style": "travel",
+            "visual_badge_1": "Carry Edit",
+            "visual_badge_2": "Travel Ready",
             "link": "shopify://collections/all"
           }
         },
@@ -110,6 +116,9 @@
             "label": "Tech Accessories",
             "title": "Smart Protection",
             "description": "Premium cables, cases, and charging solutions that last.",
+            "visual_style": "tech",
+            "visual_badge_1": "Tech Edit",
+            "visual_badge_2": "Protected",
             "link": "shopify://collections/all"
           }
         },
@@ -120,6 +129,9 @@
             "label": "Latest",
             "title": "New Arrivals",
             "description": "The newest practical upgrades for your daily routine.",
+            "visual_style": "daily",
+            "visual_badge_1": "New Drop",
+            "visual_badge_2": "Fresh Pick",
             "link": "shopify://collections/all"
           }
         }
@@ -131,8 +143,9 @@
         "bento_new"
       ],
       "settings": {
-        "title": "Selected by Purpose.",
-        "subtitle": "Discover the categories that define our commitment to practical utility."
+        "title": "Shop by how you live.",
+        "subtitle": "A curated storefront for smarter work, cleaner carry, protected tech, and practical everyday upgrades.",
+        "fallback_collection": "all"
       }
     },
     "ir_premium_products_featured": {

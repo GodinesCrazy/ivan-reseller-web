@@ -12,14 +12,53 @@
 
     <div class="ir-bento-grid">
       {% for block in section.blocks %}
+        {%- liquid
+          assign visual_products = collections[section.settings.fallback_collection].products | default: collections['all'].products
+          assign visual_product = visual_products[forloop.index0] | default: visual_products.first
+        -%}
         <div class="ir-bento-item ir-bento-item--{{ block.settings.size }}" {{ block.shopify_attributes }}>
           <a href="{{ block.settings.link }}" class="ir-bento-link">
             {% if block.settings.image != blank %}
               <div class="ir-bento-image-wrap">
                 {{ block.settings.image | image_url: width: 1200 | image_tag: class: 'ir-bento-image', loading: 'lazy' }}
               </div>
+            {% elsif visual_product != blank and visual_product.featured_image != blank %}
+              <div class="ir-bento-product-visual ir-bento-product-visual--{{ block.settings.visual_style }}">
+                <div class="ir-bento-product-visual__halo"></div>
+                <div class="ir-bento-product-visual__image-card">
+                  {{
+                    visual_product.featured_image
+                    | image_url: width: 900
+                    | image_tag:
+                      class: 'ir-bento-product-visual__image',
+                      loading: 'lazy',
+                      widths: '360, 540, 720, 900',
+                      sizes: '(min-width: 990px) 34vw, 90vw',
+                      alt: visual_product.title
+                  }}
+                </div>
+                <div class="ir-bento-product-visual__spec ir-bento-product-visual__spec--top">
+                  <span>{{ block.settings.visual_badge_1 }}</span>
+                </div>
+                <div class="ir-bento-product-visual__spec ir-bento-product-visual__spec--bottom">
+                  <span>{{ visual_product.price | money }}</span>
+                </div>
+              </div>
             {% else %}
-              <div class="ir-bento-placeholder"></div>
+              <div class="ir-bento-product-visual ir-bento-product-visual--{{ block.settings.visual_style }}">
+                <div class="ir-bento-product-visual__halo"></div>
+                <div class="ir-bento-product-visual__device">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <div class="ir-bento-product-visual__spec ir-bento-product-visual__spec--top">
+                  <span>{{ block.settings.visual_badge_1 }}</span>
+                </div>
+                <div class="ir-bento-product-visual__spec ir-bento-product-visual__spec--bottom">
+                  <span>{{ block.settings.visual_badge_2 }}</span>
+                </div>
+              </div>
             {% endif %}
             
             <div class="ir-bento-content">
@@ -37,8 +76,8 @@
 
 <style>
   .ir-bento-section {
-    padding: var(--ir-spacing-2xl) 0;
-    background: var(--ir-white);
+    padding: clamp(5rem, 8vw, 8rem) 0;
+    background: #f7f7f3;
   }
   
   .ir-bento-container {
@@ -47,41 +86,52 @@
   }
   
   .ir-bento-header {
-    margin-bottom: var(--ir-spacing-xl);
-    max-width: 600px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 2rem;
+    margin-bottom: clamp(2rem, 4vw, 3.5rem);
   }
   
   .ir-bento-title {
-    font-size: clamp(1.75rem, 3vw, 2.5rem);
-    font-weight: 700;
-    color: var(--ir-navy);
-    margin-bottom: 8px;
+    max-width: 12ch;
+    font-size: clamp(2.2rem, 4vw, 4.4rem);
+    line-height: 0.98;
+    font-weight: 760;
+    color: #111111;
+    margin: 0;
+    letter-spacing: 0;
+    text-wrap: balance;
   }
   
   .ir-bento-subtitle {
-    color: var(--ir-gray-500);
-    font-size: 1.0625rem;
+    max-width: 30rem;
+    color: #55524d;
+    font-size: 1.04rem;
+    line-height: 1.65;
+    margin: 0;
   }
   
   .ir-bento-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    grid-auto-rows: 240px;
-    gap: 20px;
+    grid-auto-rows: 250px;
+    gap: 18px;
   }
   
   .ir-bento-item {
     position: relative;
-    border-radius: 20px;
+    border-radius: 10px;
     overflow: hidden;
-    background: var(--ir-gray-50);
-    border: 1px solid var(--ir-gray-100);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: #111111;
+    border: 1px solid rgba(17, 17, 17, 0.08);
+    box-shadow: 0 18px 54px rgba(17, 17, 17, 0.08);
+    transition: transform 0.32s ease, box-shadow 0.32s ease;
   }
   
   .ir-bento-item:hover {
     transform: translateY(-4px);
-    box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+    box-shadow: 0 30px 90px rgba(17,17,17,0.16);
   }
   
   .ir-bento-item--large {
@@ -126,33 +176,37 @@
     position: absolute;
     inset: 0;
     z-index: 2;
-    padding: 32px;
+    padding: clamp(1.3rem, 2.2vw, 2rem);
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.4) 100%);
+    background: linear-gradient(180deg, rgba(5, 6, 8, 0) 34%, rgba(5, 6, 8, 0.74) 100%);
   }
   
   .ir-bento-label {
     font-size: 0.6875rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: rgba(255,255,255,0.8);
-    margin-bottom: 4px;
+    letter-spacing: 0.11em;
+    color: rgba(255,255,255,0.72);
+    margin-bottom: 0.35rem;
   }
   
   .ir-bento-heading {
-    font-size: 1.5rem;
-    font-weight: 700;
+    max-width: 15ch;
+    font-size: clamp(1.35rem, 2vw, 1.8rem);
+    line-height: 1.05;
+    font-weight: 760;
     color: var(--ir-white);
-    margin: 0 0 8px;
+    margin: 0 0 0.65rem;
+    letter-spacing: 0;
+    text-wrap: balance;
   }
   
   .ir-bento-text {
-    font-size: 0.9375rem;
-    color: rgba(255,255,255,0.7);
-    margin: 0 0 16px;
+    font-size: 0.94rem;
+    color: rgba(255,255,255,0.74);
+    margin: 0 0 1rem;
     max-width: 280px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -163,7 +217,7 @@
   
   .ir-bento-button {
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--ir-white);
     opacity: 0;
     transform: translateX(-10px);
@@ -175,13 +229,155 @@
     transform: translateX(0);
   }
   
-  .ir-bento-placeholder {
-    width: 100%;
-    height: 100%;
-    background: #E2E8F0;
+  .ir-bento-product-visual {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    isolation: isolate;
+    background:
+      radial-gradient(circle at 72% 22%, rgba(255, 255, 255, 0.22), transparent 30%),
+      linear-gradient(145deg, #16181d 0%, #2d2a23 54%, #8a6538 130%);
+  }
+
+  .ir-bento-product-visual--travel {
+    background:
+      radial-gradient(circle at 76% 24%, rgba(255,255,255,0.2), transparent 30%),
+      linear-gradient(145deg, #111827 0%, #2f3b3b 58%, #9a6b3c 130%);
+  }
+
+  .ir-bento-product-visual--tech {
+    background:
+      radial-gradient(circle at 70% 16%, rgba(255,255,255,0.2), transparent 28%),
+      linear-gradient(145deg, #070b14 0%, #1f2937 52%, #2f6f5e 130%);
+  }
+
+  .ir-bento-product-visual--daily {
+    background:
+      radial-gradient(circle at 70% 20%, rgba(255,255,255,0.18), transparent 28%),
+      linear-gradient(145deg, #171717 0%, #3f3f35 58%, #b88746 125%);
+  }
+
+  .ir-bento-product-visual::before {
+    content: '';
+    position: absolute;
+    inset: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    z-index: 1;
+  }
+
+  .ir-bento-product-visual::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(110deg, rgba(255,255,255,0.08), transparent 36%),
+      radial-gradient(circle at 12% 86%, rgba(255,255,255,0.1), transparent 24%);
+    z-index: 1;
+  }
+
+  .ir-bento-product-visual__halo {
+    position: absolute;
+    width: 19rem;
+    aspect-ratio: 1;
+    right: -4rem;
+    top: -4rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.16);
+    filter: blur(1px);
+    z-index: 0;
+  }
+
+  .ir-bento-product-visual__image-card {
+    position: absolute;
+    right: clamp(1.1rem, 3vw, 2.5rem);
+    top: clamp(1rem, 3vw, 2rem);
+    width: min(52%, 19rem);
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+    transform: rotate(3deg);
+    z-index: 2;
+  }
+
+  .ir-bento-item--large .ir-bento-product-visual__image-card {
+    width: min(48%, 21rem);
+    right: 2.5rem;
+    top: 2.25rem;
+  }
+
+  .ir-bento-product-visual__image {
+    width: 86%;
+    height: 86%;
+    object-fit: contain;
+    filter: drop-shadow(0 14px 24px rgba(0,0,0,0.18));
+  }
+
+  .ir-bento-product-visual__spec {
+    position: absolute;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.13);
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 0.72rem;
+    font-weight: 760;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    backdrop-filter: blur(14px);
+  }
+
+  .ir-bento-product-visual__spec--top {
+    left: 1.5rem;
+    top: 1.5rem;
+  }
+
+  .ir-bento-product-visual__spec--bottom {
+    right: 1.5rem;
+    bottom: 1.5rem;
+  }
+
+  .ir-bento-product-visual__device {
+    position: absolute;
+    right: 2rem;
+    top: 2rem;
+    width: min(42%, 13rem);
+    aspect-ratio: 0.72;
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(235,235,230,0.92));
+    box-shadow: 0 26px 70px rgba(0,0,0,0.26);
+    transform: rotate(5deg);
+    z-index: 2;
+  }
+
+  .ir-bento-product-visual__device span {
+    position: absolute;
+    left: 18%;
+    right: 18%;
+    height: 7px;
+    border-radius: 999px;
+    background: rgba(17, 17, 17, 0.16);
+  }
+
+  .ir-bento-product-visual__device span:nth-child(1) { top: 24%; }
+  .ir-bento-product-visual__device span:nth-child(2) { top: 42%; }
+  .ir-bento-product-visual__device span:nth-child(3) { top: 60%; }
   }
   
   @media screen and (max-width: 1100px) {
+    .ir-bento-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
     .ir-bento-grid {
       grid-template-columns: repeat(2, 1fr);
     }
@@ -201,6 +397,10 @@
     .ir-bento-content {
       padding: 24px;
     }
+
+    .ir-bento-product-visual__image-card {
+      width: min(48%, 16rem);
+    }
   }
 </style>
 
@@ -219,6 +419,11 @@
       "id": "subtitle",
       "label": "Subheading",
       "default": "Carefully selected upgrades for every part of your day."
+    },
+    {
+      "type": "collection",
+      "id": "fallback_collection",
+      "label": "Products to use when category images are empty"
     }
   ],
   "blocks": [
@@ -260,6 +465,30 @@
           "id": "description",
           "label": "Description",
           "default": "Clean and functional tools for your desk."
+        },
+        {
+          "type": "select",
+          "id": "visual_style",
+          "label": "Fallback visual style",
+          "options": [
+            { "value": "workspace", "label": "Workspace" },
+            { "value": "travel", "label": "Travel" },
+            { "value": "tech", "label": "Tech" },
+            { "value": "daily", "label": "Daily" }
+          ],
+          "default": "workspace"
+        },
+        {
+          "type": "text",
+          "id": "visual_badge_1",
+          "label": "Visual badge 1",
+          "default": "Curated"
+        },
+        {
+          "type": "text",
+          "id": "visual_badge_2",
+          "label": "Visual badge 2",
+          "default": "Ready"
         },
         {
           "type": "url",
