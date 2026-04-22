@@ -323,6 +323,8 @@ router.get('/listings', async (req: Request, res: Response, next: NextFunction) 
             id: true,
             cjSku: true,
             cjVid: true,
+            stockLastKnown: true,
+            unitCostUsd: true,
           },
         },
       },

@@ -38,9 +38,44 @@ type ListingRow = {
   listedPriceUsd: number | null;
   publishedAt: string | null;
   lastError: string | null;
+  draftPayload?: {
+    cjProductId?: string | null;
+    cjSku?: string | null;
+    cjVid?: string | null;
+    title?: string | null;
+    handle?: string | null;
+    descriptionHtml?: string | null;
+    images?: string[];
+    quantity?: number | null;
+    pricingSnapshot?: {
+      supplierCostUsd?: number | null;
+      shippingCostUsd?: number | null;
+      paymentProcessingFeeUsd?: number | null;
+      incidentBufferUsd?: number | null;
+      targetProfitUsd?: number | null;
+      netProfitUsd?: number | null;
+      netMarginPct?: number | null;
+      suggestedSellPriceUsd?: number | null;
+    };
+    shippingSnapshot?: {
+      amountUsd?: number | null;
+      serviceName?: string | null;
+      carrier?: string | null;
+      estimatedMinDays?: number | null;
+      estimatedMaxDays?: number | null;
+      originCountryCode?: string | null;
+    } | null;
+    variantAttributes?: Record<string, string>;
+  } | null;
   updatedAt: string;
   product: { id: number; cjProductId: string; title: string } | null;
-  variant: { id: number; cjSku: string | null; cjVid: string | null } | null;
+  variant: {
+    id: number;
+    cjSku: string | null;
+    cjVid: string | null;
+    stockLastKnown?: number | null;
+    unitCostUsd?: number | string | null;
+  } | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -100,6 +135,28 @@ function truthSummary(row: ListingRow): string {
 function usd(n: number | null | undefined): string {
   if (n == null) return '—';
   return `$${Number(n).toFixed(2)}`;
+}
+
+function pct(n: number | null | undefined): string {
+  if (n == null) return '—';
+  return `${Number(n).toFixed(2)}%`;
+}
+
+function htmlPreview(html: string | null | undefined): string {
+  const text = String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > 220 ? `${text.slice(0, 220)}…` : text;
+}
+
+function reconciliationReasonText(reason: string): string {
+  if (reason === 'No Shopify product id is stored for this listing yet.') {
+    return 'Draft interno: aún no se ha creado el producto en Shopify. Presiona Publicar para enviarlo.';
+  }
+  return reason;
 }
 
 function fmtDate(iso: string | null): string {
@@ -226,7 +283,14 @@ export default function CjShopifyUsaListingsPage() {
                 </td>
               </tr>
             ) : (
-              listings.map((row) => (
+              listings.map((row) => {
+                const draft = row.draftPayload ?? null;
+                const pricing = draft?.pricingSnapshot;
+                const shipping = draft?.shippingSnapshot;
+                const draftImages = Array.isArray(draft?.images) ? draft.images.slice(0, 4) : [];
+                const descriptionPreview = htmlPreview(draft?.descriptionHtml);
+
+                return (
                 <Fragment key={row.id}>
                   <tr className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40">
                     <td className="px-3 py-2 font-mono tabular-nums text-xs">{row.id}</td>
@@ -288,25 +352,77 @@ export default function CjShopifyUsaListingsPage() {
                   </tr>
                   {expandedId === row.id && (
                     <tr className="bg-slate-50/90 dark:bg-slate-950/50">
-                      <td colSpan={8} className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                        <p><strong>Estado Ivan reconciliado:</strong> {row.status}</p>
-                        <p><strong>Shopify Admin status:</strong> {row.publishTruth?.shopify?.adminStatus ?? '—'}</p>
-                        <p><strong>Shopify existe:</strong> {row.publishTruth?.shopify?.exists == null ? '—' : row.publishTruth.shopify.exists ? 'Sí' : 'No'}</p>
-                        <p><strong>Publication:</strong> {row.publishTruth?.shopify?.publicationName ?? '—'} / {row.publishTruth?.shopify?.publishedOnPublication == null ? '—' : row.publishTruth.shopify.publishedOnPublication ? 'Publicado' : 'No publicado'}</p>
-                        <p><strong>Inventory available:</strong> {row.publishTruth?.shopify?.inventoryQuantity ?? '—'}</p>
-                        <p><strong>Shopify Product ID:</strong> {row.shopifyProductId ?? '—'}</p>
-                        <p><strong>Shopify Variant ID:</strong> {row.shopifyVariantId ?? '—'}</p>
-                        <p><strong>Handle:</strong> {row.shopifyHandle ?? '—'}</p>
-                        <p><strong>Storefront URL:</strong> {row.storefrontUrl ?? '—'}</p>
-                        <p><strong>Buyer-facing:</strong> {row.publishTruth?.buyerFacingVerified ? 'OK' : 'No verificado'}</p>
-                        <p><strong>Última publicación verificada:</strong> {fmtDate(row.publishedAt)}</p>
-                        <p><strong>Reconciliado:</strong> {fmtDate(row.publishTruth?.reconciledAt ?? null)}</p>
-                        <p><strong>Actualizado:</strong> {fmtDate(row.updatedAt)}</p>
+                      <td colSpan={8} className="px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
+                        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-500">Draft interno</p>
+                              <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                {draft?.title || row.product?.title || 'Producto sin título'}
+                              </p>
+                              {descriptionPreview && (
+                                <p className="mt-1 max-w-4xl leading-5 text-slate-600 dark:text-slate-400">
+                                  {descriptionPreview}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+                              <p><strong>Precio venta:</strong> {usd(pricing?.suggestedSellPriceUsd ?? row.listedPriceUsd)}</p>
+                              <p><strong>Costo CJ:</strong> {usd(pricing?.supplierCostUsd ?? Number(row.variant?.unitCostUsd ?? 0))}</p>
+                              <p><strong>Envío:</strong> {usd(pricing?.shippingCostUsd ?? shipping?.amountUsd)}</p>
+                              <p><strong>Fee pago:</strong> {usd(pricing?.paymentProcessingFeeUsd)}</p>
+                              <p><strong>Buffer:</strong> {usd(pricing?.incidentBufferUsd)}</p>
+                              <p><strong>Profit neto:</strong> {usd(pricing?.netProfitUsd)}</p>
+                              <p><strong>Margen neto:</strong> {pct(pricing?.netMarginPct)}</p>
+                              <p><strong>Profit objetivo:</strong> {usd(pricing?.targetProfitUsd)}</p>
+                              <p><strong>Cantidad draft:</strong> {draft?.quantity ?? row.quantity ?? '—'}</p>
+                              <p><strong>Stock CJ:</strong> {row.variant?.stockLastKnown ?? '—'}</p>
+                              <p><strong>Servicio envío:</strong> {shipping?.serviceName ?? '—'}</p>
+                              <p><strong>Origen envío:</strong> {shipping?.originCountryCode ?? '—'}</p>
+                              <p><strong>Entrega estimada:</strong> {shipping?.estimatedMaxDays ? `${shipping.estimatedMaxDays} días` : '—'}</p>
+                              <p><strong>SKU CJ:</strong> <span className="font-mono">{draft?.cjSku ?? row.variant?.cjSku ?? '—'}</span></p>
+                              <p><strong>CJ Variant ID:</strong> <span className="font-mono">{draft?.cjVid ?? row.variant?.cjVid ?? '—'}</span></p>
+                              <p className="sm:col-span-2 lg:col-span-3"><strong>Handle previsto:</strong> <span className="font-mono">{draft?.handle ?? row.shopifyHandle ?? '—'}</span></p>
+                            </div>
+
+                            {draftImages.length > 0 && (
+                              <div className="flex gap-2 pt-1">
+                                {draftImages.map((src) => (
+                                  <img
+                                    key={src}
+                                    src={src}
+                                    alt=""
+                                    className="h-14 w-14 rounded border border-slate-200 object-cover dark:border-slate-700"
+                                    loading="lazy"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-1 rounded border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+                            <p className="mb-2 text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-500">Verdad Shopify</p>
+                            <p><strong>Estado Ivan reconciliado:</strong> {row.status}</p>
+                            <p><strong>Shopify Admin status:</strong> {row.publishTruth?.shopify?.adminStatus ?? '—'}</p>
+                            <p><strong>Shopify existe:</strong> {row.publishTruth?.shopify?.exists == null ? '—' : row.publishTruth.shopify.exists ? 'Sí' : 'No'}</p>
+                            <p><strong>Publication:</strong> {row.publishTruth?.shopify?.publicationName ?? '—'} / {row.publishTruth?.shopify?.publishedOnPublication == null ? '—' : row.publishTruth.shopify.publishedOnPublication ? 'Publicado' : 'No publicado'}</p>
+                            <p><strong>Inventory available:</strong> {row.publishTruth?.shopify?.inventoryQuantity ?? '—'}</p>
+                            <p><strong>Shopify Product ID:</strong> {row.shopifyProductId ?? '—'}</p>
+                            <p><strong>Shopify Variant ID:</strong> {row.shopifyVariantId ?? '—'}</p>
+                            <p><strong>Handle Shopify:</strong> {row.shopifyHandle ?? '—'}</p>
+                            <p><strong>Storefront URL:</strong> {row.storefrontUrl ?? '—'}</p>
+                            <p><strong>Buyer-facing:</strong> {row.publishTruth?.buyerFacingVerified ? 'OK' : 'No verificado'}</p>
+                            <p><strong>Última publicación verificada:</strong> {fmtDate(row.publishedAt)}</p>
+                            <p><strong>Reconciliado:</strong> {fmtDate(row.publishTruth?.reconciledAt ?? null)}</p>
+                            <p><strong>Actualizado:</strong> {fmtDate(row.updatedAt)}</p>
+                          </div>
+                        </div>
                         {row.publishTruth?.reasons && row.publishTruth.reasons.length > 0 && (
                           <div className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 mt-1">
                             <p className="font-medium text-amber-800 dark:text-amber-200 mb-1">Razones de reconciliación</p>
                             <ul className="list-disc pl-4 space-y-1">
-                              {row.publishTruth.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                              {row.publishTruth.reasons.map((reason) => <li key={reason}>{reconciliationReasonText(reason)}</li>)}
                             </ul>
                           </div>
                         )}
@@ -320,7 +436,8 @@ export default function CjShopifyUsaListingsPage() {
                     </tr>
                   )}
                 </Fragment>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
