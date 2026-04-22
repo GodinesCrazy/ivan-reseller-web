@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { authenticate } from '../../middleware/auth.middleware';
+import { AppError, ErrorCode } from '../../middleware/error.middleware';
 import { createWebhookSignatureValidator } from '../../middleware/webhook-signature.middleware';
 import { env } from '../../config/env';
 import { prisma } from '../../config/database';
@@ -555,6 +556,70 @@ router.get('/products', async (req: Request, res: Response, next: NextFunction) 
       }),
     }));
     res.json({ ok: true, products: productsWithStorefront });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/products/:productId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const productId = Number(req.params.productId);
+
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new AppError('ID de producto CJ Shopify USA inválido.', 400, ErrorCode.VALIDATION_ERROR);
+    }
+
+    const product = await prisma.cjShopifyUsaProduct.findFirst({
+      where: { id: productId, userId },
+      select: {
+        id: true,
+        title: true,
+        listings: {
+          select: {
+            id: true,
+            status: true,
+            shopifyProductId: true,
+            shopifyHandle: true,
+          },
+        },
+        _count: {
+          select: { orders: true },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new AppError('Producto CJ Shopify USA no encontrado.', 404, ErrorCode.NOT_FOUND);
+    }
+
+    const linkedListing = product.listings.find(
+      (listing) => Boolean(listing.shopifyProductId) || listing.status === CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+    );
+
+    if (linkedListing) {
+      throw new AppError(
+        'No se puede eliminar un artículo con producto Shopify vinculado. Primero elimínalo u ocúltalo desde Store Products/Shopify.',
+        409,
+        ErrorCode.RESOURCE_CONFLICT,
+      );
+    }
+
+    if (product._count.orders > 0) {
+      throw new AppError(
+        'No se puede eliminar un artículo con órdenes asociadas.',
+        409,
+        ErrorCode.RESOURCE_CONFLICT,
+      );
+    }
+
+    await prisma.cjShopifyUsaProduct.delete({ where: { id: product.id } });
+    await recordTrace(userId, 'PRODUCT_DELETE', 'cj_shopify_usa.product.deleted', {
+      productId: product.id,
+      title: product.title,
+    } as Prisma.InputJsonValue);
+
+    res.json({ ok: true, deletedProductId: product.id });
   } catch (error) {
     next(error);
   }

@@ -71,6 +71,15 @@
             "link": "shopify://collections/all"
           }
         },
+        "retail_cat_pets": {
+          "type": "category",
+          "settings": {
+            "title": "Pets",
+            "caption": "Grooming picks",
+            "collection": "all",
+            "link": "/search?q=pet+grooming"
+          }
+        },
         "retail_cat_deals": {
           "type": "category",
           "settings": {
@@ -87,6 +96,7 @@
         "retail_cat_workspace",
         "retail_cat_travel",
         "retail_cat_audio",
+        "retail_cat_pets",
         "retail_cat_deals"
       ],
       "settings": {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, ExternalLink, Eye, FileText, Send, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Eye, FileText, Send, ShieldAlert, Trash2 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -172,6 +172,28 @@ export default function CjShopifyUsaProductsPage() {
     }
   }
 
+  async function deleteProduct(product: ProductRow) {
+    const confirmed = window.confirm(
+      `Eliminar "${product.title}" del catálogo CJ Shopify USA?\n\nEsta acción borra el artículo local y sus drafts no publicados.`,
+    );
+    if (!confirmed) return;
+
+    setBusyId(product.id);
+    setActionMsg(null);
+    setError(null);
+    try {
+      await api.delete(`/api/cj-shopify-usa/products/${product.id}`);
+      setActionMsg(`Artículo eliminado: ${product.title}`);
+      if (expandedId === product.id) setExpandedId(null);
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, 'Error al eliminar el artículo.'));
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const filtered = products.filter((p) => {
     if (filterDecision === 'ALL') return true;
     if (filterDecision === 'NO_EVAL') return p.evaluations.length === 0;
@@ -254,6 +276,7 @@ export default function CjShopifyUsaProductsPage() {
                 const hasDraft = row.listings.some((l) => l.status === 'DRAFT');
                 const draftListing = row.listings.find((l) => l.status === 'DRAFT') ?? null;
                 const hasShopifyLinkedListing = row.listings.some((l) => Boolean(l.shopifyProductId));
+                const hasBlockingListing = Boolean(activeListing) || hasShopifyLinkedListing;
                 const canDraft = ev?.decision === 'APPROVED' && !hasDraft && !activeListing && !hasShopifyLinkedListing;
 
                 return (
@@ -345,6 +368,16 @@ export default function CjShopifyUsaProductsPage() {
                         >
                           <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                           {expandedId === row.id ? 'Ocultar' : 'Detalle'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === row.id || hasBlockingListing}
+                          title={hasBlockingListing ? 'Primero elimina u oculta el producto vinculado desde Store Products/Shopify.' : 'Eliminar artículo'}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
+                          onClick={() => void deleteProduct(row)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          {busyId === row.id ? '…' : 'Eliminar'}
                         </button>
                         </div>
                       </td>
