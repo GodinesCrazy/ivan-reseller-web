@@ -3715,7 +3715,15 @@ body {
 }
 
 .collection-wrapper {
-  padding-top: 1.2rem;
+  padding-top: 0 !important;
+}
+
+.main-collection-grid {
+  padding-top: 0.75rem !important;
+}
+
+.facets-container {
+  margin-top: 0 !important;
 }
 
 .search-page__header {
@@ -3994,6 +4002,25 @@ product-information {
   .ir-bento-header {
     align-items: flex-start !important;
     flex-direction: column !important;
+  }
+}
+
+@media screen and (max-width: 989px) {
+  .ir-retail-promo {
+    overflow: hidden !important;
+  }
+
+  .ir-retail-promo .ir-retail-promo__track {
+    width: 100% !important;
+    min-width: 0 !important;
+    display: flex !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .ir-retail-promo .ir-retail-promo__track span:not(:first-child) {
+    display: none !important;
   }
 }
 
