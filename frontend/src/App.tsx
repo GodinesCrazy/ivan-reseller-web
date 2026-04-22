@@ -186,7 +186,10 @@ function AppContent() {
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
-        log.warn('Error o timeout validando token, continuando:', error);
+        // Avoid noisy console traces from malformed/stale local tokens.
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_refresh_token');
+        log.warn('Sesion local invalida o timeout de verificacion. Continuando en modo seguro.');
         setCheckingAuth(false);
         if (isMounted) {
           setIsInitialized(true);

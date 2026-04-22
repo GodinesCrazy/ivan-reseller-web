@@ -434,19 +434,35 @@ export const cjShopifyUsaDiscoverService = {
             variant.unitCostUsd,
             shippingUsd,
           );
-          if (qualification.decision !== 'APPROVED') continue;
-          if (!hasMinimumStock(variant.stock, minStock)) continue;
+          const hasStock = hasMinimumStock(variant.stock, minStock);
+          if (!hasStock && qualification.decision !== 'APPROVED') continue;
 
           const marginPct = qualification.breakdown.netMarginPct;
+          const approvalBoost = qualification.decision === 'APPROVED' ? 12 : -8;
           const baseScore =
             45 +
             Math.min(20, marginPct) +
             (fulfillmentOrigin === 'US' ? 14 : fulfillmentOrigin === 'CN' ? 8 : 4) +
             Math.max(0, 12 - shippingUsd) +
             Math.min(8, (variant.stock ?? 0) / 25) +
-            (estimatedDays != null ? Math.max(0, 4 - Math.floor(estimatedDays / 5)) : 0);
+            (estimatedDays != null ? Math.max(0, 4 - Math.floor(estimatedDays / 5)) : 0) +
+            approvalBoost;
 
           const score = clamp(Math.round(baseScore), 1, 99);
+          const reasonText =
+            qualification.decision === 'APPROVED'
+              ? buildSuggestionReason({
+                  fulfillmentOrigin,
+                  shippingUsd,
+                  marginPct,
+                  stock: Number(variant.stock ?? 0),
+                })
+              : `${qualification.reasons[0] || 'Ajustar pricing/operación'} · ${buildSuggestionReason({
+                  fulfillmentOrigin,
+                  shippingUsd,
+                  marginPct,
+                  stock: Number(variant.stock ?? 0),
+                })}`;
 
           ranked.push({
             cjProductId: detail.cjProductId,
@@ -455,12 +471,7 @@ export const cjShopifyUsaDiscoverService = {
             keyword,
             score,
             confidence: confidenceFromScore(score),
-            reason: buildSuggestionReason({
-              fulfillmentOrigin,
-              shippingUsd,
-              marginPct,
-              stock: Number(variant.stock ?? 0),
-            }),
+            reason: reasonText,
             fulfillmentOrigin,
             stock: Number(variant.stock ?? 0),
             shippingUsd,

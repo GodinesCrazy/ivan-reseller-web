@@ -1,6 +1,6 @@
 // Apply theme before first paint to avoid flash (localStorage + prefers-color-scheme)
 (function applyThemeInit() {
-  let theme: 'light' | 'dark' = 'light';
+  let theme: 'light' | 'dark' = 'dark';
   try {
     const saved = localStorage.getItem('userSettings');
     if (saved) {
@@ -8,9 +8,10 @@
       if (parsed.theme === 'dark') theme = 'dark';
       else if (parsed.theme === 'auto')
         theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      else if (parsed.theme === 'light') theme = 'light';
     }
   } catch {
-    // ignore
+    localStorage.removeItem('userSettings');
   }
   if (theme === 'dark') document.documentElement.classList.add('dark');
   else document.documentElement.classList.remove('dark');

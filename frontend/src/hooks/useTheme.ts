@@ -2,23 +2,30 @@ import { useEffect, useState } from 'react';
 
 type Theme = 'light' | 'dark' | 'auto';
 
+function readSavedTheme(): Theme {
+  const saved = localStorage.getItem('userSettings');
+  if (!saved) return 'dark';
+  try {
+    const parsed = JSON.parse(saved);
+    const candidate = parsed?.theme;
+    if (candidate === 'light' || candidate === 'dark' || candidate === 'auto') {
+      return candidate;
+    }
+  } catch {
+    // Avoid repeated parse issues from malformed local values.
+    localStorage.removeItem('userSettings');
+  }
+  return 'dark';
+}
+
 /**
  * Hook para manejar el tema de la aplicación
  * Aplica el tema al elemento <html> para que Tailwind funcione correctamente
  */
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
-    // Cargar desde localStorage o usar 'light' por defecto
-    const saved = localStorage.getItem('userSettings');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return (parsed.theme || 'light') as Theme;
-      } catch {
-        return 'light';
-      }
-    }
-    return 'light';
+    // Cargar desde localStorage o usar dark por defecto.
+    return readSavedTheme();
   });
 
   // Función para obtener el tema efectivo (resuelve 'auto' a 'light' o 'dark')

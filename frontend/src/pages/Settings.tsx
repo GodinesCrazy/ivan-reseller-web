@@ -77,7 +77,7 @@ export default function Settings() {
     timezone: 'America/New_York',
     dateFormat: 'MM/DD/YYYY',
     currencyFormat: 'USD',
-    theme: 'light',
+    theme: 'dark',
     opportunityAllowedPackageTiers: 'small',
     opportunitySmallMaxPriceUsd: 45,
     opportunityMediumMaxPriceUsd: 120,
@@ -162,7 +162,7 @@ export default function Settings() {
       // ✅ Intentar cargar desde el backend
       const { data } = await api.get('/api/settings');
       if (data?.success && data?.data) {
-        const loadedTheme = data.data.theme || 'light';
+          const loadedTheme = data.data.theme || 'dark';
         setGeneralSettings({
           language: data.data.language || 'en',
           timezone: data.data.timezone || 'America/New_York',
@@ -185,7 +185,7 @@ export default function Settings() {
         const saved = localStorage.getItem('userSettings');
         if (saved) {
           const parsed = JSON.parse(saved);
-          const loadedTheme = parsed.theme || 'light';
+          const loadedTheme = parsed.theme || 'dark';
           setGeneralSettings({
             language: parsed.language || 'en',
             timezone: parsed.timezone || 'America/New_York',
