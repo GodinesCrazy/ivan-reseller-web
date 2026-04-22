@@ -107,10 +107,6 @@ const SHOPIFY_USA_AI_DISCOVERY_KEYWORDS = [
   'kitchen organizer',
   'pet grooming',
   'travel accessories',
-  'fitness resistance bands',
-  'led strip lights',
-  'portable blender',
-  'desk organizer',
 ];
 
 function clamp(num: number, min: number, max: number): number {
@@ -390,7 +386,7 @@ export const cjShopifyUsaDiscoverService = {
     const keywordPool = (input?.keywords && input.keywords.length > 0
       ? input.keywords
       : SHOPIFY_USA_AI_DISCOVERY_KEYWORDS
-    ).slice(0, 10);
+    ).slice(0, 5);
 
     const ranked: DiscoverAiSuggestionItem[] = [];
     let analyzed = 0;
@@ -399,18 +395,15 @@ export const cjShopifyUsaDiscoverService = {
       const searchResults = await adapter.searchProducts({
         keyword,
         page: 1,
-        pageSize: 10,
+        pageSize: 8,
       });
 
-      for (const summary of searchResults.slice(0, 3)) {
-        if (ranked.length >= maxItems * 2) break;
+      for (const summary of searchResults.slice(0, 2)) {
+        if (ranked.length >= maxItems + 3) break;
         analyzed += 1;
 
         try {
-          const detail = await enrichProductDetailWithLiveStock(
-            adapter,
-            await adapter.getProductById(summary.cjProductId),
-          );
+          const detail = await adapter.getProductById(summary.cjProductId);
           const variant =
             (detail.variants.find((v) => hasMinimumStock(v.stock, minStock)) as CjVariantDetail | undefined) ||
             (detail.variants[0] as CjVariantDetail | undefined);
@@ -431,7 +424,9 @@ export const cjShopifyUsaDiscoverService = {
             fulfillmentOrigin = shipping.fulfillmentOrigin;
             estimatedDays = shipping.quote.estimatedDays;
           } catch {
-            // keep shipping at zero if quote is unavailable; qualification will reflect risk
+            // Fast fallback to avoid long-running suggestion requests in production.
+            shippingUsd = Math.max(2, Number(settings.maxShippingUsd ?? 12) * 0.55);
+            fulfillmentOrigin = 'UNKNOWN';
           }
 
           const qualification = await cjShopifyUsaQualificationService.evaluate(

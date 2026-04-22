@@ -91,26 +91,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-4">
-      <div className="max-w-md w-full space-y-8 p-10 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#040f2a] via-[#081a3e] to-[#050b1c] p-4">
+      <div className="max-w-md w-full space-y-8 p-10 bg-white/8 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/15">
         <div className="text-center flex flex-col items-center space-y-4">
-          <div className="h-16 w-16 rounded-3xl overflow-hidden shadow-lg ring-2 ring-primary-200/60 dark:ring-primary-500/40">
+          <div className="h-24 w-24 rounded-3xl overflow-hidden shadow-xl ring-2 ring-white/30 bg-white/10 flex items-center justify-center">
             <img
               src="/brand-logo.png"
               alt="Logotipo Ivan Reseller"
-              className="h-full w-full object-cover"
+              className="h-[82%] w-[82%] object-contain brightness-0 invert"
               loading="lazy"
             />
           </div>
           <div>
-            <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Ivan Reseller</h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Ingresá para detectar oportunidades de negocio</p>
+            <h2 className="text-3xl font-bold text-white">Ivan Reseller</h2>
+            <p className="mt-1 text-sm text-slate-300">Ingresá para detectar oportunidades de negocio</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-6">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label htmlFor="username" className="block text-sm font-medium text-slate-200">
               Username
             </label>
             <input
@@ -118,15 +118,15 @@ export default function Login() {
               id="username"
               type="text"
               autoComplete="username"
-              className="mt-1 block w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-md shadow-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2.5 border border-white/15 rounded-md shadow-sm bg-black/25 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400"
             />
             {errors.username && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.username.message}</p>
+              <p className="mt-1 text-sm text-red-300">{errors.username.message}</p>
             )}
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label htmlFor="password" className="block text-sm font-medium text-slate-200">
               Password
             </label>
             <input
@@ -134,30 +134,30 @@ export default function Login() {
               id="password"
               type="password"
               autoComplete="current-password"
-              className="mt-1 block w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-md shadow-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2.5 border border-white/15 rounded-md shadow-sm bg-black/25 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400"
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password.message}</p>
+              <p className="mt-1 text-sm text-red-300">{errors.password.message}</p>
             )}
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-blue-500 disabled:opacity-50 transition-colors"
           >
             {isLoading ? 'Ingresando...' : 'Ingresar'}
           </button>
 
           {/* ✅ P0.5: Botón para solicitar acceso */}
           <div className="mt-4 text-center">
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+            <p className="text-sm text-slate-300 mb-2">
               ¿No tenés cuenta?
             </p>
             <button
               type="button"
               onClick={() => navigate('/request-access')}
-              className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              className="text-sm font-medium text-blue-300 hover:text-blue-200"
             >
               Solicitar acceso
             </button>
