@@ -59,38 +59,82 @@
             assign rendered_payment_icons = false
           -%}
 
-          {%- for type in shop.enabled_payment_types -%}
-            {%- case type -%}
-              {%- when 'visa' -%}
-                {%- if section.settings.show_visa -%}
-                  {%- assign rendered_payment_icons = true -%}
-                  <li class="ir-payment-trust__icon-wrap">
-                    {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
-                  </li>
-                {%- endif -%}
-              {%- when 'master', 'mastercard' -%}
-                {%- if section.settings.show_mastercard -%}
-                  {%- assign rendered_payment_icons = true -%}
-                  <li class="ir-payment-trust__icon-wrap">
-                    {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
-                  </li>
-                {%- endif -%}
-              {%- when 'american_express', 'amex' -%}
-                {%- if section.settings.show_amex -%}
-                  {%- assign rendered_payment_icons = true -%}
-                  <li class="ir-payment-trust__icon-wrap">
-                    {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
-                  </li>
-                {%- endif -%}
-              {%- when 'paypal' -%}
-                {%- if section.settings.show_paypal -%}
-                  {%- assign rendered_payment_icons = true -%}
-                  <li class="ir-payment-trust__icon-wrap">
-                    {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
-                  </li>
-                {%- endif -%}
-            {%- endcase -%}
-          {%- endfor -%}
+          {%- if section.settings.show_all_payments -%}
+            {%- for type in shop.enabled_payment_types -%}
+              {%- assign rendered_payment_icons = true -%}
+              <li class="ir-payment-trust__icon-wrap">
+                {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+              </li>
+            {%- endfor -%}
+          {%- else -%}
+            {%- for type in shop.enabled_payment_types -%}
+              {%- case type -%}
+                {%- when 'visa' -%}
+                  {%- if section.settings.show_visa -%}
+                    {%- assign rendered_payment_icons = true -%}
+                    <li class="ir-payment-trust__icon-wrap">
+                      {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                    </li>
+                  {%- endif -%}
+                {%- when 'master', 'mastercard' -%}
+                  {%- if section.settings.show_mastercard -%}
+                    {%- assign rendered_payment_icons = true -%}
+                    <li class="ir-payment-trust__icon-wrap">
+                      {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                    </li>
+                  {%- endif -%}
+                {%- when 'american_express', 'amex' -%}
+                  {%- if section.settings.show_amex -%}
+                    {%- assign rendered_payment_icons = true -%}
+                    <li class="ir-payment-trust__icon-wrap">
+                      {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                    </li>
+                  {%- endif -%}
+                {%- when 'paypal' -%}
+                  {%- if section.settings.show_paypal -%}
+                    {%- assign rendered_payment_icons = true -%}
+                    <li class="ir-payment-trust__icon-wrap">
+                      {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                    </li>
+                  {%- endif -%}
+                {%- when 'apple_pay' -%}
+                  {%- if section.settings.show_apple_pay -%}
+                    {%- assign rendered_payment_icons = true -%}
+                    <li class="ir-payment-trust__icon-wrap">
+                      {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                    </li>
+                  {%- endif -%}
+                {%- when 'google_pay' -%}
+                  {%- if section.settings.show_google_pay -%}
+                    {%- assign rendered_payment_icons = true -%}
+                    <li class="ir-payment-trust__icon-wrap">
+                      {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                    </li>
+                  {%- endif -%}
+                {%- when 'shopify_pay' -%}
+                  {%- if section.settings.show_shop_pay -%}
+                    {%- assign rendered_payment_icons = true -%}
+                    <li class="ir-payment-trust__icon-wrap">
+                      {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                    </li>
+                  {%- endif -%}
+                {%- when 'discover' -%}
+                  {%- if section.settings.show_discover -%}
+                    {%- assign rendered_payment_icons = true -%}
+                    <li class="ir-payment-trust__icon-wrap">
+                      {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                    </li>
+                  {%- endif -%}
+                {%- when 'diners_club' -%}
+                  {%- if section.settings.show_diners_club -%}
+                    {%- assign rendered_payment_icons = true -%}
+                    <li class="ir-payment-trust__icon-wrap">
+                      {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                    </li>
+                  {%- endif -%}
+              {%- endcase -%}
+            {%- endfor -%}
+          {%- endif -%}
 
           {%- unless rendered_payment_icons -%}
             <li class="ir-payment-trust__method-text">Payment options are shown at checkout.</li>
@@ -209,6 +253,42 @@
       "type": "checkbox",
       "id": "show_paypal",
       "label": "Show PayPal",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_apple_pay",
+      "label": "Show Apple Pay",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_google_pay",
+      "label": "Show Google Pay",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_shop_pay",
+      "label": "Show Shop Pay",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_discover",
+      "label": "Show Discover",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_diners_club",
+      "label": "Show Diners Club",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_all_payments",
+      "label": "Show All Enabled Methods",
       "default": true
     }
   ],

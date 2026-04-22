@@ -385,6 +385,13 @@ export const cjShopifyUsaPublishService = {
     } as Prisma.InputJsonValue);
 
     try {
+      const mediaPayload = (Array.isArray(draft.images) ? draft.images : []).map((src: string) => ({
+        originalSource: String(src),
+        mediaContentType: 'IMAGE' as const,
+      }));
+
+      console.log(`[ShopifyPublish] Publishing listing ${listing.id} with ${mediaPayload.length} images`);
+
       const upserted = await cjShopifyUsaAdminService.upsertProduct({
         userId: input.userId,
         identifierId: listing.shopifyProductId,
@@ -396,6 +403,7 @@ export const cjShopifyUsaPublishService = {
         tags: ['cj-shopify-usa', `cj-product:${listing.product.cjProductId}`],
         sku: String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim(),
         price: Number(listing.listedPriceUsd || draft.pricingSnapshot?.suggestedSellPriceUsd || 0),
+        media: mediaPayload,
         status: 'ACTIVE',
       });
 

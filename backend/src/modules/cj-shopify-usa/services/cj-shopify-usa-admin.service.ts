@@ -558,8 +558,18 @@ export class CjShopifyUsaAdminService {
     tags?: string[];
     sku: string;
     price: number;
+    media?: Array<{
+      originalSource: string;
+      mediaContentType: 'IMAGE';
+      alt?: string;
+    }>;
     status?: 'ACTIVE' | 'DRAFT';
   }) {
+    const normalizedMedia = input.media?.map(m => ({
+      ...m,
+      originalSource: m.originalSource.startsWith('//') ? `https:${m.originalSource}` : m.originalSource
+    }));
+
     const data = await this.graphql<{
       productSet: {
         product?: {
@@ -617,6 +627,7 @@ export class CjShopifyUsaAdminService {
           productType: trimOrEmpty(input.productType) || undefined,
           status: input.status || 'ACTIVE',
           tags: input.tags?.filter(Boolean) ?? [],
+          media: normalizedMedia && normalizedMedia.length > 0 ? normalizedMedia : undefined,
           productOptions: [
             {
               name: 'Title',
@@ -647,6 +658,7 @@ export class CjShopifyUsaAdminService {
 
     const errors = data.productSet.userErrors ?? [];
     const product = data.productSet.product;
+
     if (errors.length > 0 || !product) {
       throw new AppError(
         `Shopify product upsert failed: ${errors.map((entry) => entry.message).join('; ') || 'unknown error'}`,
@@ -666,6 +678,9 @@ export class CjShopifyUsaAdminService {
         ErrorCode.EXTERNAL_API_ERROR,
       );
     }
+
+    // Phase Debug: log the upsert results for image publication verification
+    console.log(`[ShopifyAdmin] upsertProduct result: productId=${product.id}, handle=${product.handle}, mediaCount=${normalizedMedia?.length ?? 0}`);
 
     return {
       productId: product.id,
