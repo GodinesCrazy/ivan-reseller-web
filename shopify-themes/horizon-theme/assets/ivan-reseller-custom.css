@@ -4086,6 +4086,27 @@ product-information {
   object-fit: cover !important;
 }
 
+.product-information .product-details img {
+  display: none !important;
+}
+
+.product-information .product-details .text-block,
+.product-information .product-details .rte {
+  color: #4b5563 !important;
+  font-size: 0.95rem !important;
+  line-height: 1.65 !important;
+}
+
+.product-information .product-details .text-block h2,
+.product-information .product-details .text-block h3,
+.product-information .product-details .rte h2,
+.product-information .product-details .rte h3 {
+  margin: 1rem 0 0.45rem !important;
+  color: #111827 !important;
+  font-size: 1rem !important;
+  line-height: 1.35 !important;
+}
+
 .ir-product-trust-section {
   background: #f7f8fa !important;
   padding: 1.5rem 0 2rem !important;
