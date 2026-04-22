@@ -84,6 +84,15 @@
               {% endfor %}
             </ul>
           </div>
+        {% else %}
+          <div class="ir-premium-footer__column">
+            <h3 class="ir-premium-footer__title">{{ menu_2_title | default: 'Support' }}</h3>
+            <ul class="ir-premium-footer__menu">
+              <li><a href="{{ routes.search_url }}" class="ir-premium-footer__link">Search products</a></li>
+              <li><a href="{{ routes.cart_url }}" class="ir-premium-footer__link">View cart</a></li>
+              <li><a href="mailto:{{ shop.email | default: 'support@ivanreseller.com' }}" class="ir-premium-footer__link">Contact support</a></li>
+            </ul>
+          </div>
         {% endif %}
         
         {% if menu_3 != blank %}
@@ -95,6 +104,15 @@
                   <a href="{{ link.url }}" class="ir-premium-footer__link">{{ link.title }}</a>
                 </li>
               {% endfor %}
+            </ul>
+          </div>
+        {% else %}
+          <div class="ir-premium-footer__column">
+            <h3 class="ir-premium-footer__title">{{ menu_3_title | default: 'Company' }}</h3>
+            <ul class="ir-premium-footer__menu">
+              <li><a href="{{ routes.all_products_collection_url }}" class="ir-premium-footer__link">All products</a></li>
+              <li><a href="{{ routes.search_url }}?q=travel" class="ir-premium-footer__link">Travel accessories</a></li>
+              <li><a href="{{ routes.search_url }}?q=workspace" class="ir-premium-footer__link">Workspace tools</a></li>
             </ul>
           </div>
         {% endif %}

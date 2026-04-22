@@ -10,6 +10,7 @@
   "sections": {
     "ir_announcement_bar": {
       "type": "ir-announcement-bar",
+      "disabled": true,
       "settings": {
         "show_bar": true,
         "message": "Free shipping on orders over $50 • 30-day easy returns",
@@ -108,15 +109,15 @@
         "ir_trust_item_shipping": {
           "type": "trust_item",
           "settings": {
-            "icon": "🚚",
-            "label": "Fast Shipping",
+            "icon": "FREE",
+            "label": "Free Shipping",
             "subtext": "Free delivery on orders over $50"
           }
         },
         "ir_trust_item_guarantee": {
           "type": "trust_item",
           "settings": {
-            "icon": "🛡️",
+            "icon": "30",
             "label": "30-Day Guarantee",
             "subtext": "Easy returns, no questions asked"
           }
@@ -124,7 +125,7 @@
         "ir_trust_item_secure": {
           "type": "trust_item",
           "settings": {
-            "icon": "🔒",
+            "icon": "SSL",
             "label": "Secure Checkout",
             "subtext": "256-bit SSL encryption"
           }
@@ -132,7 +133,7 @@
         "ir_trust_item_support": {
           "type": "trust_item",
           "settings": {
-            "icon": "💬",
+            "icon": "24/7",
             "label": "24/7 Support",
             "subtext": "We're here to help anytime"
           }
@@ -150,6 +151,7 @@
     },
     "ir_bento_grid_categories": {
       "type": "ir-bento-grid",
+      "disabled": true,
       "blocks": {
         "bento_workspace": {
           "type": "category_item",

@@ -3481,7 +3481,7 @@ body {
 }
 
 .ir-logo-full {
-  max-width: 18rem;
+  max-width: 19rem;
 }
 
 .ir-logo-svg text {
@@ -3492,6 +3492,34 @@ body {
   background: #ffffff !important;
   border-top: 1px solid rgba(15, 23, 42, 0.06);
   border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.ir-trust-bar__icon-wrap {
+  width: 3rem !important;
+  height: 3rem !important;
+  border-radius: 10px !important;
+  background: #0f172a !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.ir-trust-bar__icon {
+  font-size: 0.72rem !important;
+  font-weight: 820 !important;
+  letter-spacing: 0.04em !important;
+}
+
+.ir-ready .ir-trust-bar__item,
+.ir-ready .ir-why-card,
+.ir-ready .ir-product-benefits__item,
+.ir-ready .ir-product-trust__item,
+.ir-ready product-card.product-card .product-card__content {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+.shopify-section-group-header-group .announcement-bar {
+  display: none !important;
 }
 
 .ir-premium-products {
@@ -3690,6 +3718,58 @@ body {
   padding-top: 1.2rem;
 }
 
+.search-page__header {
+  width: min(1560px, calc(100vw - 48px));
+  margin: 0 auto;
+  padding: clamp(2.5rem, 5vw, 4.25rem) clamp(1.3rem, 3vw, 2.25rem) !important;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(15, 118, 110, 0.16), transparent 28%),
+    linear-gradient(135deg, #0f172a 0%, #1f2937 62%, #334155 100%);
+  color: #ffffff;
+}
+
+.search-page__header h1,
+.search-page__header h2,
+.search-page__header h3 {
+  color: #ffffff !important;
+  font-size: clamp(2.5rem, 5vw, 5.2rem) !important;
+  line-height: 0.94 !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
+}
+
+.search-page__header h3::after {
+  content: 'Find practical tech, phone accessories, travel tools, and workspace upgrades from the active catalog.';
+  display: block;
+  max-width: 44rem;
+  margin-top: 1rem;
+  color: rgba(255,255,255,0.74);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  font-weight: 460;
+}
+
+.search-page__header predictive-search,
+.search-page__header .search-input,
+.search-page__header form {
+  max-width: 55rem !important;
+}
+
+.search-page__header input[type='search'],
+.search-page__header input[name='q'] {
+  min-height: 4.2rem !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  border-radius: 12px !important;
+  background: rgba(255,255,255,0.96) !important;
+  color: #111827 !important;
+  box-shadow: 0 18px 34px rgba(0,0,0,0.18);
+}
+
+results-list.product-grid-container {
+  background: #f3f5f7 !important;
+}
+
 .facets-container {
   top: calc(var(--header-height, 190px) + 8px) !important;
   border-radius: 12px !important;
@@ -3828,6 +3908,81 @@ product-information {
 
 .shopify-section-group-footer-group .section {
   border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.ir-premium-footer-section,
+.ir-premium-footer {
+  background: #0b1220 !important;
+}
+
+.ir-premium-footer__main {
+  padding: clamp(3rem, 5vw, 5rem) 0 !important;
+}
+
+.ir-premium-footer__container,
+.ir-premium-footer__trust-container,
+.ir-premium-footer__bottom-container {
+  width: min(1560px, calc(100vw - 48px)) !important;
+  max-width: none !important;
+  padding-inline: 0 !important;
+}
+
+.ir-premium-footer__container {
+  grid-template-columns: minmax(18rem, 1.2fr) 2fr minmax(20rem, 1fr) !important;
+  gap: clamp(2rem, 5vw, 5rem) !important;
+}
+
+.ir-premium-footer__brand {
+  max-width: 28rem !important;
+}
+
+.ir-premium-footer__description,
+.ir-premium-footer__newsletter-text,
+.ir-premium-footer__link,
+.ir-premium-footer__copyright,
+.ir-premium-footer__legal a {
+  color: rgba(229, 231, 235, 0.76) !important;
+}
+
+.ir-premium-footer__title {
+  color: #ffffff !important;
+  letter-spacing: 0 !important;
+}
+
+.ir-premium-footer__nav {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 1.4rem !important;
+}
+
+.ir-premium-footer__newsletter {
+  padding: 1.25rem !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  border-radius: 14px !important;
+  background: rgba(255,255,255,0.045) !important;
+}
+
+.ir-premium-footer__input {
+  min-height: 3.4rem !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+.ir-premium-footer__submit {
+  border-radius: 9px !important;
+  background: #0f766e !important;
+}
+
+.ir-premium-footer__trust,
+.ir-premium-footer__bottom {
+  border-color: rgba(255,255,255,0.08) !important;
+}
+
+.ir-premium-footer__badge {
+  border-radius: 999px !important;
+  background: rgba(255,255,255,0.055) !important;
+  color: rgba(255,255,255,0.84) !important;
 }
 
 @media screen and (max-width: 1100px) {

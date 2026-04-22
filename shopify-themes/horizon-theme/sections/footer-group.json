@@ -11,8 +11,41 @@
   "type": "footer",
   "name": "Footer",
   "sections": {
+    "ir_premium_footer_retail": {
+      "type": "ir-premium-footer",
+      "settings": {
+        "brand_description": "IvanReseller curates practical electronics, travel essentials, workspace upgrades, and everyday gadgets with clear pricing and a secure buying path.",
+        "show_social": false,
+        "menu_1": "main-menu",
+        "menu_1_title": "Shop",
+        "menu_2": "",
+        "menu_2_title": "Support",
+        "menu_3": "",
+        "menu_3_title": "Company",
+        "show_newsletter": true,
+        "newsletter_title": "Get the better drops",
+        "newsletter_text": "Curated deals, useful product launches, and smarter accessories for work, travel, and daily carry.",
+        "placeholder": "Email address",
+        "success_message": "Thanks for subscribing.",
+        "show_trust": true,
+        "show_payment_icons": true,
+        "show_visa": true,
+        "show_mastercard": true,
+        "show_amex": false,
+        "show_paypal": true,
+        "show_trust_badges": true,
+        "badge_1_text": "Secure checkout",
+        "badge_2_text": "30-day support",
+        "badge_3_text": "Curated catalog",
+        "copyright_text": "Premium retail experience for practical upgrades.",
+        "show_legal_links": false,
+        "legal_menu": "",
+        "color_scheme": "scheme-3"
+      }
+    },
     "footer_m9NzUG": {
       "type": "footer",
+      "disabled": true,
       "blocks": {
         "group_H6VpwJ": {
           "type": "group",
@@ -342,6 +375,7 @@
     },
     "footer_utilities_jLGE8U": {
       "type": "footer-utilities",
+      "disabled": true,
       "blocks": {
         "footer_copyright_jweRK8": {
           "type": "footer-copyright",
@@ -397,6 +431,7 @@
     }
   },
   "order": [
+    "ir_premium_footer_retail",
     "footer_m9NzUG",
     "footer_utilities_jLGE8U"
   ]
