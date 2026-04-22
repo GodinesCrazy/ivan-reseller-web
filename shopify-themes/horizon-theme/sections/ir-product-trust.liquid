@@ -93,26 +93,7 @@
           {%- endfor -%}
 
           {%- unless rendered_payment_icons -%}
-            {%- if section.settings.show_visa -%}
-              <li class="ir-payment-trust__icon-wrap">
-                {{ 'visa' | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
-              </li>
-            {%- endif -%}
-            {%- if section.settings.show_mastercard -%}
-              <li class="ir-payment-trust__icon-wrap">
-                {{ 'master' | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
-              </li>
-            {%- endif -%}
-            {%- if section.settings.show_amex -%}
-              <li class="ir-payment-trust__icon-wrap">
-                {{ 'american_express' | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
-              </li>
-            {%- endif -%}
-            {%- if section.settings.show_paypal -%}
-              <li class="ir-payment-trust__icon-wrap">
-                {{ 'paypal' | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
-              </li>
-            {%- endif -%}
+            <li class="ir-payment-trust__method-text">Payment options are shown at checkout.</li>
           {%- endunless -%}
         </ul>
       </div>

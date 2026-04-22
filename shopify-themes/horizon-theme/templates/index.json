@@ -8,6 +8,20 @@
  * ------------------------------------------------------------
  */{
   "sections": {
+    "ir_announcement_bar": {
+      "type": "ir-announcement-bar",
+      "settings": {
+        "show_bar": true,
+        "message": "Free shipping on orders over $50 • 30-day easy returns",
+        "highlight_text": "New Arrivals",
+        "link_text": "Shop Now",
+        "link_url": "shopify://collections/all",
+        "show_icon": true,
+        "icon": "truck",
+        "show_close": true,
+        "color_scheme": "scheme-5"
+      }
+    },
     "ir_hero_ultra_main": {
       "type": "ir-hero-ultra",
       "settings": {
@@ -133,6 +147,47 @@
         "view_all_text": "Shop All Products"
       }
     },
+    "ir_merch_story_main": {
+      "type": "ir-merchandising-story",
+      "blocks": {
+        "merch_point_travel": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Travel lighter",
+            "text": "Compact organizers, protection, and portable utility products selected for real movement, not impulse clutter."
+          }
+        },
+        "merch_point_workspace": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Work cleaner",
+            "text": "Desk upgrades that create order, reduce friction, and make your everyday setup feel considered."
+          }
+        },
+        "merch_point_everyday": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Buy with clarity",
+            "text": "Stronger product presentation, visible pricing, and direct paths to cart help you evaluate quickly."
+          }
+        }
+      },
+      "block_order": [
+        "merch_point_travel",
+        "merch_point_workspace",
+        "merch_point_everyday"
+      ],
+      "settings": {
+        "eyebrow": "The Ivan Reseller Edit",
+        "title": "A sharper catalog for practical upgrades.",
+        "text": "The store is organized around useful decisions: what improves your desk, what travels well, what protects your tech, and what earns a place in daily use.",
+        "collection": "all",
+        "showcase_kicker": "Featured picks",
+        "showcase_title": "Designed to be easy to compare.",
+        "button_text": "Browse the full catalog",
+        "button_link": "shopify://collections/all"
+      }
+    },
     "ir_why_us_main": {
       "type": "ir-why-us",
       "blocks": {
@@ -173,10 +228,12 @@
     }
   },
   "order": [
+    "ir_announcement_bar",
     "ir_hero_ultra_main",
     "ir_trust_bar_main",
     "ir_bento_grid_categories",
     "ir_premium_products_featured",
+    "ir_merch_story_main",
     "ir_why_us_main"
   ]
 }

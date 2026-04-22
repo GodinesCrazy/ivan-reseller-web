@@ -1,26 +1,100 @@
 {%- comment -%}
-  IVAN RESELLER - Premium SVG Logo
-  Executive-grade wordmark with cart+AI circuit icon
+  IVAN RESELLER - Premium SVG Logo v2.0
+  Executive-grade wordmark with refined AI Shopping Icon
+  Based on brand identity: Robot + Cart + Circuit aesthetics
 {%- endcomment -%}
 
 <a href="{{ routes.root_url }}" class="ir-logo-link" aria-label="{{ shop.name }} - Home">
-  <svg width="240" height="40" viewBox="0 0 240 40" fill="none" xmlns="http://www.w3.org/2000/svg" class="ir-logo-svg">
-    <!-- Icon: Shopping Cart + AI Circuit -->
-    <g transform="translate(2, 6)">
-      <!-- Cart body -->
-      <path d="M2 2h4l3 18h14l3-12H8" stroke="#0F172A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-      <!-- Cart wheels -->
-      <circle cx="10" cy="26" r="2.8" stroke="#0F172A" stroke-width="2.2" fill="none"/>
-      <circle cx="22" cy="26" r="2.8" stroke="#0F172A" stroke-width="2.2" fill="none"/>
-      <!-- AI sparkle/circuit -->
-      <circle cx="28" cy="8" r="3.5" fill="#0F172A"/>
-      <path d="M28 4V2M28 14V16M22 8h-3M36 8h3M24 4l-2-2M32 12l2 2M24 12l-2 2M32 4l2-2" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round"/>
-      <!-- Green dot indicator -->
-      <circle cx="32" cy="4" r="2" fill="#22c55e"/>
+  {% comment %}Desktop/Full Logo{% endcomment %}
+  <svg class="ir-logo-svg ir-logo-full" viewBox="0 0 280 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="logoGrad-{{ section.id | default: 'main' }}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#0F172A"/>
+        <stop offset="100%" style="stop-color:#1E293B"/>
+      </linearGradient>
+      <linearGradient id="accentGrad-{{ section.id | default: 'main' }}" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" style="stop-color:#22C55E"/>
+        <stop offset="100%" style="stop-color:#16A34A"/>
+      </linearGradient>
+    </defs>
+    
+    <!-- Icon Group: AI Robot + Shopping Cart in Circle -->
+    <g transform="translate(0, 4)">
+      <!-- Outer decorative ring -->
+      <circle cx="20" cy="20" r="18" stroke="url(#logoGrad-{{ section.id | default: 'main' }})" stroke-width="1.5" fill="none" opacity="0.2"/>
+      <circle cx="20" cy="20" r="15" stroke="url(#logoGrad-{{ section.id | default: 'main' }})" stroke-width="1" fill="none" opacity="0.1"/>
+      
+      <!-- Robot Head -->
+      <rect x="7" y="5" width="26" height="18" rx="4" stroke="#0F172A" stroke-width="2" fill="none"/>
+      
+      <!-- Robot Antenna -->
+      <line x1="20" y1="5" x2="20" y2="2" stroke="#0F172A" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="20" cy="2" r="2" fill="#22C55E"/>
+      
+      <!-- Robot Eyes -->
+      <circle cx="13" cy="13" r="2.5" fill="#0F172A"/>
+      <circle cx="27" cy="13" r="2.5" fill="#0F172A"/>
+      
+      <!-- Robot Mouth -->
+      <rect x="14" y="18" width="12" height="2" rx="1" fill="#0F172A"/>
+      
+      <!-- Robot Side Panels (ears) -->
+      <rect x="3" y="9" width="3" height="8" rx="1" fill="#0F172A"/>
+      <rect cx="3" cy="13" r="1.5" fill="#22C55E"/>
+      <rect x="34" y="9" width="3" height="8" rx="1" fill="#0F172A"/>
+      <rect cx="37" cy="13" r="1.5" fill="#22C55E"/>
+      
+      <!-- Shopping Cart integrated -->
+      <path d="M8 24h24l2-8H6l2 8z" stroke="#0F172A" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+      
+      <!-- Cart Handle -->
+      <path d="M6 24v-3" stroke="#0F172A" stroke-width="1.8" stroke-linecap="round"/>
+      
+      <!-- Cart Wheels -->
+      <circle cx="14" cy="30" r="2.5" stroke="#0F172A" stroke-width="1.5" fill="none"/>
+      <circle cx="26" cy="30" r="2.5" stroke="#0F172A" stroke-width="1.5" fill="none"/>
+      
+      <!-- AI Circuit accents -->
+      <path d="M35 7l3-2M35 11l3 1" stroke="#22C55E" stroke-width="1" stroke-linecap="round" opacity="0.7"/>
+      
+      <!-- Status indicator -->
+      <circle cx="35" cy="5" r="2.5" fill="url(#accentGrad-{{ section.id | default: 'main' }})"/>
     </g>
+    
     <!-- Wordmark: Ivan Reseller -->
-    <text x="48" y="28" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="20" font-weight="750" fill="#0F172A" letter-spacing="-0.03em">Ivan</text>
-    <text x="95" y="28" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="20" font-weight="450" fill="#525252" letter-spacing="-0.02em">Reseller</text>
+    <text x="50" y="26" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="750" fill="#0F172A" letter-spacing="-0.02em">Ivan</text>
+    <text x="100" y="26" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="450" fill="#475569" letter-spacing="-0.01em">Reseller</text>
+  </svg>
+  
+  {% comment %}Compact Logo for Mobile{% endcomment %}
+  <svg class="ir-logo-svg ir-logo-compact" viewBox="0 0 160 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <g transform="translate(0, 2)">
+      <!-- Simplified icon -->
+      <circle cx="16" cy="16" r="14" stroke="#0F172A" stroke-width="1.5" fill="none"/>
+      <rect x="5" y="5" width="22" height="14" rx="3" stroke="#0F172A" stroke-width="1.8" fill="none"/>
+      <circle cx="10" cy="11" r="2" fill="#0F172A"/>
+      <circle cx="22" cy="11" r="2" fill="#0F172A"/>
+      <rect x="10" y="14" width="12" height="1.5" rx="0.75" fill="#0F172A"/>
+      <path d="M7 20h18l1.5-5H5.5l1.5 5z" stroke="#0F172A" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+      <circle cx="11" cy="24" r="1.8" stroke="#0F172A" stroke-width="1.2" fill="none"/>
+      <circle cx="21" cy="24" r="1.8" stroke="#0F172A" stroke-width="1.2" fill="none"/>
+      <circle cx="28" cy="4" r="2" fill="#22C55E"/>
+    </g>
+    <text x="38" y="22" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="700" fill="#0F172A" letter-spacing="-0.02em">Ivan</text>
+    <text x="72" y="22" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="16" font-weight="400" fill="#475569" letter-spacing="-0.01em">Reseller</text>
+  </svg>
+  
+  {% comment %}Icon-only for very small screens{% endcomment %}
+  <svg class="ir-logo-svg ir-logo-icon-only" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="20" r="18" stroke="#0F172A" stroke-width="1.5" fill="none" opacity="0.2"/>
+    <rect x="9" y="9" width="22" height="16" rx="3" stroke="#0F172A" stroke-width="2" fill="none"/>
+    <circle cx="14" cy="16" r="2.5" fill="#0F172A"/>
+    <circle cx="26" cy="16" r="2.5" fill="#0F172A"/>
+    <rect x="14" y="20" width="12" height="2" rx="1" fill="#0F172A"/>
+    <path d="M10 27h20l2-7H8l2 7z" stroke="#0F172A" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+    <circle cx="15" cy="32" r="2.5" stroke="#0F172A" stroke-width="1.5" fill="none"/>
+    <circle cx="25" cy="32" r="2.5" stroke="#0F172A" stroke-width="1.5" fill="none"/>
+    <circle cx="32" cy="8" r="2.5" fill="#22C55E"/>
   </svg>
 </a>
 
@@ -29,19 +103,41 @@
     display: flex;
     align-items: center;
     text-decoration: none;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.2s ease, transform 0.2s ease;
   }
   .ir-logo-link:hover {
     opacity: 0.85;
+    transform: translateY(-1px);
   }
   .ir-logo-svg {
-    height: 32px;
+    height: 36px;
     width: auto;
     display: block;
   }
-  @media screen and (max-width: 749px) {
+  .ir-logo-compact,
+  .ir-logo-icon-only {
+    display: none;
+  }
+  
+  @media screen and (max-width: 989px) {
+    .ir-logo-full {
+      display: none;
+    }
+    .ir-logo-compact {
+      display: block;
+    }
     .ir-logo-svg {
-      height: 26px;
+      height: 30px;
+    }
+  }
+  
+  @media screen and (max-width: 380px) {
+    .ir-logo-compact {
+      display: none;
+    }
+    .ir-logo-icon-only {
+      display: block;
+      height: 34px;
     }
   }
 </style>

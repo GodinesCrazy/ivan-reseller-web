@@ -9,8 +9,6 @@
   if featured_product == blank
     assign featured_product = collections['all'].products[0]
   endif
-  
-  assign secondary_products = collections['all'].products | slice: 1, 2
 -%}
 
 <section class="ir-hero-ultra" data-color-scheme="{{ section.settings.color_scheme }}">
@@ -246,7 +244,7 @@
     font-size: clamp(2.75rem, 5vw, 4.5rem);
     font-weight: 700;
     line-height: 1.05;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
     color: #171717;
     margin: 0 0 24px;
     text-wrap: balance;
@@ -510,7 +508,7 @@
     font-size: 1.5rem;
     font-weight: 700;
     color: #171717;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
   
   .ir-hero-ultra__stat-label {

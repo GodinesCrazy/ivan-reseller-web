@@ -151,11 +151,38 @@
                     "padding-inline-end": 0
                   },
                   "blocks": {}
+                },
+                "ir_pdp_value_text": {
+                  "type": "text",
+                  "name": "Commerce reassurance",
+                  "settings": {
+                    "text": "<p><strong>Chosen for practical everyday use.</strong> Review product details, select options, and add to cart with a secure checkout path.</p>",
+                    "width": "100%",
+                    "max_width": "normal",
+                    "alignment": "left",
+                    "type_preset": "rte",
+                    "font": "var(--font-body--family)",
+                    "font_size": "0.95rem",
+                    "line_height": "normal",
+                    "letter_spacing": "normal",
+                    "case": "none",
+                    "wrap": "pretty",
+                    "color": "var(--color-foreground)",
+                    "background": false,
+                    "background_color": "#00000026",
+                    "corner_radius": 0,
+                    "padding-block-start": 8,
+                    "padding-block-end": 0,
+                    "padding-inline-start": 0,
+                    "padding-inline-end": 0
+                  },
+                  "blocks": {}
                 }
               },
               "block_order": [
                 "text_xrnftG",
-                "price_tVjtKg"
+                "price_tVjtKg",
+                "ir_pdp_value_text"
               ]
             },
             "divider_VJhene": {
