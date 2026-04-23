@@ -1,0 +1,234 @@
+{%- comment -%} PawVault — Lifestyle Split. Real pet photo + editorial text. {%- endcomment -%}
+
+<section class="pv-life">
+  <div class="pv-life__grid">
+
+    <div class="pv-life__image-col">
+      <div class="pv-life__image-wrap">
+        {% if section.settings.image != blank %}
+          {{ section.settings.image | image_url: width: 1200 | image_tag:
+              class: 'pv-life__img',
+              loading: 'lazy',
+              alt: section.settings.image.alt | default: 'Happy pet' }}
+        {% else %}
+          <img
+            src="https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=1200&h=1400&fit=crop&q=85&fm=jpg"
+            alt="Happy golden retriever"
+            class="pv-life__img"
+            loading="lazy"
+            width="600" height="700"
+          >
+        {% endif %}
+        <div class="pv-life__badge">
+          <span class="pv-life__badge-icon">🐾</span>
+          <div>
+            <strong>{{ section.settings.badge_title | default: 'Pet-Approved' }}</strong>
+            <span>{{ section.settings.badge_sub | default: 'Quality your pet will love' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pv-life__text-col">
+      <p class="pv-life__eyebrow">{{ section.settings.eyebrow | default: 'Why PawVault' }}</p>
+      <h2 class="pv-life__title">{{ section.settings.title | default: 'Because your pet deserves the best version of everything.' }}</h2>
+      <p class="pv-life__body">{{ section.settings.text | default: 'We built PawVault because pet accessories should be as thoughtful as the love you give. Every product is evaluated for real safety, real durability and real everyday use — not just what photographs well.' }}</p>
+
+      <div class="pv-life__checks">
+        {% for block in section.blocks %}
+          <div class="pv-life__check" {{ block.shopify_attributes }}>
+            <span class="pv-life__check-dot"></span>
+            <span>{{ block.settings.text }}</span>
+          </div>
+        {% endfor %}
+      </div>
+
+      <a href="{{ section.settings.btn_link | default: '/collections/all' }}" class="pv-life__btn">
+        {{ section.settings.btn_text | default: 'Shop Pet Supplies' }}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+
+  </div>
+</section>
+
+<style>
+  .pv-life {
+    background: #fafaf8;
+    overflow: hidden;
+  }
+
+  .pv-life__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 680px;
+  }
+
+  @media (max-width: 899px) {
+    .pv-life__grid { grid-template-columns: 1fr; }
+  }
+
+  .pv-life__image-col {
+    position: relative;
+    overflow: hidden;
+    min-height: 500px;
+  }
+
+  .pv-life__image-wrap {
+    position: absolute;
+    inset: 0;
+  }
+
+  .pv-life__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center top;
+    display: block;
+  }
+
+  .pv-life__badge {
+    position: absolute;
+    bottom: 32px;
+    left: 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+    background: rgba(255,255,255,0.92);
+    border-radius: 16px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    max-width: 260px;
+  }
+
+  .pv-life__badge-icon {
+    font-size: 2rem;
+    flex-shrink: 0;
+  }
+
+  .pv-life__badge strong {
+    display: block;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 2px;
+  }
+
+  .pv-life__badge span {
+    font-size: 0.8125rem;
+    color: #64748b;
+  }
+
+  .pv-life__text-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: clamp(48px, 8vw, 100px) clamp(32px, 6vw, 80px);
+  }
+
+  .pv-life__eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #f59e0b;
+    margin: 0 0 20px;
+  }
+
+  .pv-life__title {
+    font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0 0 20px;
+  }
+
+  .pv-life__body {
+    font-size: 1rem;
+    line-height: 1.75;
+    color: #475569;
+    margin: 0 0 32px;
+  }
+
+  .pv-life__checks {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+
+  .pv-life__check {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: #1e293b;
+  }
+
+  .pv-life__check-dot {
+    width: 8px;
+    height: 8px;
+    background: #f59e0b;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .pv-life__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 28px;
+    background: #0f172a;
+    color: #ffffff;
+    border-radius: 100px;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    align-self: flex-start;
+  }
+
+  .pv-life__btn:hover {
+    background: #1e293b;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(15,23,42,0.25);
+  }
+</style>
+
+{% schema %}
+{
+  "name": "PV — Lifestyle Split",
+  "tag": "section",
+  "settings": [
+    { "type": "image_picker", "id": "image", "label": "Pet Photo (upload your own or leave blank for default)" },
+    { "type": "text",     "id": "badge_title", "label": "Badge Title", "default": "Pet-Approved" },
+    { "type": "text",     "id": "badge_sub",   "label": "Badge Subtitle", "default": "Quality your pet will love" },
+    { "type": "text",     "id": "eyebrow",  "label": "Eyebrow",  "default": "Why PawVault" },
+    { "type": "text",     "id": "title",    "label": "Title",    "default": "Because your pet deserves the best version of everything." },
+    { "type": "textarea", "id": "text",     "label": "Body",     "default": "We built PawVault because pet accessories should be as thoughtful as the love you give. Every product is evaluated for real safety, real durability and real everyday use — not just what photographs well." },
+    { "type": "text",     "id": "btn_text", "label": "Button",   "default": "Shop Pet Supplies" },
+    { "type": "url",      "id": "btn_link", "label": "Button Link" }
+  ],
+  "blocks": [
+    {
+      "type": "check",
+      "name": "Check Point",
+      "settings": [{ "type": "text", "id": "text", "label": "Text" }]
+    }
+  ],
+  "presets": [
+    {
+      "name": "PV — Lifestyle Split",
+      "category": "PawVault",
+      "blocks": [
+        { "type": "check", "settings": { "text": "Carefully selected for pet safety & durability" } },
+        { "type": "check", "settings": { "text": "Fast, free shipping on orders over $50" } },
+        { "type": "check", "settings": { "text": "30-day returns — no questions asked" } }
+      ]
+    }
+  ]
+}
+{% endschema %}

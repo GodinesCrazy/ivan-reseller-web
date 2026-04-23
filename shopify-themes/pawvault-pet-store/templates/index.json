@@ -40,63 +40,42 @@
     "pv_categories": {
       "type": "pv-pet-categories",
       "blocks": {
-        "cat_dogs": {
-          "type": "category",
-          "settings": { "icon": "🐕", "name": "Dogs",         "desc": "Collars, leashes and accessories",     "color": "amber",  "link": "shopify://collections/all" }
-        },
-        "cat_cats": {
-          "type": "category",
-          "settings": { "icon": "🐈", "name": "Cats",         "desc": "Cat trees, beds and enrichment toys",  "color": "sage",   "link": "shopify://collections/all" }
-        },
-        "cat_grooming": {
-          "type": "category",
-          "settings": { "icon": "✂️", "name": "Grooming",     "desc": "Brushes, shampoos and nail clippers",  "color": "rose",   "link": "shopify://collections/all" }
-        },
-        "cat_feeding": {
-          "type": "category",
-          "settings": { "icon": "🥣", "name": "Feeding",      "desc": "Bowls, feeders and water fountains",   "color": "sky",    "link": "shopify://collections/all" }
-        },
-        "cat_toys": {
-          "type": "category",
-          "settings": { "icon": "🎾", "name": "Toys",         "desc": "Interactive and enrichment toys",      "color": "violet", "link": "shopify://collections/all" }
-        },
-        "cat_beds": {
-          "type": "category",
-          "settings": { "icon": "🛏️", "name": "Beds & Comfort", "desc": "Cozy beds, mats and blankets",      "color": "peach",  "link": "shopify://collections/all" }
-        }
+        "cat_dogs":     { "type": "category", "settings": { "icon": "🐕", "name": "Dogs",         "desc": "Collars, leashes and accessories",     "color": "amber",  "link": "shopify://collections/all" } },
+        "cat_cats":     { "type": "category", "settings": { "icon": "🐈", "name": "Cats",         "desc": "Cat trees, beds and enrichment toys",  "color": "sage",   "link": "shopify://collections/all" } },
+        "cat_grooming": { "type": "category", "settings": { "icon": "✂️", "name": "Grooming",     "desc": "Brushes, shampoos and nail clippers",  "color": "rose",   "link": "shopify://collections/all" } },
+        "cat_feeding":  { "type": "category", "settings": { "icon": "🥣", "name": "Feeding",      "desc": "Bowls, feeders and water fountains",   "color": "sky",    "link": "shopify://collections/all" } },
+        "cat_toys":     { "type": "category", "settings": { "icon": "🎾", "name": "Toys",         "desc": "Interactive and enrichment toys",      "color": "violet", "link": "shopify://collections/all" } },
+        "cat_beds":     { "type": "category", "settings": { "icon": "🛏️", "name": "Beds & Comfort","desc": "Cozy beds, mats and blankets",        "color": "peach",  "link": "shopify://collections/all" } }
       },
-      "block_order": ["cat_dogs", "cat_cats", "cat_grooming", "cat_feeding", "cat_toys", "cat_beds"],
+      "block_order": ["cat_dogs","cat_cats","cat_grooming","cat_feeding","cat_toys","cat_beds"],
+      "settings": { "eyebrow": "Shop by Category", "title": "Built for pets who deserve better." }
+    },
+    "pv_lifestyle": {
+      "type": "pv-lifestyle-split",
+      "blocks": {
+        "check_safety":   { "type": "check", "settings": { "text": "Selected for pet safety & real durability" } },
+        "check_shipping": { "type": "check", "settings": { "text": "Fast, free shipping on orders over $50" } },
+        "check_returns":  { "type": "check", "settings": { "text": "30-day returns — no questions asked" } }
+      },
+      "block_order": ["check_safety","check_shipping","check_returns"],
       "settings": {
-        "eyebrow": "Shop by Category",
-        "title": "Built for pets who deserve better."
+        "eyebrow": "Why PawVault",
+        "title": "Because your pet deserves the best version of everything.",
+        "text": "We built PawVault because pet accessories should be as thoughtful as the love you give. Every product is evaluated for real safety, real durability and real everyday use — not just what photographs well.",
+        "btn_text": "Shop Pet Supplies",
+        "btn_link": "shopify://collections/all",
+        "badge_title": "Pet-Approved",
+        "badge_sub": "Quality your pet will love"
       }
     },
     "pv_promise": {
       "type": "pv-brand-promise",
       "blocks": {
-        "val_selection": {
-          "type": "value",
-          "settings": {
-            "title": "Pet-Focused Selection",
-            "text": "The entire catalog is built around dogs, cats and small animals. Every product is selected for safety, durability and real-world pet use."
-          }
-        },
-        "val_guarantee": {
-          "type": "value",
-          "settings": {
-            "title": "Happy Pet Guarantee",
-            "text": "30-day returns, secure checkout and dedicated support. If your pet doesn't love it, we make it right — no questions asked."
-          }
-        },
-        "val_shipping": {
-          "type": "value",
-          "settings": {
-            "title": "Fast, Free Shipping",
-            "text": "Free shipping on all orders over $50. Most pet orders arrive within 3–7 business days across the USA."
-          }
-        }
+        "val_selection": { "type": "value", "settings": { "title": "Pet-Focused Selection",  "text": "The entire catalog is built around dogs, cats and small animals. Every product is selected for safety, durability and real-world pet use." } },
+        "val_guarantee": { "type": "value", "settings": { "title": "Happy Pet Guarantee",   "text": "30-day returns, secure checkout and dedicated support. If your pet doesn't love it, we make it right — no questions asked." } },
+        "val_shipping":  { "type": "value", "settings": { "title": "Fast, Free Shipping",   "text": "Free shipping on all orders over $50. Most pet orders arrive within 3–7 business days across the USA." } }
       },
-      "block_order": ["val_selection", "val_guarantee", "val_shipping"],
+      "block_order": ["val_selection","val_guarantee","val_shipping"],
       "settings": {
         "eyebrow": "The PawVault Promise",
         "title": "Premium pet supplies, seriously curated.",
@@ -106,10 +85,5 @@
       }
     }
   },
-  "order": [
-    "pv_hero",
-    "pv_trust_bar",
-    "pv_categories",
-    "pv_promise"
-  ]
+  "order": ["pv_hero","pv_trust_bar","pv_categories","pv_lifestyle","pv_promise"]
 }
