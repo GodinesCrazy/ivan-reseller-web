@@ -372,19 +372,26 @@ type SearchState =
   | { kind: 'error'; msg: string };
 
 const CATEGORY_PRESETS = [
+  { id: 'pets', label: '🐾 Pets (Default)', keyword: 'pet supplies', hint: 'Pet supplies, accessories and essentials — store default' },
+  { id: 'pet-dogs', label: 'Dogs', keyword: 'dog accessories', hint: 'Dog collars, leashes, toys and care' },
+  { id: 'pet-cats', label: 'Cats', keyword: 'cat accessories', hint: 'Cat trees, toys, litter boxes and care' },
+  { id: 'pet-grooming', label: 'Pet Grooming', keyword: 'pet grooming brush', hint: 'Brushes, shampoos, nail clippers and grooming tools' },
+  { id: 'pet-toys', label: 'Pet Toys', keyword: 'dog toys', hint: 'Interactive toys, chew toys and enrichment' },
+  { id: 'pet-feeding', label: 'Pet Feeding', keyword: 'pet food bowl', hint: 'Bowls, feeders, fountains and storage' },
+  { id: 'pet-beds', label: 'Beds & Comfort', keyword: 'pet bed', hint: 'Dog beds, cat beds and cozy mats' },
+  { id: 'pet-travel', label: 'Pet Travel', keyword: 'pet carrier', hint: 'Carriers, travel crates and car accessories' },
   { id: 'power', label: 'Power & Charging', keyword: 'power bank', hint: 'Baterias, cargadores y energia portatil' },
   { id: 'phones', label: 'Phones', keyword: 'phone holder', hint: 'Accesorios y soporte para celular' },
   { id: 'workspace', label: 'Workspace', keyword: 'desk organizer', hint: 'Organizacion y accesorios de escritorio' },
   { id: 'travel', label: 'Travel', keyword: 'travel organizer', hint: 'Bolsos y accesorios de viaje' },
-  { id: 'pets', label: 'Pets', keyword: 'pet grooming', hint: 'Cuidado y accesorios para mascotas' },
   { id: 'beauty', label: 'Beauty', keyword: 'lipstick organizer', hint: 'Beauty, makeup y organizadores' },
   { id: 'kitchen', label: 'Home & Kitchen', keyword: 'kitchen organizer', hint: 'Hogar, cocina y orden' },
-  { id: 'electronics', label: 'Electronica', keyword: 'wireless earbuds', hint: 'Gadgets y audio populares en CJ' },
+  { id: 'electronics', label: 'Electronics', keyword: 'wireless earbuds', hint: 'Gadgets y audio populares en CJ' },
 ] as const;
 
 export default function CjShopifyUsaDiscoverPage() {
   const navigate = useNavigate();
-  const [keyword, setKeyword] = useState('');
+  const [keyword, setKeyword] = useState('pet supplies');
   const [searchState, setSearchState] = useState<SearchState>({ kind: 'idle' });
   const [lastDraft, setLastDraft] = useState<DraftResult | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<AiSuggestionItem[]>([]);
@@ -463,10 +470,15 @@ export default function CjShopifyUsaDiscoverPage() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Descubrir Productos</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Busca en el catálogo CJ, evalúa márgenes y crea drafts para Shopify USA.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Descubrir Productos</h2>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">🐾 Pet Store</span>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              Busca en el catálogo CJ para Shopify USA. <span className="text-amber-600 dark:text-amber-400 font-medium">PET</span> preseleccionado por defecto — puedes buscar cualquier otro nicho.
+            </p>
+          </div>
         </div>
         {lastDraft && (
           <button
@@ -506,7 +518,7 @@ export default function CjShopifyUsaDiscoverPage() {
             type="text"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="Buscar en catálogo CJ (ej. wireless earbuds, phone case…)"
+            placeholder="Buscar en catálogo CJ (ej. pet bed, dog collar, cat toy…)"
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
           />
         </div>
@@ -533,7 +545,7 @@ export default function CjShopifyUsaDiscoverPage() {
               <div className="px-2 py-1.5">
                 <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Buscar por categoria</p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Atajos basados en categorias reales y busquedas utiles dentro del catalogo CJ.
+                  🐾 PET es el nicho por defecto. Todas las categorías siguen disponibles.
                 </p>
               </div>
               <div className="space-y-1">
@@ -642,12 +654,12 @@ export default function CjShopifyUsaDiscoverPage() {
       {/* States */}
 
       {searchState.kind === 'idle' && (
-        <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 py-14 flex flex-col items-center gap-3 text-center">
-          <Search className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+        <div className="rounded-xl border border-dashed border-amber-200 dark:border-amber-800/40 py-14 flex flex-col items-center gap-3 text-center bg-amber-50/30 dark:bg-amber-900/5">
+          <span className="text-4xl">🐾</span>
           <div>
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Ingresa un término de búsqueda</p>
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Pet Store — busca productos para mascotas</p>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-xs mx-auto">
-              Busca por categoría, producto o keyword. Los resultados muestran stock e inventario de CJ en tiempo real.
+              Keyword <strong className="text-amber-600 dark:text-amber-400">pet supplies</strong> preseleccionado. Presiona Buscar o elige otra categoría.
             </p>
           </div>
         </div>

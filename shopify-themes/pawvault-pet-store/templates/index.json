@@ -1,0 +1,244 @@
+{
+  "sections": {
+    "ir_announcement_bar": {
+      "type": "ir-announcement-bar",
+      "settings": {
+        "show_bar": true,
+        "message": "Free shipping on pet orders over $50 • 30-day easy returns",
+        "highlight_text": "New Pet Arrivals",
+        "link_text": "Shop Now",
+        "link_url": "shopify://collections/all",
+        "show_icon": true,
+        "icon": "truck",
+        "show_close": true,
+        "color_scheme": "scheme-5"
+      }
+    },
+    "ir_hero_ultra_main": {
+      "type": "ir-hero-ultra",
+      "settings": {
+        "eyebrow": "PawVault — Premium Pet Store",
+        "title": "Your pet's happy place, delivered.",
+        "description": "Discover premium accessories, grooming essentials, toys, and everyday pet supplies — carefully selected for dogs and cats who deserve the best.",
+        "button_text": "Shop Pet Supplies",
+        "button_link": "shopify://collections/all",
+        "secondary_button_text": "Browse All Products",
+        "secondary_button_link": "shopify://collections/all"
+      }
+    },
+    "ir_trust_bar_main": {
+      "type": "ir-trust-bar",
+      "blocks": {
+        "ir_trust_item_shipping": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🚚",
+            "label": "Fast Shipping",
+            "subtext": "Free delivery on orders over $50"
+          }
+        },
+        "ir_trust_item_pets": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🐾",
+            "label": "Pet-Approved",
+            "subtext": "Quality accessories for dogs & cats"
+          }
+        },
+        "ir_trust_item_guarantee": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🛡️",
+            "label": "30-Day Guarantee",
+            "subtext": "Easy returns, no questions asked"
+          }
+        },
+        "ir_trust_item_support": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "💬",
+            "label": "Pet Support",
+            "subtext": "Expert advice for happy pets"
+          }
+        }
+      },
+      "block_order": [
+        "ir_trust_item_shipping",
+        "ir_trust_item_pets",
+        "ir_trust_item_guarantee",
+        "ir_trust_item_support"
+      ],
+      "settings": {
+        "background_color": "#FFFFFF"
+      }
+    },
+    "ir_bento_grid_categories": {
+      "type": "ir-bento-grid",
+      "blocks": {
+        "bento_dogs": {
+          "type": "category_item",
+          "settings": {
+            "size": "large",
+            "label": "Dogs",
+            "title": "Everything for Your Dog",
+            "description": "Collars, leashes, beds, toys and accessories built for happy, active dogs of every breed.",
+            "visual_style": "workspace",
+            "visual_badge_1": "Dog Edit",
+            "visual_badge_2": "Tail Wagger",
+            "link": "shopify://collections/all"
+          }
+        },
+        "bento_cats": {
+          "type": "category_item",
+          "settings": {
+            "size": "tall",
+            "label": "Cats",
+            "title": "Cat Favorites",
+            "description": "Cat trees, cozy beds, enrichment toys and grooming essentials your cat will love.",
+            "visual_style": "travel",
+            "visual_badge_1": "Cat Edit",
+            "visual_badge_2": "Purr Approved",
+            "link": "shopify://collections/all"
+          }
+        },
+        "bento_grooming": {
+          "type": "category_item",
+          "settings": {
+            "size": "wide",
+            "label": "Grooming",
+            "title": "Pamper & Groom",
+            "description": "Brushes, shampoos, nail clippers and grooming kits for a healthy, shiny coat.",
+            "visual_style": "tech",
+            "visual_badge_1": "Groom Edit",
+            "visual_badge_2": "Shiny Coat",
+            "link": "shopify://collections/all"
+          }
+        },
+        "bento_new": {
+          "type": "category_item",
+          "settings": {
+            "size": "small",
+            "label": "New Arrivals",
+            "title": "Fresh Pet Picks",
+            "description": "The newest pet accessories and supplies, just landed.",
+            "visual_style": "daily",
+            "visual_badge_1": "New Drop",
+            "visual_badge_2": "Fresh Pick",
+            "link": "shopify://collections/all"
+          }
+        }
+      },
+      "block_order": [
+        "bento_dogs",
+        "bento_cats",
+        "bento_grooming",
+        "bento_new"
+      ],
+      "settings": {
+        "title": "Shop by pet and category.",
+        "subtitle": "Everything your dog, cat or small animal needs — grooming, feeding, comfort, play and everyday essentials.",
+        "fallback_collection": "all"
+      }
+    },
+    "ir_premium_products_featured": {
+      "type": "ir-premium-product-card",
+      "settings": {
+        "eyebrow": "PawVault Favorites",
+        "title": "Pets Love These",
+        "collection": "all",
+        "products_to_show": 8,
+        "columns": 4,
+        "show_view_all": true,
+        "view_all_text": "Shop All Pet Supplies"
+      }
+    },
+    "ir_merch_story_main": {
+      "type": "ir-merchandising-story",
+      "blocks": {
+        "merch_point_dogs": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Built for dogs",
+            "text": "Durable collars, interactive toys and cozy beds selected for dogs of all breeds and sizes — from playful puppies to senior companions."
+          }
+        },
+        "merch_point_cats": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Loved by cats",
+            "text": "Cat trees, enrichment toys and grooming tools that keep cats engaged, healthy and happy — because a content cat means a happy home."
+          }
+        },
+        "merch_point_quality": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Quality you can trust",
+            "text": "Every product in PawVault is evaluated for pet safety, durability and real everyday value — no filler, no compromises."
+          }
+        }
+      },
+      "block_order": [
+        "merch_point_dogs",
+        "merch_point_cats",
+        "merch_point_quality"
+      ],
+      "settings": {
+        "eyebrow": "The PawVault Edit",
+        "title": "A premium pet store, seriously curated.",
+        "text": "PawVault is organized around what really matters for pets: what keeps them active, what keeps them comfortable, what they actually use — and what their owners can trust.",
+        "collection": "all",
+        "showcase_kicker": "Featured pet picks",
+        "showcase_title": "Designed for the pets you love.",
+        "button_text": "Browse the pet catalog",
+        "button_link": "shopify://collections/all"
+      }
+    },
+    "ir_why_us_main": {
+      "type": "ir-why-us",
+      "blocks": {
+        "ir_value_card_selection": {
+          "type": "value_card",
+          "settings": {
+            "icon": "01",
+            "title": "Pet-Focused Selection",
+            "text": "The entire catalog is built around dogs, cats and small pets. Every product is selected for safety, durability and real-world pet use."
+          }
+        },
+        "ir_value_card_quality": {
+          "type": "value_card",
+          "settings": {
+            "icon": "02",
+            "title": "Clear Before Checkout",
+            "text": "Product pages are designed for fast evaluation — visible pricing, honest descriptions and clean trust cues so you shop with confidence."
+          }
+        },
+        "ir_value_card_experience": {
+          "type": "value_card",
+          "settings": {
+            "icon": "03",
+            "title": "Happy Pet Guarantee",
+            "text": "30-day returns, secure checkout and dedicated support. If your pet doesn't love it, we'll make it right."
+          }
+        }
+      },
+      "block_order": [
+        "ir_value_card_selection",
+        "ir_value_card_quality",
+        "ir_value_card_experience"
+      ],
+      "settings": {
+        "title": "A better way to shop for your pet.",
+        "subtitle": "PawVault keeps the experience focused, transparent and built around what dogs and cats actually need — not what looks good on a shelf."
+      }
+    }
+  },
+  "order": [
+    "ir_announcement_bar",
+    "ir_hero_ultra_main",
+    "ir_trust_bar_main",
+    "ir_bento_grid_categories",
+    "ir_premium_products_featured",
+    "ir_merch_story_main",
+    "ir_why_us_main"
+  ]
+}

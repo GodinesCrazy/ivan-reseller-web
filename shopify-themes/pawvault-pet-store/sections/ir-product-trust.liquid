@@ -1,0 +1,294 @@
+{%- comment -%}
+  IVAN RESELLER - Product Page Trust Elements
+{%- endcomment -%}
+
+<div class="ir-product-trust-section">
+  <div class="ir-product-trust__panel">
+    <p class="ir-product-trust__eyebrow">Before checkout</p>
+    <h2 class="ir-product-trust__heading">Clear product details, protected payment, and simple support.</h2>
+
+    {%- if section.settings.show_guarantee -%}
+      <div class="ir-guarantee-badge">
+        <span class="ir-guarantee-badge__icon">OK</span>
+        <div class="ir-guarantee-badge__content">
+          <div class="ir-guarantee-badge__title">{{ section.settings.guarantee_title }}</div>
+          <div class="ir-guarantee-badge__text">{{ section.settings.guarantee_text }}</div>
+        </div>
+      </div>
+    {%- endif -%}
+
+    {%- if section.settings.show_benefits and section.blocks.size > 0 -%}
+      <div class="ir-product-benefits">
+        {% for block in section.blocks %}
+          {% if block.type == 'benefit' %}
+            <div class="ir-product-benefits__item" {{ block.shopify_attributes }}>
+              <span class="ir-product-benefits__check">✓</span>
+              <span class="ir-product-benefits__text">{{ block.settings.text }}</span>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {%- endif -%}
+
+    {%- if section.settings.show_stock_indicator -%}
+      <div class="ir-stock-indicator">
+        <span class="ir-stock-indicator__dot"></span>
+        <span class="ir-stock-indicator__text">{{ section.settings.stock_text }}</span>
+        <span class="ir-stock-indicator__subtext">{{ section.settings.stock_subtext }}</span>
+      </div>
+    {%- endif -%}
+
+    {%- if section.settings.show_trust_bar -%}
+      <div class="ir-product-trust__bar">
+        {% for block in section.blocks %}
+          {% if block.type == 'trust_item' %}
+            <div class="ir-product-trust__item" {{ block.shopify_attributes }}>
+              <span class="ir-product-trust__icon">{{ block.settings.icon }}</span>
+              <span>{{ block.settings.text }}</span>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {%- endif -%}
+
+    {%- if section.settings.show_payment_trust -%}
+      <div class="ir-payment-trust">
+        <p class="ir-payment-trust__text">{{ section.settings.payment_text }}</p>
+        <ul class="ir-payment-trust__icons" role="list">
+          {%- liquid
+            assign rendered_payment_icons = false
+          -%}
+
+          {%- for type in shop.enabled_payment_types -%}
+            {%- case type -%}
+              {%- when 'visa' -%}
+                {%- if section.settings.show_visa -%}
+                  {%- assign rendered_payment_icons = true -%}
+                  <li class="ir-payment-trust__icon-wrap">
+                    {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                  </li>
+                {%- endif -%}
+              {%- when 'master', 'mastercard' -%}
+                {%- if section.settings.show_mastercard -%}
+                  {%- assign rendered_payment_icons = true -%}
+                  <li class="ir-payment-trust__icon-wrap">
+                    {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                  </li>
+                {%- endif -%}
+              {%- when 'american_express', 'amex' -%}
+                {%- if section.settings.show_amex -%}
+                  {%- assign rendered_payment_icons = true -%}
+                  <li class="ir-payment-trust__icon-wrap">
+                    {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                  </li>
+                {%- endif -%}
+              {%- when 'paypal' -%}
+                {%- if section.settings.show_paypal -%}
+                  {%- assign rendered_payment_icons = true -%}
+                  <li class="ir-payment-trust__icon-wrap">
+                    {{ type | payment_type_svg_tag: class: 'icon icon--full-color ir-payment-trust__icon-svg' }}
+                  </li>
+                {%- endif -%}
+            {%- endcase -%}
+          {%- endfor -%}
+
+          {%- unless rendered_payment_icons -%}
+            <li class="ir-payment-trust__method-text">Payment options are shown at checkout.</li>
+          {%- endunless -%}
+        </ul>
+      </div>
+    {%- endif -%}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "IR - Product Trust",
+  "tag": "section",
+  "class": "ir-product-trust-section",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Guarantee Badge"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_guarantee",
+      "label": "Show Guarantee Badge",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "guarantee_title",
+      "label": "Guarantee Title",
+      "default": "30-Day Money Back Guarantee"
+    },
+    {
+      "type": "text",
+      "id": "guarantee_text",
+      "label": "Guarantee Text",
+      "default": "Not happy? Full refund, no questions asked."
+    },
+    {
+      "type": "header",
+      "content": "Benefits List"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_benefits",
+      "label": "Show Benefits List",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Stock Indicator"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_stock_indicator",
+      "label": "Show Stock Urgency",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "stock_text",
+      "label": "Stock Text",
+      "default": "Only 14 left in stock"
+    },
+    {
+      "type": "text",
+      "id": "stock_subtext",
+      "label": "Stock Subtext",
+      "default": "Selling fast"
+    },
+    {
+      "type": "header",
+      "content": "Trust Bar"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_trust_bar",
+      "label": "Show Trust Bar",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Payment Trust"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_payment_trust",
+      "label": "Show Payment Icons",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "payment_text",
+      "label": "Payment Text",
+      "default": "Secure checkout with 256-bit encryption"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_visa",
+      "label": "Show Visa",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_mastercard",
+      "label": "Show Mastercard",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_amex",
+      "label": "Show Amex",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_paypal",
+      "label": "Show PayPal",
+      "default": true
+    }
+  ],
+  "blocks": [
+    {
+      "type": "benefit",
+      "name": "Benefit Item",
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Benefit Text",
+          "default": "Memory foam molds to your neck for perfect support"
+        }
+      ]
+    },
+    {
+      "type": "trust_item",
+      "name": "Trust Item",
+      "settings": [
+        {
+          "type": "text",
+          "id": "icon",
+          "label": "Icon (emoji)",
+          "default": "01"
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Trust Text",
+          "default": "Free shipping over $35"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Product Trust",
+      "blocks": [
+        {
+          "type": "benefit",
+          "settings": {
+            "text": "Memory foam molds to your neck for perfect support"
+          }
+        },
+        {
+          "type": "benefit",
+          "settings": {
+            "text": "Lightweight and compact for easy everyday use"
+          }
+        },
+        {
+          "type": "benefit",
+          "settings": {
+            "text": "Machine washable cover for easy cleaning"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "01",
+            "text": "Free shipping over $35"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "02",
+            "text": "30-day returns"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "03",
+            "text": "Ships from USA"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

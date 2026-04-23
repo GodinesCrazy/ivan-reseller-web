@@ -1,0 +1,657 @@
+{%- comment -%}
+  IVAN RESELLER - Ultra Premium Hero
+  Executive-grade hero with commanding visual presence
+  Inspired by: Apple Store, Bellroy, Nomad, Native Union
+{%- endcomment -%}
+
+{%- liquid
+  assign featured_product = section.settings.featured_product
+  if featured_product == blank
+    assign featured_product = collections['all'].products[0]
+  endif
+-%}
+
+<section class="ir-hero-ultra" data-color-scheme="{{ section.settings.color_scheme }}">
+  <div class="ir-hero-ultra__backdrop">
+    <div class="ir-hero-ultra__gradient"></div>
+    <div class="ir-hero-ultra__texture"></div>
+  </div>
+  
+  <div class="ir-hero-ultra__container">
+    <div class="ir-hero-ultra__grid">
+      <!-- Content Column -->
+      <div class="ir-hero-ultra__content">
+        <div class="ir-hero-ultra__kicker-wrap">
+          <span class="ir-hero-ultra__kicker-badge">
+            <span class="ir-hero-ultra__pulse"></span>
+            {{ section.settings.eyebrow | default: "PawVault — Premium Pet Store" }}
+          </span>
+        </div>
+        
+        <h1 class="ir-hero-ultra__headline">
+          {{ section.settings.title | default: "Your pet's happy place, delivered." }}
+        </h1>
+        
+        <p class="ir-hero-ultra__subheadline">
+          {{ section.settings.description | default: "Discover premium accessories, grooming essentials, toys, and everyday pet supplies — carefully selected for dogs and cats who deserve the best." }}
+        </p>
+        
+        <div class="ir-hero-ultra__cta-group">
+          <a href="{{ section.settings.button_link | default: '/collections/all' }}" class="ir-hero-ultra__cta ir-hero-ultra__cta--primary">
+            <span>{{ section.settings.button_text | default: "Shop the Collection" }}</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+          {% if section.settings.secondary_button_text != blank %}
+            <a href="{{ section.settings.secondary_button_link | default: '/collections/all' }}" class="ir-hero-ultra__cta ir-hero-ultra__cta--secondary">
+              {{ section.settings.secondary_button_text }}
+            </a>
+          {% endif %}
+        </div>
+        
+        <!-- Trust Pills -->
+        <div class="ir-hero-ultra__trust">
+          <div class="ir-hero-ultra__trust-pill">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <span>Secure Checkout</span>
+          </div>
+          <div class="ir-hero-ultra__trust-pill">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+            </svg>
+            <span>30-Day Returns</span>
+          </div>
+          <div class="ir-hero-ultra__trust-pill">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+            <span>Fast Delivery</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Visual Column -->
+      <div class="ir-hero-ultra__visual">
+        <div class="ir-hero-ultra__stage">
+          {% if section.settings.hero_image != blank %}
+            <div class="ir-hero-ultra__main-image-wrap">
+              {{ section.settings.hero_image | image_url: width: 1200 | image_tag: 
+                class: 'ir-hero-ultra__main-image', 
+                loading: 'eager',
+                alt: section.settings.title 
+              }}
+            </div>
+          {% elsif featured_product != blank %}
+            <div class="ir-hero-ultra__product-showcase">
+              <div class="ir-hero-ultra__product-main">
+                {{ featured_product.featured_image | image_url: width: 800 | image_tag:
+                  class: 'ir-hero-ultra__product-image',
+                  loading: 'eager',
+                  alt: featured_product.title
+                }}
+              </div>
+              
+              <!-- Floating Product Card -->
+              <a href="{{ featured_product.url }}" class="ir-hero-ultra__floating-card">
+                <div class="ir-hero-ultra__floating-image">
+                  {{ featured_product.featured_image | image_url: width: 120 | image_tag:
+                    loading: 'lazy',
+                    alt: featured_product.title
+                  }}
+                </div>
+                <div class="ir-hero-ultra__floating-info">
+                  <span class="ir-hero-ultra__floating-label">Featured</span>
+                  <p class="ir-hero-ultra__floating-title">{{ featured_product.title | truncate: 35 }}</p>
+                  <p class="ir-hero-ultra__floating-price">{{ featured_product.price | money }}</p>
+                </div>
+                <div class="ir-hero-ultra__floating-arrow">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </div>
+              </a>
+            </div>
+          {% else %}
+            <div class="ir-hero-ultra__fallback-visual">
+              <div class="ir-hero-ultra__fallback-grid">
+                <div class="ir-hero-ultra__fallback-item ir-hero-ultra__fallback-item--large">
+                  <span>🐕 Dogs</span>
+                </div>
+                <div class="ir-hero-ultra__fallback-item">
+                  <span>🐈 Cats</span>
+                </div>
+                <div class="ir-hero-ultra__fallback-item">
+                  <span>✂️ Grooming</span>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+        
+        <!-- Stats Row -->
+        <div class="ir-hero-ultra__stats">
+          <div class="ir-hero-ultra__stat">
+            <span class="ir-hero-ultra__stat-number">🐾</span>
+            <span class="ir-hero-ultra__stat-label">Pet-Approved Products</span>
+          </div>
+          <div class="ir-hero-ultra__stat-divider"></div>
+          <div class="ir-hero-ultra__stat">
+            <span class="ir-hero-ultra__stat-number">30-Day</span>
+            <span class="ir-hero-ultra__stat-label">Happy Pet Guarantee</span>
+          </div>
+          <div class="ir-hero-ultra__stat-divider"></div>
+          <div class="ir-hero-ultra__stat">
+            <span class="ir-hero-ultra__stat-number">Free</span>
+            <span class="ir-hero-ultra__stat-label">Shipping Over $50</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .ir-hero-ultra {
+    position: relative;
+    min-height: 90vh;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    background: linear-gradient(135deg, #fafaf9 0%, #f5f5f4 50%, #fafaf9 100%);
+  }
+  
+  .ir-hero-ultra__backdrop {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+  
+  .ir-hero-ultra__gradient {
+    position: absolute;
+    inset: 0;
+    background: 
+      radial-gradient(ellipse 80% 50% at 20% 40%, rgba(184, 135, 70, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 60% 40% at 80% 60%, rgba(47, 111, 94, 0.06) 0%, transparent 50%);
+  }
+  
+  .ir-hero-ultra__texture {
+    position: absolute;
+    inset: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  }
+  
+  .ir-hero-ultra__container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 120px 48px 80px;
+  }
+  
+  .ir-hero-ultra__grid {
+    display: grid;
+    grid-template-columns: 1fr 1.15fr;
+    gap: 80px;
+    align-items: center;
+  }
+  
+  /* Content Column */
+  .ir-hero-ultra__content {
+    max-width: 560px;
+  }
+  
+  .ir-hero-ultra__kicker-wrap {
+    margin-bottom: 24px;
+  }
+  
+  .ir-hero-ultra__kicker-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #525252;
+    backdrop-filter: blur(8px);
+  }
+  
+  .ir-hero-ultra__pulse {
+    width: 8px;
+    height: 8px;
+    background: #22c55e;
+    border-radius: 50%;
+    animation: ir-pulse 2s ease-in-out infinite;
+  }
+  
+  @keyframes ir-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+  }
+  
+  .ir-hero-ultra__headline {
+    font-size: clamp(2.75rem, 5vw, 4.5rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: 0;
+    color: #171717;
+    margin: 0 0 24px;
+    text-wrap: balance;
+  }
+  
+  .ir-hero-ultra__subheadline {
+    font-size: 1.125rem;
+    line-height: 1.7;
+    color: #525252;
+    margin: 0 0 32px;
+    text-wrap: balance;
+  }
+  
+  .ir-hero-ultra__cta-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+  
+  .ir-hero-ultra__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 28px;
+    border-radius: 100px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .ir-hero-ultra__cta--primary {
+    background: #171717;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  }
+  
+  .ir-hero-ultra__cta--primary:hover {
+    background: #000000;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  }
+  
+  .ir-hero-ultra__cta--secondary {
+    background: transparent;
+    color: #171717;
+    border: 1px solid #d4d4d4;
+  }
+  
+  .ir-hero-ultra__cta--secondary:hover {
+    border-color: #a3a3a3;
+    background: rgba(0, 0, 0, 0.02);
+  }
+  
+  .ir-hero-ultra__trust {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  
+  .ir-hero-ultra__trust-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 100px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #525252;
+  }
+  
+  /* Visual Column */
+  .ir-hero-ultra__visual {
+    position: relative;
+  }
+  
+  .ir-hero-ultra__stage {
+    position: relative;
+  }
+  
+  .ir-hero-ultra__main-image-wrap {
+    position: relative;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 
+      0 32px 64px -12px rgba(0, 0, 0, 0.14),
+      0 12px 24px -8px rgba(0, 0, 0, 0.08);
+  }
+  
+  .ir-hero-ultra__main-image {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  
+  .ir-hero-ultra__product-showcase {
+    position: relative;
+    aspect-ratio: 4/3;
+    background: linear-gradient(145deg, #f5f5f4 0%, #e7e5e4 100%);
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 
+      inset 0 2px 4px rgba(255, 255, 255, 0.8),
+      0 32px 64px -12px rgba(0, 0, 0, 0.14);
+  }
+  
+  .ir-hero-ultra__product-main {
+    width: 70%;
+    height: 70%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .ir-hero-ultra__product-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.15));
+    transition: transform 0.5s ease;
+  }
+  
+  .ir-hero-ultra__product-showcase:hover .ir-hero-ultra__product-image {
+    transform: scale(1.02);
+  }
+  
+  /* Floating Card */
+  .ir-hero-ultra__floating-card {
+    position: absolute;
+    bottom: -20px;
+    right: -20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    text-decoration: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(12px);
+    max-width: 320px;
+  }
+  
+  .ir-hero-ultra__floating-card:hover {
+    transform: translate(-4px, -4px);
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.14);
+  }
+  
+  .ir-hero-ultra__floating-image {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #f5f5f4;
+    flex-shrink: 0;
+  }
+  
+  .ir-hero-ultra__floating-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .ir-hero-ultra__floating-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .ir-hero-ultra__floating-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #2f6f5e;
+    margin-bottom: 4px;
+  }
+  
+  .ir-hero-ultra__floating-title {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #171717;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .ir-hero-ultra__floating-price {
+    margin: 4px 0 0;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: #737373;
+  }
+  
+  .ir-hero-ultra__floating-arrow {
+    color: #d4d4d4;
+    transition: color 0.2s ease;
+  }
+  
+  .ir-hero-ultra__floating-card:hover .ir-hero-ultra__floating-arrow {
+    color: #171717;
+  }
+  
+  /* Fallback Visual */
+  .ir-hero-ultra__fallback-visual {
+    padding: 40px;
+  }
+  
+  .ir-hero-ultra__fallback-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 16px;
+    height: 400px;
+  }
+  
+  .ir-hero-ultra__fallback-item {
+    background: linear-gradient(145deg, #f5f5f4, #e7e5e4);
+    border-radius: 16px;
+    display: flex;
+    align-items: flex-end;
+    padding: 24px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+  }
+  
+  .ir-hero-ultra__fallback-item--large {
+    grid-row: span 2;
+  }
+  
+  .ir-hero-ultra__fallback-item span {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #525252;
+  }
+  
+  /* Stats */
+  .ir-hero-ultra__stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 48px;
+    padding-top: 32px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+  }
+  
+  .ir-hero-ultra__stat {
+    text-align: center;
+  }
+  
+  .ir-hero-ultra__stat-number {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #171717;
+    letter-spacing: 0;
+  }
+  
+  .ir-hero-ultra__stat-label {
+    display: block;
+    font-size: 0.8125rem;
+    color: #737373;
+    margin-top: 4px;
+  }
+  
+  .ir-hero-ultra__stat-divider {
+    width: 1px;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.08);
+  }
+  
+  /* Responsive */
+  @media screen and (max-width: 1100px) {
+    .ir-hero-ultra__grid {
+      grid-template-columns: 1fr;
+      gap: 48px;
+      text-align: center;
+    }
+    
+    .ir-hero-ultra__content {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .ir-hero-ultra__kicker-wrap,
+    .ir-hero-ultra__cta-group,
+    .ir-hero-ultra__trust {
+      justify-content: center;
+    }
+    
+    .ir-hero-ultra__floating-card {
+      right: 20px;
+      bottom: -10px;
+    }
+  }
+  
+  @media screen and (max-width: 749px) {
+    .ir-hero-ultra__container {
+      padding: 100px 24px 60px;
+    }
+    
+    .ir-hero-ultra__headline {
+      font-size: 2.25rem;
+    }
+    
+    .ir-hero-ultra__subheadline {
+      font-size: 1rem;
+    }
+    
+    .ir-hero-ultra__cta {
+      width: 100%;
+      justify-content: center;
+    }
+    
+    .ir-hero-ultra__stats {
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .ir-hero-ultra__stat-divider {
+      width: 60px;
+      height: 1px;
+    }
+    
+    .ir-hero-ultra__floating-card {
+      position: relative;
+      right: auto;
+      bottom: auto;
+      margin: -40px 20px 0;
+      max-width: none;
+    }
+    
+    .ir-hero-ultra__fallback-grid {
+      height: 300px;
+    }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "IR - Ultra Premium Hero",
+  "class": "ir-hero-ultra-section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow Text",
+      "default": "PawVault — Premium Pet Store"
+    },
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Headline",
+      "default": "Your pet's happy place, delivered."
+    },
+    {
+      "type": "textarea",
+      "id": "description",
+      "label": "Description",
+      "default": "Discover premium accessories, grooming essentials, toys, and everyday pet supplies — carefully selected for dogs and cats who deserve the best."
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Primary Button",
+      "default": "Shop Pet Supplies"
+    },
+    {
+      "type": "url",
+      "id": "button_link",
+      "label": "Primary Button Link"
+    },
+    {
+      "type": "text",
+      "id": "secondary_button_text",
+      "label": "Secondary Button",
+      "default": "View All Products"
+    },
+    {
+      "type": "url",
+      "id": "secondary_button_link",
+      "label": "Secondary Button Link"
+    },
+    {
+      "type": "image_picker",
+      "id": "hero_image",
+      "label": "Hero Image (optional)"
+    },
+    {
+      "type": "product",
+      "id": "featured_product",
+      "label": "Featured Product"
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Ultra Premium Hero",
+      "category": "Ivan Reseller"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,192 @@
+{%- comment -%}
+  Ivan Reseller - Editorial Merchandising Section
+  A lightweight homepage section that adds premium brand context without affecting commerce logic.
+{%- endcomment -%}
+
+{%- liquid
+  assign featured_collection = collections[section.settings.collection]
+
+  if featured_collection == blank
+    assign featured_collection = collections['all']
+  endif
+-%}
+
+<div class="ir-merch-section">
+  <div class="ir-merch__container">
+    <div class="ir-merch__intro">
+      {%- if section.settings.eyebrow != blank -%}
+        <p class="ir-merch__eyebrow">{{ section.settings.eyebrow }}</p>
+      {%- endif -%}
+
+      {%- if section.settings.title != blank -%}
+        <h2 class="ir-merch__title">{{ section.settings.title }}</h2>
+      {%- endif -%}
+
+      {%- if section.settings.text != blank -%}
+        <p class="ir-merch__text">{{ section.settings.text }}</p>
+      {%- endif -%}
+    </div>
+
+    <div class="ir-merch__layout">
+      <div class="ir-merch__cards">
+        {%- for block in section.blocks -%}
+          <article class="ir-merch-card" {{ block.shopify_attributes }}>
+            <span class="ir-merch-card__index">0{{ forloop.index }}</span>
+            {%- if block.settings.title != blank -%}
+              <h3 class="ir-merch-card__title">{{ block.settings.title }}</h3>
+            {%- endif -%}
+            {%- if block.settings.text != blank -%}
+              <p class="ir-merch-card__text">{{ block.settings.text }}</p>
+            {%- endif -%}
+          </article>
+        {%- endfor -%}
+      </div>
+
+      <div class="ir-merch__showcase">
+        <div class="ir-merch__showcase-header">
+          <p class="ir-merch__showcase-kicker">{{ section.settings.showcase_kicker }}</p>
+          <h3 class="ir-merch__showcase-title">{{ section.settings.showcase_title }}</h3>
+        </div>
+
+        <div class="ir-merch-products">
+          {%- if featured_collection != blank and featured_collection.products_count > 0 -%}
+            {%- for product in featured_collection.products limit: 3 -%}
+              <a class="ir-merch-product" href="{{ product.url }}">
+                <span class="ir-merch-product__media">
+                  {%- if product.featured_image != blank -%}
+                    {{
+                      product.featured_image
+                      | image_url: width: 360
+                      | image_tag:
+                        loading: 'lazy',
+                        widths: '180, 240, 360',
+                        sizes: '(min-width: 990px) 120px, 96px',
+                        alt: product.title
+                    }}
+                  {%- else -%}
+                    <span class="ir-merch-product__fallback">{{ product.title | slice: 0, 1 }}</span>
+                  {%- endif -%}
+                </span>
+                <span class="ir-merch-product__copy">
+                  <span class="ir-merch-product__title">{{ product.title }}</span>
+                  <span class="ir-merch-product__price">{{ product.price | money }}</span>
+                </span>
+              </a>
+            {%- endfor -%}
+          {%- else -%}
+            <div class="ir-merch-product ir-merch-product--empty">
+              <span class="ir-merch-product__copy">
+                <span class="ir-merch-product__title">Curated products are being prepared.</span>
+                <span class="ir-merch-product__price">Check back soon</span>
+              </span>
+            </div>
+          {%- endif -%}
+        </div>
+
+        {%- if section.settings.button_text != blank and section.settings.button_link != blank -%}
+          <a class="ir-merch__link" href="{{ section.settings.button_link }}">{{ section.settings.button_text }}</a>
+        {%- endif -%}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "IR - Merchandising Story",
+  "tag": "section",
+  "class": "ir-merch-section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow",
+      "default": "The Edit"
+    },
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Title",
+      "default": "Practical upgrades with a cleaner point of view."
+    },
+    {
+      "type": "textarea",
+      "id": "text",
+      "label": "Text",
+      "default": "PawVault focuses on premium pet accessories, grooming tools, and everyday essentials selected for dogs, cats and their owners."
+    },
+    {
+      "type": "collection",
+      "id": "collection",
+      "label": "Showcase collection"
+    },
+    {
+      "type": "text",
+      "id": "showcase_kicker",
+      "label": "Showcase kicker",
+      "default": "Currently featured"
+    },
+    {
+      "type": "text",
+      "id": "showcase_title",
+      "label": "Showcase title",
+      "default": "Small products, noticeable improvements."
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button text",
+      "default": "Shop all products"
+    },
+    {
+      "type": "url",
+      "id": "button_link",
+      "label": "Button link"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "merch_point",
+      "name": "Merchandising point",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Title",
+          "default": "Useful by design"
+        },
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Text",
+          "default": "Every pick needs a clear reason to be in your pet's life — durability, safety, and everyday use first."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Merchandising Story",
+      "blocks": [
+        {
+          "type": "merch_point"
+        },
+        {
+          "type": "merch_point",
+          "settings": {
+            "title": "Easy to evaluate",
+            "text": "Clean product pages, visible pricing, and straightforward trust cues help you decide faster."
+          }
+        },
+        {
+          "type": "merch_point",
+          "settings": {
+            "title": "Made for everyday wins",
+            "text": "The assortment leans into everyday pet improvements — better toys, more comfortable beds, and accessories that actually last."
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

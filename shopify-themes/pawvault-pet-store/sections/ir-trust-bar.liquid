@@ -1,0 +1,105 @@
+{%- comment -%}
+  IVAN RESELLER - Trust Bar Section
+{%- endcomment -%}
+
+<div class="ir-trust-bar-section" style="background-color: {{ section.settings.background_color | default: '#FFFFFF' }};">
+  <div class="ir-trust-bar__container">
+    {% for block in section.blocks %}
+      <div class="ir-trust-bar__item" {{ block.shopify_attributes }}>
+        {% if block.settings.icon != blank %}
+          <span class="ir-trust-bar__icon-wrap">
+            <span class="ir-trust-bar__icon">{{ block.settings.icon }}</span>
+          </span>
+        {% endif %}
+
+        <div class="ir-trust-bar__copy">
+          <span class="ir-trust-bar__label">{{ block.settings.label }}</span>
+          {% if block.settings.subtext != blank %}
+            <span class="ir-trust-bar__subtext">{{ block.settings.subtext }}</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "IR - Trust Bar",
+  "tag": "section",
+  "class": "ir-trust-bar-section",
+  "settings": [
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background Color",
+      "default": "#FFFFFF"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "trust_item",
+      "name": "Trust Item",
+      "settings": [
+        {
+          "type": "text",
+          "id": "icon",
+          "label": "Icon (emoji or SVG)",
+          "default": "🚚"
+        },
+        {
+          "type": "text",
+          "id": "label",
+          "label": "Label",
+          "default": "Free Shipping"
+        },
+        {
+          "type": "text",
+          "id": "subtext",
+          "label": "Subtext",
+          "default": "Over $35"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Trust Bar",
+      "blocks": [
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🚚",
+            "label": "Free Shipping",
+            "subtext": "Over $35"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "⚡",
+            "label": "Fast Delivery",
+            "subtext": "3-7 Days USA"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🔄",
+            "label": "Easy Returns",
+            "subtext": "30-Day Policy"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🤖",
+            "label": "AI Curated",
+            "subtext": "Trending Products"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

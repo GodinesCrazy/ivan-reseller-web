@@ -1,0 +1,46 @@
+{%- comment -%}
+  IVAN RESELLER - Brand Logo SVG
+  Premium wordmark with optional icon
+{%- endcomment -%}
+
+{% assign logo_style = logo_style | default: 'full' %}
+{% assign logo_color = logo_color | default: '#0f172a' %}
+{% assign logo_height = logo_height | default: 32 %}
+
+{% if logo_style == 'full' %}
+  <svg class="ir-logo" width="{{ logo_height | times: 5.8 | round }}" height="{{ logo_height }}" viewBox="0 0 232 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <g transform="translate(0, 2)">
+      <rect x="1" y="1" width="36" height="36" rx="12" fill="{{ logo_color }}"/>
+      <path d="M12 10v18M26 10v18M12 19h14" stroke="white" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M28.5 8.5l1.1-2.4 1.1 2.4 2.4 1.1-2.4 1.1-1.1 2.4-1.1-2.4-2.4-1.1 2.4-1.1z" fill="#b88746"/>
+    </g>
+    <g transform="translate(50, 8)">
+      <text x="0" y="20" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="19" font-weight="760" fill="{{ logo_color }}" letter-spacing="-0.04em">Ivan</text>
+      <text x="45" y="20" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="19" font-weight="520" fill="{{ logo_color }}" letter-spacing="-0.03em">Reseller</text>
+    </g>
+  </svg>
+{% elsif logo_style == 'icon' %}
+  <svg class="ir-logo ir-logo--icon" width="{{ logo_height }}" height="{{ logo_height }}" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="2" y="2" width="36" height="36" rx="12" fill="{{ logo_color }}"/>
+    <path d="M13 11v18M27 11v18M13 20h14" stroke="white" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M29 8.5l1-2.2 1 2.2 2.2 1-2.2 1-1 2.2-1-2.2-2.2-1 2.2-1z" fill="#b88746"/>
+  </svg>
+{% elsif logo_style == 'wordmark' %}
+  <svg class="ir-logo" width="{{ logo_height | times: 5 }}" height="{{ logo_height }}" viewBox="0 0 180 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <text x="0" y="26" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="700" fill="{{ logo_color }}" letter-spacing="-0.03em">Ivan</text>
+    <text x="54" y="26" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="22" font-weight="500" fill="{{ logo_color }}" letter-spacing="-0.03em">Reseller</text>
+  </svg>
+{% endif %}
+
+<style>
+  .ir-logo {
+    display: block;
+    height: auto;
+  }
+  
+  .header__heading-logo .ir-logo,
+  .header__heading-link .ir-logo {
+    height: 100%;
+    width: auto;
+  }
+</style>

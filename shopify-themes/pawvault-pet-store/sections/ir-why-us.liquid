@@ -1,0 +1,118 @@
+{%- comment -%}
+  IVAN RESELLER - Why Shop With Us Section
+{%- endcomment -%}
+
+<div class="ir-why-section">
+  <div class="ir-why__container">
+    <div class="ir-why__header">
+      <p class="ir-why__eyebrow">Why PawVault</p>
+      {% if section.settings.title != blank %}
+        <h2 class="ir-why__title">{{ section.settings.title }}</h2>
+      {% endif %}
+      {% if section.settings.subtitle != blank %}
+        <p class="ir-why__subtitle">{{ section.settings.subtitle }}</p>
+      {% endif %}
+    </div>
+
+    <div class="ir-why__grid">
+      {% for block in section.blocks %}
+        <div class="ir-why-card" {{ block.shopify_attributes }}>
+          <span class="ir-why-card__step">0{{ forloop.index }}</span>
+
+          {% if block.settings.icon != blank %}
+            <div class="ir-why-card__icon">
+              {{ block.settings.icon }}
+            </div>
+          {% endif %}
+
+          {% if block.settings.title != blank %}
+            <h3 class="ir-why-card__title">{{ block.settings.title }}</h3>
+          {% endif %}
+
+          {% if block.settings.text != blank %}
+            <p class="ir-why-card__text">{{ block.settings.text }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "IR - Why Shop With Us",
+  "tag": "section",
+  "class": "ir-why-section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Section Title",
+      "default": "Why PawVault?"
+    },
+    {
+      "type": "textarea",
+      "id": "subtitle",
+      "label": "Section Subtitle",
+      "default": "We use AI to find quality products before they go viral."
+    }
+  ],
+  "blocks": [
+    {
+      "type": "value_card",
+      "name": "Value Card",
+      "settings": [
+        {
+          "type": "text",
+          "id": "icon",
+          "label": "Icon (emoji or text)",
+          "default": "🤖"
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Card Title",
+          "default": "AI-Powered Discovery"
+        },
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Card Text",
+          "default": "Our algorithms analyze trends to bring you products you'll love before everyone else has them."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Why Shop With Us",
+      "blocks": [
+        {
+          "type": "value_card",
+          "settings": {
+            "icon": "🤖",
+            "title": "AI-Powered Discovery",
+            "text": "Our algorithms analyze trends to bring you products you'll love before everyone else has them."
+          }
+        },
+        {
+          "type": "value_card",
+          "settings": {
+            "icon": "⚡",
+            "title": "Fast USA Shipping",
+            "text": "Most orders ship within 24 hours from US-based facilities. Track your order in real time."
+          }
+        },
+        {
+          "type": "value_card",
+          "settings": {
+            "icon": "💯",
+            "title": "Quality Guaranteed",
+            "text": "Every product is vetted. Not satisfied? 30-day hassle-free returns."
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

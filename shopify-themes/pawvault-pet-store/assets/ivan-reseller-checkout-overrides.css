@@ -1,0 +1,10 @@
+.buy-buttons-block .accelerated-checkout-block,
+.buy-buttons-block .shopify-payment-button,
+.buy-buttons-block .shopify-payment-button__more-options,
+.buy-buttons-block shopify-accelerated-checkout,
+.product-form-buttons .accelerated-checkout-block,
+.product-form-buttons .shopify-payment-button,
+.product-form-buttons .shopify-payment-button__more-options,
+.product-form-buttons shopify-accelerated-checkout {
+  display: none !important;
+}
