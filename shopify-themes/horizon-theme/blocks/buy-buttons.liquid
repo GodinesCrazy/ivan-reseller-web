@@ -224,12 +224,6 @@
             add_to_cart_text: add_to_cart_text
           %}
 
-          {% content_for 'block',
-            type: 'accelerated-checkout',
-            id: 'accelerated-checkout',
-            can_add_to_cart: can_add_to_cart,
-            form_obj: form
-          %}
         </div>
         {%- if block_settings.gift_card_form and product.gift_card? -%}
           </span>
@@ -457,10 +451,6 @@
           "settings": {
             "style_class": "button-secondary"
           }
-        },
-        "accelerated-checkout": {
-          "type": "accelerated-checkout",
-          "static": true
         }
       }
     }
