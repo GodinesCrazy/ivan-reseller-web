@@ -17,7 +17,7 @@
         "announcement_trust": {
           "type": "_announcement",
           "settings": {
-            "text": "Free Shipping on Orders $50+  •  30-Day Returns  •  Secure Checkout",
+            "text": "🐾 PawVault — Free shipping on pet orders over $50  •  30-day easy returns",
             "link": "",
             "font": "var(--font-subheading--family)",
             "font_size": "0.8125rem",

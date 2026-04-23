@@ -6,9 +6,6 @@
 
 {%- liquid
   assign featured_product = section.settings.featured_product
-  if featured_product == blank
-    assign featured_product = collections['all'].products[0]
-  endif
 -%}
 
 <section class="ir-hero-ultra" data-color-scheme="{{ section.settings.color_scheme }}">
@@ -250,6 +247,12 @@
     text-wrap: balance;
   }
   
+  .ir-hero-ultra__subheadline a,
+  .ir-hero-ultra__content a:not(.ir-hero-ultra__cta) {
+    color: inherit;
+    text-decoration: none;
+  }
+
   .ir-hero-ultra__subheadline {
     font-size: 1.125rem;
     line-height: 1.7;
