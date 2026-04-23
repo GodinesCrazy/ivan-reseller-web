@@ -1,0 +1,252 @@
+/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ *
+ * This file may be updated by the Shopify admin theme editor
+ * or related systems. Please exercise caution as any changes
+ * made to this file may be overwritten.
+ * ------------------------------------------------------------
+ */{
+  "sections": {
+    "ir_announcement_bar": {
+      "type": "ir-announcement-bar",
+      "settings": {
+        "show_bar": true,
+        "message": "Free shipping on orders over $50 • 30-day easy returns",
+        "highlight_text": "New Arrivals",
+        "link_text": "Shop Now",
+        "link_url": "shopify://collections/all",
+        "show_icon": true,
+        "icon": "truck",
+        "show_close": true,
+        "color_scheme": "scheme-5"
+      }
+    },
+    "ir_hero_ultra_main": {
+      "type": "ir-hero-ultra",
+      "settings": {
+        "eyebrow": "Curated by AI, Selected for Quality",
+        "title": "Everyday tools, thoughtfully elevated.",
+        "description": "Discover practical tech accessories, workspace upgrades, and travel essentials that simplify your daily routine. Each product is carefully selected for quality, utility, and lasting value.",
+        "button_text": "Shop the Collection",
+        "button_link": "shopify://collections/all",
+        "secondary_button_text": "Explore Best Sellers",
+        "secondary_button_link": "shopify://collections/all"
+      }
+    },
+    "ir_trust_bar_main": {
+      "type": "ir-trust-bar",
+      "blocks": {
+        "ir_trust_item_shipping": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🚚",
+            "label": "Fast Shipping",
+            "subtext": "Free delivery on orders over $50"
+          }
+        },
+        "ir_trust_item_guarantee": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🛡️",
+            "label": "30-Day Guarantee",
+            "subtext": "Easy returns, no questions asked"
+          }
+        },
+        "ir_trust_item_secure": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "🔒",
+            "label": "Secure Checkout",
+            "subtext": "256-bit SSL encryption"
+          }
+        },
+        "ir_trust_item_support": {
+          "type": "trust_item",
+          "settings": {
+            "icon": "💬",
+            "label": "24/7 Support",
+            "subtext": "We're here to help anytime"
+          }
+        }
+      },
+      "block_order": [
+        "ir_trust_item_shipping",
+        "ir_trust_item_guarantee",
+        "ir_trust_item_secure",
+        "ir_trust_item_support"
+      ],
+      "settings": {
+        "background_color": "#FFFFFF"
+      }
+    },
+    "ir_bento_grid_categories": {
+      "type": "ir-bento-grid",
+      "blocks": {
+        "bento_workspace": {
+          "type": "category_item",
+          "settings": {
+            "size": "large",
+            "label": "Workspace",
+            "title": "Minimalist Productivity",
+            "description": "Tools and accessories designed to keep your desk clear and your focus sharp.",
+            "visual_style": "workspace",
+            "visual_badge_1": "Desk Edit",
+            "visual_badge_2": "Work Ready",
+            "link": "shopify://collections/all"
+          }
+        },
+        "bento_travel": {
+          "type": "category_item",
+          "settings": {
+            "size": "tall",
+            "label": "Travel",
+            "title": "On The Move",
+            "description": "Pack lighter and travel smarter with our curated carry essentials.",
+            "visual_style": "travel",
+            "visual_badge_1": "Carry Edit",
+            "visual_badge_2": "Travel Ready",
+            "link": "shopify://collections/all"
+          }
+        },
+        "bento_tech": {
+          "type": "category_item",
+          "settings": {
+            "size": "wide",
+            "label": "Tech Accessories",
+            "title": "Smart Protection",
+            "description": "Premium cables, cases, and charging solutions that last.",
+            "visual_style": "tech",
+            "visual_badge_1": "Tech Edit",
+            "visual_badge_2": "Protected",
+            "link": "shopify://collections/all"
+          }
+        },
+        "bento_new": {
+          "type": "category_item",
+          "settings": {
+            "size": "small",
+            "label": "Latest",
+            "title": "New Arrivals",
+            "description": "The newest practical upgrades for your daily routine.",
+            "visual_style": "daily",
+            "visual_badge_1": "New Drop",
+            "visual_badge_2": "Fresh Pick",
+            "link": "shopify://collections/all"
+          }
+        }
+      },
+      "block_order": [
+        "bento_workspace",
+        "bento_travel",
+        "bento_tech",
+        "bento_new"
+      ],
+      "settings": {
+        "title": "Shop by how you live.",
+        "subtitle": "A curated storefront for smarter work, cleaner carry, protected tech, and practical everyday upgrades.",
+        "fallback_collection": "all"
+      }
+    },
+    "ir_premium_products_featured": {
+      "type": "ir-premium-product-card",
+      "settings": {
+        "eyebrow": "Featured Collection",
+        "title": "Customer Favorites",
+        "collection": "all",
+        "products_to_show": 8,
+        "columns": 4,
+        "show_view_all": true,
+        "view_all_text": "Shop All Products"
+      }
+    },
+    "ir_merch_story_main": {
+      "type": "ir-merchandising-story",
+      "blocks": {
+        "merch_point_travel": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Travel lighter",
+            "text": "Compact organizers, protection, and portable utility products selected for real movement, not impulse clutter."
+          }
+        },
+        "merch_point_workspace": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Work cleaner",
+            "text": "Desk upgrades that create order, reduce friction, and make your everyday setup feel considered."
+          }
+        },
+        "merch_point_everyday": {
+          "type": "merch_point",
+          "settings": {
+            "title": "Buy with clarity",
+            "text": "Stronger product presentation, visible pricing, and direct paths to cart help you evaluate quickly."
+          }
+        }
+      },
+      "block_order": [
+        "merch_point_travel",
+        "merch_point_workspace",
+        "merch_point_everyday"
+      ],
+      "settings": {
+        "eyebrow": "The Ivan Reseller Edit",
+        "title": "A sharper catalog for practical upgrades.",
+        "text": "The store is organized around useful decisions: what improves your desk, what travels well, what protects your tech, and what earns a place in daily use.",
+        "collection": "all",
+        "showcase_kicker": "Featured picks",
+        "showcase_title": "Designed to be easy to compare.",
+        "button_text": "Browse the full catalog",
+        "button_link": "shopify://collections/all"
+      }
+    },
+    "ir_why_us_main": {
+      "type": "ir-why-us",
+      "blocks": {
+        "ir_value_card_selection": {
+          "type": "value_card",
+          "settings": {
+            "icon": "01",
+            "title": "Selected With Purpose",
+            "text": "The assortment is built around products that solve small, real problems across travel, work, and everyday life."
+          }
+        },
+        "ir_value_card_quality": {
+          "type": "value_card",
+          "settings": {
+            "icon": "02",
+            "title": "Clear Before Checkout",
+            "text": "Product pages are designed for fast evaluation with visible pricing, useful details, and clean trust cues."
+          }
+        },
+        "ir_value_card_experience": {
+          "type": "value_card",
+          "settings": {
+            "icon": "03",
+            "title": "Built For Confidence",
+            "text": "Secure checkout, straightforward support, and a more polished buying experience from first click to order."
+          }
+        }
+      },
+      "block_order": [
+        "ir_value_card_selection",
+        "ir_value_card_quality",
+        "ir_value_card_experience"
+      ],
+      "settings": {
+        "title": "A cleaner way to discover useful products.",
+        "subtitle": "Premium does not need to feel complicated. Ivan Reseller keeps the experience focused, practical, and easy to trust."
+      }
+    }
+  },
+  "order": [
+    "ir_announcement_bar",
+    "ir_hero_ultra_main",
+    "ir_trust_bar_main",
+    "ir_bento_grid_categories",
+    "ir_premium_products_featured",
+    "ir_merch_story_main",
+    "ir_why_us_main"
+  ]
+}

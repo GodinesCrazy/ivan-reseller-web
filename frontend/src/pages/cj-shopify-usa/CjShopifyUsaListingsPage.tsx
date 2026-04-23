@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
+import { ExternalLink, Eye, Send } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -317,37 +318,39 @@ export default function CjShopifyUsaListingsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{truthSummary(row)}</td>
-                    <td className="px-3 py-2 space-x-2 whitespace-nowrap">
-                      {['DRAFT', 'FAILED'].includes(row.status) && (
+                    <td className="px-3 py-2">
+                      <div className="flex min-w-[200px] flex-wrap items-center gap-1.5">
+                        {['DRAFT', 'FAILED'].includes(row.status) && (
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2.5 text-xs font-medium text-primary-700 transition hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-primary-800/70 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-900/40"
+                            onClick={() => void publish(row.id)}
+                          >
+                            <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                            {busyId === row.id ? '…' : 'Publicar'}
+                          </button>
+                        )}
+                        {row.status === 'ACTIVE' && row.storefrontUrl && row.publishTruth?.buyerFacingVerified && (
+                          <a
+                            href={row.storefrontUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                            Ver tienda
+                          </a>
+                        )}
                         <button
                           type="button"
-                          disabled={busyId === row.id}
-                          className="text-xs font-medium text-primary-600 dark:text-primary-400 disabled:opacity-40"
-                          onClick={() => void publish(row.id)}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                          onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}
                         >
-                          {busyId === row.id ? '…' : 'Publicar'}
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                          {expandedId === row.id ? 'Ocultar' : 'Detalle'}
                         </button>
-                      )}
-                      {row.status === 'ACTIVE' && row.storefrontUrl && row.publishTruth?.buyerFacingVerified && (
-                        <a
-                          href={row.storefrontUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-emerald-600 dark:text-emerald-400 underline"
-                        >
-                          Ver en tienda
-                        </a>
-                      )}
-                      {row.status === 'ACTIVE' && !row.publishTruth?.buyerFacingVerified && (
-                        <span className="text-xs text-amber-600 dark:text-amber-400">Tienda no verificada</span>
-                      )}
-                      <button
-                        type="button"
-                        className="text-xs text-slate-500 underline"
-                        onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}
-                      >
-                        {expandedId === row.id ? 'Ocultar' : 'Detalle'}
-                      </button>
+                      </div>
                     </td>
                   </tr>
                   {expandedId === row.id && (

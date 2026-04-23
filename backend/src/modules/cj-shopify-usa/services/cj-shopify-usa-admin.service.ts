@@ -565,10 +565,32 @@ export class CjShopifyUsaAdminService {
     }>;
     status?: 'ACTIVE' | 'DRAFT';
   }) {
-    const normalizedMedia = input.media?.map(m => ({
-      ...m,
-      originalSource: m.originalSource.startsWith('//') ? `https:${m.originalSource}` : m.originalSource
-    }));
+    const normalizedMedia = input.media?.map((m) => {
+      let src = m.originalSource;
+      if (src) {
+        if (src.startsWith('//')) {
+          src = `https:${src}`;
+        } else if (src.startsWith('http:')) {
+          src = src.replace('http:', 'https:');
+        }
+        try {
+          const decoded = decodeURI(src);
+          if (decoded === src) {
+            src = encodeURI(src);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+      return {
+        ...m,
+        originalSource: src,
+      };
+    });
+
+    if (normalizedMedia?.length) {
+      console.log(`[ShopifyAdmin] Prepared ${normalizedMedia.length} media items. First URL: ${normalizedMedia[0].originalSource}`);
+    }
 
     const data = await this.graphql<{
       productSet: {

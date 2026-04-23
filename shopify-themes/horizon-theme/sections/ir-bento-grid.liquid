@@ -47,11 +47,27 @@
             {% else %}
               <div class="ir-bento-product-visual ir-bento-product-visual--{{ block.settings.visual_style }}">
                 <div class="ir-bento-product-visual__halo"></div>
-                <div class="ir-bento-product-visual__device">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
+                
+                {%- liquid
+                  assign category_asset = 'cat-' | append: block.settings.visual_style | append: '.png'
+                  assign has_asset = false
+                  if block.settings.visual_style == 'power' or block.settings.visual_style == 'phones' or block.settings.visual_style == 'workspace' or block.settings.visual_style == 'travel' or block.settings.visual_style == 'pets'
+                    assign has_asset = true
+                  endif
+                -%}
+
+                {% if has_asset %}
+                  <div class="ir-bento-product-visual__image-card" style="background: transparent; box-shadow: none; transform: none; top: 50%; right: 5%; transform: translateY(-50%); width: 45%;">
+                    <img src="{{ category_asset | asset_url }}" class="ir-bento-product-visual__image" style="width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.15));" loading="lazy" alt="{{ block.settings.title }}">
+                  </div>
+                {% else %}
+                  <div class="ir-bento-product-visual__device">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                {% endif %}
+
                 <div class="ir-bento-product-visual__spec ir-bento-product-visual__spec--top">
                   <span>{{ block.settings.visual_badge_1 }}</span>
                 </div>
@@ -471,10 +487,13 @@
           "id": "visual_style",
           "label": "Fallback visual style",
           "options": [
+            { "value": "power", "label": "Power" },
+            { "value": "phones", "label": "Phones" },
             { "value": "workspace", "label": "Workspace" },
             { "value": "travel", "label": "Travel" },
             { "value": "tech", "label": "Tech" },
-            { "value": "daily", "label": "Daily" }
+            { "value": "daily", "label": "Daily" },
+            { "value": "pets", "label": "Pets" }
           ],
           "default": "workspace"
         },

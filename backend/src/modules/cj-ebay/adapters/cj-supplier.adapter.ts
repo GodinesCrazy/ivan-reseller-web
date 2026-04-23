@@ -209,12 +209,14 @@ function parseVariantRow(v: Record<string, unknown>): CjVariantDetail | null {
   const attributes: Record<string, string> = {};
   const vn = v.variantNameEn ?? v.variantName;
   if (typeof vn === 'string' && vn.trim()) attributes.label = vn.trim();
+  const variantImage = typeof v.variantImage === 'string' ? v.variantImage.trim() : undefined;
   return {
     cjSku: sku || vid,
     cjVid: vid || undefined,
     attributes,
     unitCostUsd,
     stock,
+    variantImage,
   };
 }
 
@@ -686,8 +688,6 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
     const imgRaw = mainRow.productImage;
     let imageUrls: string[] = [];
     if (typeof imgRaw === 'string' && imgRaw.trim()) {
-      // CJ often returns productImage as a JSON array string e.g. '["url1","url2"]'.
-      // Try JSON.parse first; fall back to comma-split for plain CSV format.
       try {
         const parsed = JSON.parse(imgRaw) as unknown;
         if (Array.isArray(parsed)) {
@@ -697,6 +697,13 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
         }
       } catch {
         imageUrls = imgRaw.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    }
+
+    // Merge variant images if they are not already in imageUrls
+    for (const v of variants) {
+      if (v.variantImage && !imageUrls.includes(v.variantImage)) {
+        imageUrls.push(v.variantImage);
       }
     }
 

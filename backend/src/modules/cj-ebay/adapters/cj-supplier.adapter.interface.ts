@@ -69,6 +69,7 @@ export interface CjVariantDetail {
   attributes: Record<string, string>;
   unitCostUsd: number;
   stock: number;
+  variantImage?: string;
 }
 
 export interface CjProductDetail {
