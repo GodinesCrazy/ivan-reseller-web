@@ -656,7 +656,6 @@ export class CjShopifyUsaAdminService {
           productType: trimOrEmpty(input.productType) || undefined,
           status: input.status || 'ACTIVE',
           tags: input.tags?.filter(Boolean) ?? [],
-          media: normalizedMedia && normalizedMedia.length > 0 ? normalizedMedia : undefined,
           productOptions: [
             {
               name: 'Title',
@@ -812,6 +811,50 @@ export class CjShopifyUsaAdminService {
     if (!published || errors.length > 0) {
       throw new AppError(
         `Shopify publication failed: ${errors.map((entry) => entry.message).join('; ') || 'product not published'}`,
+        400,
+        ErrorCode.EXTERNAL_API_ERROR,
+      );
+    }
+  }
+
+  async unpublishProductFromPublication(input: {
+    userId: number;
+    productId: string;
+    publicationId: string;
+  }) {
+    const data = await this.graphql<{
+      publishableUnpublish: {
+        userErrors: ShopifyGraphqlUserError[];
+        publishable?: {
+          publishedOnPublication?: boolean;
+        } | null;
+      };
+    }>({
+      userId: input.userId,
+      query: `
+        mutation CjShopifyUsaUnpublishProduct($id: ID!, $publicationId: ID!) {
+          publishableUnpublish(id: $id, input: { publicationId: $publicationId }) {
+            publishable {
+              publishedOnPublication(publicationId: $publicationId)
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      variables: {
+        id: input.productId,
+        publicationId: input.publicationId,
+      },
+    });
+
+    const errors = data.publishableUnpublish.userErrors ?? [];
+    const stillPublished = Boolean(data.publishableUnpublish.publishable?.publishedOnPublication);
+    if (errors.length > 0 || stillPublished) {
+      throw new AppError(
+        `Shopify unpublish failed: ${errors.map((entry) => entry.message).join('; ') || 'product still published on publication'}`,
         400,
         ErrorCode.EXTERNAL_API_ERROR,
       );

@@ -169,6 +169,29 @@ async function resolveLatestVariantStock(input: {
   }
 }
 
+async function resolveShopifyPublishTargets(userId: number) {
+  const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+  const probe = await cjShopifyUsaAdminService.probeConnection(userId);
+
+  const preferredLocationId = String(settings.shopifyLocationId || '').trim();
+  const location =
+    probe.locations.find((candidate) => candidate.id === preferredLocationId) ||
+    probe.locations.find((candidate) => candidate.isActive && candidate.fulfillsOnlineOrders) ||
+    probe.locations.find((candidate) => candidate.isActive) ||
+    probe.locations[0];
+
+  const publication =
+    probe.publications.find((candidate) => candidate.name.toLowerCase().includes('online store')) ||
+    probe.publications[0];
+
+  return {
+    settings,
+    probe,
+    location,
+    publication,
+  };
+}
+
 export const cjShopifyUsaPublishService = {
   async buildDraft(input: {
     userId: number;
@@ -388,7 +411,7 @@ export const cjShopifyUsaPublishService = {
       throw new AppError('Listing draft payload is missing. Create a draft first.', 400, ErrorCode.VALIDATION_ERROR);
     }
 
-    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(input.userId);
+    const { settings, probe, location, publication } = await resolveShopifyPublishTargets(input.userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
     const availableStock = listing.variant
       ? await resolveLatestVariantStock({
@@ -420,8 +443,6 @@ export const cjShopifyUsaPublishService = {
       );
     }
 
-    const probe = await cjShopifyUsaAdminService.probeConnection(input.userId);
-
     if (probe.missingScopes.length > 0) {
       throw new AppError(
         `Shopify app is missing required scopes: ${probe.missingScopes.join(', ')}`,
@@ -430,13 +451,6 @@ export const cjShopifyUsaPublishService = {
       );
     }
 
-    const preferredLocationId = String(settings.shopifyLocationId || '').trim();
-    const location =
-      probe.locations.find((candidate) => candidate.id === preferredLocationId) ||
-      probe.locations.find((candidate) => candidate.isActive && candidate.fulfillsOnlineOrders) ||
-      probe.locations.find((candidate) => candidate.isActive) ||
-      probe.locations[0];
-
     if (!location?.id) {
       throw new AppError(
         'No Shopify location is available for inventory sync.',
@@ -444,10 +458,6 @@ export const cjShopifyUsaPublishService = {
         ErrorCode.EXTERNAL_API_ERROR,
       );
     }
-
-    const publication =
-      probe.publications.find((candidate) => candidate.name.toLowerCase().includes('online store')) ||
-      probe.publications[0];
 
     if (!publication?.id) {
       throw new AppError(
@@ -616,6 +626,148 @@ export const cjShopifyUsaPublishService = {
         error: message,
       } as Prisma.InputJsonValue);
 
+      throw error;
+    }
+  },
+
+  async pauseListing(input: {
+    userId: number;
+    listingId: number;
+  }) {
+    const listing = await prisma.cjShopifyUsaListing.findFirst({
+      where: {
+        id: input.listingId,
+        userId: input.userId,
+      },
+    });
+
+    if (!listing) {
+      throw new AppError('Listing not found.', 404, ErrorCode.NOT_FOUND);
+    }
+
+    if (!listing.shopifyProductId) {
+      throw new AppError(
+        'Listing has not been published to Shopify yet, so it cannot be paused.',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    try {
+      const { publication } = await resolveShopifyPublishTargets(input.userId);
+      if (publication?.id) {
+        try {
+          await cjShopifyUsaAdminService.unpublishProductFromPublication({
+            userId: input.userId,
+            productId: listing.shopifyProductId,
+            publicationId: publication.id,
+          });
+        } catch (error) {
+          console.warn(
+            `[ShopifyPause] Listing ${listing.id} could not be unpublished from publication before DRAFT status: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+
+      await cjShopifyUsaAdminService.updateProductStatus({
+        userId: input.userId,
+        productId: listing.shopifyProductId,
+        status: 'DRAFT',
+      });
+
+      const updated = await prisma.cjShopifyUsaListing.update({
+        where: { id: listing.id },
+        data: {
+          status: CJ_SHOPIFY_USA_LISTING_STATUS.PAUSED,
+          lastSyncedAt: new Date(),
+          publishedAt: null,
+          lastError: null,
+        },
+      });
+
+      await recordTrace(input.userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_PAUSE, 'listing.pause', {
+        listingId: listing.id,
+        shopifyProductId: listing.shopifyProductId,
+      } as Prisma.InputJsonValue);
+
+      return updated;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await prisma.cjShopifyUsaListing.update({
+        where: { id: listing.id },
+        data: {
+          lastError: message,
+        },
+      });
+      throw error;
+    }
+  },
+
+  async unpublishListing(input: {
+    userId: number;
+    listingId: number;
+  }) {
+    const listing = await prisma.cjShopifyUsaListing.findFirst({
+      where: {
+        id: input.listingId,
+        userId: input.userId,
+      },
+    });
+
+    if (!listing) {
+      throw new AppError('Listing not found.', 404, ErrorCode.NOT_FOUND);
+    }
+
+    if (!listing.shopifyProductId) {
+      throw new AppError(
+        'Listing has not been published to Shopify yet, so it cannot be unpublished.',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    try {
+      const { publication } = await resolveShopifyPublishTargets(input.userId);
+      if (publication?.id) {
+        await cjShopifyUsaAdminService.unpublishProductFromPublication({
+          userId: input.userId,
+          productId: listing.shopifyProductId,
+          publicationId: publication.id,
+        });
+      }
+
+      await cjShopifyUsaAdminService.updateProductStatus({
+        userId: input.userId,
+        productId: listing.shopifyProductId,
+        status: 'ARCHIVED',
+      });
+
+      const updated = await prisma.cjShopifyUsaListing.update({
+        where: { id: listing.id },
+        data: {
+          status: CJ_SHOPIFY_USA_LISTING_STATUS.ARCHIVED,
+          lastSyncedAt: new Date(),
+          publishedAt: null,
+          lastError: null,
+        },
+      });
+
+      await recordTrace(input.userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_UNPUBLISH, 'listing.unpublish', {
+        listingId: listing.id,
+        shopifyProductId: listing.shopifyProductId,
+      } as Prisma.InputJsonValue);
+
+      return updated;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await prisma.cjShopifyUsaListing.update({
+        where: { id: listing.id },
+        data: {
+          lastError: message,
+        },
+      });
       throw error;
     }
   },

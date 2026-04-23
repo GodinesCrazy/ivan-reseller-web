@@ -50,6 +50,7 @@ export const CJ_SHOPIFY_USA_TRACE_STEP = {
   LISTING_PUBLISH_ERROR: 'listing.publish.error',
   LISTING_FORCE_RESET: 'listing.force.reset',
   LISTING_PAUSE: 'listing.pause',
+  LISTING_UNPUBLISH: 'listing.unpublish',
   LISTING_RECONCILE_START: 'listing.reconcile.start',
   LISTING_RECONCILE_SUCCESS: 'listing.reconcile.success',
   LISTING_RECONCILE_PUBLISHED: 'listing.reconcile.published',

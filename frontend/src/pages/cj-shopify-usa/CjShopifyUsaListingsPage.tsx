@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { ExternalLink, Eye, Send } from 'lucide-react';
+import { Archive, ExternalLink, Eye, Pause, Send } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -218,6 +218,43 @@ export default function CjShopifyUsaListingsPage() {
     }
   }
 
+  async function pauseListing(id: number) {
+    setBusyId(id);
+    setError(null);
+    setActionMsg(null);
+    try {
+      await api.post(`/api/cj-shopify-usa/listings/${id}/pause`);
+      setActionMsg('Publicación pausada.');
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, 'Error al pausar la publicación.'));
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function unpublishListing(id: number) {
+    const confirmed = window.confirm(
+      '¿Despublicar este artículo de Shopify?\n\nSe quitará del canal de venta y quedará archivado en Shopify.',
+    );
+    if (!confirmed) return;
+
+    setBusyId(id);
+    setError(null);
+    setActionMsg(null);
+    try {
+      await api.post(`/api/cj-shopify-usa/listings/${id}/unpublish`);
+      setActionMsg('Artículo despublicado.');
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, 'Error al despublicar el artículo.'));
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const hasFailed = listings.some((l) => l.status === 'FAILED');
   const hasReconcilePending = listings.some((l) => l.status === 'RECONCILE_PENDING');
   const hasReconcileFailed = listings.some((l) => l.status === 'RECONCILE_FAILED');
@@ -290,6 +327,13 @@ export default function CjShopifyUsaListingsPage() {
                 const shipping = draft?.shippingSnapshot;
                 const draftImages = Array.isArray(draft?.images) ? draft.images.slice(0, 4) : [];
                 const descriptionPreview = htmlPreview(draft?.descriptionHtml);
+                const canPublish = row.status !== 'PUBLISHING' && row.status !== 'ACTIVE';
+                const canPause =
+                  Boolean(row.shopifyProductId) &&
+                  !['DRAFT', 'PUBLISHING', 'PAUSED', 'ARCHIVED'].includes(row.status);
+                const canUnpublish =
+                  Boolean(row.shopifyProductId) &&
+                  !['DRAFT', 'PUBLISHING', 'ARCHIVED'].includes(row.status);
 
                 return (
                 <Fragment key={row.id}>
@@ -319,8 +363,8 @@ export default function CjShopifyUsaListingsPage() {
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{truthSummary(row)}</td>
                     <td className="px-3 py-2">
-                      <div className="flex min-w-[200px] flex-wrap items-center gap-1.5">
-                        {['DRAFT', 'FAILED'].includes(row.status) && (
+                      <div className="flex min-w-[360px] flex-wrap items-center gap-1.5">
+                        {canPublish && (
                           <button
                             type="button"
                             disabled={busyId === row.id}
@@ -329,6 +373,28 @@ export default function CjShopifyUsaListingsPage() {
                           >
                             <Send className="h-3.5 w-3.5" aria-hidden="true" />
                             {busyId === row.id ? '…' : 'Publicar'}
+                          </button>
+                        )}
+                        {canPause && (
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                            onClick={() => void pauseListing(row.id)}
+                          >
+                            <Pause className="h-3.5 w-3.5" aria-hidden="true" />
+                            {busyId === row.id ? '…' : 'Pausar'}
+                          </button>
+                        )}
+                        {canUnpublish && (
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
+                            onClick={() => void unpublishListing(row.id)}
+                          >
+                            <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                            {busyId === row.id ? '…' : 'Despublicar'}
                           </button>
                         )}
                         {row.status === 'ACTIVE' && row.storefrontUrl && row.publishTruth?.buyerFacingVerified && (
