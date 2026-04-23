@@ -12,6 +12,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Brain,
+  Tags,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -370,6 +371,17 @@ type SearchState =
   | { kind: 'no_results'; keyword: string }
   | { kind: 'error'; msg: string };
 
+const CATEGORY_PRESETS = [
+  { id: 'power', label: 'Power & Charging', keyword: 'power bank', hint: 'Baterias, cargadores y energia portatil' },
+  { id: 'phones', label: 'Phones', keyword: 'phone holder', hint: 'Accesorios y soporte para celular' },
+  { id: 'workspace', label: 'Workspace', keyword: 'desk organizer', hint: 'Organizacion y accesorios de escritorio' },
+  { id: 'travel', label: 'Travel', keyword: 'travel organizer', hint: 'Bolsos y accesorios de viaje' },
+  { id: 'pets', label: 'Pets', keyword: 'pet grooming', hint: 'Cuidado y accesorios para mascotas' },
+  { id: 'beauty', label: 'Beauty', keyword: 'lipstick organizer', hint: 'Beauty, makeup y organizadores' },
+  { id: 'kitchen', label: 'Home & Kitchen', keyword: 'kitchen organizer', hint: 'Hogar, cocina y orden' },
+  { id: 'electronics', label: 'Electronica', keyword: 'wireless earbuds', hint: 'Gadgets y audio populares en CJ' },
+] as const;
+
 export default function CjShopifyUsaDiscoverPage() {
   const navigate = useNavigate();
   const [keyword, setKeyword] = useState('');
@@ -379,6 +391,7 @@ export default function CjShopifyUsaDiscoverPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiMeta, setAiMeta] = useState<{ totalAnalyzed: number; generatedAt: string } | null>(null);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function doSearch(kw: string, page: number) {
@@ -413,6 +426,12 @@ export default function CjShopifyUsaDiscoverPage() {
 
   function handleDrafted(result: DraftResult) {
     setLastDraft(result);
+  }
+
+  function handleCategorySearch(categoryKeyword: string) {
+    setKeyword(categoryKeyword);
+    setCategoryMenuOpen(false);
+    doSearch(categoryKeyword, 1);
   }
 
   async function handleAiSuggestions() {
@@ -479,7 +498,7 @@ export default function CjShopifyUsaDiscoverPage() {
       )}
 
       {/* Search bar */}
-      <form onSubmit={handleSubmit} className="flex gap-2">
+      <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 items-stretch">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -499,6 +518,43 @@ export default function CjShopifyUsaDiscoverPage() {
           {searchState.kind === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
           Buscar
         </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setCategoryMenuOpen((value) => !value)}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-sm font-medium transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+          >
+            <Tags className="w-4 h-4" />
+            Categorias CJ
+            {categoryMenuOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          {categoryMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 z-20 w-80 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-2">
+              <div className="px-2 py-1.5">
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Buscar por categoria</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Atajos basados en categorias reales y busquedas utiles dentro del catalogo CJ.
+                </p>
+              </div>
+              <div className="space-y-1">
+                {CATEGORY_PRESETS.map((category) => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => handleCategorySearch(category.keyword)}
+                    className="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{category.label}</span>
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500">{category.keyword}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{category.hint}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         <button
           type="button"
           onClick={handleAiSuggestions}

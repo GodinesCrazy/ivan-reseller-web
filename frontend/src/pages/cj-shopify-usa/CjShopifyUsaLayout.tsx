@@ -1,8 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 const links = [
-  { to: '/cj-shopify-usa/discover', label: '✦ Descubrir' },
   { to: '/cj-shopify-usa/overview', label: 'Overview' },
+  { to: '/cj-shopify-usa/discover', label: '✦ Descubrir' },
   { to: '/cj-shopify-usa/products', label: 'Products' },
   { to: '/cj-shopify-usa/listings', label: 'Store Products' },
   { to: '/cj-shopify-usa/orders', label: 'Orders' },

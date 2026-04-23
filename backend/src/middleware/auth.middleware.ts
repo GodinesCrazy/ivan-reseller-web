@@ -200,6 +200,44 @@ export const authenticate = async (
           path: req.path,
           method: req.method,
         });
+
+        const refreshToken =
+          req.cookies?.refreshToken ||
+          (req.headers.cookie ? parseCookiesFromHeader(req.headers.cookie).refreshToken : undefined);
+
+        if (refreshToken && req.path !== '/api/auth/refresh' && req.path !== '/api/auth/logout') {
+          try {
+            const refreshed = await authService.refreshAccessToken(refreshToken);
+            const isProduction = process.env.NODE_ENV === 'production';
+            const cookieBaseOptions = {
+              httpOnly: true,
+              secure: isProduction ? true : req.secure || (req.headers['x-forwarded-proto'] as string) === 'https',
+              sameSite: 'none' as const,
+              path: '/',
+            };
+
+            res.cookie('token', refreshed.accessToken, {
+              ...cookieBaseOptions,
+              maxAge: 60 * 60 * 1000,
+            });
+            res.cookie('refreshToken', refreshed.refreshToken, {
+              ...cookieBaseOptions,
+              maxAge: 30 * 24 * 60 * 60 * 1000,
+            });
+
+            const decoded = jwt.verify(refreshed.accessToken, env.JWT_SECRET) as JwtPayload;
+            req.user = decoded;
+            next();
+            return;
+          } catch (refreshError) {
+            logger.warn('[Auth] Refresh after token expiry failed', {
+              path: req.path,
+              method: req.method,
+              error: refreshError instanceof Error ? refreshError.message : String(refreshError),
+            });
+          }
+        }
+
         throw new AppError('Token expired', 401);
       }
       

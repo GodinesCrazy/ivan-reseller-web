@@ -178,6 +178,29 @@ function collectAttributeSpecs(attributes: Record<string, unknown> | null | unde
     .map(([key, value]) => `${toTitleCase(key)}: ${value}`);
 }
 
+function buildShippingEta(snapshot: Record<string, unknown> | null | undefined): string {
+  const minDays = toSafeInt(snapshot?.estimatedMinDays);
+  const maxDays = toSafeInt(snapshot?.estimatedMaxDays);
+  const origin = normalizeWhitespace(String(snapshot?.originCountryCode ?? '')).toUpperCase();
+
+  if (minDays > 0 && maxDays > 0) {
+    if (minDays === maxDays) {
+      return `Estimated delivery in ${minDays} business day${minDays === 1 ? '' : 's'}`;
+    }
+    return `Estimated delivery in ${minDays}-${maxDays} business days`;
+  }
+
+  if (maxDays > 0) {
+    return `Estimated delivery in up to ${maxDays} business days`;
+  }
+
+  if (origin === 'US') {
+    return 'Estimated delivery in 3-7 business days';
+  }
+
+  return 'Estimated delivery shown at checkout';
+}
+
 function uniqueItems(items: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -206,6 +229,7 @@ function buildDraftDescription(input: {
   title: string;
   description: string | null;
   variantAttributes?: Record<string, unknown> | null;
+  shippingSnapshot?: Record<string, unknown> | null;
 }) {
   const professionalTitle = buildProfessionalTitle({
     title: input.title,
@@ -266,6 +290,11 @@ function buildDraftDescription(input: {
   const remainingHighlights = highlights[0] === lead ? highlights.slice(1) : highlights;
 
   const htmlParts = [`<p>${lead}</p>`];
+  const shippingEta = buildShippingEta(input.shippingSnapshot);
+
+  if (shippingEta && shippingEta !== 'Estimated delivery shown at checkout') {
+    htmlParts.push(`<p><strong>USA stock.</strong> ${shippingEta}.</p>`);
+  }
 
   if (remainingHighlights.length > 0) {
     htmlParts.push('<h3>Highlights</h3>');
@@ -571,6 +600,13 @@ export const cjShopifyUsaPublishService = {
       title: draftTitle,
       description: product.description,
       variantAttributes: (variant.attributes ?? null) as Record<string, unknown> | null,
+      shippingSnapshot: shippingQuote
+        ? {
+            estimatedMinDays: shippingQuote.estimatedMinDays,
+            estimatedMaxDays: shippingQuote.estimatedMaxDays,
+            originCountryCode: shippingQuote.originCountryCode,
+          }
+        : null,
     });
 
     const draftPayload = {
@@ -796,6 +832,25 @@ export const cjShopifyUsaPublishService = {
         userId: input.userId,
         productId: upserted.productId,
         publicationId: publication.id,
+      });
+
+      await cjShopifyUsaAdminService.setProductMetafields({
+        userId: input.userId,
+        productId: upserted.productId,
+        metafields: [
+          {
+            namespace: 'ivan_reseller',
+            key: 'shipping_eta',
+            type: 'single_line_text_field',
+            value: buildShippingEta((draft.shippingSnapshot ?? null) as Record<string, unknown> | null),
+          },
+          {
+            namespace: 'ivan_reseller',
+            key: 'fulfillment_origin',
+            type: 'single_line_text_field',
+            value: String(draft.shippingSnapshot?.originCountryCode || 'US').toUpperCase(),
+          },
+        ],
       });
 
       if (!upserted.productId || !upserted.variantId || !upserted.handle) {

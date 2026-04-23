@@ -96,20 +96,30 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Set JWT in httpOnly cookie for session persistence (cross-origin: Vercel -> Railway)
     let token: string;
+    let refreshToken: string;
     try {
       token = authService.generateToken(user.id, user.username, user.role);
+      refreshToken = await authService.generateRefreshToken(user.id);
     } catch (tokenErr) {
       console.error('LOGIN_FATAL_ERROR token', tokenErr);
       return res.status(500).json({ success: false });
     }
 
     try {
-      res.cookie('token', token, {
+      const baseCookieOptions = {
         httpOnly: true,
         secure: true,
-        sameSite: 'none',
+        sameSite: 'none' as const,
         path: '/',
+      };
+
+      res.cookie('token', token, {
+        ...baseCookieOptions,
         maxAge: 60 * 60 * 1000, // 1 hour
+      });
+      res.cookie('refreshToken', refreshToken, {
+        ...baseCookieOptions,
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       });
     } catch (cookieErr) {
       console.error('COOKIE_SET_FAILED', cookieErr);
@@ -130,6 +140,8 @@ router.post('/login', async (req: Request, res: Response) => {
         username: user.username,
         role: user.role,
       },
+      token,
+      refreshToken,
     });
   } catch (err) {
     console.error('LOGIN_FATAL_ERROR', err);

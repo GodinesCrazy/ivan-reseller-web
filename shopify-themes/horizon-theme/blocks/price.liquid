@@ -11,6 +11,18 @@
     assign is_rte = true
   endif
 
+  assign shipping_eta_metafield = product_resource.metafields.ivan_reseller.shipping_eta
+  assign fulfillment_origin_metafield = product_resource.metafields.ivan_reseller.fulfillment_origin
+  assign shipping_eta = shipping_eta_metafield.value | default: shipping_eta_metafield | strip
+  assign fulfillment_origin = fulfillment_origin_metafield.value | default: fulfillment_origin_metafield | strip | upcase
+  assign is_cj_product = false
+  if product_resource.tags contains 'cj-shopify-usa'
+    assign is_cj_product = true
+  endif
+  if shipping_eta == blank and is_cj_product
+    assign shipping_eta = 'Estimated delivery in 3-7 business days'
+  endif
+
   capture text_block_classes
     if block_settings.width == '100%'
       echo 'text-block--align-' | append: block_settings.alignment
@@ -53,6 +65,16 @@
     show_sale_price_first: block_settings.show_sale_price_first
   %}
 
+  {% if shipping_eta != blank %}
+    <div class="ir-delivery-estimate" data-origin="{{ fulfillment_origin | default: 'US' }}">
+      <span class="ir-delivery-estimate__icon">●</span>
+      <span class="ir-delivery-estimate__text">{{ shipping_eta }}</span>
+      {% if fulfillment_origin == 'US' %}
+        <span class="ir-delivery-estimate__origin">USA stock</span>
+      {% endif %}
+    </div>
+  {% endif %}
+
   {% if block_settings.show_tax_info %}
     <div class="tax-note">
       {%- if cart.duties_included and cart.taxes_included -%}
@@ -83,6 +105,40 @@
     </div>
   {%- endif -%}
 </product-price>
+
+{% stylesheet %}
+  .ir-delivery-estimate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.55rem;
+    color: rgb(var(--color-foreground-rgb) / 0.8);
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .ir-delivery-estimate__icon {
+    color: #0f766e;
+    font-size: 0.7rem;
+  }
+
+  .ir-delivery-estimate__text {
+    font-weight: 600;
+  }
+
+  .ir-delivery-estimate__origin {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(15, 118, 110, 0.1);
+    color: #0f766e;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+{% endstylesheet %}
 
 {% schema %}
 {

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '@stores/authStore';
 import { API_BASE_URL, API_BASE_HAS_SUFFIX } from '../config/runtime';
+import { beginTrackedSessionRequest, endTrackedSessionRequest } from '@/utils/sessionActivity';
 
 // ✅ GO-LIVE: Usar módulo centralizado para API_BASE_URL
 // baseURL = import.meta.env.VITE_API_URL || http://localhost:4000 (via runtime.ts)
@@ -15,6 +16,7 @@ export const api = axios.create({
 // Si las cookies no funcionan (Safari iOS), usamos el token de localStorage
 api.interceptors.request.use(
   (config) => {
+    beginTrackedSessionRequest();
     // Intentar obtener token de localStorage primero (fallback para Safari iOS)
     let token = localStorage.getItem('auth_token');
     
@@ -46,7 +48,10 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    endTrackedSessionRequest();
+    return Promise.reject(error);
+  }
 );
 
 // ✅ FASE 6 & 7: Response interceptor - handle errors robustamente
@@ -63,6 +68,7 @@ const SERVER_ERROR_TOAST_ID = 'server-error-toast';
 
 api.interceptors.response.use(
   (response) => {
+    endTrackedSessionRequest();
     // Si hay respuesta exitosa, resetear flag (backend está funcionando)
     if (backendDownToastShown) {
       backendDownToastShown = false;
@@ -76,6 +82,7 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
+    endTrackedSessionRequest();
     if (import.meta.env.DEV) {
       console.log('[API]', error.config?.url, error.response?.status);
     }

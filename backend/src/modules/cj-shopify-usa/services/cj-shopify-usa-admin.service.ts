@@ -1043,6 +1043,68 @@ export class CjShopifyUsaAdminService {
     return media;
   }
 
+  async setProductMetafields(input: {
+    userId: number;
+    productId: string;
+    metafields: Array<{
+      namespace: string;
+      key: string;
+      type: string;
+      value: string;
+    }>;
+  }) {
+    const metafields = input.metafields
+      .map((entry) => ({
+        ownerId: input.productId,
+        namespace: trimOrEmpty(entry.namespace),
+        key: trimOrEmpty(entry.key),
+        type: trimOrEmpty(entry.type),
+        value: trimOrEmpty(entry.value),
+      }))
+      .filter((entry) => entry.namespace && entry.key && entry.type && entry.value);
+
+    if (metafields.length === 0) {
+      return [];
+    }
+
+    const data = await this.graphql<{
+      metafieldsSet?: {
+        metafields?: Array<{ id: string; namespace: string; key: string; value: string }> | null;
+        userErrors?: ShopifyGraphqlUserError[] | null;
+      } | null;
+    }>({
+      userId: input.userId,
+      query: `
+        mutation CjShopifyUsaSetProductMetafields($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            metafields {
+              id
+              namespace
+              key
+              value
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      variables: { metafields },
+    });
+
+    const errors = data.metafieldsSet?.userErrors ?? [];
+    if (errors.length > 0) {
+      throw new AppError(
+        `Shopify metafieldsSet failed: ${errors.map((entry) => entry.message).join('; ')}`,
+        400,
+        ErrorCode.EXTERNAL_API_ERROR,
+      );
+    }
+
+    return data.metafieldsSet?.metafields ?? [];
+  }
+
   async updateProductStatus(input: {
     userId: number;
     productId: string;

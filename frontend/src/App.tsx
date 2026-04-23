@@ -102,6 +102,7 @@ const OnboardingWizard = lazy(() => import('@components/OnboardingWizard'));
 const NotFound = lazy(() => import('@pages/NotFound'));
 import Layout from '@components/layout/Layout';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { useInactivitySessionTimeout } from '@/hooks/useInactivitySessionTimeout';
 
 /** /help exacto: render sin auth ni stores - NUNCA pantalla en blanco */
 function HelpOnlyPage() {
@@ -116,6 +117,7 @@ function AppContent() {
 
   // ✅ CORRECCIÓN TEMA: Inicializar tema al cargar la app
   useTheme();
+  useInactivitySessionTimeout();
 
   // Silent OAuth proactive refresh when user is authenticated
   useEffect(() => {
