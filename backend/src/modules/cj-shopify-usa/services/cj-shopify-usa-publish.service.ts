@@ -46,19 +46,21 @@ function decodeHtmlEntities(input: string): string {
 }
 
 function stripHtmlToPlainText(input: string): string {
-  return normalizeWhitespace(
-    decodeHtmlEntities(
-      input
-        .replace(/<img\b[^>]*>/gi, ' ')
-        .replace(/<table[\s\S]*?<\/table>/gi, ' ')
-        .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6])\s*\/?>/gi, '\n')
-        .replace(/<li\b[^>]*>/gi, '\n')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\r/g, '\n'),
-    )
-      .replace(/[ \t]+\n/g, '\n')
-      .replace(/\n{2,}/g, '\n'),
+  const text = decodeHtmlEntities(
+    input
+      .replace(/<img\b[^>]*>/gi, ' ')
+      .replace(/<table[\s\S]*?<\/table>/gi, ' ')
+      .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6])\s*\/?>/gi, '\n')
+      .replace(/<li\b[^>]*>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\r/g, '\n'),
   );
+
+  return text
+    .split('\n')
+    .map((line) => normalizeWhitespace(line))
+    .filter(Boolean)
+    .join('\n');
 }
 
 function toTitleCase(input: string): string {
@@ -77,7 +79,14 @@ function toTitleCase(input: string): string {
 }
 
 function sentenceCase(input: string): string {
-  const text = normalizeWhitespace(input).replace(/\s*:\s*/g, ': ');
+  const text = normalizeWhitespace(input)
+    .replace(/\b([A-Z][A-Z0-9&/-]{2,})\b/g, (word) => {
+      if (['RFID', 'USB', 'LED', 'AAA', 'USPS', 'VIP'].includes(word)) {
+        return word;
+      }
+      return toTitleCase(word.toLowerCase());
+    })
+    .replace(/\s*:\s*/g, ': ');
   if (!text) return '';
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -186,7 +195,7 @@ function buildDefaultLead(title: string): string {
   if (lower.includes('organizer')) return `A practical ${lower} designed to keep everyday essentials neat, visible, and easy to reach.`;
   if (lower.includes('timer')) return `A clear and easy-to-use ${lower} designed for kitchens, desks, and daily routines.`;
   if (lower.includes('wallet')) return `A slim ${lower} built for everyday carry, quick access, and a cleaner pocket setup.`;
-  if (lower.includes('scissors')) return `A precise ${lower} designed for clean trimming and comfortable control.`;
+  if (lower.includes('scissors')) return `A precise pair of ${lower} designed for clean trimming and comfortable control.`;
   if (lower.includes('wrist rest')) return `A supportive ${lower} made for more comfortable typing, clicking, and long desk sessions.`;
   if (lower.includes('gap organizer')) return `A space-saving ${lower} that keeps small essentials within reach while reducing car clutter.`;
   if (lower.includes('stand')) return `A stable ${lower} for hands-free viewing at home, work, or on the go.`;
