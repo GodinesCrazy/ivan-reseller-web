@@ -1,0 +1,216 @@
+{%- comment -%} PawVault — Premium Hero. Zero product image dependency. {%- endcomment -%}
+
+<section class="pv-hero">
+  <div class="pv-hero__bg" aria-hidden="true">
+    <div class="pv-hero__glow pv-hero__glow--1"></div>
+    <div class="pv-hero__glow pv-hero__glow--2"></div>
+  </div>
+
+  <div class="pv-hero__container">
+    <div class="pv-hero__eyebrow-row">
+      <span class="pv-hero__dot"></span>
+      <span>{{ section.settings.eyebrow | default: 'PawVault — Premium Pet Store' }}</span>
+    </div>
+
+    <h1 class="pv-hero__headline">
+      {{ section.settings.line1 | default: 'Everything' }}<br>
+      <span class="pv-hero__accent">{{ section.settings.line2 | default: 'your pet' }}</span><br>
+      {{ section.settings.line3 | default: 'deserves.' }}
+    </h1>
+
+    <p class="pv-hero__sub">
+      {{ section.settings.description | default: 'Premium accessories, grooming essentials and everyday supplies for dogs and cats — selected for quality, safety and real daily use.' }}
+    </p>
+
+    <div class="pv-hero__ctas">
+      <a href="{{ section.settings.btn1_link | default: '/collections/all' }}" class="pv-hero__btn pv-hero__btn--fill">
+        {{ section.settings.btn1_text | default: 'Shop Pet Supplies' }}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+      <a href="{{ section.settings.btn2_link | default: '/collections/all' }}" class="pv-hero__btn pv-hero__btn--outline">
+        {{ section.settings.btn2_text | default: 'Browse All Products' }}
+      </a>
+    </div>
+
+    <div class="pv-hero__pills">
+      <span class="pv-hero__pill">🐕 Dogs</span>
+      <span class="pv-hero__pill">🐈 Cats</span>
+      <span class="pv-hero__pill">✂️ Grooming</span>
+      <span class="pv-hero__pill">🎾 Toys</span>
+      <span class="pv-hero__pill">🛏️ Beds</span>
+      <span class="pv-hero__pill">🥣 Feeding</span>
+    </div>
+  </div>
+</section>
+
+<style>
+  .pv-hero {
+    position: relative;
+    min-height: 88vh;
+    display: flex;
+    align-items: center;
+    background: #0f172a;
+    overflow: hidden;
+  }
+
+  .pv-hero__bg { position: absolute; inset: 0; pointer-events: none; }
+
+  .pv-hero__glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(100px);
+    opacity: 0.45;
+  }
+
+  .pv-hero__glow--1 {
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(245,158,11,0.25) 0%, transparent 70%);
+    top: -10%; right: -5%;
+  }
+
+  .pv-hero__glow--2 {
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%);
+    bottom: -5%; left: 5%;
+  }
+
+  .pv-hero__container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: clamp(80px, 12vw, 140px) clamp(24px, 6vw, 80px);
+    text-align: center;
+  }
+
+  .pv-hero__eyebrow-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #f59e0b;
+    margin-bottom: 36px;
+  }
+
+  .pv-hero__dot {
+    width: 8px; height: 8px;
+    background: #f59e0b;
+    border-radius: 50%;
+    animation: pv-blink 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pv-blink {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(1.4); }
+  }
+
+  .pv-hero__headline {
+    font-size: clamp(3.25rem, 9vw, 7rem);
+    font-weight: 800;
+    line-height: 1.0;
+    letter-spacing: -0.03em;
+    color: #f8fafc;
+    margin: 0 0 28px;
+  }
+
+  .pv-hero__accent { color: #f59e0b; }
+
+  .pv-hero__sub {
+    font-size: clamp(1rem, 1.8vw, 1.15rem);
+    line-height: 1.75;
+    color: #94a3b8;
+    max-width: 540px;
+    margin: 0 auto 44px;
+  }
+
+  .pv-hero__ctas {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 52px;
+  }
+
+  .pv-hero__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 15px 30px;
+    border-radius: 100px;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.22s ease;
+    letter-spacing: -0.01em;
+  }
+
+  .pv-hero__btn--fill {
+    background: #f59e0b;
+    color: #0f172a;
+    box-shadow: 0 4px 20px rgba(245,158,11,0.3);
+  }
+
+  .pv-hero__btn--fill:hover {
+    background: #fbbf24;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(245,158,11,0.45);
+  }
+
+  .pv-hero__btn--outline {
+    background: transparent;
+    color: #f1f5f9;
+    border: 1.5px solid rgba(241,245,249,0.25);
+  }
+
+  .pv-hero__btn--outline:hover {
+    border-color: rgba(241,245,249,0.6);
+    background: rgba(241,245,249,0.05);
+  }
+
+  .pv-hero__pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .pv-hero__pill {
+    padding: 8px 18px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 100px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #94a3b8;
+    letter-spacing: 0.01em;
+  }
+
+  @media (max-width: 749px) {
+    .pv-hero__headline { line-height: 1.05; }
+    .pv-hero__btn { width: 100%; justify-content: center; }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "PV — Hero Premium",
+  "tag": "section",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "PawVault — Premium Pet Store" },
+    { "type": "text", "id": "line1", "label": "Headline Line 1", "default": "Everything" },
+    { "type": "text", "id": "line2", "label": "Headline Line 2 (amber accent)", "default": "your pet" },
+    { "type": "text", "id": "line3", "label": "Headline Line 3", "default": "deserves." },
+    { "type": "textarea", "id": "description", "label": "Description", "default": "Premium accessories, grooming essentials and everyday supplies for dogs and cats — selected for quality, safety and real daily use." },
+    { "type": "text", "id": "btn1_text", "label": "Primary Button", "default": "Shop Pet Supplies" },
+    { "type": "url", "id": "btn1_link", "label": "Primary Button Link" },
+    { "type": "text", "id": "btn2_text", "label": "Secondary Button", "default": "Browse All Products" },
+    { "type": "url", "id": "btn2_link", "label": "Secondary Button Link" }
+  ],
+  "presets": [{ "name": "PV — Hero Premium", "category": "PawVault" }]
+}
+{% endschema %}

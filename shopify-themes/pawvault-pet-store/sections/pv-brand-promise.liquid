@@ -1,0 +1,171 @@
+{%- comment -%} PawVault — Brand Promise Section. Dark editorial, no product dependency. {%- endcomment -%}
+
+<section class="pv-promise">
+  <div class="pv-promise__container">
+
+    <div class="pv-promise__left">
+      <p class="pv-promise__eyebrow">{{ section.settings.eyebrow | default: 'The PawVault Promise' }}</p>
+      <h2 class="pv-promise__title">{{ section.settings.title | default: 'Premium pet supplies, seriously curated.' }}</h2>
+      <p class="pv-promise__text">{{ section.settings.text | default: 'PawVault is built around one idea: pets deserve better. Every product we carry is evaluated for safety, durability, and real everyday use.' }}</p>
+      {% if section.settings.btn_text != blank %}
+        <a href="{{ section.settings.btn_link | default: '/collections/all' }}" class="pv-promise__btn">
+          {{ section.settings.btn_text }}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      {% endif %}
+    </div>
+
+    <div class="pv-promise__right">
+      {% for block in section.blocks %}
+        <div class="pv-val" {{ block.shopify_attributes }}>
+          <span class="pv-val__num">0{{ forloop.index }}</span>
+          <div class="pv-val__body">
+            <h3 class="pv-val__title">{{ block.settings.title }}</h3>
+            <p class="pv-val__text">{{ block.settings.text }}</p>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</section>
+
+<style>
+  .pv-promise {
+    padding: clamp(5rem, 8vw, 8rem) 0;
+    background: #0f172a;
+  }
+
+  .pv-promise__container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 clamp(20px, 5vw, 80px);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(48px, 8vw, 100px);
+    align-items: start;
+  }
+
+  @media (max-width: 899px) { .pv-promise__container { grid-template-columns: 1fr; } }
+
+  .pv-promise__eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #f59e0b;
+    margin: 0 0 20px;
+  }
+
+  .pv-promise__title {
+    font-size: clamp(1.75rem, 4vw, 2.75rem);
+    font-weight: 800;
+    color: #f8fafc;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0 0 20px;
+  }
+
+  .pv-promise__text {
+    font-size: 1rem;
+    line-height: 1.75;
+    color: #64748b;
+    margin: 0 0 36px;
+  }
+
+  .pv-promise__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 28px;
+    background: #f59e0b;
+    color: #0f172a;
+    border-radius: 100px;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+
+  .pv-promise__btn:hover {
+    background: #fbbf24;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(245,158,11,0.35);
+  }
+
+  .pv-promise__right {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .pv-val {
+    display: flex;
+    gap: 22px;
+    padding: 28px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+
+  .pv-val:first-child { padding-top: 0; }
+  .pv-val:last-child { border-bottom: none; padding-bottom: 0; }
+
+  .pv-val__num {
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: #f59e0b;
+    padding-top: 3px;
+    flex-shrink: 0;
+    min-width: 24px;
+  }
+
+  .pv-val__title {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+
+  .pv-val__text {
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: #475569;
+    margin: 0;
+  }
+</style>
+
+{% schema %}
+{
+  "name": "PV — Brand Promise",
+  "tag": "section",
+  "settings": [
+    { "type": "text",     "id": "eyebrow",  "label": "Eyebrow",       "default": "The PawVault Promise" },
+    { "type": "text",     "id": "title",    "label": "Title",          "default": "Premium pet supplies, seriously curated." },
+    { "type": "textarea", "id": "text",     "label": "Description",    "default": "PawVault is built around one idea: pets deserve better. Every product we carry is evaluated for safety, durability, and real everyday use — not just what looks good on a shelf." },
+    { "type": "text",     "id": "btn_text", "label": "Button Text",    "default": "Shop All Pet Supplies" },
+    { "type": "url",      "id": "btn_link", "label": "Button Link" }
+  ],
+  "blocks": [
+    {
+      "type": "value",
+      "name": "Value Point",
+      "settings": [
+        { "type": "text",     "id": "title", "label": "Title" },
+        { "type": "textarea", "id": "text",  "label": "Text" }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "PV — Brand Promise",
+      "category": "PawVault",
+      "blocks": [
+        { "type": "value", "settings": { "title": "Pet-Focused Selection", "text": "The entire catalog is built around dogs, cats and small animals. Every product is selected for safety, durability and real-world pet use." } },
+        { "type": "value", "settings": { "title": "Happy Pet Guarantee",  "text": "30-day returns, secure checkout and dedicated support. If your pet doesn't love it, we make it right — no questions asked." } },
+        { "type": "value", "settings": { "title": "Fast, Free Shipping",  "text": "Free shipping on all orders over $50. Most pet orders arrive within 3–7 business days across the USA." } }
+      ]
+    }
+  ]
+}
+{% endschema %}
