@@ -757,6 +757,7 @@ export class CjShopifyUsaAdminService {
               inventoryItemId: input.inventoryItemId,
               locationId: input.locationId,
               quantity: Math.max(0, Math.floor(input.quantity)),
+              changeFromQuantity: null,
             },
           ],
         },
