@@ -39,6 +39,9 @@ type ShopifyProductTruth = {
   handle?: string | null;
   status?: string | null;
   publishedOnPublication?: boolean | null;
+  media?: {
+    nodes?: Array<{ id: string }> | null;
+  } | null;
   variants?: {
     nodes?: ShopifyVariantTruth[];
   } | null;
@@ -75,6 +78,7 @@ export type CjShopifyUsaPublishTruth = {
     publicationName: string | null;
     inventoryQuantity: number | null;
     inventoryItemId: string | null;
+    mediaCount: number | null;
   };
   storefront: {
     url: string | null;
@@ -282,6 +286,11 @@ export class CjShopifyUsaReconciliationService {
               handle
               status
               ${publicationField}
+              media(first: 50) {
+                nodes {
+                  id
+                }
+              }
               variants(first: 50) {
                 nodes {
                   id
@@ -341,6 +350,7 @@ export class CjShopifyUsaReconciliationService {
           publicationName: null,
           inventoryQuantity: null,
           inventoryItemId: null,
+          mediaCount: null,
         },
         storefront: {
           url: storefrontUrl,
@@ -385,6 +395,7 @@ export class CjShopifyUsaReconciliationService {
     const inventoryQuantity = availableQuantity(variant);
     const adminStatus = trim(shopifyProduct?.status).toUpperCase() || null;
     const adminHandle = trim(shopifyProduct?.handle) || null;
+    const mediaCount = shopifyProduct?.media?.nodes?.length ?? null;
     const publishedOnPublication =
       typeof shopifyProduct?.publishedOnPublication === 'boolean'
         ? shopifyProduct.publishedOnPublication
@@ -412,6 +423,7 @@ export class CjShopifyUsaReconciliationService {
     } else {
       if (!adminHandle) reasons.push('Shopify Admin product has no handle.');
       if (adminStatus !== 'ACTIVE') reasons.push(`Shopify Admin product status is ${adminStatus ?? 'UNKNOWN'}.`);
+      if (mediaCount === 0) reasons.push('Shopify Admin product has no product images.');
       if (publishedOnPublication === false) reasons.push('Product is not published on the selected Shopify publication.');
       if (inventoryQuantity != null && inventoryQuantity <= 0) reasons.push('Shopify available inventory is 0.');
       if (variant && normalizeShopifyVariantGid(listing.shopifyVariantId) && variant.id !== normalizeShopifyVariantGid(listing.shopifyVariantId)) {
@@ -432,6 +444,7 @@ export class CjShopifyUsaReconciliationService {
     } else if (
       adminStatus === 'ACTIVE' &&
       adminHandle &&
+      mediaCount !== 0 &&
       publishedOnPublication !== false &&
       inventoryQuantity !== 0 &&
       storefront?.buyerFacingOk
@@ -487,6 +500,7 @@ export class CjShopifyUsaReconciliationService {
         shopifyAdminStatus: adminStatus,
         publishedOnPublication,
         inventoryQuantity,
+        mediaCount,
         storefrontBuyerFacingOk: storefront?.buyerFacingOk ?? null,
       } as Prisma.InputJsonValue);
     }
@@ -520,6 +534,7 @@ export class CjShopifyUsaReconciliationService {
           publicationName: resolvedTargets.publicationName,
           inventoryQuantity,
           inventoryItemId: variant?.inventoryItem?.id ?? null,
+          mediaCount,
         },
         storefront: {
           url: storefrontUrl,

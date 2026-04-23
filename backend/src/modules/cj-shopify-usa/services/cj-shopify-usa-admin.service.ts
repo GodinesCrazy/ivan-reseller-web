@@ -76,6 +76,28 @@ function trimOrEmpty(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function normalizeShopifyMediaSource(value: unknown): string {
+  let src = trimOrEmpty(value);
+  if (!src) return '';
+
+  if (src.startsWith('//')) {
+    src = `https:${src}`;
+  } else if (src.startsWith('http:')) {
+    src = src.replace('http:', 'https:');
+  }
+
+  try {
+    const decoded = decodeURI(src);
+    if (decoded === src) {
+      src = encodeURI(src);
+    }
+  } catch {
+    // Keep the source as-is; Shopify will return mediaUserErrors for invalid URLs.
+  }
+
+  return src;
+}
+
 export function normalizeShopifyShopDomain(raw: string): string {
   const input = trimOrEmpty(raw).toLowerCase();
   if (!input) {
@@ -566,27 +588,12 @@ export class CjShopifyUsaAdminService {
     status?: 'ACTIVE' | 'DRAFT';
   }) {
     const normalizedMedia = input.media?.map((m) => {
-      let src = m.originalSource;
-      if (src) {
-        if (src.startsWith('//')) {
-          src = `https:${src}`;
-        } else if (src.startsWith('http:')) {
-          src = src.replace('http:', 'https:');
-        }
-        try {
-          const decoded = decodeURI(src);
-          if (decoded === src) {
-            src = encodeURI(src);
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
+      const src = normalizeShopifyMediaSource(m.originalSource);
       return {
         ...m,
         originalSource: src,
       };
-    });
+    }).filter((m) => Boolean(m.originalSource));
 
     if (normalizedMedia?.length) {
       console.log(`[ShopifyAdmin] Prepared ${normalizedMedia.length} media items. First URL: ${normalizedMedia[0].originalSource}`);
@@ -751,7 +758,6 @@ export class CjShopifyUsaAdminService {
               inventoryItemId: input.inventoryItemId,
               locationId: input.locationId,
               quantity: Math.max(0, Math.floor(input.quantity)),
-              changeFromQuantity: null,
             },
           ],
         },
@@ -893,6 +899,151 @@ export class CjShopifyUsaAdminService {
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  async getProductMediaCount(input: { userId: number; productId: string }) {
+    const data = await this.graphql<{
+      product?: {
+        media?: {
+          nodes?: Array<{ id: string }>;
+        } | null;
+      } | null;
+    }>({
+      userId: input.userId,
+      query: `
+        query CjShopifyUsaProductMedia($productId: ID!) {
+          product(id: $productId) {
+            media(first: 50) {
+              nodes {
+                id
+              }
+            }
+          }
+        }
+      `,
+      variables: { productId: input.productId },
+    });
+    return data.product?.media?.nodes?.length ?? 0;
+  }
+
+  async productCreateMedia(input: {
+    userId: number;
+    productId: string;
+    media: Array<{
+      originalSource: string;
+      mediaContentType: 'IMAGE';
+      alt?: string;
+    }>;
+  }) {
+    const data = await this.graphql<{
+      productCreateMedia?: {
+        media?: Array<{ id: string; status: string }> | null;
+        mediaUserErrors?: ShopifyGraphqlUserError[] | null;
+        userErrors?: ShopifyGraphqlUserError[] | null;
+      } | null;
+    }>({
+      userId: input.userId,
+      query: `
+        mutation CjShopifyUsaProductCreateMedia(
+          $productId: ID!
+          $media: [CreateMediaInput!]!
+        ) {
+          productCreateMedia(productId: $productId, media: $media) {
+            media {
+              id
+              status
+            }
+            mediaUserErrors {
+              field
+              message
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      variables: {
+        productId: input.productId,
+        media: input.media.map((m) => ({
+          originalSource: normalizeShopifyMediaSource(m.originalSource),
+          mediaContentType: m.mediaContentType,
+          alt: trimOrEmpty(m.alt) || undefined,
+        })).filter((m) => Boolean(m.originalSource)),
+      },
+    });
+
+    const errors = [
+      ...(data.productCreateMedia?.mediaUserErrors ?? []),
+      ...(data.productCreateMedia?.userErrors ?? []),
+    ];
+    const media = data.productCreateMedia?.media ?? [];
+
+    if (errors.length > 0) {
+      throw new AppError(
+        `Shopify productCreateMedia failed: ${errors.map((e) => e.message).join('; ')}`,
+        400,
+        ErrorCode.EXTERNAL_API_ERROR,
+      );
+    }
+
+    if (input.media.length > 0 && media.length === 0) {
+      throw new AppError(
+        'Shopify productCreateMedia returned no media for the submitted image URLs.',
+        502,
+        ErrorCode.EXTERNAL_API_ERROR,
+      );
+    }
+
+    return media;
+  }
+
+  async updateProductStatus(input: {
+    userId: number;
+    productId: string;
+    status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+  }) {
+    const data = await this.graphql<{
+      productUpdate?: {
+        product?: { id: string; status: string } | null;
+        userErrors?: ShopifyGraphqlUserError[] | null;
+      } | null;
+    }>({
+      userId: input.userId,
+      query: `
+        mutation CjShopifyUsaUpdateProductStatus($product: ProductUpdateInput!) {
+          productUpdate(product: $product) {
+            product {
+              id
+              status
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      variables: {
+        product: {
+          id: input.productId,
+          status: input.status,
+        },
+      },
+    });
+
+    const errors = data.productUpdate?.userErrors ?? [];
+    const product = data.productUpdate?.product;
+    if (errors.length > 0 || !product) {
+      throw new AppError(
+        `Shopify product status update failed: ${errors.map((entry) => entry.message).join('; ') || 'unknown error'}`,
+        400,
+        ErrorCode.EXTERNAL_API_ERROR,
+      );
+    }
+
+    return product;
   }
 
   async listRecentOrders(input: {

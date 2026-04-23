@@ -48,6 +48,93 @@ async function recordTrace(userId: number, step: string, message: string, meta?:
   });
 }
 
+async function ensureShopifyImagesAttached(input: {
+  userId: number;
+  listingId: number;
+  productId: string;
+  mediaPayload: Array<{ originalSource: string; mediaContentType: 'IMAGE' }>;
+}) {
+  const draftProductAfterImageFailure = async (reason: string) => {
+    try {
+      await cjShopifyUsaAdminService.updateProductStatus({
+        userId: input.userId,
+        productId: input.productId,
+        status: 'DRAFT',
+      });
+      console.warn(
+        `[ShopifyPublish] Listing ${input.listingId} product ${input.productId} moved to DRAFT after image failure: ${reason}`,
+      );
+    } catch (statusError) {
+      console.warn(
+        `[ShopifyPublish] Could not move listing ${input.listingId} product ${input.productId} to DRAFT after image failure: ${
+          statusError instanceof Error ? statusError.message : String(statusError)
+        }`,
+      );
+    }
+  };
+
+  if (input.mediaPayload.length === 0) {
+    await draftProductAfterImageFailure('no local image URLs in draft payload');
+    throw new AppError(
+      'Listing cannot be published to Shopify without at least one product image.',
+      400,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  let mediaCount = await cjShopifyUsaAdminService.getProductMediaCount({
+    userId: input.userId,
+    productId: input.productId,
+  });
+
+  console.log(
+    `[ShopifyPublish] Listing ${input.listingId} product ${input.productId} has ${mediaCount} media items (expected ${input.mediaPayload.length})`,
+  );
+
+  if (mediaCount === 0) {
+    console.log(
+      `[ShopifyPublish] Fallback: productSet did not attach images. Attempting productCreateMedia for ${input.mediaPayload.length} images.`,
+    );
+    try {
+      await cjShopifyUsaAdminService.productCreateMedia({
+        userId: input.userId,
+        productId: input.productId,
+        media: input.mediaPayload,
+      });
+    } catch (error) {
+      await draftProductAfterImageFailure(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }
+
+  for (const delayMs of [500, 1500, 3000]) {
+    mediaCount = await cjShopifyUsaAdminService.getProductMediaCount({
+      userId: input.userId,
+      productId: input.productId,
+    });
+    if (mediaCount > 0) {
+      return mediaCount;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  mediaCount = await cjShopifyUsaAdminService.getProductMediaCount({
+    userId: input.userId,
+    productId: input.productId,
+  });
+
+  if (mediaCount <= 0) {
+    await draftProductAfterImageFailure('Shopify media count remained 0 after upload verification');
+    throw new AppError(
+      `Shopify product was created but no images are attached after upload verification. productId=${input.productId}`,
+      502,
+      ErrorCode.EXTERNAL_API_ERROR,
+    );
+  }
+
+  return mediaCount;
+}
+
 async function resolveLatestVariantStock(input: {
   userId: number;
   variantId: number;
@@ -385,10 +472,13 @@ export const cjShopifyUsaPublishService = {
     } as Prisma.InputJsonValue);
 
     try {
-      const mediaPayload = (Array.isArray(draft.images) ? draft.images : []).map((src: string) => ({
-        originalSource: String(src),
-        mediaContentType: 'IMAGE' as const,
-      }));
+      const mediaPayload = (Array.isArray(draft.images) ? draft.images : [])
+        .map((src: string) => String(src).trim())
+        .filter(Boolean)
+        .map((src: string) => ({
+          originalSource: src,
+          mediaContentType: 'IMAGE' as const,
+        }));
 
       console.log(`[ShopifyPublish] Publishing listing ${listing.id} with ${mediaPayload.length} images`);
 
@@ -405,6 +495,13 @@ export const cjShopifyUsaPublishService = {
         price: Number(listing.listedPriceUsd || draft.pricingSnapshot?.suggestedSellPriceUsd || 0),
         media: mediaPayload,
         status: 'ACTIVE',
+      });
+
+      const attachedMediaCount = await ensureShopifyImagesAttached({
+        userId: input.userId,
+        listingId: listing.id,
+        productId: upserted.productId,
+        mediaPayload,
       });
 
       await cjShopifyUsaAdminService.setInventoryQuantity({
@@ -499,6 +596,7 @@ export const cjShopifyUsaPublishService = {
         shopifyHandle: upserted.handle,
         publicationId: publication.id,
         locationId: location.id,
+        attachedMediaCount,
         storefrontVerification,
       } as Prisma.InputJsonValue);
 

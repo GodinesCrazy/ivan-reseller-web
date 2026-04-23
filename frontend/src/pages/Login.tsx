@@ -152,7 +152,7 @@ export default function Login() {
           {/* ✅ P0.5: Botón para solicitar acceso */}
           <div className="mt-4 text-center">
             <p className="text-sm text-slate-300 mb-2">
-              ¿No tenés cuenta?
+              ¿No tienes cuenta?
             </p>
             <button
               type="button"
