@@ -1120,6 +1120,170 @@ export const cjShopifyUsaPublishService = {
     }
   },
 
+  /**
+   * Expands an ACTIVE single-variant Shopify product to include ALL CJ variants
+   * of the same product. Creates listings for previously-unpublished variants
+   * and updates the Shopify product with a proper variant picker.
+   */
+  async expandProductVariants(input: {
+    userId: number;
+    listingId: number;
+  }) {
+    // 1. Load the primary (already-published) listing
+    const primary = await prisma.cjShopifyUsaListing.findFirst({
+      where: { id: input.listingId, userId: input.userId },
+      include: { product: true, variant: true },
+    });
+
+    if (!primary) throw new AppError('Listing not found.', 404, ErrorCode.NOT_FOUND);
+    if (!primary.shopifyProductId) throw new AppError('Listing has no Shopify product — publish it first.', 400, ErrorCode.VALIDATION_ERROR);
+    if (primary.status !== CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE) {
+      throw new AppError('Only ACTIVE listings can be expanded.', 400, ErrorCode.VALIDATION_ERROR);
+    }
+
+    // 2. Find ALL CJ variants for this product (published or not)
+    const allCjVariants = await prisma.cjShopifyUsaProductVariant.findMany({
+      where: { productId: primary.productId },
+      include: {
+        listings: {
+          where: { userId: input.userId },
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    if (allCjVariants.length <= 1) {
+      return { message: 'Product has only one variant — nothing to expand.', expanded: 0 };
+    }
+
+    // 3. Resolve Shopify publish targets
+    const { location } = await resolveShopifyPublishTargets(input.userId);
+    if (!location?.id) throw new AppError('No Shopify location available for inventory sync.', 400, ErrorCode.EXTERNAL_API_ERROR);
+
+    const basePrice = Number(primary.listedPriceUsd ?? 14.99);
+    const productTitle = String(primary.product.title);
+
+    // 4. Build the full variant option set for Shopify
+    const variantRows = allCjVariants.map((v) => ({
+      listingId: v.listings[0]?.id ?? null,       // null = no existing listing
+      cjSku: v.cjSku,
+      attrs: v.attributes,
+      price: Number(v.listings[0]?.listedPriceUsd ?? basePrice),
+      quantity: Math.min(v.stockLastKnown ?? 1, 50), // cap at 50 for safety
+      cjVariantId: v.id,
+      cjVid: v.cjVid,
+    }));
+
+    const { productOptions, variantInputs } = buildMultiVariantOptions(variantRows, productTitle);
+
+    // 5. Update the existing Shopify product with ALL variants
+    const draft = (primary.draftPayload || {}) as Record<string, any>;
+    const upserted = await cjShopifyUsaAdminService.upsertProduct({
+      userId: input.userId,
+      identifierId: primary.shopifyProductId,
+      handle: primary.shopifyHandle || draft.handle || null,
+      title: productTitle,
+      descriptionHtml: String(draft.descriptionHtml || ''),
+      vendor: String(draft.vendor || 'CJ Dropshipping'),
+      productType: String(draft.productType || 'CJ Dropshipping'),
+      tags: ['cj-shopify-usa', `cj-product:${primary.product.cjProductId}`],
+      sku: String(primary.shopifySku || '').trim(),
+      price: basePrice,
+      status: 'ACTIVE',
+      productOptions,
+      variants: variantInputs.map((v) => ({ sku: v.sku, price: v.price, optionValues: v.optionValues })),
+    });
+
+    const shopifyVariantBySku = new Map(upserted.allVariants.map((v) => [v.sku, v]));
+
+    // 6. Set inventory + upsert listings for each variant
+    let expanded = 0;
+
+    for (const vc of variantInputs) {
+      const sv = shopifyVariantBySku.get(vc.sku);
+      if (!sv) continue;
+
+      // Set inventory
+      if (vc.quantity > 0) {
+        await cjShopifyUsaAdminService.setInventoryQuantity({
+          userId: input.userId,
+          inventoryItemId: sv.inventoryItemId,
+          locationId: location.id,
+          quantity: vc.quantity,
+          referenceDocumentUri: `logistics://cj-shopify-usa/expand/${primary.id}`,
+          idempotencyKey: `expand-${primary.id}-${vc.sku}-${vc.quantity}`,
+        });
+      }
+
+      // Find the DB variant row
+      const cjVarRow = allCjVariants.find((v) => v.cjSku === vc.sku);
+      if (!cjVarRow) continue;
+
+      const existingListingId = vc.listingId;
+
+      if (existingListingId) {
+        // Update existing listing with new shopifyVariantId
+        await prisma.cjShopifyUsaListing.update({
+          where: { id: existingListingId },
+          data: {
+            shopifyProductId: upserted.productId,
+            shopifyVariantId: sv.id,
+            shopifyHandle: upserted.handle,
+            status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+            publishedAt: new Date(),
+            lastSyncedAt: new Date(),
+            lastError: null,
+          },
+        });
+      } else {
+        // Create a new listing for this previously-unpublished variant
+        await prisma.cjShopifyUsaListing.create({
+          data: {
+            userId: input.userId,
+            productId: primary.productId,
+            variantId: cjVarRow.id,
+            status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+            shopifyProductId: upserted.productId,
+            shopifyVariantId: sv.id,
+            shopifyHandle: upserted.handle,
+            shopifySku: vc.sku,
+            listedPriceUsd: vc.price,
+            quantity: vc.quantity,
+            publishedAt: new Date(),
+            lastSyncedAt: new Date(),
+            draftPayload: {
+              cjSku: vc.sku,
+              cjVid: cjVarRow.cjVid,
+              title: productTitle,
+              vendor: 'CJ Dropshipping',
+              productType: 'CJ Dropshipping',
+              pricingSnapshot: { suggestedSellPriceUsd: vc.price },
+              variantAttributes: cjVarRow.attributes,
+            } as Prisma.InputJsonValue,
+          },
+        });
+        expanded++;
+      }
+    }
+
+    await recordTrace(input.userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_PUBLISH_SUCCESS, 'listing.expand-variants.success', {
+      primaryListingId: primary.id,
+      shopifyProductId: upserted.productId,
+      totalVariants: variantInputs.length,
+      newVariantsAdded: expanded,
+    } as Prisma.InputJsonValue);
+
+    return {
+      message: `Product updated with ${variantInputs.length} variants. ${expanded} new variants added.`,
+      shopifyProductId: upserted.productId,
+      shopifyHandle: upserted.handle,
+      totalVariants: variantInputs.length,
+      expanded,
+    };
+  },
+
   async pauseListing(input: {
     userId: number;
     listingId: number;

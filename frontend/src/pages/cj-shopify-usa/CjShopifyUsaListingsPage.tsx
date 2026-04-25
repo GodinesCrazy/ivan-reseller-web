@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { Archive, ExternalLink, Eye, Pause, Send } from 'lucide-react';
+import { Archive, ExternalLink, Eye, GitMerge, Pause, Send } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -255,6 +255,28 @@ export default function CjShopifyUsaListingsPage() {
     }
   }
 
+  async function expandVariants(id: number) {
+    const confirmed = window.confirm(
+      '¿Ampliar variantes de este producto?\n\nSe agregarán TODAS las variantes disponibles de CJ (colores, tallas, etc.) al producto de Shopify y el cliente podrá elegir cuál quiere comprar.',
+    );
+    if (!confirmed) return;
+
+    setBusyId(id);
+    setError(null);
+    setActionMsg(null);
+    try {
+      const res = await api.post<{ ok: boolean; message: string; totalVariants: number; expanded: number }>(
+        `/api/cj-shopify-usa/listings/${id}/expand-variants`,
+      );
+      setActionMsg(res.data.message ?? 'Variantes ampliadas correctamente.');
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, 'Error al ampliar variantes.'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const hasFailed = listings.some((l) => l.status === 'FAILED');
   const hasReconcilePending = listings.some((l) => l.status === 'RECONCILE_PENDING');
   const hasReconcileFailed = listings.some((l) => l.status === 'RECONCILE_FAILED');
@@ -395,6 +417,18 @@ export default function CjShopifyUsaListingsPage() {
                           >
                             <Archive className="h-3.5 w-3.5" aria-hidden="true" />
                             {busyId === row.id ? '…' : 'Despublicar'}
+                          </button>
+                        )}
+                        {row.status === 'ACTIVE' && (
+                          <button
+                            type="button"
+                            disabled={busyId === row.id}
+                            title="Agregar todas las variantes CJ (colores, tallas) al producto de Shopify"
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-800/70 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/40"
+                            onClick={() => void expandVariants(row.id)}
+                          >
+                            <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
+                            {busyId === row.id ? '…' : 'Ampliar variantes'}
                           </button>
                         )}
                         {row.status === 'ACTIVE' && row.storefrontUrl && row.publishTruth?.buyerFacingVerified && (

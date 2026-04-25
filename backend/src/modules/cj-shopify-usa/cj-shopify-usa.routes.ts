@@ -405,6 +405,21 @@ router.post('/listings/:listingId/unpublish', async (req: Request, res: Response
   }
 });
 
+router.post('/listings/:listingId/expand-variants', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const listingId = Number(req.params.listingId);
+    if (!Number.isInteger(listingId) || listingId <= 0) {
+      res.status(400).json({ ok: false, error: 'INVALID_LISTING_ID' });
+      return;
+    }
+    const result = await cjShopifyUsaPublishService.expandProductVariants({ userId, listingId });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/orders', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
