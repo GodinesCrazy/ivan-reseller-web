@@ -635,7 +635,7 @@ export class CjShopifyUsaAdminService {
               id
               handle
               status
-              variants(first: 10) {
+              variants(first: 100) {
                 nodes {
                   id
                   sku

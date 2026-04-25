@@ -202,57 +202,59 @@ export default function CjShopifyUsaListingsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  async function publish(id: number) {
+  async function withAction(
+    id: number,
+    fn: () => Promise<string | undefined>,
+    errorMsg: string,
+  ) {
     setBusyId(id);
     setError(null);
     setActionMsg(null);
     try {
-      await api.post('/api/cj-shopify-usa/listings/publish', { listingId: id });
-      setActionMsg('Publicación iniciada.');
+      const msg = await fn();
+      if (msg) setActionMsg(msg);
       await load();
     } catch (e) {
-      setError(axiosMsg(e, 'Error al publicar.'));
+      setError(axiosMsg(e, errorMsg));
       await load();
     } finally {
       setBusyId(null);
     }
   }
 
-  async function pauseListing(id: number) {
-    setBusyId(id);
-    setError(null);
-    setActionMsg(null);
-    try {
-      await api.post(`/api/cj-shopify-usa/listings/${id}/pause`);
-      setActionMsg('Publicación pausada.');
-      await load();
-    } catch (e) {
-      setError(axiosMsg(e, 'Error al pausar la publicación.'));
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const publish = (id: number) =>
+    withAction(
+      id,
+      async () => {
+        await api.post('/api/cj-shopify-usa/listings/publish', { listingId: id });
+        return 'Publicación iniciada.';
+      },
+      'Error al publicar.',
+    );
+
+  const pauseListing = (id: number) =>
+    withAction(
+      id,
+      async () => {
+        await api.post(`/api/cj-shopify-usa/listings/${id}/pause`);
+        return 'Publicación pausada.';
+      },
+      'Error al pausar la publicación.',
+    );
 
   async function unpublishListing(id: number) {
     const confirmed = window.confirm(
       '¿Despublicar este artículo de Shopify?\n\nSe quitará del canal de venta y quedará archivado en Shopify.',
     );
     if (!confirmed) return;
-
-    setBusyId(id);
-    setError(null);
-    setActionMsg(null);
-    try {
-      await api.post(`/api/cj-shopify-usa/listings/${id}/unpublish`);
-      setActionMsg('Artículo despublicado.');
-      await load();
-    } catch (e) {
-      setError(axiosMsg(e, 'Error al despublicar el artículo.'));
-      await load();
-    } finally {
-      setBusyId(null);
-    }
+    await withAction(
+      id,
+      async () => {
+        await api.post(`/api/cj-shopify-usa/listings/${id}/unpublish`);
+        return 'Artículo despublicado.';
+      },
+      'Error al despublicar el artículo.',
+    );
   }
 
   async function expandVariants(id: number) {
@@ -260,21 +262,16 @@ export default function CjShopifyUsaListingsPage() {
       '¿Ampliar variantes de este producto?\n\nSe agregarán TODAS las variantes disponibles de CJ (colores, tallas, etc.) al producto de Shopify y el cliente podrá elegir cuál quiere comprar.',
     );
     if (!confirmed) return;
-
-    setBusyId(id);
-    setError(null);
-    setActionMsg(null);
-    try {
-      const res = await api.post<{ ok: boolean; message: string; totalVariants: number; expanded: number }>(
-        `/api/cj-shopify-usa/listings/${id}/expand-variants`,
-      );
-      setActionMsg(res.data.message ?? 'Variantes ampliadas correctamente.');
-      await load();
-    } catch (e) {
-      setError(axiosMsg(e, 'Error al ampliar variantes.'));
-    } finally {
-      setBusyId(null);
-    }
+    await withAction(
+      id,
+      async () => {
+        const res = await api.post<{ ok: boolean; message: string }>(
+          `/api/cj-shopify-usa/listings/${id}/expand-variants`,
+        );
+        return res.data.message ?? 'Variantes ampliadas correctamente.';
+      },
+      'Error al ampliar variantes.',
+    );
   }
 
   const hasFailed = listings.some((l) => l.status === 'FAILED');

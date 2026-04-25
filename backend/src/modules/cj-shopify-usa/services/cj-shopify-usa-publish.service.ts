@@ -10,10 +10,22 @@ import {
   CJ_SHOPIFY_USA_TRACE_STEP,
 } from '../cj-shopify-usa.constants';
 
-/**
- * Extracts a clean variant label from the CJ attribute label by stripping
- * the product title prefix (e.g. "Dog Rope Blue 3m" → "Blue 3m").
- */
+type VariantRow = {
+  listingId: number;
+  cjSku: string;
+  attrs: unknown;
+  price: number;
+  quantity: number;
+};
+
+type VariantInput = {
+  sku: string;
+  price: number;
+  optionValues: Array<{ optionName: string; name: string }>;
+  listingId: number;
+  quantity: number;
+};
+
 function buildVariantLabel(attrs: unknown, productTitle: string): string {
   const raw = String((attrs as Record<string, string> | null)?.label ?? '').trim();
   if (!raw) return 'Default';
@@ -25,35 +37,19 @@ function buildVariantLabel(attrs: unknown, productTitle: string): string {
   return raw;
 }
 
-/**
- * Builds Shopify productOptions + variant inputs from a set of CJ listings.
- * Returns the option array, variant config array, and a SKU→listingId map.
- */
 function buildMultiVariantOptions(
-  rows: Array<{
-    listingId: number;
-    cjSku: string;
-    attrs: unknown;
-    price: number;
-    quantity: number;
-  }>,
+  rows: VariantRow[],
   productTitle: string,
 ): {
   productOptions: Array<{ name: string; position: number; values: Array<{ name: string }> }>;
-  variantInputs: Array<{
-    sku: string;
-    price: number;
-    optionValues: Array<{ optionName: string; name: string }>;
-    listingId: number;
-    quantity: number;
-  }>;
+  variantInputs: VariantInput[];
 } {
   const seen = new Set<string>();
-  const variantInputs: ReturnType<typeof buildMultiVariantOptions>['variantInputs'] = [];
+  const variantInputs: VariantInput[] = [];
 
   for (const row of rows) {
     const label = buildVariantLabel(row.attrs, productTitle);
-    if (seen.has(label)) continue; // skip duplicate labels
+    if (seen.has(label)) continue;
     seen.add(label);
     variantInputs.push({
       sku: row.cjSku,
@@ -70,6 +66,13 @@ function buildMultiVariantOptions(
     ],
     variantInputs,
   };
+}
+
+function resolvePrimarySku(
+  listing: { shopifySku?: string | null; variant?: { cjSku?: string } | null },
+  draft: Record<string, any>,
+): string {
+  return String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim();
 }
 
 function sanitizeHandle(input: string): string {
@@ -857,7 +860,6 @@ export const cjShopifyUsaPublishService = {
           mediaContentType: 'IMAGE' as const,
         }));
 
-      // ── MULTI-VARIANT: find all DRAFT sibling listings for the same CJ product ──
       const siblingDrafts = await prisma.cjShopifyUsaListing.findMany({
         where: {
           userId: input.userId,
@@ -920,7 +922,7 @@ export const cjShopifyUsaPublishService = {
         vendor: String(draft.vendor || 'CJ Dropshipping'),
         productType: String(draft.productType || 'CJ Dropshipping'),
         tags: ['cj-shopify-usa', `cj-product:${listing.product.cjProductId}`],
-        sku: String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim(),
+        sku: resolvePrimarySku(listing, draft),
         price: Number(listing.listedPriceUsd || draft.pricingSnapshot?.suggestedSellPriceUsd || 0),
         media: mediaPayload,
         status: 'ACTIVE',
@@ -935,35 +937,35 @@ export const cjShopifyUsaPublishService = {
         mediaPayload,
       });
 
-      // Build a SKU → Shopify variant map for inventory assignment
-      const shopifyVariantBySku = new Map(
-        upserted.allVariants.map((v) => [v.sku, v])
-      );
+      const shopifyVariantBySku = new Map(upserted.allVariants.map((v) => [v.sku, v]));
 
-      if (isMultiVariant && variantConfig.length > 0) {
-        // Set inventory for each sibling variant individually
-        for (const vc of variantConfig) {
-          const sv = shopifyVariantBySku.get(vc.sku);
-          if (!sv) continue;
-          await cjShopifyUsaAdminService.setInventoryQuantity({
-            userId: input.userId,
-            inventoryItemId: sv.inventoryItemId,
-            locationId: location.id,
-            quantity: vc.quantity,
-            referenceDocumentUri: `logistics://cj-shopify-usa/listing/${vc.listingId}`,
-            idempotencyKey: `cj-shopify-usa-${vc.listingId}-qty-${vc.quantity}`,
-          });
-        }
-      } else {
-        await cjShopifyUsaAdminService.setInventoryQuantity({
-          userId: input.userId,
-          inventoryItemId: upserted.inventoryItemId,
-          locationId: location.id,
-          quantity: desiredQuantity,
-          referenceDocumentUri: `logistics://cj-shopify-usa/listing/${listing.id}`,
-          idempotencyKey: `cj-shopify-usa-${listing.id}-${desiredQuantity}`,
-        });
-      }
+      const inventoryCalls = isMultiVariant && variantConfig.length > 0
+        ? variantConfig
+            .map((vc) => {
+              const sv = shopifyVariantBySku.get(vc.sku);
+              if (!sv) return null;
+              return cjShopifyUsaAdminService.setInventoryQuantity({
+                userId: input.userId,
+                inventoryItemId: sv.inventoryItemId,
+                locationId: location.id,
+                quantity: vc.quantity,
+                referenceDocumentUri: `logistics://cj-shopify-usa/listing/${vc.listingId}`,
+                idempotencyKey: `cj-shopify-usa-${vc.listingId}-qty-${vc.quantity}`,
+              });
+            })
+            .filter(Boolean)
+        : [
+            cjShopifyUsaAdminService.setInventoryQuantity({
+              userId: input.userId,
+              inventoryItemId: upserted.inventoryItemId,
+              locationId: location.id,
+              quantity: desiredQuantity,
+              referenceDocumentUri: `logistics://cj-shopify-usa/listing/${listing.id}`,
+              idempotencyKey: `cj-shopify-usa-${listing.id}-${desiredQuantity}`,
+            }),
+          ];
+
+      await Promise.all(inventoryCalls);
 
       await cjShopifyUsaAdminService.publishProductToPublication({
         userId: input.userId,
@@ -1022,7 +1024,7 @@ export const cjShopifyUsaPublishService = {
           storefrontVerification.error ? `error=${storefrontVerification.error}` : '',
         ].filter(Boolean).join('; ');
 
-        const primarySkuPending = String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim();
+        const primarySkuPending = resolvePrimarySku(listing, draft);
         const pendingVariantId = shopifyVariantBySku.get(primarySkuPending)?.id ?? upserted.variantId;
         const pending = await prisma.cjShopifyUsaListing.update({
           where: { id: listing.id },
@@ -1048,7 +1050,6 @@ export const cjShopifyUsaPublishService = {
         return pending;
       }
 
-      // ── Update sibling listings with their individual shopifyVariantId ──
       if (isMultiVariant && variantConfig.length > 0) {
         for (const vc of variantConfig) {
           if (vc.listingId === listing.id) continue; // handled below
@@ -1068,8 +1069,7 @@ export const cjShopifyUsaPublishService = {
         }
       }
 
-      // Resolve shopifyVariantId for the primary listing
-      const primarySku = String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim();
+      const primarySku = resolvePrimarySku(listing, draft);
       const primaryShopifyVariant = shopifyVariantBySku.get(primarySku);
       const resolvedVariantId = primaryShopifyVariant?.id ?? upserted.variantId;
 
@@ -1197,62 +1197,55 @@ export const cjShopifyUsaPublishService = {
     });
 
     const shopifyVariantBySku = new Map(upserted.allVariants.map((v) => [v.sku, v]));
+    // O(1) lookup instead of O(N) find inside loop
+    const cjVariantBySku = new Map(allCjVariants.map((v) => [v.cjSku, v]));
 
-    // 6. Set inventory + upsert listings for each variant
+    // Parallel inventory calls
+    await Promise.all(
+      variantInputs
+        .filter((vc) => vc.quantity > 0 && shopifyVariantBySku.has(vc.sku))
+        .map((vc) =>
+          cjShopifyUsaAdminService.setInventoryQuantity({
+            userId: input.userId,
+            inventoryItemId: shopifyVariantBySku.get(vc.sku)!.inventoryItemId,
+            locationId: location.id,
+            quantity: vc.quantity,
+            referenceDocumentUri: `logistics://cj-shopify-usa/expand/${primary.id}`,
+            idempotencyKey: `expand-${primary.id}-${vc.sku}-${vc.quantity}`,
+          }),
+        ),
+    );
+
     let expanded = 0;
+    const now = new Date();
 
     for (const vc of variantInputs) {
       const sv = shopifyVariantBySku.get(vc.sku);
-      if (!sv) continue;
+      const cjVarRow = cjVariantBySku.get(vc.sku);
+      if (!sv || !cjVarRow) continue;
 
-      // Set inventory
-      if (vc.quantity > 0) {
-        await cjShopifyUsaAdminService.setInventoryQuantity({
-          userId: input.userId,
-          inventoryItemId: sv.inventoryItemId,
-          locationId: location.id,
-          quantity: vc.quantity,
-          referenceDocumentUri: `logistics://cj-shopify-usa/expand/${primary.id}`,
-          idempotencyKey: `expand-${primary.id}-${vc.sku}-${vc.quantity}`,
-        });
-      }
+      const sharedFields = {
+        shopifyProductId: upserted.productId,
+        shopifyVariantId: sv.id,
+        shopifyHandle: upserted.handle,
+        status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+        publishedAt: now,
+        lastSyncedAt: now,
+        lastError: null,
+      };
 
-      // Find the DB variant row
-      const cjVarRow = allCjVariants.find((v) => v.cjSku === vc.sku);
-      if (!cjVarRow) continue;
-
-      const existingListingId = vc.listingId;
-
-      if (existingListingId) {
-        // Update existing listing with new shopifyVariantId
-        await prisma.cjShopifyUsaListing.update({
-          where: { id: existingListingId },
-          data: {
-            shopifyProductId: upserted.productId,
-            shopifyVariantId: sv.id,
-            shopifyHandle: upserted.handle,
-            status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
-            publishedAt: new Date(),
-            lastSyncedAt: new Date(),
-            lastError: null,
-          },
-        });
+      if (vc.listingId) {
+        await prisma.cjShopifyUsaListing.update({ where: { id: vc.listingId }, data: sharedFields });
       } else {
-        // Create a new listing for this previously-unpublished variant
         await prisma.cjShopifyUsaListing.create({
           data: {
             userId: input.userId,
             productId: primary.productId,
             variantId: cjVarRow.id,
-            status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
-            shopifyProductId: upserted.productId,
-            shopifyVariantId: sv.id,
-            shopifyHandle: upserted.handle,
+            ...sharedFields,
             shopifySku: vc.sku,
             listedPriceUsd: vc.price,
             quantity: vc.quantity,
-            publishedAt: new Date(),
-            lastSyncedAt: new Date(),
             draftPayload: {
               cjSku: vc.sku,
               cjVid: cjVarRow.cjVid,
