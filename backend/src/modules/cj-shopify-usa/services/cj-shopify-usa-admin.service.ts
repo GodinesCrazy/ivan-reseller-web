@@ -580,6 +580,13 @@ export class CjShopifyUsaAdminService {
     tags?: string[];
     sku: string;
     price: number;
+    /** Multi-variant support: provide options + variants to create a proper variant picker */
+    productOptions?: Array<{ name: string; position: number; values: Array<{ name: string }> }>;
+    variants?: Array<{
+      sku: string;
+      price: number;
+      optionValues: Array<{ optionName: string; name: string }>;
+    }>;
     media?: Array<{
       originalSource: string;
       mediaContentType: 'IMAGE';
@@ -656,28 +663,24 @@ export class CjShopifyUsaAdminService {
           productType: trimOrEmpty(input.productType) || undefined,
           status: input.status || 'ACTIVE',
           tags: input.tags?.filter(Boolean) ?? [],
-          productOptions: [
-            {
-              name: 'Title',
-              position: 1,
-              values: [{ name: 'Default Title' }],
-            },
+          productOptions: input.productOptions ?? [
+            { name: 'Title', position: 1, values: [{ name: 'Default Title' }] },
           ],
-          variants: [
+          variants: input.variants?.map((v) => ({
+            optionValues: v.optionValues,
+            sku: v.sku,
+            price: Number(v.price.toFixed(2)),
+            taxable: true,
+            inventoryPolicy: 'DENY' as const,
+            inventoryItem: { tracked: true },
+          })) ?? [
             {
-              optionValues: [
-                {
-                  optionName: 'Title',
-                  name: 'Default Title',
-                },
-              ],
+              optionValues: [{ optionName: 'Title', name: 'Default Title' }],
               sku: input.sku,
               price: Number(input.price.toFixed(2)),
               taxable: true,
-              inventoryPolicy: 'DENY',
-              inventoryItem: {
-                tracked: true,
-              },
+              inventoryPolicy: 'DENY' as const,
+              inventoryItem: { tracked: true },
             },
           ],
         },
@@ -716,6 +719,14 @@ export class CjShopifyUsaAdminService {
       status: product.status,
       variantId: variant.id,
       inventoryItemId: variant.inventoryItem.id,
+      /** All returned variants — used for multi-variant inventory mapping */
+      allVariants: (product.variants?.nodes ?? [])
+        .filter((v) => v.inventoryItem?.id)
+        .map((v) => ({
+          id: v.id,
+          sku: trimOrEmpty(v.sku),
+          inventoryItemId: v.inventoryItem!.id,
+        })),
     };
   }
 

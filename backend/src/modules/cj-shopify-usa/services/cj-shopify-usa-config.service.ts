@@ -5,6 +5,7 @@ const CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS = {
   minMarginPct: 12,
   minProfitUsd: 1.5,
   maxShippingUsd: 15,
+  minCostUsd: 2.0,
 } as const;
 
 const CJ_SHOPIFY_USA_LEGACY_STRICT_DEFAULTS = {
@@ -51,6 +52,7 @@ export class CjShopifyUsaConfigService {
           handlingBufferDays: 3,
           incidentBufferPct: 3.0,        // 3% buffer de riesgo
           maxShippingUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.maxShippingUsd,
+          minCostUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.minCostUsd,
           defaultPaymentFeePct: 5.4,     // PayPal Express cross-border
           defaultPaymentFixedFeeUsd: 0.30,
         },

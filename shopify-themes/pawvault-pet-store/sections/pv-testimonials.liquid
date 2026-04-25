@@ -1,0 +1,285 @@
+{%- comment -%} PawVault — Testimonials. Social proof with pet lifestyle photos. {%- endcomment -%}
+
+{%- liquid
+  assign pv_av1 = 'pv-avatar-1.jpg' | asset_url
+  assign pv_av2 = 'pv-avatar-2.jpg' | asset_url
+  assign pv_av3 = 'pv-avatar-3.jpg' | asset_url
+  assign pet_avatars = pv_av1 | append: '|' | append: pv_av2 | append: '|' | append: pv_av3 | append: '|' | append: pv_av1 | append: '|' | append: pv_av2 | append: '|' | append: pv_av3 | split: '|'
+-%}
+
+<section class="pv-revs">
+  <div class="pv-revs__container">
+
+    <header class="pv-revs__head">
+      <p class="pv-revs__eyebrow">{{ section.settings.eyebrow | default: 'What pet parents say' }}</p>
+      <h2 class="pv-revs__title">{{ section.settings.title | default: 'Loved by thousands of dogs and cats.' }}</h2>
+      <div class="pv-revs__agg">
+        <div class="pv-revs__stars" aria-label="{{ section.settings.rating | default: '4.8' }} stars out of 5">
+          {%- for i in (1..5) -%}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#f59e0b" aria-hidden="true">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+          {%- endfor -%}
+        </div>
+        <span class="pv-revs__agg-text">
+          <strong>{{ section.settings.rating | default: '4.8' }}</strong> out of 5
+          &nbsp;·&nbsp;
+          {{ section.settings.review_count | default: '2,000+' }} happy pet families
+        </span>
+      </div>
+    </header>
+
+    <div class="pv-revs__grid">
+      {% for block in section.blocks %}
+        {%- assign avatar = pet_avatars[forloop.index0] -%}
+        <article class="pv-rev-card" {{ block.shopify_attributes }}>
+
+          <div class="pv-rev-card__top">
+            <div class="pv-rev-card__avatar">
+              {% if block.settings.image != blank %}
+                {{
+                  block.settings.image
+                  | image_url: width: 120
+                  | image_tag:
+                    class: 'pv-rev-card__img',
+                    loading: 'lazy',
+                    alt: block.settings.pet | default: 'Happy pet'
+                }}
+              {% else %}
+                <img
+                  src="{{ avatar }}"
+                  alt="{{ block.settings.pet | default: 'Happy pet' }}"
+                  class="pv-rev-card__img"
+                  loading="lazy"
+                  width="60"
+                  height="60"
+                >
+              {% endif %}
+            </div>
+            <div class="pv-rev-card__stars" aria-label="5 out of 5 stars">
+              {%- for i in (1..5) -%}
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" aria-hidden="true">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+              {%- endfor -%}
+            </div>
+          </div>
+
+          <blockquote class="pv-rev-card__quote">
+            "{{ block.settings.quote | default: 'Excellent quality and fast shipping. My pet loves everything from PawVault!' }}"
+          </blockquote>
+
+          <footer class="pv-rev-card__footer">
+            <strong class="pv-rev-card__name">{{ block.settings.name | default: 'Happy customer' }}</strong>
+            {%- if block.settings.pet != blank -%}
+              <span class="pv-rev-card__pet"> · {{ block.settings.pet }}</span>
+            {%- endif -%}
+          </footer>
+
+        </article>
+      {% endfor %}
+    </div>
+
+  </div>
+</section>
+
+<style>
+  .pv-revs {
+    padding: clamp(4.5rem, 8vw, 7rem) 0;
+    background: #faf8f4;
+  }
+
+  .pv-revs__container {
+    width: min(1280px, calc(100% - 40px));
+    margin: 0 auto;
+  }
+
+  .pv-revs__head {
+    text-align: center;
+    margin-bottom: clamp(2.5rem, 5vw, 4rem);
+  }
+
+  .pv-revs__eyebrow {
+    margin: 0 0 0.85rem;
+    color: #b47b2d;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .pv-revs__title {
+    margin: 0 0 1.25rem;
+    color: #0f1f35;
+    font-size: clamp(1.8rem, 3.5vw, 2.75rem);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+  }
+
+  .pv-revs__agg {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pv-revs__stars {
+    display: flex;
+    gap: 2px;
+  }
+
+  .pv-revs__agg-text {
+    font-size: 0.9375rem;
+    color: #52606d;
+  }
+
+  .pv-revs__agg-text strong {
+    color: #0f1f35;
+    font-weight: 700;
+  }
+
+  .pv-revs__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+
+  .pv-rev-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    padding: 1.75rem;
+    border: 1px solid rgba(16, 35, 59, 0.08);
+    border-radius: 24px;
+    background: #ffffff;
+    transition: transform 200ms ease, box-shadow 200ms ease;
+  }
+
+  .pv-rev-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 44px rgba(16, 35, 59, 0.09);
+  }
+
+  .pv-rev-card__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .pv-rev-card__avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 3px solid #f7f4ee;
+    box-shadow: 0 4px 14px rgba(16, 35, 59, 0.13);
+  }
+
+  .pv-rev-card__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .pv-rev-card__stars {
+    display: flex;
+    gap: 2px;
+  }
+
+  .pv-rev-card__quote {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.72;
+    color: #334155;
+    font-style: italic;
+    flex: 1;
+  }
+
+  .pv-rev-card__footer {
+    border-top: 1px solid rgba(16, 35, 59, 0.07);
+    padding-top: 0.85rem;
+    font-size: 0.875rem;
+  }
+
+  .pv-rev-card__name {
+    color: #0f1f35;
+    font-weight: 700;
+  }
+
+  .pv-rev-card__pet {
+    color: #607286;
+  }
+
+  @media (max-width: 899px) {
+    .pv-revs__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 599px) {
+    .pv-revs__grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "PV — Testimonials",
+  "tag": "section",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "What pet parents say" },
+    { "type": "text", "id": "title", "label": "Title", "default": "Loved by thousands of dogs and cats." },
+    { "type": "text", "id": "rating", "label": "Rating (e.g. 4.8)", "default": "4.8" },
+    { "type": "text", "id": "review_count", "label": "Review count (e.g. 2,000+)", "default": "2,000+" }
+  ],
+  "blocks": [
+    {
+      "type": "review",
+      "name": "Review",
+      "settings": [
+        { "type": "image_picker", "id": "image", "label": "Pet photo (optional — auto if blank)" },
+        { "type": "textarea", "id": "quote", "label": "Quote" },
+        { "type": "text", "id": "name", "label": "Reviewer name", "default": "Happy customer" },
+        { "type": "text", "id": "pet", "label": "Pet name (optional)" }
+      ]
+    }
+  ],
+  "max_blocks": 6,
+  "presets": [
+    {
+      "name": "PV — Testimonials",
+      "category": "PawVault",
+      "blocks": [
+        {
+          "type": "review",
+          "settings": {
+            "quote": "Finally a pet store that feels curated and trustworthy. The quality is genuinely impressive — my dog Biscuit is obsessed with his new harness.",
+            "name": "Sarah M.",
+            "pet": "Biscuit the Golden"
+          }
+        },
+        {
+          "type": "review",
+          "settings": {
+            "quote": "Luna hasn't left her new cat bed since it arrived. Beautiful packaging, fast delivery. Absolutely ordering again.",
+            "name": "Mike T.",
+            "pet": "Luna the Tabby"
+          }
+        },
+        {
+          "type": "review",
+          "settings": {
+            "quote": "Shopping here feels different — like someone actually thought about what dog parents need. The grooming tools are excellent quality.",
+            "name": "Jennifer K.",
+            "pet": "Pepper the Labrador"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

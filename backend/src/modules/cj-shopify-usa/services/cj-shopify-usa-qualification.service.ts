@@ -25,6 +25,7 @@ const PRICING_DEFAULTS = {
   minMarginPct: 12,             // Operational default to avoid over-rejecting valid candidates
   minProfitUsd: 1.50,           // Operational default for low-ticket discovery phase
   maxShippingUsd: 15.00,        // Allow broader candidate set before operator filtering
+  minCostUsd: 2.00,             // Minimum supplier cost to ensure sellable margin
   minSellPriceUsd: 9.99,        // Psychological floor for viable product
   maxSellPriceUsd: 150.00,      // Upper sanity limit for initial catalog
 } as const;
@@ -73,6 +74,7 @@ export class CjShopifyUsaQualificationService {
     const marginPct = Number(settings.minMarginPct ?? PRICING_DEFAULTS.minMarginPct);
     const maxShippingUsd = Number(settings.maxShippingUsd ?? PRICING_DEFAULTS.maxShippingUsd);
     const minProfitUsd = Number(settings.minProfitUsd ?? PRICING_DEFAULTS.minProfitUsd);
+    const minCostUsd = Number(settings.minCostUsd ?? PRICING_DEFAULTS.minCostUsd);
 
     // === CÁLCULO DE COSTOS BASE ===
     const baseCostUsd = cjCostUsd + estimatedShippingUsd;
@@ -96,8 +98,8 @@ export class CjShopifyUsaQualificationService {
     }
 
     // 2. Rechazar productos de costo muy bajo (difíciles de vender con margen sano)
-    if (cjCostUsd < 2.00) {
-      reasons.push(`Product cost too low: $${cjCostUsd.toFixed(2)} < $2.00 minimum`);
+    if (cjCostUsd < minCostUsd) {
+      reasons.push(`Product cost too low: $${cjCostUsd.toFixed(2)} < $${minCostUsd.toFixed(2)} minimum`);
       return {
         decision: 'REJECTED',
         reasons,

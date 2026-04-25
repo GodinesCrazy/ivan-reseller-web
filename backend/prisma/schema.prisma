@@ -2731,6 +2731,7 @@ model CjShopifyUsaAccountSettings {
   shopifyAccessToken         String?  @db.Text // Should be a custom app token
   shopifyLocationId          String?  // The explicit Shopify location ID for inventory
 
+  minCostUsd                 Decimal? @db.Decimal(18, 2)
   defaultPaymentFeePct       Decimal? @db.Decimal(6, 4)
   defaultPaymentFixedFeeUsd  Decimal? @db.Decimal(18, 2)
   cjPostCreateCheckoutMode   String   @default("MANUAL")

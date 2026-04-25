@@ -7,6 +7,7 @@ type SettingsPayload = {
   minMarginPct: number;
   minProfitUsd: number;
   maxShippingUsd: number;
+  minCostUsd: number;
 };
 
 function toErrorMessage(error: unknown): string {
@@ -23,6 +24,7 @@ export default function CjShopifyUsaSettingsPage() {
     minMarginPct: 12,
     minProfitUsd: 1.5,
     maxShippingUsd: 15,
+    minCostUsd: 2,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,6 +42,7 @@ export default function CjShopifyUsaSettingsPage() {
             minMarginPct: Number(settings.minMarginPct ?? 12),
             minProfitUsd: Number(settings.minProfitUsd ?? 1.5),
             maxShippingUsd: Number(settings.maxShippingUsd ?? 15),
+            minCostUsd: Number(settings.minCostUsd ?? 2),
           });
         }
       } catch (e) {
@@ -100,6 +103,18 @@ export default function CjShopifyUsaSettingsPage() {
           </label>
 
           <label className="block">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Min cost USD</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={values.minCostUsd}
+              onChange={(e) => setValues((prev) => ({ ...prev, minCostUsd: Number(e.target.value) }))}
+              className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="block">
             <span className="text-xs text-slate-500 dark:text-slate-400">Min margin %</span>
             <input
               type="number"
@@ -127,6 +142,7 @@ export default function CjShopifyUsaSettingsPage() {
 
         <div className="mt-4 flex items-center gap-2">
           <button
+            type="button"
             onClick={saveSettings}
             disabled={saving}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm disabled:opacity-60"

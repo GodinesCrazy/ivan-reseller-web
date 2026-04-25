@@ -3,87 +3,175 @@
     "pv_hero": {
       "type": "pv-hero-premium",
       "settings": {
-        "eyebrow": "PawVault — Premium Pet Store",
-        "line1": "Everything",
-        "line2": "your pet",
-        "line3": "deserves.",
-        "description": "Premium accessories, grooming essentials and everyday supplies for dogs and cats — selected for quality, safety and real daily use.",
-        "btn1_text": "Shop Pet Supplies",
+        "eyebrow": "PawVault — Premium Pet Shop",
+        "signal": "⭐ 4.8 · Trusted by 2,000+ pet families",
+        "line1": "Your pet deserves",
+        "line2": "the good stuff.",
+        "line3": "",
+        "description": "Hand-picked accessories, grooming essentials and everyday supplies for dogs and cats — chosen for comfort, safety and real daily use.",
+        "btn1_text": "Shop pet supplies",
         "btn1_link": "shopify://collections/all",
-        "btn2_text": "Browse All Products",
-        "btn2_link": "shopify://collections/all"
+        "btn2_text": "Browse bestsellers",
+        "btn2_link": "shopify://collections/all",
+        "stat_1_value": "Free",
+        "stat_1_label": "shipping over $50",
+        "stat_2_value": "30-day",
+        "stat_2_label": "easy returns",
+        "stat_3_value": "4.8★",
+        "stat_3_label": "average rating",
+        "overlay_kicker": "Trending now",
+        "overlay_title": "Top-rated pet essentials",
+        "overlay_text": "Loved by 2,000+ pet families across the USA."
       }
     },
     "pv_trust_bar": {
-      "type": "ir-trust-bar",
-      "blocks": {
-        "trust_ship": {
-          "type": "trust_item",
-          "settings": { "icon": "🚚", "label": "Free Shipping", "subtext": "On all orders over $50" }
-        },
-        "trust_pet": {
-          "type": "trust_item",
-          "settings": { "icon": "🐾", "label": "Pet-Approved", "subtext": "Quality for dogs & cats" }
-        },
-        "trust_returns": {
-          "type": "trust_item",
-          "settings": { "icon": "🛡️", "label": "30-Day Returns", "subtext": "No questions asked" }
-        },
-        "trust_support": {
-          "type": "trust_item",
-          "settings": { "icon": "💬", "label": "Pet Support", "subtext": "Expert advice anytime" }
-        }
-      },
-      "block_order": ["trust_ship", "trust_pet", "trust_returns", "trust_support"],
-      "settings": { "background_color": "#FFFFFF" }
+      "type": "pv-trust-bar",
+      "settings": {}
     },
     "pv_categories": {
       "type": "pv-pet-categories",
       "blocks": {
-        "cat_dogs":     { "type": "category", "settings": { "icon": "🐕", "name": "Dogs",         "desc": "Collars, leashes and accessories",     "color": "amber",  "link": "shopify://collections/all" } },
-        "cat_cats":     { "type": "category", "settings": { "icon": "🐈", "name": "Cats",         "desc": "Cat trees, beds and enrichment toys",  "color": "sage",   "link": "shopify://collections/all" } },
-        "cat_grooming": { "type": "category", "settings": { "icon": "✂️", "name": "Grooming",     "desc": "Brushes, shampoos and nail clippers",  "color": "rose",   "link": "shopify://collections/all" } },
-        "cat_feeding":  { "type": "category", "settings": { "icon": "🥣", "name": "Feeding",      "desc": "Bowls, feeders and water fountains",   "color": "sky",    "link": "shopify://collections/all" } },
-        "cat_toys":     { "type": "category", "settings": { "icon": "🎾", "name": "Toys",         "desc": "Interactive and enrichment toys",      "color": "violet", "link": "shopify://collections/all" } },
-        "cat_beds":     { "type": "category", "settings": { "icon": "🛏️", "name": "Beds & Comfort","desc": "Cozy beds, mats and blankets",        "color": "peach",  "link": "shopify://collections/all" } }
+        "cat_dogs": {
+          "type": "category",
+          "settings": {
+            "name": "Dogs",
+            "desc": "Harnesses, leashes, play toys and daily comfort for your pup.",
+            "cta": "Shop dogs",
+            "link": "shopify://collections/all"
+          }
+        },
+        "cat_cats": {
+          "type": "category",
+          "settings": {
+            "name": "Cats",
+            "desc": "Beds, enrichment and cozy upgrades for your cat.",
+            "cta": "Shop cats",
+            "link": "shopify://collections/all"
+          }
+        },
+        "cat_grooming": {
+          "type": "category",
+          "settings": {
+            "name": "Grooming",
+            "desc": "Brushes, trimmers and bath-time essentials.",
+            "cta": "Shop grooming",
+            "link": "shopify://collections/all"
+          }
+        },
+        "cat_comfort": {
+          "type": "category",
+          "settings": {
+            "name": "Comfort & Feeding",
+            "desc": "Beds, bowls and home staples for daily pet life.",
+            "cta": "Shop comfort",
+            "link": "shopify://collections/all"
+          }
+        }
       },
-      "block_order": ["cat_dogs","cat_cats","cat_grooming","cat_feeding","cat_toys","cat_beds"],
-      "settings": { "eyebrow": "Shop by Category", "title": "Built for pets who deserve better." }
+      "block_order": ["cat_dogs", "cat_cats", "cat_grooming", "cat_comfort"],
+      "settings": {
+        "eyebrow": "Shop by routine",
+        "title": "Everything your pet needs, organized your way.",
+        "text": "Start by pet type or by the routines that matter most — grooming, feeding, play and everyday comfort."
+      }
+    },
+    "pv_bestsellers": {
+      "type": "pv-bestsellers",
+      "settings": {
+        "eyebrow": "Our picks",
+        "title": "Hot this week",
+        "sort_by": "newest",
+        "products_to_show": "4"
+      }
     },
     "pv_lifestyle": {
       "type": "pv-lifestyle-split",
       "blocks": {
-        "check_safety":   { "type": "check", "settings": { "text": "Selected for pet safety & real durability" } },
-        "check_shipping": { "type": "check", "settings": { "text": "Fast, free shipping on orders over $50" } },
-        "check_returns":  { "type": "check", "settings": { "text": "30-day returns — no questions asked" } }
+        "check_safety": { "type": "check", "settings": { "text": "Hand-reviewed for pet safety and everyday durability" } },
+        "check_shipping": { "type": "check", "settings": { "text": "Free shipping on all orders over $50 across the USA" } },
+        "check_returns": { "type": "check", "settings": { "text": "30-day hassle-free returns — no questions asked" } }
       },
-      "block_order": ["check_safety","check_shipping","check_returns"],
+      "block_order": ["check_safety", "check_shipping", "check_returns"],
       "settings": {
         "eyebrow": "Why PawVault",
-        "title": "Because your pet deserves the best version of everything.",
-        "text": "We built PawVault because pet accessories should be as thoughtful as the love you give. Every product is evaluated for real safety, real durability and real everyday use — not just what photographs well.",
-        "btn_text": "Shop Pet Supplies",
+        "title": "Built for pet parents who care about the details.",
+        "text": "At PawVault, every product is hand-reviewed for safety, comfort, and real daily use. We focus on what pets actually need — and what pet parents actually love.",
+        "btn_text": "Browse the full catalog",
         "btn_link": "shopify://collections/all",
-        "badge_title": "Pet-Approved",
-        "badge_sub": "Quality your pet will love"
+        "badge_title": "Pet-parent approved",
+        "badge_sub": "Comfort, safety and daily use — always"
+      }
+    },
+    "pv_testimonials": {
+      "type": "pv-testimonials",
+      "blocks": {
+        "rev_1": {
+          "type": "review",
+          "settings": {
+            "quote": "Finally a pet store that feels curated and trustworthy. The quality is genuinely impressive — my dog Biscuit is obsessed with his new harness.",
+            "name": "Sarah M.",
+            "pet": "Biscuit the Golden"
+          }
+        },
+        "rev_2": {
+          "type": "review",
+          "settings": {
+            "quote": "Luna hasn't left her new cat bed since it arrived. Beautiful packaging, fast delivery. Absolutely ordering again.",
+            "name": "Mike T.",
+            "pet": "Luna the Tabby"
+          }
+        },
+        "rev_3": {
+          "type": "review",
+          "settings": {
+            "quote": "Shopping here feels different — like someone actually thought about what dog parents need. The grooming tools are excellent quality.",
+            "name": "Jennifer K.",
+            "pet": "Pepper the Labrador"
+          }
+        }
+      },
+      "block_order": ["rev_1", "rev_2", "rev_3"],
+      "settings": {
+        "eyebrow": "What pet parents say",
+        "title": "Loved by thousands of dogs and cats.",
+        "rating": "4.8",
+        "review_count": "2,000+"
       }
     },
     "pv_promise": {
       "type": "pv-brand-promise",
       "blocks": {
-        "val_selection": { "type": "value", "settings": { "title": "Pet-Focused Selection",  "text": "The entire catalog is built around dogs, cats and small animals. Every product is selected for safety, durability and real-world pet use." } },
-        "val_guarantee": { "type": "value", "settings": { "title": "Happy Pet Guarantee",   "text": "30-day returns, secure checkout and dedicated support. If your pet doesn't love it, we make it right — no questions asked." } },
-        "val_shipping":  { "type": "value", "settings": { "title": "Fast, Free Shipping",   "text": "Free shipping on all orders over $50. Most pet orders arrive within 3–7 business days across the USA." } }
+        "val_selection": {
+          "type": "value",
+          "settings": {
+            "title": "Curated for real pets",
+            "text": "Every product is reviewed for safety, comfort and everyday durability. We focus on what pets actually need — not just what sells fastest."
+          }
+        },
+        "val_guarantee": {
+          "type": "value",
+          "settings": {
+            "title": "Your satisfaction, guaranteed",
+            "text": "30-day returns, secure checkout and real support. If your pet doesn't love it, we make it right — simply and without hassle."
+          }
+        },
+        "val_shipping": {
+          "type": "value",
+          "settings": {
+            "title": "Fast, free shipping",
+            "text": "Free shipping on every order over $50. Most deliveries arrive within 3–7 business days across the USA."
+          }
+        }
       },
-      "block_order": ["val_selection","val_guarantee","val_shipping"],
+      "block_order": ["val_selection", "val_guarantee", "val_shipping"],
       "settings": {
         "eyebrow": "The PawVault Promise",
         "title": "Premium pet supplies, seriously curated.",
-        "text": "PawVault is built around one idea: pets deserve better. Every product we carry is evaluated for safety, durability, and real everyday use — not just what looks good on a shelf.",
-        "btn_text": "Shop All Pet Supplies",
+        "text": "PawVault is built around one idea: pets deserve better. Every product is selected for safety, durability, and real everyday use — not just what looks good.",
+        "btn_text": "Shop all pet supplies",
         "btn_link": "shopify://collections/all"
       }
     }
   },
-  "order": ["pv_hero","pv_trust_bar","pv_categories","pv_lifestyle","pv_promise"]
+  "order": ["pv_hero", "pv_trust_bar", "pv_categories", "pv_bestsellers", "pv_lifestyle", "pv_testimonials", "pv_promise"]
 }

@@ -10,6 +10,68 @@ import {
   CJ_SHOPIFY_USA_TRACE_STEP,
 } from '../cj-shopify-usa.constants';
 
+/**
+ * Extracts a clean variant label from the CJ attribute label by stripping
+ * the product title prefix (e.g. "Dog Rope Blue 3m" → "Blue 3m").
+ */
+function buildVariantLabel(attrs: unknown, productTitle: string): string {
+  const raw = String((attrs as Record<string, string> | null)?.label ?? '').trim();
+  if (!raw) return 'Default';
+  const prefix = productTitle.trim();
+  if (raw.toLowerCase().startsWith(prefix.toLowerCase())) {
+    const stripped = raw.slice(prefix.length).trim();
+    return stripped || raw;
+  }
+  return raw;
+}
+
+/**
+ * Builds Shopify productOptions + variant inputs from a set of CJ listings.
+ * Returns the option array, variant config array, and a SKU→listingId map.
+ */
+function buildMultiVariantOptions(
+  rows: Array<{
+    listingId: number;
+    cjSku: string;
+    attrs: unknown;
+    price: number;
+    quantity: number;
+  }>,
+  productTitle: string,
+): {
+  productOptions: Array<{ name: string; position: number; values: Array<{ name: string }> }>;
+  variantInputs: Array<{
+    sku: string;
+    price: number;
+    optionValues: Array<{ optionName: string; name: string }>;
+    listingId: number;
+    quantity: number;
+  }>;
+} {
+  const seen = new Set<string>();
+  const variantInputs: ReturnType<typeof buildMultiVariantOptions>['variantInputs'] = [];
+
+  for (const row of rows) {
+    const label = buildVariantLabel(row.attrs, productTitle);
+    if (seen.has(label)) continue; // skip duplicate labels
+    seen.add(label);
+    variantInputs.push({
+      sku: row.cjSku,
+      price: row.price,
+      optionValues: [{ optionName: 'Variant', name: label }],
+      listingId: row.listingId,
+      quantity: row.quantity,
+    });
+  }
+
+  return {
+    productOptions: [
+      { name: 'Variant', position: 1, values: variantInputs.map((v) => ({ name: v.optionValues[0].name })) },
+    ],
+    variantInputs,
+  };
+}
+
 function sanitizeHandle(input: string): string {
   return input
     .toLowerCase()
@@ -795,13 +857,65 @@ export const cjShopifyUsaPublishService = {
           mediaContentType: 'IMAGE' as const,
         }));
 
-      console.log(`[ShopifyPublish] Publishing listing ${listing.id} with ${mediaPayload.length} images`);
+      // ── MULTI-VARIANT: find all DRAFT sibling listings for the same CJ product ──
+      const siblingDrafts = await prisma.cjShopifyUsaListing.findMany({
+        where: {
+          userId: input.userId,
+          productId: listing.productId,
+          status: CJ_SHOPIFY_USA_LISTING_STATUS.DRAFT,
+          id: { not: listing.id },
+        },
+        include: { variant: true },
+      });
+
+      const allToPublish = [listing, ...siblingDrafts];
+      const isMultiVariant = allToPublish.length > 1;
+      const productTitle = String(draft.title || listing.product.title || 'Pet Product');
+
+      // Build variant options when there are multiple variants
+      let productOptions: Parameters<typeof cjShopifyUsaAdminService.upsertProduct>[0]['productOptions'];
+      let variantInputsForUpsert: Parameters<typeof cjShopifyUsaAdminService.upsertProduct>[0]['variants'];
+      let variantConfig: ReturnType<typeof buildMultiVariantOptions>['variantInputs'] = [];
+
+      if (isMultiVariant) {
+        const rows = allToPublish.map((l) => {
+          const lDraft = (l.draftPayload || {}) as Record<string, any>;
+          return {
+            listingId: l.id,
+            cjSku: String(l.shopifySku || l.variant?.cjSku || lDraft.cjSku || '').trim(),
+            attrs: l.variant?.attributes ?? lDraft.variantAttributes ?? null,
+            price: Number(l.listedPriceUsd ?? lDraft.pricingSnapshot?.suggestedSellPriceUsd ?? 0),
+            quantity: toSafeInt(l.quantity ?? lDraft.quantity ?? 0),
+          };
+        });
+
+        const built = buildMultiVariantOptions(rows, productTitle);
+        productOptions = built.productOptions;
+        variantInputsForUpsert = built.variantInputs.map((v) => ({
+          sku: v.sku,
+          price: v.price,
+          optionValues: v.optionValues,
+        }));
+        variantConfig = built.variantInputs;
+
+        // Set ALL siblings to PUBLISHING so they're tracked
+        if (siblingDrafts.length > 0) {
+          await prisma.cjShopifyUsaListing.updateMany({
+            where: { id: { in: siblingDrafts.map((l) => l.id) } },
+            data: { status: CJ_SHOPIFY_USA_LISTING_STATUS.PUBLISHING, lastError: null },
+          });
+        }
+
+        console.log(`[ShopifyPublish] Multi-variant: listing ${listing.id} + ${siblingDrafts.length} siblings → 1 Shopify product with ${variantConfig.length} variants`);
+      } else {
+        console.log(`[ShopifyPublish] Publishing listing ${listing.id} with ${mediaPayload.length} images`);
+      }
 
       const upserted = await cjShopifyUsaAdminService.upsertProduct({
         userId: input.userId,
         identifierId: listing.shopifyProductId,
         handle: listing.shopifyHandle || draft.handle || null,
-        title: String(draft.title || listing.product.title),
+        title: productTitle,
         descriptionHtml: String(draft.descriptionHtml || ''),
         vendor: String(draft.vendor || 'CJ Dropshipping'),
         productType: String(draft.productType || 'CJ Dropshipping'),
@@ -810,6 +924,8 @@ export const cjShopifyUsaPublishService = {
         price: Number(listing.listedPriceUsd || draft.pricingSnapshot?.suggestedSellPriceUsd || 0),
         media: mediaPayload,
         status: 'ACTIVE',
+        productOptions,
+        variants: variantInputsForUpsert,
       });
 
       const attachedMediaCount = await ensureShopifyImagesAttached({
@@ -819,14 +935,35 @@ export const cjShopifyUsaPublishService = {
         mediaPayload,
       });
 
-      await cjShopifyUsaAdminService.setInventoryQuantity({
-        userId: input.userId,
-        inventoryItemId: upserted.inventoryItemId,
-        locationId: location.id,
-        quantity: desiredQuantity,
-        referenceDocumentUri: `logistics://cj-shopify-usa/listing/${listing.id}`,
-        idempotencyKey: `cj-shopify-usa-${listing.id}-${desiredQuantity}`,
-      });
+      // Build a SKU → Shopify variant map for inventory assignment
+      const shopifyVariantBySku = new Map(
+        upserted.allVariants.map((v) => [v.sku, v])
+      );
+
+      if (isMultiVariant && variantConfig.length > 0) {
+        // Set inventory for each sibling variant individually
+        for (const vc of variantConfig) {
+          const sv = shopifyVariantBySku.get(vc.sku);
+          if (!sv) continue;
+          await cjShopifyUsaAdminService.setInventoryQuantity({
+            userId: input.userId,
+            inventoryItemId: sv.inventoryItemId,
+            locationId: location.id,
+            quantity: vc.quantity,
+            referenceDocumentUri: `logistics://cj-shopify-usa/listing/${vc.listingId}`,
+            idempotencyKey: `cj-shopify-usa-${vc.listingId}-qty-${vc.quantity}`,
+          });
+        }
+      } else {
+        await cjShopifyUsaAdminService.setInventoryQuantity({
+          userId: input.userId,
+          inventoryItemId: upserted.inventoryItemId,
+          locationId: location.id,
+          quantity: desiredQuantity,
+          referenceDocumentUri: `logistics://cj-shopify-usa/listing/${listing.id}`,
+          idempotencyKey: `cj-shopify-usa-${listing.id}-${desiredQuantity}`,
+        });
+      }
 
       await cjShopifyUsaAdminService.publishProductToPublication({
         userId: input.userId,
@@ -885,14 +1022,16 @@ export const cjShopifyUsaPublishService = {
           storefrontVerification.error ? `error=${storefrontVerification.error}` : '',
         ].filter(Boolean).join('; ');
 
+        const primarySkuPending = String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim();
+        const pendingVariantId = shopifyVariantBySku.get(primarySkuPending)?.id ?? upserted.variantId;
         const pending = await prisma.cjShopifyUsaListing.update({
           where: { id: listing.id },
           data: {
             status: CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
             shopifyProductId: upserted.productId,
-            shopifyVariantId: upserted.variantId,
+            shopifyVariantId: pendingVariantId,
             shopifyHandle: upserted.handle,
-            shopifySku: String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim(),
+            shopifySku: primarySkuPending,
             lastSyncedAt: new Date(),
             lastError: `Shopify product was created/published but buyer-facing storefront verification failed: ${reason}`,
           },
@@ -909,14 +1048,39 @@ export const cjShopifyUsaPublishService = {
         return pending;
       }
 
+      // ── Update sibling listings with their individual shopifyVariantId ──
+      if (isMultiVariant && variantConfig.length > 0) {
+        for (const vc of variantConfig) {
+          if (vc.listingId === listing.id) continue; // handled below
+          const sv = shopifyVariantBySku.get(vc.sku);
+          await prisma.cjShopifyUsaListing.update({
+            where: { id: vc.listingId },
+            data: {
+              status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+              shopifyProductId: upserted.productId,
+              shopifyVariantId: sv?.id ?? null,
+              shopifyHandle: upserted.handle,
+              publishedAt: new Date(),
+              lastSyncedAt: new Date(),
+              lastError: null,
+            },
+          });
+        }
+      }
+
+      // Resolve shopifyVariantId for the primary listing
+      const primarySku = String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim();
+      const primaryShopifyVariant = shopifyVariantBySku.get(primarySku);
+      const resolvedVariantId = primaryShopifyVariant?.id ?? upserted.variantId;
+
       const updated = await prisma.cjShopifyUsaListing.update({
         where: { id: listing.id },
         data: {
           status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
           shopifyProductId: upserted.productId,
-          shopifyVariantId: upserted.variantId,
+          shopifyVariantId: resolvedVariantId,
           shopifyHandle: upserted.handle,
-          shopifySku: String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim(),
+          shopifySku: primarySku,
           publishedAt: new Date(),
           lastSyncedAt: new Date(),
           lastError: null,
@@ -926,12 +1090,14 @@ export const cjShopifyUsaPublishService = {
       await recordTrace(input.userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_PUBLISH_SUCCESS, 'listing.publish.success', {
         listingId: listing.id,
         shopifyProductId: upserted.productId,
-        shopifyVariantId: upserted.variantId,
+        shopifyVariantId: resolvedVariantId,
         shopifyHandle: upserted.handle,
         publicationId: publication.id,
         locationId: location.id,
         attachedMediaCount,
         storefrontVerification,
+        siblingCount: siblingDrafts.length,
+        isMultiVariant,
       } as Prisma.InputJsonValue);
 
       return updated;

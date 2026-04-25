@@ -1,0 +1,307 @@
+{%- comment -%} PawVault — Bestsellers / Featured Products. Shows real products from a configurable collection. {%- endcomment -%}
+
+{%- liquid
+  assign src_collection = collections[section.settings.collection]
+  if src_collection == blank or src_collection.products_count == 0
+    assign src_collection = collections.all
+  endif
+  assign limit = section.settings.products_to_show | default: 4
+  assign sort_by = section.settings.sort_by | default: 'default'
+  if sort_by == 'newest'
+    assign display_products = src_collection.products | sort: 'published_at' | reverse
+  elsif sort_by == 'price-asc'
+    assign display_products = src_collection.products | sort: 'price'
+  elsif sort_by == 'price-desc'
+    assign display_products = src_collection.products | sort: 'price' | reverse
+  elsif sort_by == 'title'
+    assign display_products = src_collection.products | sort: 'title'
+  else
+    assign display_products = src_collection.products
+  endif
+-%}
+
+<section class="pv-best">
+  <div class="pv-best__container">
+
+    <div class="pv-best__header">
+      <div>
+        <p class="pv-best__eyebrow">{{ section.settings.eyebrow | default: 'Our picks' }}</p>
+        <h2 class="pv-best__title">{{ section.settings.title | default: 'Hot this week' }}</h2>
+      </div>
+      <a href="{{ src_collection.url | default: routes.all_products_collection_url }}" class="pv-best__view-all">
+        View all
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+
+    <div class="pv-best__grid">
+      {%- for product in display_products limit: limit -%}
+        {%- liquid
+          assign product_image = product.featured_image
+          assign product_price = product.price | money
+          assign product_compare = product.compare_at_price
+          assign is_on_sale = false
+          if product_compare and product_compare > product.price
+            assign is_on_sale = true
+          endif
+        -%}
+        <a href="{{ product.url }}" class="pv-prod-card">
+          <div class="pv-prod-card__media">
+            {%- if product_image != blank -%}
+              {{
+                product_image
+                | image_url: width: 600
+                | image_tag:
+                  class: 'pv-prod-card__img',
+                  loading: 'lazy',
+                  alt: product_image.alt | default: product.title,
+                  widths: '300, 450, 600'
+              }}
+            {%- else -%}
+              <div class="pv-prod-card__no-img">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9l4-4 4 4 4-4 4 4"/><circle cx="8.5" cy="15.5" r="1.5"/></svg>
+              </div>
+            {%- endif -%}
+            {%- if is_on_sale -%}
+              <span class="pv-prod-card__badge">Sale</span>
+            {%- endif -%}
+          </div>
+          <div class="pv-prod-card__info">
+            <p class="pv-prod-card__name">{{ product.title }}</p>
+            <div class="pv-prod-card__prices">
+              <span class="pv-prod-card__price">{{ product_price }}</span>
+              {%- if is_on_sale -%}
+                <s class="pv-prod-card__compare">{{ product_compare | money }}</s>
+              {%- endif -%}
+            </div>
+          </div>
+        </a>
+      {%- else -%}
+        <p class="pv-best__empty">No products found in this collection.</p>
+      {%- endfor -%}
+    </div>
+
+  </div>
+</section>
+
+<style>
+  .pv-best {
+    padding: clamp(4rem, 7vw, 6.5rem) 0;
+    background: #ffffff;
+  }
+
+  .pv-best__container {
+    width: min(1280px, calc(100% - 40px));
+    margin: 0 auto;
+  }
+
+  .pv-best__header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 2.25rem;
+    flex-wrap: wrap;
+  }
+
+  .pv-best__eyebrow {
+    margin: 0 0 0.5rem;
+    color: #b47b2d;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .pv-best__title {
+    margin: 0;
+    color: #0f1f35;
+    font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+  }
+
+  .pv-best__view-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.875rem;
+    font-weight: 650;
+    color: #0f1f35;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(15, 31, 53, 0.25);
+    padding-bottom: 2px;
+    white-space: nowrap;
+    transition: border-color 180ms ease, color 180ms ease;
+  }
+
+  .pv-best__view-all:hover {
+    color: #f59e0b;
+    border-color: #f59e0b;
+  }
+
+  .pv-best__grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+
+  .pv-best__empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #607286;
+    font-size: 0.9rem;
+  }
+
+  /* ── PRODUCT CARD ─────────────────────────────── */
+  .pv-prod-card {
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid rgba(16, 35, 59, 0.08);
+    background: #ffffff;
+    transition: transform 200ms ease, box-shadow 200ms ease;
+  }
+
+  .pv-prod-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 38px rgba(16, 35, 59, 0.1);
+  }
+
+  .pv-prod-card__media {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    background: #f4f2ee;
+  }
+
+  .pv-prod-card__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 600ms ease;
+  }
+
+  .pv-prod-card:hover .pv-prod-card__img {
+    transform: scale(1.05);
+  }
+
+  .pv-prod-card__no-img {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c0c8d4;
+  }
+
+  .pv-prod-card__badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    background: #f59e0b;
+    color: #0f1f35;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .pv-prod-card__info {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex: 1;
+  }
+
+  .pv-prod-card__name {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 650;
+    color: #0f1f35;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .pv-prod-card__prices {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .pv-prod-card__price {
+    font-size: 0.9375rem;
+    font-weight: 800;
+    color: #0f1f35;
+  }
+
+  .pv-prod-card__compare {
+    font-size: 0.8rem;
+    color: #8a9ab0;
+  }
+
+  /* ── RESPONSIVE ─────────────────────────────────── */
+  @media (max-width: 1023px) {
+    .pv-best__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 749px) {
+    .pv-best__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.9rem;
+    }
+  }
+
+  @media (max-width: 479px) {
+    .pv-best__grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "PV — Bestsellers",
+  "tag": "section",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Our picks" },
+    { "type": "text", "id": "title", "label": "Heading", "default": "Hot this week" },
+    { "type": "collection", "id": "collection", "label": "Collection (leave blank for All Products)" },
+    {
+      "type": "select",
+      "id": "sort_by",
+      "label": "Sort order",
+      "options": [
+        { "value": "default", "label": "Collection default (set in Shopify Admin)" },
+        { "value": "newest", "label": "Newest first" },
+        { "value": "price-asc", "label": "Price: low to high" },
+        { "value": "price-desc", "label": "Price: high to low" },
+        { "value": "title", "label": "Alphabetical" }
+      ],
+      "default": "default"
+    },
+    {
+      "type": "select",
+      "id": "products_to_show",
+      "label": "Products to show",
+      "options": [
+        { "value": "4", "label": "4" },
+        { "value": "8", "label": "8" },
+        { "value": "12", "label": "12" }
+      ],
+      "default": "4"
+    }
+  ],
+  "presets": [
+    { "name": "PV — Bestsellers", "category": "PawVault" }
+  ]
+}
+{% endschema %}
