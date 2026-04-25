@@ -317,9 +317,67 @@
   }
 
   /* ─────────────────────────────────────────────
+     7. NAVIGATION FIX
+     Replaces the Shopify-stored Spanish nav (Inicio/Catálogo/Contacto)
+     with the full English pet-store navigation pointing to real collections.
+  ───────────────────────────────────────────── */
+  const NAV_ITEMS = [
+    { label: 'Home',         href: '/'                         },
+    { label: 'Dogs',         href: '/collections/dogs'         },
+    { label: 'Cats',         href: '/collections/cats'         },
+    { label: 'Grooming',     href: '/collections/grooming'     },
+    { label: 'Toys',         href: '/collections/toys'         },
+    { label: 'New Arrivals', href: '/collections/new-arrivals' },
+    { label: 'All Products', href: '/collections/all'          },
+    { label: 'Contact',      href: '/pages/contact'            },
+  ];
+
+  function initNavigation() {
+    // Desktop nav — .menu-list__link elements inside the header nav
+    const desktopNav = document.querySelector(
+      '.header__row--top nav, .header-menu, [data-header-menu], .menu-list',
+    );
+    // Mobile nav — the drawer nav list
+    const mobileNav = document.querySelector(
+      '.menu-drawer__navigation, .menu-drawer__menu',
+    );
+
+    function buildDesktopNav(container) {
+      if (!container) return;
+      const existing = container.querySelectorAll('a.menu-list__link, li.menu-list__item');
+      if (!existing.length) return;
+      const list = existing[0].closest('ul') || container;
+      list.innerHTML = NAV_ITEMS.map(item => `
+        <li class="menu-list__item">
+          <a href="${item.href}" class="menu-list__link body-text link link--button" data-pv-nav="true">
+            <span class="menu-list__link-title">${item.label}</span>
+          </a>
+        </li>`).join('');
+    }
+
+    function buildMobileNav(container) {
+      if (!container) return;
+      const list = container.querySelector('ul') || container;
+      if (!list) return;
+      list.innerHTML = NAV_ITEMS.map(item => `
+        <li class="menu-drawer__list-item menu-drawer__list-item--flat">
+          <a href="${item.href}"
+             class="menu-drawer__menu-item menu-drawer__menu-item--mainlist focus-inset"
+             data-pv-nav="true">
+            <span class="menu-drawer__menu-item-text wrap-text">${item.label}</span>
+          </a>
+        </li>`).join('');
+    }
+
+    buildDesktopNav(desktopNav);
+    buildMobileNav(mobileNav);
+  }
+
+  /* ─────────────────────────────────────────────
      BOOT
   ───────────────────────────────────────────── */
   function boot() {
+    initNavigation();
     initAnnouncementRotation();
     initHeroVariants();
     initProductUrgency();

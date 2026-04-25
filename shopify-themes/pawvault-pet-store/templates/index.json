@@ -37,7 +37,7 @@
             "name": "Dogs",
             "desc": "Harnesses, leashes, play toys and daily comfort for your pup.",
             "cta": "Shop dogs",
-            "link": "shopify://collections/all"
+            "link": "shopify://collections/dogs"
           }
         },
         "cat_cats": {
@@ -46,7 +46,7 @@
             "name": "Cats",
             "desc": "Beds, enrichment and cozy upgrades for your cat.",
             "cta": "Shop cats",
-            "link": "shopify://collections/all"
+            "link": "shopify://collections/cats"
           }
         },
         "cat_grooming": {
@@ -55,7 +55,7 @@
             "name": "Grooming",
             "desc": "Brushes, trimmers and bath-time essentials.",
             "cta": "Shop grooming",
-            "link": "shopify://collections/all"
+            "link": "shopify://collections/grooming"
           }
         },
         "cat_comfort": {
@@ -64,7 +64,7 @@
             "name": "Comfort & Feeding",
             "desc": "Beds, bowls and home staples for daily pet life.",
             "cta": "Shop comfort",
-            "link": "shopify://collections/all"
+            "link": "shopify://collections/feeding"
           }
         }
       },
@@ -78,8 +78,9 @@
     "pv_bestsellers": {
       "type": "pv-bestsellers",
       "settings": {
-        "eyebrow": "Our picks",
+        "eyebrow": "New arrivals",
         "title": "Hot this week",
+        "collection": "new-arrivals",
         "sort_by": "newest",
         "products_to_show": "4"
       }

@@ -25,6 +25,7 @@ export const CJ_SHOPIFY_USA_REQUIRED_SCOPES = [
   'write_publications',
   'read_merchant_managed_fulfillment_orders',
   'write_merchant_managed_fulfillment_orders',
+  'write_online_store_navigation', // needed to update nav menus programmatically
 ] as const;
 
 export const CJ_SHOPIFY_USA_REQUIRED_WEBHOOK_TOPICS = [
