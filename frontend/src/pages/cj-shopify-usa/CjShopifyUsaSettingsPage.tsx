@@ -10,6 +10,13 @@ type SettingsPayload = {
   minCostUsd: number;
 };
 
+/** Parse a number from user input supporting both dot and comma as decimal separator */
+function parseNumericInput(raw: string, fallback: number): number {
+  const normalized = raw.trim().replace(',', '.');
+  const parsed = parseFloat(normalized);
+  return isFinite(parsed) ? parsed : fallback;
+}
+
 function toErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const payload = error.response?.data as { error?: string; message?: string } | undefined;
@@ -57,6 +64,12 @@ export default function CjShopifyUsaSettingsPage() {
   }, []);
 
   async function saveSettings() {
+    // Guard: reject if any field is NaN before sending (avoids backend reset to defaults)
+    const hasNaN = Object.values(values).some((v) => !isFinite(v as number));
+    if (hasNaN) {
+      setError('Uno o más campos tienen un valor inválido. Usa punto (.) como separador decimal.');
+      return;
+    }
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -97,7 +110,7 @@ export default function CjShopifyUsaSettingsPage() {
               min={0}
               step="0.01"
               value={values.maxShippingUsd}
-              onChange={(e) => setValues((prev) => ({ ...prev, maxShippingUsd: Number(e.target.value) }))}
+              onChange={(e) => setValues((prev) => ({ ...prev, maxShippingUsd: parseNumericInput(e.target.value, prev.maxShippingUsd) }))}
               className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
             />
           </label>
@@ -109,7 +122,7 @@ export default function CjShopifyUsaSettingsPage() {
               min={0}
               step="0.01"
               value={values.minCostUsd}
-              onChange={(e) => setValues((prev) => ({ ...prev, minCostUsd: Number(e.target.value) }))}
+              onChange={(e) => setValues((prev) => ({ ...prev, minCostUsd: parseNumericInput(e.target.value, prev.minCostUsd) }))}
               className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
             />
           </label>
@@ -122,7 +135,7 @@ export default function CjShopifyUsaSettingsPage() {
               max={100}
               step="0.1"
               value={values.minMarginPct}
-              onChange={(e) => setValues((prev) => ({ ...prev, minMarginPct: Number(e.target.value) }))}
+              onChange={(e) => setValues((prev) => ({ ...prev, minMarginPct: parseNumericInput(e.target.value, prev.minMarginPct) }))}
               className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
             />
           </label>
@@ -134,7 +147,7 @@ export default function CjShopifyUsaSettingsPage() {
               min={0}
               step="0.01"
               value={values.minProfitUsd}
-              onChange={(e) => setValues((prev) => ({ ...prev, minProfitUsd: Number(e.target.value) }))}
+              onChange={(e) => setValues((prev) => ({ ...prev, minProfitUsd: parseNumericInput(e.target.value, prev.minProfitUsd) }))}
               className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
             />
           </label>

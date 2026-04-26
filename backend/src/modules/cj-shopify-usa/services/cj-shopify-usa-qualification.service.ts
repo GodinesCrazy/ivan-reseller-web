@@ -68,13 +68,20 @@ export class CjShopifyUsaQualificationService {
     const reasons: string[] = [];
 
     // === CONFIGURACIÓN CON DEFAULTS MEJORADOS ===
-    const providerFeePct = Number(settings.defaultPaymentFeePct ?? PRICING_DEFAULTS.paymentFeePct);
-    const providerFeeFixed = Number(settings.defaultPaymentFixedFeeUsd ?? PRICING_DEFAULTS.paymentFixedFeeUsd);
-    const incidentBufferPct = Number(settings.incidentBufferPct ?? PRICING_DEFAULTS.incidentBufferPct);
-    const marginPct = Number(settings.minMarginPct ?? PRICING_DEFAULTS.minMarginPct);
-    const maxShippingUsd = Number(settings.maxShippingUsd ?? PRICING_DEFAULTS.maxShippingUsd);
-    const minProfitUsd = Number(settings.minProfitUsd ?? PRICING_DEFAULTS.minProfitUsd);
-    const minCostUsd = Number(settings.minCostUsd ?? PRICING_DEFAULTS.minCostUsd);
+    // safeNum: guard against NaN/null/undefined coming from the API (e.g. when the
+    // frontend sends a comma-decimal like "0,5" which JSON-serialises as null)
+    const safeNum = (v: unknown, fallback: number): number => {
+      const n = Number(v);
+      return isFinite(n) ? n : fallback;
+    };
+
+    const providerFeePct    = safeNum(settings.defaultPaymentFeePct,      PRICING_DEFAULTS.paymentFeePct);
+    const providerFeeFixed  = safeNum(settings.defaultPaymentFixedFeeUsd,  PRICING_DEFAULTS.paymentFixedFeeUsd);
+    const incidentBufferPct = safeNum(settings.incidentBufferPct,          PRICING_DEFAULTS.incidentBufferPct);
+    const marginPct         = safeNum(settings.minMarginPct,               PRICING_DEFAULTS.minMarginPct);
+    const maxShippingUsd    = safeNum(settings.maxShippingUsd,             PRICING_DEFAULTS.maxShippingUsd);
+    const minProfitUsd      = safeNum(settings.minProfitUsd,               PRICING_DEFAULTS.minProfitUsd);
+    const minCostUsd        = safeNum(settings.minCostUsd,                 PRICING_DEFAULTS.minCostUsd);
 
     // === CÁLCULO DE COSTOS BASE ===
     const baseCostUsd = cjCostUsd + estimatedShippingUsd;
