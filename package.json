@@ -21,8 +21,11 @@
     "release-check": "node scripts/release-check.mjs"
   },
   "dependencies": {
-    "@vercel/speed-insights": "^1.3.1",
     "@vercel/node": "^3.0.0",
+    "@vercel/speed-insights": "^1.3.1",
     "axios": "^1.13.1"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   }
 }

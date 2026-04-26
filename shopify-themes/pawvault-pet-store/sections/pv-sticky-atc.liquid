@@ -1,0 +1,123 @@
+{%- if product -%}
+  {%- liquid
+    assign current_variant = product.selected_or_first_available_variant
+    assign product_form_id = 'pv-sticky-form-' | append: product.id
+  -%}
+
+  <div
+    id="pv-sticky-atc"
+    class="pv-sticky-atc"
+    aria-hidden="true"
+    data-product-id="{{ product.id }}"
+    data-variant-id="{{ current_variant.id }}"
+  >
+    <div class="pv-sticky-atc__inner">
+
+      <div class="pv-sticky-atc__info">
+        <p class="pv-sticky-atc__title">{{ product.title | truncate: 42 }}</p>
+        <p class="pv-sticky-atc__price" id="pv-sticky-price">
+          {%- if current_variant.compare_at_price > current_variant.price -%}
+            <s class="pv-sticky-atc__compare">{{ current_variant.compare_at_price | money }}</s>
+          {%- endif -%}
+          <span>{{ current_variant.price | money }}</span>
+        </p>
+      </div>
+
+      {%- form 'product', product, id: product_form_id, class: 'pv-sticky-atc__form' -%}
+        <input
+          type="hidden"
+          name="id"
+          id="pv-sticky-variant-input"
+          value="{{ current_variant.id }}"
+        >
+        <button
+          type="submit"
+          name="add"
+          class="pv-sticky-atc__btn"
+          {%- unless current_variant.available -%}disabled{%- endunless -%}
+          aria-label="Add {{ product.title | escape }} to cart"
+        >
+          {%- if current_variant.available -%}
+            Add to Cart
+          {%- else -%}
+            Sold Out
+          {%- endif -%}
+        </button>
+      {%- endform -%}
+
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var bar = document.getElementById('pv-sticky-atc');
+      if (!bar) return;
+
+      // Watch main ATC button — show sticky bar when it leaves viewport
+      var mainAtcSelector = 'button[name="add"]:not(.pv-sticky-atc__btn)';
+      var mainBtn = document.querySelector(mainAtcSelector);
+
+      if (!mainBtn || !('IntersectionObserver' in window)) {
+        bar.classList.add('pv-sticky-atc--ready');
+        return;
+      }
+
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          var visible = entry.isIntersecting;
+          bar.classList.toggle('pv-sticky-atc--visible', !visible);
+          bar.setAttribute('aria-hidden', visible ? 'true' : 'false');
+        });
+      }, { threshold: 0 });
+
+      io.observe(mainBtn);
+
+      // Sync variant changes from URL — Shopify updates ?variant= on selection
+      function syncVariant() {
+        var params = new URLSearchParams(window.location.search);
+        var vid = params.get('variant');
+        if (!vid) return;
+
+        var hiddenInput = document.getElementById('pv-sticky-variant-input');
+        var priceEl     = document.getElementById('pv-sticky-price');
+        var stickyBtn   = bar.querySelector('.pv-sticky-atc__btn');
+
+        if (hiddenInput) hiddenInput.value = vid;
+
+        // Try to read price from the main price element on the page
+        var mainPrice = document.querySelector('.product-information .price [data-price]');
+        if (mainPrice && priceEl) {
+          priceEl.textContent = mainPrice.textContent;
+        }
+
+        // Sync sold-out state from main button
+        if (stickyBtn && mainBtn) {
+          var disabled = mainBtn.hasAttribute('disabled');
+          stickyBtn.disabled = disabled;
+          stickyBtn.textContent = disabled ? 'Sold Out' : 'Add to Cart';
+        }
+      }
+
+      // Listen for URL changes (Shopify pushes state on variant select)
+      var lastHref = location.href;
+      setInterval(function () {
+        if (location.href !== lastHref) {
+          lastHref = location.href;
+          syncVariant();
+        }
+      }, 250);
+    })();
+  </script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "PDP — Sticky Add to Cart",
+  "tag": "section",
+  "class": "pv-sticky-atc-section",
+  "settings": [],
+  "presets": [
+    { "name": "PDP — Sticky Add to Cart" }
+  ]
+}
+{% endschema %}

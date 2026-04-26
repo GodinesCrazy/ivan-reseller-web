@@ -1,298 +1,153 @@
-{%- comment -%} PawVault category gallery — editorial asymmetric 3-col bento grid. {%- endcomment -%}
+{%- comment -%} PawVault — Compact horizontal category strip. Like Chewy's category nav. {%- endcomment -%}
 
-<section class="pv-cats">
-  <div class="pv-cats__container">
-
-    <div class="pv-cats__header">
-      <p class="pv-cats__eyebrow">{{ section.settings.eyebrow | default: 'Shop by routine' }}</p>
-      <h2 class="pv-cats__title">{{ section.settings.title | default: 'Everything your pet needs, organized your way.' }}</h2>
-      <p class="pv-cats__text">{{ section.settings.text | default: 'Start by pet type or by the routines that matter most.' }}</p>
-    </div>
-
-    <div class="pv-cats__grid">
-      {% for block in section.blocks %}
-        {%- liquid
-          case forloop.index
-            when 1
-              assign fallback_image = 'pv-cat-dogs.jpg' | asset_url
-            when 2
-              assign fallback_image = 'pv-cat-cats.jpg' | asset_url
-            when 3
-              assign fallback_image = 'pv-cat-grooming.jpg' | asset_url
-            else
-              assign fallback_image = 'pv-cat-comfort.jpg' | asset_url
-          endcase
-        -%}
-        <a
-          href="{{ block.settings.link | default: routes.all_products_collection_url }}"
-          class="pv-cat-card"
-          {{ block.shopify_attributes }}
-        >
-          <div class="pv-cat-card__media">
-            {% if block.settings.image != blank %}
-              {{
-                block.settings.image
-                | image_url: width: 1200
-                | image_tag:
-                  class: 'pv-cat-card__image',
-                  loading: 'lazy',
-                  alt: block.settings.image.alt | default: block.settings.name
-              }}
-            {% else %}
-              <img
-                src="{{ fallback_image }}"
-                alt="{{ block.settings.name | default: 'Pet category' }}"
-                class="pv-cat-card__image"
-                loading="lazy"
-                width="720"
-                height="900"
-              >
-            {% endif %}
-          </div>
-          <div class="pv-cat-card__overlay"></div>
-          <div class="pv-cat-card__content">
-            <div class="pv-cat-card__body">
-              <h3 class="pv-cat-card__name">{{ block.settings.name | default: 'Category' }}</h3>
-              <p class="pv-cat-card__desc">{{ block.settings.desc }}</p>
-            </div>
-            <span class="pv-cat-card__cta">
-              {{ block.settings.cta | default: 'Explore' }}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M5 12h14M12 5l7 7-7 7"/>
-              </svg>
-            </span>
-          </div>
-        </a>
-      {% endfor %}
-    </div>
-
+<div class="pv-cstrip">
+  <div class="pv-cstrip__scroll">
+    {%- for block in section.blocks -%}
+      {%- liquid
+        case block.settings.icon
+          when 'dog'
+            assign icon_svg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 5.172C10 3.782 8.423 2.679 6.5 3c-2.823.47-4.113 6.006-4 7 .08.703 1.725 1.722 3.656 1 1.261-.472 1.96-1.45 2.344-2.5"/><path d="M14.267 5.172c0-1.39 1.577-2.493 3.5-2.172 2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.96-1.45-2.344-2.5"/><path d="M8 14v.5A3.5 3.5 0 0 0 11.5 18v0h1a3.5 3.5 0 0 0 3.5-3.5V14"/><path d="M6.5 9.5C8 9 10 9.2 12 10c2-.8 4-1 5.5-.5"/></svg>'
+          when 'cat'
+            assign icon_svg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5c.67 0 1.35.09 2 .26 1.78-2 5.03-2.84 6.42-2.26 1.4.58-.42 7-.42 7 .57 1.07 1 2.24 1 3.44C21 17.9 16.97 21 12 21s-9-3-9-7.56c0-1.25.5-2.4 1-3.44 0 0-1.89-6.42-.5-7 1.39-.58 4.72.23 6.5 2.23A9.04 9.04 0 0 1 12 5z"/><path d="M8 14v.5M16 14v.5"/></svg>'
+          when 'scissors'
+            assign icon_svg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>'
+          when 'bed'
+            assign icon_svg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>'
+          when 'bowl'
+            assign icon_svg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M7 12h10"/></svg>'
+          when 'star'
+            assign icon_svg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
+          when 'toy'
+            assign icon_svg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>'
+          else
+            assign icon_svg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>'
+        endcase
+      -%}
+      <a
+        href="{{ block.settings.link | default: routes.all_products_collection_url }}"
+        class="pv-cstrip__item"
+        {{ block.shopify_attributes }}
+      >
+        <span class="pv-cstrip__icon">{{ icon_svg }}</span>
+        <span class="pv-cstrip__label">{{ block.settings.label | default: 'Category' }}</span>
+      </a>
+    {%- endfor -%}
   </div>
-</section>
+</div>
 
 <style>
-  .pv-cats {
-    padding: clamp(5rem, 9vw, 8rem) 0;
-    background: #f7f4ee;
-  }
-
-  .pv-cats__container {
-    width: min(1280px, calc(100% - 40px));
-    margin: 0 auto;
-  }
-
-  .pv-cats__header {
-    max-width: 44rem;
-    margin-bottom: 2.75rem;
-  }
-
-  .pv-cats__eyebrow {
-    margin: 0 0 0.85rem;
-    color: #b47b2d;
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  .pv-cats__title {
-    margin: 0;
-    color: #0f1f35;
-    font-size: clamp(2rem, 4vw, 3.25rem);
-    line-height: 1.05;
-    letter-spacing: -0.04em;
-  }
-
-  .pv-cats__text {
-    margin: 1rem 0 0;
-    max-width: 38rem;
-    color: #5d6c7c;
-    font-size: 1rem;
-    line-height: 1.7;
-  }
-
-  /* ── EDITORIAL ASYMMETRIC GRID ─────────────────── */
-  .pv-cats__grid {
-    display: grid;
-    grid-template-columns: 1.35fr 0.85fr 1.15fr;
-    grid-template-rows: 1fr 1fr;
-    min-height: 640px;
-    gap: 1rem;
-  }
-
-  /* Card 1 (Dogs) — tall left */
-  .pv-cat-card:nth-child(1) { grid-column: 1; grid-row: 1 / 3; }
-  /* Card 2 (Cats) — top center */
-  .pv-cat-card:nth-child(2) { grid-column: 2; grid-row: 1; }
-  /* Card 3 (Grooming) — bottom center */
-  .pv-cat-card:nth-child(3) { grid-column: 2; grid-row: 2; }
-  /* Card 4 (Comfort) — tall right */
-  .pv-cat-card:nth-child(4) { grid-column: 3; grid-row: 1 / 3; }
-
-  /* ── CARD BASE ─────────────────────────────────── */
-  .pv-cat-card {
-    position: relative;
+  .pv-cstrip {
+    background: #ffffff;
+    border-top: 1px solid var(--pv-border);
+    border-bottom: 1px solid var(--pv-border);
     overflow: hidden;
+  }
+
+  .pv-cstrip__scroll {
     display: flex;
-    border-radius: 24px;
-    text-decoration: none;
-    color: #ffffff;
-    box-shadow: 0 16px 36px rgba(16, 35, 59, 0.1);
-    transition: box-shadow 250ms ease;
-  }
-
-  .pv-cat-card:hover {
-    box-shadow: 0 26px 56px rgba(16, 35, 59, 0.18);
-  }
-
-  .pv-cat-card__media,
-  .pv-cat-card__overlay {
-    position: absolute;
-    inset: 0;
-  }
-
-  .pv-cat-card__image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-    transition: transform 800ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-
-  .pv-cat-card:hover .pv-cat-card__image {
-    transform: scale(1.07);
-  }
-
-  .pv-cat-card__overlay {
-    background: linear-gradient(
-      180deg,
-      rgba(8, 18, 36, 0.02) 0%,
-      rgba(8, 18, 36, 0.38) 50%,
-      rgba(8, 18, 36, 0.82) 100%
-    );
-  }
-
-  .pv-cat-card__content {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    gap: 1rem;
-    padding: 1.75rem;
-  }
-
-  .pv-cat-card__body {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .pv-cat-card__name {
-    margin: 0;
-    font-size: clamp(1.35rem, 2vw, 2.1rem);
-    font-weight: 800;
-    line-height: 1.05;
-    letter-spacing: -0.03em;
-  }
-
-  .pv-cat-card__desc {
-    margin: 0;
-    max-width: 22rem;
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 0.9rem;
-    line-height: 1.6;
-  }
-
-  /* Short center cards: hide description to keep compact */
-  .pv-cat-card:nth-child(2) .pv-cat-card__desc,
-  .pv-cat-card:nth-child(3) .pv-cat-card__desc {
-    display: none;
-  }
-
-  .pv-cat-card__cta {
-    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    width: fit-content;
-    padding: 0.6rem 1.1rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.13);
-    border: 1px solid rgba(255, 255, 255, 0.28);
-    color: #ffffff;
-    font-size: 0.875rem;
-    font-weight: 650;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    transition: background 220ms ease, transform 220ms ease;
+    gap: 0;
+    width: min(1400px, 100%);
+    margin: 0 auto;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
-  .pv-cat-card:hover .pv-cat-card__cta {
-    background: rgba(255, 255, 255, 0.22);
-    transform: translateX(3px);
+  .pv-cstrip__scroll::-webkit-scrollbar { display: none; }
+
+  .pv-cstrip__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    flex: 0 0 auto;
+    min-width: 90px;
+    padding: 1rem 1.1rem;
+    text-decoration: none;
+    color: var(--pv-text);
+    border-right: 1px solid var(--pv-border);
+    transition: background 150ms ease, color 150ms ease;
   }
 
-  /* ── RESPONSIVE ─────────────────────────────────── */
-  @media (max-width: 899px) {
-    .pv-cats__grid {
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 22rem 22rem;
-      min-height: 0;
-    }
-    .pv-cat-card:nth-child(1) { grid-column: 1; grid-row: 1; }
-    .pv-cat-card:nth-child(2) { grid-column: 2; grid-row: 1; }
-    .pv-cat-card:nth-child(3) { grid-column: 1; grid-row: 2; }
-    .pv-cat-card:nth-child(4) { grid-column: 2; grid-row: 2; }
-    .pv-cat-card:nth-child(2) .pv-cat-card__desc,
-    .pv-cat-card:nth-child(3) .pv-cat-card__desc {
-      display: block;
-    }
+  .pv-cstrip__item:first-child { border-left: none; }
+
+  .pv-cstrip__item:hover {
+    background: rgba(245, 158, 11, 0.06);
+    color: var(--pv-navy);
   }
 
-  @media (max-width: 599px) {
-    .pv-cats__grid {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto;
+  .pv-cstrip__item:hover .pv-cstrip__icon {
+    color: var(--pv-gold);
+  }
+
+  .pv-cstrip__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--pv-navy);
+    transition: color 150ms ease;
+  }
+
+  .pv-cstrip__label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 749px) {
+    .pv-cstrip__item {
+      min-width: 72px;
+      padding: 0.9rem 0.85rem;
     }
-    .pv-cat-card:nth-child(n) {
-      grid-column: 1;
-      grid-row: auto;
-      min-height: 22rem;
-    }
+
+    .pv-cstrip__label { font-size: 0.7rem; }
   }
 </style>
 
 {% schema %}
 {
-  "name": "PV - Category Gallery",
-  "tag": "section",
-  "settings": [
-    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Shop by routine" },
-    { "type": "text", "id": "title", "label": "Title", "default": "Everything your pet needs, organized your way." },
-    { "type": "textarea", "id": "text", "label": "Intro text", "default": "Start by pet type or by the routines that matter most — grooming, feeding, play and everyday comfort." }
-  ],
+  "name": "PV — Category Strip",
+  "tag": "div",
   "blocks": [
     {
-      "type": "category",
-      "name": "Category card",
+      "type": "cat",
+      "name": "Category",
       "settings": [
-        { "type": "image_picker", "id": "image", "label": "Image" },
-        { "type": "text", "id": "name", "label": "Category name", "default": "Dogs" },
-        { "type": "textarea", "id": "desc", "label": "Description", "default": "Leashes, play, comfort and daily essentials." },
-        { "type": "text", "id": "cta", "label": "CTA label", "default": "Explore" },
-        { "type": "url", "id": "link", "label": "Link" }
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "dog",      "label": "Dog" },
+            { "value": "cat",      "label": "Cat" },
+            { "value": "scissors", "label": "Grooming" },
+            { "value": "bed",      "label": "Beds" },
+            { "value": "bowl",     "label": "Feeding" },
+            { "value": "toy",      "label": "Toy" },
+            { "value": "star",     "label": "Bestsellers" },
+            { "value": "heart",    "label": "Heart" }
+          ],
+          "default": "dog"
+        },
+        { "type": "text", "id": "label", "label": "Label",   "default": "Dogs" },
+        { "type": "url",  "id": "link",  "label": "URL" }
       ]
     }
   ],
   "presets": [
     {
-      "name": "PV - Category Gallery",
-      "category": "PawVault",
+      "name": "PV — Category Strip",
       "blocks": [
-        { "type": "category", "settings": { "name": "Dogs", "desc": "Harnesses, leashes, play toys and daily essentials for your pup.", "cta": "Shop dogs" } },
-        { "type": "category", "settings": { "name": "Cats", "desc": "Beds, enrichment and calm home upgrades for your cat.", "cta": "Shop cats" } },
-        { "type": "category", "settings": { "name": "Grooming", "desc": "Brushes, trimmers and bath-time essentials.", "cta": "Shop grooming" } },
-        { "type": "category", "settings": { "name": "Comfort & Feeding", "desc": "Beds, bowls and home staples for daily pet life.", "cta": "Shop comfort" } }
+        { "type": "cat", "settings": { "icon": "dog",      "label": "Dogs" } },
+        { "type": "cat", "settings": { "icon": "cat",      "label": "Cats" } },
+        { "type": "cat", "settings": { "icon": "scissors", "label": "Grooming" } },
+        { "type": "cat", "settings": { "icon": "bed",      "label": "Beds" } },
+        { "type": "cat", "settings": { "icon": "bowl",     "label": "Feeding" } },
+        { "type": "cat", "settings": { "icon": "toy",      "label": "Toys" } },
+        { "type": "cat", "settings": { "icon": "star",     "label": "Bestsellers" } }
       ]
     }
   ]

@@ -1,0 +1,103 @@
+<div class="pv-quality section-{{ section.id }}">
+  <div class="pv-quality__inner">
+    {%- if section.settings.show_eyebrow -%}
+      <p class="pv-quality__eyebrow">{{ section.settings.eyebrow | default: 'Quality Guarantee' }}</p>
+    {%- endif -%}
+
+    <div class="pv-quality__grid">
+      {%- for block in section.blocks -%}
+        {%- liquid
+          case block.settings.icon
+            when 'shield'
+              assign svg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
+            when 'check-circle'
+              assign svg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+            when 'leaf'
+              assign svg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 22c1.25-1.25 2.5-2 4-2 2.5 0 3.5 2 6 2 2 0 3.5-1 4.5-2M22 2s-5 2-10 7-7 10-7 10"/></svg>'
+            when 'award'
+              assign svg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>'
+            when 'package'
+              assign svg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'
+            else
+              assign svg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
+          endcase
+        -%}
+        <div class="pv-quality__item" {{ block.shopify_attributes }}>
+          <div class="pv-quality__icon">{{ svg }}</div>
+          <div class="pv-quality__content">
+            <div class="pv-quality__title">{{ block.settings.title }}</div>
+            {%- if block.settings.text != blank -%}
+              <div class="pv-quality__text">{{ block.settings.text }}</div>
+            {%- endif -%}
+          </div>
+        </div>
+      {%- endfor -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "PDP — Quality Guarantee",
+  "tag": "section",
+  "class": "pv-quality-section",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_eyebrow",
+      "label": "Show eyebrow label",
+      "default": false
+    },
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow text",
+      "default": "Quality Guarantee"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "guarantee_item",
+      "name": "Guarantee item",
+      "settings": [
+        {
+          "type": "select",
+          "id": "icon",
+          "label": "Icon",
+          "options": [
+            { "value": "shield",       "label": "Shield (pet-safe)" },
+            { "value": "check-circle", "label": "Check circle (quality)" },
+            { "value": "leaf",         "label": "Leaf (natural)" },
+            { "value": "award",        "label": "Award (certified)" },
+            { "value": "package",      "label": "Package (shipping)" }
+          ],
+          "default": "shield"
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Title",
+          "default": "Pet-safe materials"
+        },
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Supporting text",
+          "default": "Every product is reviewed for material safety and everyday durability."
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "PDP — Quality Guarantee",
+      "blocks": [
+        { "type": "guarantee_item", "settings": { "icon": "shield",       "title": "Pet-safe materials",      "text": "Every product is reviewed for material safety before it reaches your pet." } },
+        { "type": "guarantee_item", "settings": { "icon": "check-circle", "title": "Quality inspected",       "text": "Hand-reviewed for durability and real everyday use." } },
+        { "type": "guarantee_item", "settings": { "icon": "award",        "title": "30-day guarantee",        "text": "Not happy? Return it within 30 days, no questions asked." } },
+        { "type": "guarantee_item", "settings": { "icon": "package",      "title": "Secure packaging",        "text": "Orders ship in protective packaging to arrive in perfect condition." } }
+      ]
+    }
+  ]
+}
+{% endschema %}

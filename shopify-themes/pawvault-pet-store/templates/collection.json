@@ -6,13 +6,14 @@
  * or related systems. Please exercise caution as any changes
  * made to this file may be overwritten.
  * ------------------------------------------------------------
- */{
+ */
+{
   "sections": {
     "ir_collection_hero": {
       "type": "ir-collection-hero",
       "settings": {
-        "eyebrow": "Curated Catalog",
-        "description": "Purposeful accessories for travel, workspace, tech protection, and daily carry. Browse a tighter catalog with clear product information and secure checkout."
+        "eyebrow": "PawVault catalog",
+        "description": "Curated accessories, grooming tools, feeding picks and comfort essentials for dogs and cats."
       }
     },
     "main": {
@@ -29,7 +30,7 @@
             "show_swatch_label": false,
             "show_filter_label": false,
             "enable_sorting": true,
-            "enable_grid_density": true,
+            "enable_grid_density": false,
             "inherit_color_scheme": true,
             "color_scheme": "",
             "padding-block-start": 8,
@@ -45,7 +46,7 @@
           "type": "_product-card",
           "static": true,
           "settings": {
-            "product_card_gap": 4,
+            "product_card_gap": 6,
             "inherit_color_scheme": true,
             "color_scheme": "",
             "border": "none",
@@ -65,7 +66,7 @@
                 "border": "none",
                 "border_width": 1,
                 "border_opacity": 100,
-                "border_radius": 0,
+                "border_radius": 16,
                 "padding-block-start": 0,
                 "padding-block-end": 0,
                 "padding-inline-start": 0,
@@ -91,7 +92,7 @@
                 "background": false,
                 "background_color": "#00000026",
                 "corner_radius": 0,
-                "padding-block-start": 4,
+                "padding-block-start": 6,
                 "padding-block-end": 0,
                 "padding-inline-start": 0,
                 "padding-inline-end": 0
@@ -121,11 +122,7 @@
               "blocks": {}
             }
           },
-          "block_order": [
-            "card-gallery",
-            "product_title_4nY4eT",
-            "price_EzJzMm"
-          ]
+          "block_order": ["card-gallery", "product_title_4nY4eT", "price_EzJzMm"]
         }
       },
       "settings": {
@@ -135,7 +132,7 @@
         "product_grid_width": "centered",
         "full_width_on_mobile": true,
         "columns_gap_horizontal": 24,
-        "columns_gap_vertical": 40,
+        "columns_gap_vertical": 32,
         "padding-inline-start": 0,
         "padding-inline-end": 0,
         "color_scheme": "scheme-1",
@@ -145,8 +142,5 @@
       }
     }
   },
-  "order": [
-    "ir_collection_hero",
-    "main"
-  ]
+  "order": ["ir_collection_hero", "main"]
 }

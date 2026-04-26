@@ -1,15 +1,13 @@
-{%- comment -%}
-  IVAN RESELLER - Product Page Trust Elements
-{%- endcomment -%}
+{%- comment -%} PawVault product trust panel. {%- endcomment -%}
 
 <div class="ir-product-trust-section">
   <div class="ir-product-trust__panel">
     <p class="ir-product-trust__eyebrow">Before checkout</p>
-    <h2 class="ir-product-trust__heading">Clear product details, protected payment, and simple support.</h2>
+    <h2 class="ir-product-trust__heading">Pet-parent clarity, secure payment, and post-purchase support.</h2>
 
     {%- if section.settings.show_guarantee -%}
       <div class="ir-guarantee-badge">
-        <span class="ir-guarantee-badge__icon">OK</span>
+        <span class="ir-guarantee-badge__icon">✓</span>
         <div class="ir-guarantee-badge__content">
           <div class="ir-guarantee-badge__title">{{ section.settings.guarantee_title }}</div>
           <div class="ir-guarantee-badge__text">{{ section.settings.guarantee_text }}</div>
@@ -93,7 +91,7 @@
           {%- endfor -%}
 
           {%- unless rendered_payment_icons -%}
-            <li class="ir-payment-trust__method-text">Payment options are shown at checkout.</li>
+            <li class="ir-payment-trust__method-text">Payment methods appear securely during checkout.</li>
           {%- endunless -%}
         </ul>
       </div>
@@ -103,190 +101,57 @@
 
 {% schema %}
 {
-  "name": "IR - Product Trust",
+  "name": "PV - Product Trust",
   "tag": "section",
   "class": "ir-product-trust-section",
   "settings": [
-    {
-      "type": "header",
-      "content": "Guarantee Badge"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_guarantee",
-      "label": "Show Guarantee Badge",
-      "default": true
-    },
-    {
-      "type": "text",
-      "id": "guarantee_title",
-      "label": "Guarantee Title",
-      "default": "30-Day Money Back Guarantee"
-    },
-    {
-      "type": "text",
-      "id": "guarantee_text",
-      "label": "Guarantee Text",
-      "default": "Not happy? Full refund, no questions asked."
-    },
-    {
-      "type": "header",
-      "content": "Benefits List"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_benefits",
-      "label": "Show Benefits List",
-      "default": true
-    },
-    {
-      "type": "header",
-      "content": "Stock Indicator"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_stock_indicator",
-      "label": "Show Stock Urgency",
-      "default": true
-    },
-    {
-      "type": "text",
-      "id": "stock_text",
-      "label": "Stock Text",
-      "default": "Only 14 left in stock"
-    },
-    {
-      "type": "text",
-      "id": "stock_subtext",
-      "label": "Stock Subtext",
-      "default": "Selling fast"
-    },
-    {
-      "type": "header",
-      "content": "Trust Bar"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_trust_bar",
-      "label": "Show Trust Bar",
-      "default": true
-    },
-    {
-      "type": "header",
-      "content": "Payment Trust"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_payment_trust",
-      "label": "Show Payment Icons",
-      "default": true
-    },
-    {
-      "type": "text",
-      "id": "payment_text",
-      "label": "Payment Text",
-      "default": "Secure checkout with 256-bit encryption"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_visa",
-      "label": "Show Visa",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_mastercard",
-      "label": "Show Mastercard",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_amex",
-      "label": "Show Amex",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_paypal",
-      "label": "Show PayPal",
-      "default": true
-    }
+    { "type": "header", "content": "Guarantee badge" },
+    { "type": "checkbox", "id": "show_guarantee", "label": "Show guarantee badge", "default": true },
+    { "type": "text", "id": "guarantee_title", "label": "Guarantee title", "default": "30-day support" },
+    { "type": "text", "id": "guarantee_text", "label": "Guarantee text", "default": "If something feels off after delivery, we keep the support process clear and simple." },
+    { "type": "header", "content": "Benefits" },
+    { "type": "checkbox", "id": "show_benefits", "label": "Show benefits list", "default": true },
+    { "type": "header", "content": "Availability note" },
+    { "type": "checkbox", "id": "show_stock_indicator", "label": "Show availability note", "default": true },
+    { "type": "text", "id": "stock_text", "label": "Availability title", "default": "Ready for your next pet-care upgrade" },
+    { "type": "text", "id": "stock_subtext", "label": "Availability subtext", "default": "Choose your options, add to cart, and checkout with confidence." },
+    { "type": "header", "content": "Trust row" },
+    { "type": "checkbox", "id": "show_trust_bar", "label": "Show trust row", "default": true },
+    { "type": "header", "content": "Payment icons" },
+    { "type": "checkbox", "id": "show_payment_trust", "label": "Show payment block", "default": true },
+    { "type": "text", "id": "payment_text", "label": "Payment text", "default": "Secure checkout with trusted payment methods" },
+    { "type": "checkbox", "id": "show_visa", "label": "Show Visa", "default": true },
+    { "type": "checkbox", "id": "show_mastercard", "label": "Show Mastercard", "default": true },
+    { "type": "checkbox", "id": "show_amex", "label": "Show Amex", "default": true },
+    { "type": "checkbox", "id": "show_paypal", "label": "Show PayPal", "default": true }
   ],
   "blocks": [
     {
       "type": "benefit",
-      "name": "Benefit Item",
+      "name": "Benefit",
       "settings": [
-        {
-          "type": "text",
-          "id": "text",
-          "label": "Benefit Text",
-          "default": "Memory foam molds to your neck for perfect support"
-        }
+        { "type": "text", "id": "text", "label": "Text", "default": "Thoughtful details for real pet-parent routines" }
       ]
     },
     {
       "type": "trust_item",
-      "name": "Trust Item",
+      "name": "Trust item",
       "settings": [
-        {
-          "type": "text",
-          "id": "icon",
-          "label": "Icon (emoji)",
-          "default": "01"
-        },
-        {
-          "type": "text",
-          "id": "text",
-          "label": "Trust Text",
-          "default": "Free shipping over $35"
-        }
+        { "type": "text", "id": "icon", "label": "Icon", "default": "01" },
+        { "type": "text", "id": "text", "label": "Text", "default": "Clear delivery updates" }
       ]
     }
   ],
   "presets": [
     {
-      "name": "IR - Product Trust",
+      "name": "PV - Product Trust",
       "blocks": [
-        {
-          "type": "benefit",
-          "settings": {
-            "text": "Memory foam molds to your neck for perfect support"
-          }
-        },
-        {
-          "type": "benefit",
-          "settings": {
-            "text": "Lightweight and compact for easy everyday use"
-          }
-        },
-        {
-          "type": "benefit",
-          "settings": {
-            "text": "Machine washable cover for easy cleaning"
-          }
-        },
-        {
-          "type": "trust_item",
-          "settings": {
-            "icon": "01",
-            "text": "Free shipping over $35"
-          }
-        },
-        {
-          "type": "trust_item",
-          "settings": {
-            "icon": "02",
-            "text": "30-day returns"
-          }
-        },
-        {
-          "type": "trust_item",
-          "settings": {
-            "icon": "03",
-            "text": "Ships from USA"
-          }
-        }
+        { "type": "benefit", "settings": { "text": "Pet-focused picks chosen for everyday use" } },
+        { "type": "benefit", "settings": { "text": "Fast support cues before and after checkout" } },
+        { "type": "benefit", "settings": { "text": "Protected payment and straightforward returns" } },
+        { "type": "trust_item", "settings": { "icon": "01", "text": "Reliable shipping updates" } },
+        { "type": "trust_item", "settings": { "icon": "02", "text": "Straightforward return support" } },
+        { "type": "trust_item", "settings": { "icon": "03", "text": "Secure checkout experience" } }
       ]
     }
   ]

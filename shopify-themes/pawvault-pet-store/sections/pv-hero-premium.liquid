@@ -1,512 +1,438 @@
-{%- comment -%} PawVault hero with image-led editorial layout and premium pet-store cues. {%- endcomment -%}
-
 {%- liquid
-  assign hero_image_main = section.settings.image_main
-  assign hero_image_top = section.settings.image_top
-  assign hero_image_bottom = section.settings.image_bottom
-  assign hero_main_fallback = 'pv-hero-main.jpg' | asset_url
-  assign hero_top_fallback = 'pv-hero-top.jpg' | asset_url
-  assign hero_bottom_fallback = 'pv-hero-bottom.jpg' | asset_url
+  assign cta1_url  = section.settings.cta1_url  | default: routes.all_products_collection_url
+  assign cta2_url  = section.settings.cta2_url  | default: routes.all_products_collection_url
+
+  assign featured_col = collections[section.settings.featured_collection]
+  if featured_col == blank or featured_col.products_count == 0
+    assign featured_col = collections.all
+  endif
+  assign fp = featured_col.products.first
 -%}
 
-<section class="pv-hero">
-  <div class="pv-hero__orb pv-hero__orb--gold" aria-hidden="true"></div>
-  <div class="pv-hero__orb pv-hero__orb--mint" aria-hidden="true"></div>
+<section class="pvh">
+  <div class="pvh__wrap">
 
-  <div class="pv-hero__container">
-    <div class="pv-hero__copy">
-      <div class="pv-hero__eyebrow-row">
-        <span class="pv-hero__eyebrow">{{ section.settings.eyebrow | default: 'PawVault - Premium Pet Store' }}</span>
-        <span class="pv-hero__signal">{{ section.settings.signal | default: 'Curated for dogs and cats' }}</span>
+    {%- comment -%} LEFT — pitch {%- endcomment -%}
+    <div class="pvh__left">
+
+      <div class="pvh__promo-tag">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        {{ section.settings.badge | default: 'Free shipping on orders over $50 — USA wide' }}
       </div>
 
-      <h1 class="pv-hero__headline">
-        {{ section.settings.line1 | default: 'Your pet deserves' }}
-        <span class="pv-hero__accent">{{ section.settings.line2 | default: 'the good stuff.' }}</span>
-        {%- if section.settings.line3 != blank -%}{{ section.settings.line3 }}{%- endif -%}
+      <h1 class="pvh__h1">
+        {{ section.settings.line1 | default: 'Everything your' }}<br>
+        <em class="pvh__em">{{ section.settings.line2 | default: 'pet needs.' }}</em>
       </h1>
 
-      <p class="pv-hero__sub">
-        {{ section.settings.description | default: 'Premium accessories, grooming essentials and everyday supplies for dogs and cats - chosen for comfort, safety and daily use in real American homes.' }}
-      </p>
+      <p class="pvh__sub">{{ section.settings.subline | default: 'Hand-picked accessories, grooming essentials and daily care for dogs and cats — chosen for real pet parents.' }}</p>
 
-      <div class="pv-hero__chips">
-        <span class="pv-hero__chip">Dogs</span>
-        <span class="pv-hero__chip">Cats</span>
-        <span class="pv-hero__chip">Grooming</span>
-        <span class="pv-hero__chip">Beds</span>
-        <span class="pv-hero__chip">Feeding</span>
-      </div>
-
-      <div class="pv-hero__ctas">
-        <a href="{{ section.settings.btn1_link | default: '/collections/all' }}" class="pv-hero__btn pv-hero__btn--primary">
-          {{ section.settings.btn1_text | default: 'Shop Pet Supplies' }}
+      <div class="pvh__actions">
+        <a href="{{ cta1_url }}" class="pvh__btn pvh__btn--primary">
+          {{ section.settings.cta1_text | default: 'Shop All Products' }}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </a>
-        <a href="{{ section.settings.btn2_link | default: '/collections/all' }}" class="pv-hero__btn pv-hero__btn--secondary">
-          {{ section.settings.btn2_text | default: 'Browse Best Sellers' }}
+        <a href="{{ cta2_url }}" class="pvh__btn pvh__btn--ghost">
+          {{ section.settings.cta2_text | default: 'View Deals' }}
         </a>
       </div>
 
-      <div class="pv-hero__stats" aria-label="PawVault highlights">
-        <div class="pv-hero__stat">
-          <strong>{{ section.settings.stat_1_value | default: 'Free' }}</strong>
-          <span>{{ section.settings.stat_1_label | default: 'shipping over $50' }}</span>
+      <div class="pvh__trust-row">
+        <div class="pvh__trust-item">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span>30-day returns</span>
         </div>
-        <div class="pv-hero__stat">
-          <strong>{{ section.settings.stat_2_value | default: '30-day' }}</strong>
-          <span>{{ section.settings.stat_2_label | default: 'easy returns' }}</span>
+        <div class="pvh__trust-item">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Pet-safe products</span>
         </div>
-        <div class="pv-hero__stat">
-          <strong>{{ section.settings.stat_3_value | default: 'USA' }}</strong>
-          <span>{{ section.settings.stat_3_label | default: 'English storefront' }}</span>
+        <div class="pvh__trust-item">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="#f59e0b" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          <span>4.8 / 5 rating</span>
         </div>
       </div>
+
     </div>
 
-    <div class="pv-hero__visual">
-      <div class="pv-hero__visual-main">
-        {% if hero_image_main != blank %}
-          {{
-            hero_image_main
-            | image_url: width: 1600
-            | image_tag:
-              class: 'pv-hero__image',
-              loading: 'eager',
-              alt: hero_image_main.alt | default: 'Happy dog with premium accessories'
-          }}
-        {% else %}
-          <img
-            src="{{ hero_main_fallback }}"
-            alt="Happy dog with premium accessories"
-            class="pv-hero__image"
-            loading="eager"
-            width="800"
-            height="980"
-          >
-        {% endif %}
+    {%- comment -%} RIGHT — featured product card {%- endcomment -%}
+    <div class="pvh__right">
 
-        <div class="pv-hero__floating-card pv-hero__floating-card--main">
-          <span class="pv-hero__floating-kicker">{{ section.settings.overlay_kicker | default: 'PawVault Edit' }}</span>
-          <strong>{{ section.settings.overlay_title | default: 'Clean essentials for everyday pet life' }}</strong>
-          <span>{{ section.settings.overlay_text | default: 'Thoughtful picks for play, feeding, grooming and comfort.' }}</span>
+      {%- if fp != blank -%}
+        <div class="pvh__fp">
+          <span class="pvh__fp-label">Featured right now</span>
+          <a href="{{ fp.url }}" class="pvh__fp-media">
+            {%- if fp.featured_image != blank -%}
+              {{ fp.featured_image | image_url: width: 700 | image_tag: class: 'pvh__fp-img', loading: 'eager', alt: fp.featured_image.alt | default: fp.title }}
+            {%- else -%}
+              <div class="pvh__fp-no-img">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                <span>Add product image<br>in Shopify Admin</span>
+              </div>
+            {%- endif -%}
+          </a>
+          <div class="pvh__fp-info">
+            <a href="{{ fp.url }}" class="pvh__fp-name">{{ fp.title | truncate: 50 }}</a>
+            <div class="pvh__fp-bottom">
+              <span class="pvh__fp-price">{{ fp.price | money }}</span>
+              {%- form 'product', fp, class: 'pvh__fp-form' -%}
+                <input type="hidden" name="id" value="{{ fp.selected_or_first_available_variant.id }}">
+                <button type="submit" name="add" class="pvh__fp-atc"
+                  {%- unless fp.selected_or_first_available_variant.available -%}disabled{%- endunless -%}>
+                  {%- if fp.selected_or_first_available_variant.available -%}Add to Cart{%- else -%}Sold Out{%- endif -%}
+                </button>
+              {%- endform -%}
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="pv-hero__visual-stack">
-        <article class="pv-hero__mini-card">
-          <div class="pv-hero__mini-media">
-            {% if hero_image_top != blank %}
-              {{
-                hero_image_top
-                | image_url: width: 900
-                | image_tag:
-                  class: 'pv-hero__mini-image',
-                  loading: 'lazy',
-                  alt: hero_image_top.alt | default: 'Dog and owner with pet accessories'
-              }}
-            {% else %}
-              <img
-                src="{{ hero_top_fallback }}"
-                alt="Dog and owner with pet accessories"
-                class="pv-hero__mini-image"
-                loading="lazy"
-                width="520"
-                height="360"
-              >
-            {% endif %}
-          </div>
-          <div class="pv-hero__mini-body">
-            <span class="pv-hero__mini-label">Top picks for dogs</span>
-            <p>Quality accessories built for daily routines — leashes, beds, feeding and play.</p>
-          </div>
-        </article>
+      {%- else -%}
 
-        <article class="pv-hero__mini-card pv-hero__mini-card--split">
-          <div class="pv-hero__mini-body">
-            <span class="pv-hero__mini-label">Made for cats too</span>
-            <p>Premium comfort and enrichment picks for cats of every personality.</p>
+        <div class="pvh__placeholder">
+          <div class="pvh__pl-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
           </div>
-          <div class="pv-hero__mini-media">
-            {% if hero_image_bottom != blank %}
-              {{
-                hero_image_bottom
-                | image_url: width: 900
-                | image_tag:
-                  class: 'pv-hero__mini-image',
-                  loading: 'lazy',
-                  alt: hero_image_bottom.alt | default: 'Cat resting in a cozy bed'
-              }}
-            {% else %}
-              <img
-                src="{{ hero_bottom_fallback }}"
-                alt="Cat resting in a cozy bed"
-                class="pv-hero__mini-image"
-                loading="lazy"
-                width="520"
-                height="360"
-              >
-            {% endif %}
+          <p class="pvh__pl-text">Add products in<br><strong>Shopify Admin → Products</strong><br>to display them here.</p>
+          <div class="pvh__stats-grid">
+            <div class="pvh__stat"><strong>2,000+</strong><span>pet families</span></div>
+            <div class="pvh__stat"><strong>4.8★</strong><span>avg rating</span></div>
+            <div class="pvh__stat"><strong>Free</strong><span>shipping $50+</span></div>
+            <div class="pvh__stat"><strong>30-day</strong><span>returns</span></div>
           </div>
-        </article>
-      </div>
+        </div>
+
+      {%- endif -%}
+
     </div>
+
   </div>
 </section>
 
 <style>
-  .pv-hero {
-    position: relative;
-    overflow: hidden;
-    background:
-      radial-gradient(circle at top left, rgba(245, 165, 36, 0.16), transparent 28%),
-      linear-gradient(180deg, #fffdf9 0%, #f8fafc 52%, #ffffff 100%);
-    padding: clamp(2rem, 4vw, 3rem) 0 clamp(4rem, 8vw, 7rem);
+  .pvh {
+    background: var(--pv-navy);
+    border-bottom: 3px solid var(--pv-gold);
   }
 
-  .pv-hero__orb {
-    position: absolute;
-    border-radius: 999px;
-    filter: blur(90px);
-    opacity: 0.45;
-    pointer-events: none;
-  }
-
-  .pv-hero__orb--gold {
-    width: 280px;
-    height: 280px;
-    background: rgba(245, 165, 36, 0.26);
-    top: 4%;
-    right: 6%;
-  }
-
-  .pv-hero__orb--mint {
-    width: 240px;
-    height: 240px;
-    background: rgba(143, 214, 148, 0.3);
-    left: 4%;
-    bottom: 6%;
-  }
-
-  .pv-hero__container {
-    position: relative;
-    z-index: 1;
-    width: min(1280px, calc(100% - 40px));
-    margin: 0 auto;
+  .pvh__wrap {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(360px, 560px);
-    gap: clamp(2.25rem, 5vw, 4.75rem);
-    align-items: center;
+    grid-template-columns: 1fr 440px;
+    min-height: 460px;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
   }
 
-  .pv-hero__copy {
-    max-width: 610px;
-  }
-
-  .pv-hero__eyebrow-row {
+  /* LEFT */
+  .pvh__left {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-items: center;
-    margin-bottom: 1.25rem;
+    flex-direction: column;
+    justify-content: center;
+    padding: clamp(3rem, 6vw, 5rem) clamp(2rem, 4vw, 3.5rem) clamp(3rem, 6vw, 5rem) clamp(2rem, 5vw, 5rem);
+    gap: 0;
   }
 
-  .pv-hero__eyebrow,
-  .pv-hero__signal,
-  .pv-hero__mini-label,
-  .pv-hero__floating-kicker {
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-
-  .pv-hero__eyebrow {
-    color: #b7791f;
-  }
-
-  .pv-hero__signal {
-    color: #1f4d2d;
-    background: rgba(143, 214, 148, 0.16);
-    border: 1px solid rgba(143, 214, 148, 0.45);
-    border-radius: 999px;
-    padding: 0.45rem 0.8rem;
-    letter-spacing: 0.08em;
-  }
-
-  .pv-hero__headline {
-    margin: 0;
-    color: #122033;
-    font-size: clamp(2.8rem, 6vw, 5.5rem);
-    line-height: 0.95;
-    letter-spacing: -0.05em;
-    font-weight: 820;
-  }
-
-  .pv-hero__headline span {
-    display: block;
-  }
-
-  .pv-hero__accent {
-    color: #f59e0b;
-  }
-
-  .pv-hero__sub {
-    margin: 1.4rem 0 0;
-    max-width: 42rem;
-    color: #52606d;
-    font-size: clamp(1rem, 1.4vw, 1.14rem);
-    line-height: 1.8;
-  }
-
-  .pv-hero__chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem;
-    margin: 1.75rem 0 0;
-  }
-
-  .pv-hero__chip {
-    border-radius: 999px;
-    border: 1px solid rgba(18, 32, 51, 0.08);
-    background: rgba(255, 255, 255, 0.9);
-    color: #364152;
-    font-size: 0.82rem;
-    font-weight: 650;
-    padding: 0.62rem 0.95rem;
-  }
-
-  .pv-hero__ctas {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.9rem;
-    margin-top: 2rem;
-  }
-
-  .pv-hero__btn {
+  .pvh__promo-tag {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-height: 52px;
-    padding: 0.95rem 1.5rem;
-    border-radius: 999px;
-    text-decoration: none;
-    font-size: 0.96rem;
-    font-weight: 760;
-    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease, color 180ms ease;
+    gap: 7px;
+    width: fit-content;
+    padding: 0.4rem 0.9rem;
+    margin-bottom: 1.5rem;
+    border-radius: 6px;
+    background: rgba(242, 169, 59, 0.18);
+    border: 1px solid rgba(242, 169, 59, 0.35);
+    color: #fcd87a;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    font-family: var(--pv-font);
   }
 
-  .pv-hero__btn--primary {
-    background: #122033;
+  .pvh__h1 {
+    margin: 0;
     color: #ffffff;
-    box-shadow: 0 14px 32px rgba(18, 32, 51, 0.16);
+    font-size: clamp(2.6rem, 5vw, 4.2rem);
+    font-weight: 900;
+    line-height: 1.03;
+    letter-spacing: -0.05em;
+    font-family: var(--pv-font) !important;
   }
 
-  .pv-hero__btn--primary:hover {
-    transform: translateY(-2px);
-    background: #1c2d44;
+  .pvh__em {
+    font-style: normal;
+    color: var(--pv-gold);
   }
 
-  .pv-hero__btn--secondary {
-    background: #ffffff;
-    color: #122033;
-    border: 1px solid rgba(18, 32, 51, 0.12);
+  .pvh__sub {
+    margin: 1.25rem 0 0;
+    max-width: 38rem;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 1.05rem;
+    line-height: 1.7;
+    font-family: var(--pv-font);
   }
 
-  .pv-hero__btn--secondary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 28px rgba(18, 32, 51, 0.1);
-  }
-
-  .pv-hero__stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.9rem;
+  .pvh__actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
     margin-top: 2rem;
   }
 
-  .pv-hero__stat {
-    border-radius: 22px;
-    background: rgba(255, 255, 255, 0.82);
-    border: 1px solid rgba(18, 32, 51, 0.07);
-    padding: 1rem 1.05rem;
-    box-shadow: 0 16px 32px rgba(18, 32, 51, 0.06);
+  .pvh__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 50px;
+    padding: 0 1.6rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: transform 140ms ease, opacity 140ms ease, background 140ms ease;
+    font-family: var(--pv-font);
   }
 
-  .pv-hero__stat strong {
-    display: block;
-    color: #122033;
-    font-size: 1.05rem;
-    font-weight: 760;
+  .pvh__btn:hover { transform: translateY(-2px); }
+
+  .pvh__btn--primary {
+    background: var(--pv-gold);
+    color: var(--pv-navy);
   }
 
-  .pv-hero__stat span {
-    display: block;
-    margin-top: 0.2rem;
-    color: #52606d;
-    font-size: 0.84rem;
-    line-height: 1.45;
+  .pvh__btn--primary:hover { background: #f5b84a; }
+
+  .pvh__btn--ghost {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.15);
   }
 
-  .pv-hero__visual {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 0.7fr;
-    gap: 1rem;
-    align-items: stretch;
+  .pvh__btn--ghost:hover { background: rgba(255, 255, 255, 0.13); }
+
+  .pvh__trust-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    margin-top: 1.75rem;
   }
 
-  .pv-hero__visual-main,
-  .pv-hero__mini-card {
+  .pvh__trust-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.82rem;
+    font-weight: 500;
+    font-family: var(--pv-font);
+  }
+
+  /* RIGHT — featured product */
+  .pvh__right {
     position: relative;
+    display: flex;
+    align-items: stretch;
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .pvh__fp {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .pvh__fp-label {
+    display: block;
+    padding: 0.9rem 1.25rem 0.7rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--pv-gold);
+    font-family: var(--pv-font);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .pvh__fp-media {
+    display: block;
+    flex: 1;
     overflow: hidden;
-    border-radius: 30px;
-    box-shadow: 0 24px 54px rgba(18, 32, 51, 0.12);
+    background: rgba(255, 255, 255, 0.03);
   }
 
-  .pv-hero__visual-main {
-    min-height: 620px;
-    background: #e9eef5;
-  }
-
-  .pv-hero__image,
-  .pv-hero__mini-image {
+  .pvh__fp-img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
+    transition: transform 400ms ease;
   }
 
-  .pv-hero__floating-card {
-    position: absolute;
-    left: 1rem;
-    right: 1rem;
-    bottom: 1rem;
-    display: grid;
-    gap: 0.35rem;
-    padding: 1rem 1.05rem;
-    border-radius: 22px;
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.75);
-  }
+  .pvh__fp-media:hover .pvh__fp-img { transform: scale(1.03); }
 
-  .pv-hero__floating-kicker,
-  .pv-hero__mini-label {
-    color: #b7791f;
-  }
-
-  .pv-hero__floating-card strong {
-    color: #122033;
-    font-size: 1rem;
-    letter-spacing: -0.02em;
-  }
-
-  .pv-hero__floating-card span:last-child,
-  .pv-hero__mini-body p {
-    color: #52606d;
-    font-size: 0.88rem;
-    line-height: 1.55;
-  }
-
-  .pv-hero__visual-stack {
-    display: grid;
+  .pvh__fp-no-img {
+    width: 100%;
+    height: 100%;
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 1rem;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.82rem;
+    text-align: center;
+    line-height: 1.6;
+    font-family: var(--pv-font);
   }
 
-  .pv-hero__mini-card {
+  .pvh__fp-info {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(0, 0, 0, 0.15);
+  }
+
+  .pvh__fp-name {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
+    margin-bottom: 0.75rem;
+    line-height: 1.4;
+    font-family: var(--pv-font);
+  }
+
+  .pvh__fp-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .pvh__fp-price {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #ffffff;
+    font-family: var(--pv-font);
+  }
+
+  .pvh__fp-form { display: contents; }
+
+  .pvh__fp-atc {
+    display: inline-flex;
+    align-items: center;
+    height: 38px;
+    padding: 0 1.1rem;
+    border-radius: 7px;
+    border: none;
+    background: var(--pv-gold);
+    color: var(--pv-navy);
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+    font-family: var(--pv-font);
+    transition: background 140ms ease, transform 140ms ease;
+  }
+
+  .pvh__fp-atc:hover { background: #f5b84a; transform: scale(1.02); }
+  .pvh__fp-atc:disabled { background: #3d5570; color: #7a91aa; cursor: not-allowed; transform: none; }
+
+  /* Placeholder when no products */
+  .pvh__placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 2.5rem 2rem;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  .pvh__pl-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pvh__pl-text {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.85rem;
+    line-height: 1.75;
+    font-family: var(--pv-font);
+  }
+
+  .pvh__pl-text strong {
+    color: rgba(255, 255, 255, 0.65);
+    font-weight: 600;
+  }
+
+  .pvh__stats-grid {
     display: grid;
-    grid-template-rows: 1.1fr auto;
-    background: #ffffff;
-    min-height: 300px;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    width: 100%;
   }
 
-  .pv-hero__mini-card--split {
-    grid-template-rows: auto 1fr;
+  .pvh__stat {
+    padding: 0.9rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    text-align: center;
+    font-family: var(--pv-font);
   }
 
-  .pv-hero__mini-media {
-    min-height: 170px;
-    background: #e9eef5;
+  .pvh__stat strong {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--pv-gold);
   }
 
-  .pv-hero__mini-body {
-    padding: 1rem 1rem 1.15rem;
+  .pvh__stat span {
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 500;
   }
 
-  .pv-hero__mini-body p {
-    margin: 0.45rem 0 0;
+  @media (max-width: 959px) {
+    .pvh__wrap { grid-template-columns: 1fr; min-height: auto; }
+    .pvh__right { border-left: none; border-top: 1px solid rgba(255,255,255,0.07); max-height: 320px; }
+    .pvh__left { padding: 2.5rem 1.5rem 2rem; }
+    .pvh__h1 { font-size: clamp(2.2rem, 6vw, 3rem); }
   }
 
-  @media (max-width: 1099px) {
-    .pv-hero__container {
-      grid-template-columns: 1fr;
-    }
-
-    .pv-hero__copy {
-      max-width: none;
-    }
-  }
-
-  @media (max-width: 749px) {
-    .pv-hero {
-      padding-top: 1rem;
-    }
-
-    .pv-hero__container {
-      width: min(100%, calc(100% - 24px));
-      gap: 1.5rem;
-    }
-
-    .pv-hero__visual {
-      grid-template-columns: 1fr;
-    }
-
-    .pv-hero__visual-main {
-      min-height: 460px;
-    }
-
-    .pv-hero__stats {
-      grid-template-columns: 1fr;
-    }
-
-    .pv-hero__btn {
-      width: 100%;
-    }
+  @media (max-width: 479px) {
+    .pvh__btn { width: 100%; justify-content: center; }
+    .pvh__actions { flex-direction: column; }
+    .pvh__stats-grid { grid-template-columns: 1fr 1fr; }
   }
 </style>
 
 {% schema %}
 {
-  "name": "PV - Hero Premium",
+  "name": "PV — Hero",
   "tag": "section",
   "settings": [
-    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "PawVault - Premium Pet Store" },
-    { "type": "text", "id": "signal", "label": "Signal Badge", "default": "Curated for dogs and cats" },
-    { "type": "text", "id": "line1", "label": "Headline Line 1", "default": "Beautiful essentials" },
-    { "type": "text", "id": "line2", "label": "Headline Line 2", "default": "for happy pets" },
-    { "type": "text", "id": "line3", "label": "Headline Line 3", "default": "and calmer homes." },
-    { "type": "textarea", "id": "description", "label": "Description", "default": "Premium accessories, grooming essentials and everyday supplies for dogs and cats - chosen for comfort, safety and daily use in real American homes." },
-    { "type": "text", "id": "btn1_text", "label": "Primary Button", "default": "Shop Pet Supplies" },
-    { "type": "url", "id": "btn1_link", "label": "Primary Button Link" },
-    { "type": "text", "id": "btn2_text", "label": "Secondary Button", "default": "Browse Best Sellers" },
-    { "type": "url", "id": "btn2_link", "label": "Secondary Button Link" },
-    { "type": "text", "id": "stat_1_value", "label": "Stat 1 Value", "default": "Free" },
-    { "type": "text", "id": "stat_1_label", "label": "Stat 1 Label", "default": "shipping over $50" },
-    { "type": "text", "id": "stat_2_value", "label": "Stat 2 Value", "default": "30-day" },
-    { "type": "text", "id": "stat_2_label", "label": "Stat 2 Label", "default": "easy returns" },
-    { "type": "text", "id": "stat_3_value", "label": "Stat 3 Value", "default": "USA" },
-    { "type": "text", "id": "stat_3_label", "label": "Stat 3 Label", "default": "English storefront" },
-    { "type": "text", "id": "overlay_kicker", "label": "Overlay Kicker", "default": "PawVault Edit" },
-    { "type": "text", "id": "overlay_title", "label": "Overlay Title", "default": "Clean essentials for everyday pet life" },
-    { "type": "text", "id": "overlay_text", "label": "Overlay Text", "default": "Thoughtful picks for play, feeding, grooming and comfort." },
-    { "type": "image_picker", "id": "image_main", "label": "Main Hero Image" },
-    { "type": "image_picker", "id": "image_top", "label": "Top Support Image" },
-    { "type": "image_picker", "id": "image_bottom", "label": "Bottom Support Image" }
+    { "type": "text",       "id": "badge",    "label": "Top badge",        "default": "Free shipping on orders over $50 — USA wide" },
+    { "type": "text",       "id": "line1",    "label": "Headline line 1",  "default": "Everything your" },
+    { "type": "text",       "id": "line2",    "label": "Headline line 2 (gold)", "default": "pet needs." },
+    { "type": "textarea",   "id": "subline",  "label": "Subline",          "default": "Hand-picked accessories, grooming essentials and daily care for dogs and cats." },
+    { "type": "text",       "id": "cta1_text","label": "Primary CTA",      "default": "Shop All Products" },
+    { "type": "url",        "id": "cta1_url", "label": "Primary CTA link" },
+    { "type": "text",       "id": "cta2_text","label": "Secondary CTA",    "default": "View Deals" },
+    { "type": "url",        "id": "cta2_url", "label": "Secondary CTA link" },
+    { "type": "collection", "id": "featured_collection", "label": "Featured collection (right panel — first product shown)" }
   ],
-  "presets": [
-    {
-      "name": "PV - Hero Premium",
-      "category": "PawVault"
-    }
-  ]
+  "presets": [{ "name": "PV — Hero" }]
 }
 {% endschema %}

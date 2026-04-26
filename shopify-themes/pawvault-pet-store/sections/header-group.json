@@ -14,31 +14,68 @@
     "header_announcements_9jGBFp": {
       "type": "header-announcements",
       "blocks": {
-        "announcement_trust": {
+        "ann_shipping": {
           "type": "_announcement",
           "settings": {
-            "text": "🐾 PawVault — Free shipping on pet orders over $50  •  30-day easy returns",
+            "text": "🚚  Free shipping on all orders over $50 — USA wide",
+            "link": "/collections/all",
+            "font": "var(--font-subheading--family)",
+            "font_size": "0.8rem",
+            "weight": "600",
+            "letter_spacing": "0.04em",
+            "case": "none"
+          },
+          "blocks": {}
+        },
+        "ann_returns": {
+          "type": "_announcement",
+          "settings": {
+            "text": "30-day hassle-free returns • Pet-safe products • 4.8★ rated by 2,000+ families",
             "link": "",
             "font": "var(--font-subheading--family)",
-            "font_size": "0.8125rem",
+            "font_size": "0.8rem",
             "weight": "600",
-            "letter_spacing": "0.02em",
+            "letter_spacing": "0.04em",
+            "case": "none"
+          },
+          "blocks": {}
+        },
+        "ann_dogs": {
+          "type": "_announcement",
+          "settings": {
+            "text": "Shop Dogs →",
+            "link": "/collections/dogs",
+            "font": "var(--font-subheading--family)",
+            "font_size": "0.8rem",
+            "weight": "700",
+            "letter_spacing": "0.06em",
+            "case": "none"
+          },
+          "blocks": {}
+        },
+        "ann_cats": {
+          "type": "_announcement",
+          "settings": {
+            "text": "Shop Cats →",
+            "link": "/collections/cats",
+            "font": "var(--font-subheading--family)",
+            "font_size": "0.8rem",
+            "weight": "700",
+            "letter_spacing": "0.06em",
             "case": "none"
           },
           "blocks": {}
         }
       },
-      "block_order": [
-        "announcement_trust"
-      ],
+      "block_order": ["ann_shipping", "ann_returns", "ann_dogs", "ann_cats"],
       "name": "t:names.announcement_bar",
       "settings": {
         "speed": 5,
         "section_width": "full-width",
         "color_scheme": "scheme-1",
-        "divider_width": 1,
-        "padding-block-start": 15,
-        "padding-block-end": 15
+        "divider_width": 0,
+        "padding-block-start": 12,
+        "padding-block-end": 12
       }
     },
     "header_section": {
@@ -56,18 +93,19 @@
         }
       },
       "settings": {
-        "logo_position": "left",
+        "logo_position": "center",
         "menu_position": "left",
         "menu_row": "top",
         "show_search": true,
         "search_position": "right",
         "search_row": "top",
-        "show_country": true,
+        "show_country": false,
         "country_selector_style": false,
-        "show_language": true,
+        "show_language": false,
         "localization_font": "heading",
         "localization_font_size": "0.875rem",
         "localization_position": "right",
+        "actions_display_style": "icon",
         "localization_row": "top",
         "section_width": "page-width",
         "section_height": "standard",
@@ -87,8 +125,5 @@
       }
     }
   },
-  "order": [
-    "header_announcements_9jGBFp",
-    "header_section"
-  ]
+  "order": ["header_announcements_9jGBFp", "header_section"]
 }

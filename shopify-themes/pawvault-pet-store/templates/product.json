@@ -438,7 +438,31 @@
         "padding-block-start": 48,
         "padding-block-end": 48
       }
+    },
+    "pv_pdp_shipping": {
+      "type": "pv-pdp-shipping-info",
+      "settings": {
+        "free_threshold": "50",
+        "delivery_days": "3–7 business days",
+        "return_days": "30 days",
+        "ships_from": "USA"
+      }
+    },
+    "pv_pdp_guarantee": {
+      "type": "pv-pdp-quality-guarantee",
+      "blocks": {
+        "guar_safe":     { "type": "guarantee_item", "settings": { "icon": "shield",       "title": "Pet-safe materials",   "text": "Every product is reviewed for material safety before it reaches your pet." } },
+        "guar_quality":  { "type": "guarantee_item", "settings": { "icon": "check-circle", "title": "Quality inspected",    "text": "Hand-reviewed for durability and real everyday use." } },
+        "guar_returns":  { "type": "guarantee_item", "settings": { "icon": "award",        "title": "30-day guarantee",     "text": "Not happy? Return it within 30 days, no questions asked." } },
+        "guar_pack":     { "type": "guarantee_item", "settings": { "icon": "package",      "title": "Secure packaging",     "text": "Ships in protective packaging to arrive in perfect condition." } }
+      },
+      "block_order": ["guar_safe", "guar_quality", "guar_returns", "guar_pack"],
+      "settings": { "show_eyebrow": false }
+    },
+    "pv_sticky_atc": {
+      "type": "pv-sticky-atc",
+      "settings": {}
     }
   },
-  "order": ["main", "ir_product_trust_main", "product_recommendations_qggXJq"]
+  "order": ["main", "pv_pdp_shipping", "pv_pdp_guarantee", "ir_product_trust_main", "product_recommendations_qggXJq", "pv_sticky_atc"]
 }

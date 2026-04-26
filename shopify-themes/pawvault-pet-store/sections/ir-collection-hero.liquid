@@ -1,7 +1,4 @@
-{%- comment -%}
-  Ivan Reseller - Premium Collection Hero
-  Adds retail-grade catalog context while leaving native filtering and grids intact.
-{%- endcomment -%}
+{%- comment -%} PawVault collection hero. {%- endcomment -%}
 
 {%- liquid
   assign products_count = collection.products_count | default: 0
@@ -14,8 +11,8 @@
 <section class="ir-collection-hero">
   <div class="ir-collection-hero__container">
     <div class="ir-collection-hero__copy">
-      <p class="ir-collection-hero__eyebrow">{{ section.settings.eyebrow | default: 'Curated Catalog' }}</p>
-      <h1 class="ir-collection-hero__title">{{ collection.title | default: 'Shop Ivan Reseller' }}</h1>
+      <p class="ir-collection-hero__eyebrow">{{ section.settings.eyebrow | default: 'PawVault catalog' }}</p>
+      <h1 class="ir-collection-hero__title">{{ collection.title | default: 'Shop pet essentials' }}</h1>
       <p class="ir-collection-hero__text">
         {%- if collection.description != blank -%}
           {{ collection.description | strip_html }}
@@ -25,7 +22,7 @@
       </p>
       <div class="ir-collection-hero__meta" aria-label="Collection highlights">
         <span>{{ products_count }} products</span>
-        <span>Tech, travel, desk, everyday</span>
+        <span>Dogs, cats and care routines</span>
         <span>Secure checkout</span>
       </div>
     </div>
@@ -43,11 +40,13 @@
             alt: collection.title
         }}
       {%- else -%}
-        <div class="ir-collection-hero__abstract" aria-hidden="true">
-          <span>Desk</span>
-          <span>Travel</span>
-          <span>Tech</span>
-        </div>
+        <img
+          src="https://images.unsplash.com/photo-1511044568932-338cba0ad803?auto=format&fit=crop&w=1000&q=85"
+          alt="{{ collection.title | default: 'PawVault collection' }}"
+          class="ir-collection-hero__image"
+          width="1000"
+          height="1200"
+        >
       {%- endif -%}
     </div>
   </div>
@@ -55,35 +54,19 @@
 
 {% schema %}
 {
-  "name": "IR - Collection Hero",
+  "name": "PV - Collection Hero",
   "tag": "section",
   "class": "ir-collection-hero-section",
   "enabled_on": {
     "templates": ["collection"]
   },
   "settings": [
-    {
-      "type": "text",
-      "id": "eyebrow",
-      "label": "Eyebrow",
-      "default": "Curated Catalog"
-    },
-    {
-      "type": "textarea",
-      "id": "description",
-      "label": "Fallback description",
-      "default": "Purposeful accessories for travel, workspace, tech protection, and daily carry. Browse a tighter catalog with clear product information and secure checkout."
-    },
-    {
-      "type": "image_picker",
-      "id": "image",
-      "label": "Optional hero image"
-    }
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "PawVault catalog" },
+    { "type": "textarea", "id": "description", "label": "Fallback description", "default": "Curated accessories, grooming tools, feeding picks and comfort essentials for dogs and cats." },
+    { "type": "image_picker", "id": "image", "label": "Optional hero image" }
   ],
   "presets": [
-    {
-      "name": "IR - Collection Hero"
-    }
+    { "name": "PV - Collection Hero" }
   ]
 }
 {% endschema %}

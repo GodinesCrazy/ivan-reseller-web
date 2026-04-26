@@ -26,14 +26,30 @@
   assign og_title = page_title | default: shop.name
   assign og_url = canonical_url | default: request.origin
   assign og_type = 'website'
-  assign og_description = page_description | default: shop.description | default: shop.name
+
+  assign pv_default_desc = 'Premium pet supplies for dogs and cats — curated accessories, grooming essentials and everyday care. Free shipping on orders over $50 across the USA.'
+  assign og_description = page_description | default: shop.description | default: pv_default_desc
 
   if request.page_type == 'product'
     assign og_type = 'product'
+    if page_description == blank
+      assign og_description = product.description | strip_html | truncate: 160 | default: pv_default_desc
+    endif
+  elsif request.page_type == 'collection'
+    if page_description == blank
+      assign og_description = collection.description | strip_html | truncate: 160 | default: pv_default_desc
+    endif
   elsif request.page_type == 'article'
     assign og_type = 'article'
   elsif request.page_type == 'password'
     assign og_url = request.origin
+  endif
+
+  assign pv_title_suffix = ' — PawVault'
+  if request.page_type == 'index'
+    assign og_title = 'PawVault — Premium Pet Supplies for Dogs & Cats'
+  elsif og_title contains shop.name == false
+    assign og_title = og_title | append: pv_title_suffix
   endif
 %}
 
@@ -119,9 +135,11 @@
   href="{{ canonical_url }}"
 >
 
-{% if page_description %}
-  <meta
-    name="description"
-    content="{{ page_description | escape }}"
-  >
-{% endif %}
+<meta
+  name="description"
+  content="{{ og_description | escape }}"
+>
+
+{%- if request.page_type == 'product' -%}
+  {%- render 'pv-product-schema' -%}
+{%- endif -%}

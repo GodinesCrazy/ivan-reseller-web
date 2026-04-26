@@ -1,10 +1,12 @@
-.buy-buttons-block .accelerated-checkout-block,
 .buy-buttons-block .shopify-payment-button,
-.buy-buttons-block .shopify-payment-button__more-options,
-.buy-buttons-block shopify-accelerated-checkout,
-.product-form-buttons .accelerated-checkout-block,
-.product-form-buttons .shopify-payment-button,
-.product-form-buttons .shopify-payment-button__more-options,
-.product-form-buttons shopify-accelerated-checkout {
-  display: none !important;
+.product-form-buttons .shopify-payment-button {
+  display: block !important;
+}
+
+.buy-buttons-block .shopify-payment-button__button,
+.product-form-buttons .shopify-payment-button__button {
+  min-height: 3.25rem !important;
+  border-radius: 999px !important;
+  font-weight: 800 !important;
+  box-shadow: 0 14px 28px rgba(16, 35, 59, 0.12);
 }

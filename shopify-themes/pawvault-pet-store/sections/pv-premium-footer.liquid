@@ -1,0 +1,386 @@
+{%- liquid
+  assign menu_shop = section.settings.menu_shop
+  assign menu_support = section.settings.menu_support
+  assign menu_company = section.settings.menu_company
+-%}
+
+<footer class="pv-footer">
+  <div class="pv-footer__container">
+    <div class="pv-footer__brand">
+      <a href="{{ routes.root_url }}" class="pv-footer__logo-link" aria-label="{{ shop.name | escape }}">
+        {% render 'ir-logo-svg', logo_style: 'full', logo_color: '#10233b', accent_color: '#f2a93b', soft_color: '#f7f4ee', logo_height: 34 %}
+      </a>
+      <p class="pv-footer__brand-text">
+        {{ section.settings.brand_text | default: 'Premium pet essentials for dogs and cats, curated to look better, feel better, and make everyday care easier.' }}
+      </p>
+
+      <div class="pv-footer__badge-row">
+        <span>Free shipping over $50</span>
+        <span>30-day returns</span>
+        <span>Secure checkout</span>
+      </div>
+    </div>
+
+    <div class="pv-footer__links">
+      <div class="pv-footer__column">
+        <h3>Shop</h3>
+        {% if menu_shop != blank %}
+          <ul>
+            {% for link in linklists[menu_shop].links %}
+              <li><a href="{{ link.url }}">{{ link.title }}</a></li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <ul>
+            <li><a href="{{ routes.all_products_collection_url }}">All products</a></li>
+            <li><a href="{{ routes.root_url }}">Home</a></li>
+            <li><a href="{{ routes.all_products_collection_url }}?filter.p.tag=dogs">Dogs</a></li>
+            <li><a href="{{ routes.all_products_collection_url }}?filter.p.tag=cats">Cats</a></li>
+          </ul>
+        {% endif %}
+      </div>
+
+      <div class="pv-footer__column">
+        <h3>Support</h3>
+        {% if menu_support != blank %}
+          <ul>
+            {% for link in linklists[menu_support].links %}
+              <li><a href="{{ link.url }}">{{ link.title }}</a></li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <ul>
+            <li><a href="/pages/contact">Contact</a></li>
+            <li><a href="{{ routes.cart_url }}">Cart</a></li>
+            <li><a href="{{ routes.all_products_collection_url }}">Catalog</a></li>
+            <li><span>Secure payment methods shown at checkout</span></li>
+          </ul>
+        {% endif %}
+      </div>
+
+      <div class="pv-footer__column">
+        <h3>Notes</h3>
+        {% if menu_company != blank %}
+          <ul>
+            {% for link in linklists[menu_company].links %}
+              <li><a href="{{ link.url }}">{{ link.title }}</a></li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <ul>
+            <li><span>Curated for dogs and cats</span></li>
+            <li><span>Everyday care, grooming and comfort</span></li>
+            <li><span>USA storefront in English</span></li>
+          </ul>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if section.settings.show_newsletter %}
+      <div class="pv-footer__newsletter">
+        <h3>{{ section.settings.newsletter_title | default: 'Stay close to the next drop' }}</h3>
+        <p>{{ section.settings.newsletter_text | default: 'Get new arrivals, featured pet picks, and launch offers before everyone else.' }}</p>
+        {% form 'customer', id: 'pv-footer-newsletter' %}
+          <input type="hidden" name="contact[tags]" value="newsletter">
+          <div class="pv-footer__newsletter-row">
+            <input
+              type="email"
+              name="contact[email]"
+              value="{% if customer %}{{ customer.email }}{% endif %}"
+              placeholder="{{ section.settings.newsletter_placeholder | default: 'Email address' }}"
+              aria-label="{{ section.settings.newsletter_placeholder | default: 'Email address' }}"
+              required
+            >
+            <button type="submit">{{ section.settings.newsletter_button | default: 'Join' }}</button>
+          </div>
+        {% endform %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="pv-footer__trust">
+    <div class="pv-footer__trust-inner">
+      <div class="pv-footer__payments">
+        <span>Protected payment</span>
+        <div class="pv-footer__payment-icons">
+          {%- liquid
+            assign rendered_payment_icons = false
+          -%}
+          {%- for type in shop.enabled_payment_types -%}
+            {%- assign rendered_payment_icons = true -%}
+            <span class="pv-footer__payment-icon">
+              {{ type | payment_type_svg_tag: class: 'icon icon--full-color' }}
+            </span>
+          {%- endfor -%}
+          {% unless rendered_payment_icons %}
+            <span class="pv-footer__payment-text">Card and wallet options appear at checkout</span>
+          {% endunless %}
+        </div>
+      </div>
+      <div class="pv-footer__trust-copy">
+        <span>Thoughtful product curation</span>
+        <span>Fast order visibility</span>
+        <span>Simple returns support</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="pv-footer__bottom">
+    <div class="pv-footer__bottom-inner">
+      <p>&copy; {{ "now" | date: "%Y" }} {{ shop.name }}. {{ section.settings.bottom_text | default: 'Built for modern pet-parent routines.' }}</p>
+      <div class="pv-footer__policies">
+        {%- liquid
+          assign privacy_url  = shop.privacy_policy.url   | default: '/policies/privacy-policy'
+          assign terms_url    = shop.terms_of_service.url | default: '/policies/terms-of-service'
+          assign refund_url   = shop.refund_policy.url    | default: '/policies/refund-policy'
+          assign shipping_url = shop.shipping_policy.url  | default: '/policies/shipping-policy'
+        -%}
+        <a href="{{ privacy_url }}">Privacy Policy</a>
+        <a href="{{ terms_url }}">Terms of Service</a>
+        <a href="{{ refund_url }}">Returns &amp; Refunds</a>
+        <a href="{{ shipping_url }}">Shipping Policy</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .pv-footer {
+    background: #0f1b2d;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .pv-footer__container,
+  .pv-footer__trust-inner,
+  .pv-footer__bottom-inner {
+    width: min(1280px, calc(100% - 40px));
+    margin: 0 auto;
+  }
+
+  .pv-footer__container {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.5fr) minmax(18rem, 0.95fr);
+    gap: 2rem;
+    padding: clamp(3rem, 5vw, 4.75rem) 0 2.25rem;
+  }
+
+  .pv-footer__brand-text,
+  .pv-footer__newsletter p,
+  .pv-footer__column a,
+  .pv-footer__column span,
+  .pv-footer__bottom p,
+  .pv-footer__policies a {
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .pv-footer__brand-text {
+    max-width: 24rem;
+    margin: 1rem 0 0;
+    line-height: 1.7;
+  }
+
+  .pv-footer__badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+  }
+
+  .pv-footer__badge-row span,
+  .pv-footer__trust-copy span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.3rem;
+    padding: 0 0.9rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 0.8rem;
+    font-weight: 650;
+  }
+
+  .pv-footer__links {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+
+  .pv-footer__column h3,
+  .pv-footer__newsletter h3 {
+    margin: 0 0 1rem;
+    color: #ffffff;
+    font-size: 0.95rem;
+    letter-spacing: -0.02em;
+  }
+
+  .pv-footer__column ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .pv-footer__column li + li {
+    margin-top: 0.75rem;
+  }
+
+  .pv-footer__column a,
+  .pv-footer__policies a {
+    text-decoration: none;
+  }
+
+  .pv-footer__column a:hover,
+  .pv-footer__policies a:hover {
+    color: #ffffff;
+  }
+
+  .pv-footer__newsletter {
+    padding: 1.35rem;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .pv-footer__newsletter p {
+    margin: 0 0 1rem;
+    line-height: 1.7;
+  }
+
+  .pv-footer__newsletter-row {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .pv-footer__newsletter input {
+    width: 100%;
+    min-height: 3.25rem;
+    padding: 0 1rem;
+    border: 0;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #10233b;
+  }
+
+  .pv-footer__newsletter button {
+    min-width: 6rem;
+    min-height: 3.25rem;
+    padding: 0 1rem;
+    border: 0;
+    border-radius: 999px;
+    background: #f2a93b;
+    color: #10233b;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .pv-footer__trust {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 1rem 0;
+  }
+
+  .pv-footer__trust-inner,
+  .pv-footer__bottom-inner,
+  .pv-footer__payments {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .pv-footer__payments > span {
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .pv-footer__payment-icons {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .pv-footer__payment-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.3rem;
+    padding: 0.35rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .pv-footer__payment-icon svg {
+    max-height: 1rem;
+  }
+
+  .pv-footer__payment-text {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .pv-footer__bottom {
+    padding: 1rem 0 1.4rem;
+  }
+
+  .pv-footer__bottom p {
+    margin: 0;
+    font-size: 0.88rem;
+  }
+
+  .pv-footer__policies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  @media (max-width: 989px) {
+    .pv-footer__container {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 749px) {
+    .pv-footer__container,
+    .pv-footer__trust-inner,
+    .pv-footer__bottom-inner {
+      width: calc(100% - 28px);
+    }
+
+    .pv-footer__links {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .pv-footer__newsletter-row {
+      flex-direction: column;
+    }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "PV - Premium Footer",
+  "class": "pv-premium-footer-section",
+  "settings": [
+    { "type": "textarea", "id": "brand_text", "label": "Brand text", "default": "Premium pet essentials for dogs and cats, curated to look better, feel better, and make everyday care easier." },
+    { "type": "link_list", "id": "menu_shop", "label": "Shop menu" },
+    { "type": "link_list", "id": "menu_support", "label": "Support menu" },
+    { "type": "link_list", "id": "menu_company", "label": "Company menu" },
+    { "type": "checkbox", "id": "show_newsletter", "label": "Show newsletter", "default": true },
+    { "type": "text", "id": "newsletter_title", "label": "Newsletter title", "default": "Stay close to the next drop" },
+    { "type": "textarea", "id": "newsletter_text", "label": "Newsletter text", "default": "Get new arrivals, featured pet picks, and launch offers before everyone else." },
+    { "type": "text", "id": "newsletter_placeholder", "label": "Newsletter placeholder", "default": "Email address" },
+    { "type": "text", "id": "newsletter_button", "label": "Newsletter button", "default": "Join" },
+    { "type": "text", "id": "bottom_text", "label": "Bottom note", "default": "Built for modern pet-parent routines." }
+  ],
+  "presets": [
+    {
+      "name": "PV - Premium Footer",
+      "category": "PawVault"
+    }
+  ]
+}
+{% endschema %}
