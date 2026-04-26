@@ -4,6 +4,7 @@ export const cjShopifyUsaUpdateConfigSchema = z.object({
   minMarginPct: z.number().min(0).max(100).optional(),
   minProfitUsd: z.number().min(0).optional(),
   maxShippingUsd: z.number().min(0).optional(),
+  minCostUsd: z.number().min(0).optional(),
   handlingBufferDays: z.number().min(0).max(30).optional(),
   minStock: z.number().min(0).optional(),
   rejectOnUnknownShipping: z.boolean().optional(),

@@ -278,13 +278,53 @@ export default function CjShopifyUsaListingsPage() {
   const hasReconcilePending = listings.some((l) => l.status === 'RECONCILE_PENDING');
   const hasReconcileFailed = listings.some((l) => l.status === 'RECONCILE_FAILED');
 
+  const draftListings = listings.filter(
+    (l) => !['PUBLISHING', 'ACTIVE'].includes(l.status),
+  );
+
+  const [bulkPublishing, setBulkPublishing] = useState(false);
+
+  async function publishAllDrafts() {
+    if (draftListings.length === 0) return;
+    setBulkPublishing(true);
+    setError(null);
+    setActionMsg(null);
+    let ok = 0;
+    let fail = 0;
+    for (const listing of draftListings) {
+      try {
+        await api.post('/api/cj-shopify-usa/listings/publish', { listingId: listing.id });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    await load();
+    setBulkPublishing(false);
+    setActionMsg(
+      `Publicación masiva completada: ${ok} publicados${fail > 0 ? `, ${fail} fallidos` : ''}.`,
+    );
+  }
+
   if (loading) return <p className="text-sm text-slate-500">Cargando store products…</p>;
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-600 dark:text-slate-300">
-        Productos en tu tienda Shopify. Drafts listos para publicar, listings activos y su estado de sincronización.
-      </p>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Productos en tu tienda Shopify. Drafts listos para publicar, listings activos y su estado de sincronización.
+        </p>
+        {draftListings.length > 0 && (
+          <button
+            type="button"
+            disabled={bulkPublishing}
+            onClick={() => void publishAllDrafts()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white px-3 py-1.5 text-sm font-semibold transition"
+          >
+            {bulkPublishing ? '…publicando' : `Publicar todos (${draftListings.length})`}
+          </button>
+        )}
+      </div>
 
       {/* Status banners */}
       {hasFailed && (
@@ -346,7 +386,7 @@ export default function CjShopifyUsaListingsPage() {
                 const shipping = draft?.shippingSnapshot;
                 const draftImages = Array.isArray(draft?.images) ? draft.images.slice(0, 4) : [];
                 const descriptionPreview = htmlPreview(draft?.descriptionHtml);
-                const canPublish = row.status !== 'PUBLISHING' && row.status !== 'ACTIVE';
+                const canPublish = !['PUBLISHING', 'ACTIVE'].includes(row.status);
                 const canPause =
                   Boolean(row.shopifyProductId) &&
                   !['DRAFT', 'PUBLISHING', 'PAUSED', 'ARCHIVED'].includes(row.status);

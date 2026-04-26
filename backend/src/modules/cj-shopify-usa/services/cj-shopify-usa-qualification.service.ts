@@ -68,9 +68,10 @@ export class CjShopifyUsaQualificationService {
     const reasons: string[] = [];
 
     // === CONFIGURACIÓN CON DEFAULTS MEJORADOS ===
-    // safeNum: guard against NaN/null/undefined coming from the API (e.g. when the
-    // frontend sends a comma-decimal like "0,5" which JSON-serialises as null)
+    // safeNum: guard against NaN/null/undefined from settings.
+    // Note: Number(null)=0 which is finite — must check null/undefined first.
     const safeNum = (v: unknown, fallback: number): number => {
+      if (v === null || v === undefined) return fallback;
       const n = Number(v);
       return isFinite(n) ? n : fallback;
     };
