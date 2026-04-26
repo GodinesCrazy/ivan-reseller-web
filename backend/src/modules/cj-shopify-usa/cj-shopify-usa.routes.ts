@@ -13,6 +13,7 @@ import { cjShopifyUsaPublishService } from './services/cj-shopify-usa-publish.se
 import { cjShopifyUsaReconciliationService } from './services/cj-shopify-usa-reconciliation.service';
 import { cjShopifyUsaOrderIngestService } from './services/cj-shopify-usa-order-ingest.service';
 import { cjShopifyUsaTrackingService } from './services/cj-shopify-usa-tracking.service';
+import { automationService } from './services/cj-shopify-usa-automation.service';
 import {
   cjShopifyUsaListingDraftBodySchema,
   cjShopifyUsaListingPublishBodySchema,
@@ -156,6 +157,43 @@ router.post('/config', async (req: Request, res: Response, next: NextFunction) =
     next(error);
   }
 });
+
+// ── Automation ────────────────────────────────────────────────────────────────
+
+router.get('/automation/status', (req: Request, res: Response) => {
+  res.json({ ok: true, ...automationService.getStatus() });
+});
+
+router.post('/automation/start', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const status = await automationService.start(userId);
+    res.json({ ok: true, ...status });
+  } catch (e) { next(e); }
+});
+
+router.post('/automation/pause', (_req: Request, res: Response) => {
+  res.json({ ok: true, ...automationService.pause() });
+});
+
+router.post('/automation/resume', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const status = await automationService.resume(userId);
+    res.json({ ok: true, ...status });
+  } catch (e) { next(e); }
+});
+
+router.post('/automation/stop', (_req: Request, res: Response) => {
+  res.json({ ok: true, ...automationService.stop() });
+});
+
+router.post('/automation/config', (req: Request, res: Response) => {
+  const config = automationService.updateConfig(req.body as Parameters<typeof automationService.updateConfig>[0]);
+  res.json({ ok: true, config });
+});
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
 
 router.post('/auth/test', async (req: Request, res: Response, next: NextFunction) => {
   try {
