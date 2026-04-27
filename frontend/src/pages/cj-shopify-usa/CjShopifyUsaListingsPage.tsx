@@ -290,19 +290,22 @@ export default function CjShopifyUsaListingsPage() {
     setError(null);
     setActionMsg(null);
     let ok = 0;
-    let fail = 0;
+    const failedIds: number[] = [];
     for (const listing of draftListings) {
       try {
         await api.post('/api/cj-shopify-usa/listings/publish', { listingId: listing.id });
         ok++;
       } catch {
-        fail++;
+        failedIds.push(listing.id);
       }
     }
     await load();
     setBulkPublishing(false);
+    if (failedIds.length > 0) {
+      setError(`${failedIds.length} listings fallaron al publicar: IDs ${failedIds.join(', ')}. Revisa el detalle de cada uno.`);
+    }
     setActionMsg(
-      `Publicación masiva completada: ${ok} publicados${fail > 0 ? `, ${fail} fallidos` : ''}.`,
+      `Publicación masiva completada: ${ok} publicados${failedIds.length > 0 ? `, ${failedIds.length} fallidos (ver arriba)` : ' — todos OK ✓'}.`,
     );
   }
 

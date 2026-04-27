@@ -146,6 +146,23 @@ export default function CjShopifyUsaOrdersPage() {
     }
   }
 
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+
+  async function triggerOrderAction(orderId: string, action: string, label: string) {
+    setActionBusy(orderId + action);
+    setActionMsg(null);
+    try {
+      await api.post(`/api/cj-shopify-usa/orders/${orderId}/${action}`);
+      setActionMsg(`${label} completado para orden ${orderId}`);
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, `Error al ${label.toLowerCase()}.`));
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
   const filtered = orders.filter((o) => filterStatus === 'ALL' || o.status === filterStatus);
 
   const attention = orders.filter((o) =>
@@ -156,6 +173,11 @@ export default function CjShopifyUsaOrdersPage() {
 
   return (
     <div className="space-y-4">
+      {actionMsg && (
+        <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2 text-sm text-emerald-800 dark:text-emerald-200">
+          {actionMsg}
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex flex-wrap gap-2 text-xs">
           <button
@@ -255,13 +277,39 @@ export default function CjShopifyUsaOrdersPage() {
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-400">{fmtDate(row.updatedAt)}</td>
                   <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      className="text-xs text-primary-600 dark:text-primary-400 underline"
-                      onClick={(e) => { e.stopPropagation(); navigate(`/cj-shopify-usa/orders/${row.id}`); }}
-                    >
-                      Ver detalle
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Manual CJ order trigger */}
+                      {['DETECTED', 'VALIDATED', 'NEEDS_MANUAL', 'FAILED'].includes(row.status) && (
+                        <button
+                          type="button"
+                          disabled={actionBusy === row.id + 'process'}
+                          onClick={(e) => { e.stopPropagation(); void triggerOrderAction(row.id, 'process', 'Enviar a CJ'); }}
+                          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+                          title="Enviar orden manualmente a CJ Dropshipping"
+                        >
+                          {actionBusy === row.id + 'process' ? '…' : '▶ Enviar CJ'}
+                        </button>
+                      )}
+                      {/* Sync tracking for shipped orders */}
+                      {['CJ_SHIPPED', 'CJ_FULFILLING', 'CJ_PAYMENT_COMPLETED'].includes(row.status) && (
+                        <button
+                          type="button"
+                          disabled={actionBusy === row.id + 'sync-tracking'}
+                          onClick={(e) => { e.stopPropagation(); void triggerOrderAction(row.id, 'sync-tracking', 'Sync tracking'); }}
+                          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-50"
+                          title="Sincronizar número de tracking con Shopify"
+                        >
+                          {actionBusy === row.id + 'sync-tracking' ? '…' : '📦 Tracking'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="text-xs text-primary-600 dark:text-primary-400 underline"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/cj-shopify-usa/orders/${row.id}`); }}
+                      >
+                        Ver detalle
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
