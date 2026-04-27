@@ -288,6 +288,7 @@ class CjShopifyUsaAutomationService {
             userId,
             productId: product.id,
             variantId: firstVariant.id,
+            preferredShippingQuoteId: ev.shippingQuoteId ?? null,
           });
 
           cycle.draftsCreated++;

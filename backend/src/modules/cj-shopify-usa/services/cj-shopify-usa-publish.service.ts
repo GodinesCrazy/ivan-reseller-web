@@ -552,6 +552,7 @@ export const cjShopifyUsaPublishService = {
     productId: number;
     variantId?: number | null;
     quantity?: number;
+    preferredShippingQuoteId?: number | null;
   }) {
     const product = await prisma.cjShopifyUsaProduct.findFirst({
       where: {
@@ -595,14 +596,18 @@ export const cjShopifyUsaPublishService = {
       );
     }
 
-    const shippingQuote = await prisma.cjShopifyUsaShippingQuote.findFirst({
-      where: {
-        userId: input.userId,
-        productId: product.id,
-        variantId: variant.id,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const shippingQuote = input.preferredShippingQuoteId
+      ? await prisma.cjShopifyUsaShippingQuote.findUnique({
+          where: { id: input.preferredShippingQuoteId },
+        })
+      : await prisma.cjShopifyUsaShippingQuote.findFirst({
+          where: {
+            userId: input.userId,
+            productId: product.id,
+            variantId: variant.id,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
 
     const estimatedShippingUsd = shippingQuote ? toUsdNumber(shippingQuote.amountUsd) : 0;
     const supplierCostUsd = toUsdNumber(variant.unitCostUsd);
