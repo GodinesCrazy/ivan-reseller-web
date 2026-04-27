@@ -1,2 +1,4 @@
 publish-pet-drafts.mjs
 run-automation.mjs
+start-automation.mjs
+sync-db-shopify.mjs
