@@ -14,60 +14,47 @@
     "header_announcements_9jGBFp": {
       "type": "header-announcements",
       "blocks": {
-        "ann_shipping": {
+        "ann_promo": {
           "type": "_announcement",
           "settings": {
-            "text": "🚚  Free shipping on all orders over $50 — USA wide",
+            "text": "🎉 GRAND OPENING — Free shipping on all orders $50+ • 30-day returns • USA wide",
             "link": "/collections/all",
             "font": "var(--font-subheading--family)",
-            "font_size": "0.8rem",
-            "weight": "600",
+            "font_size": "0.82rem",
+            "weight": "700",
             "letter_spacing": "0.04em",
             "case": "none"
           },
           "blocks": {}
         },
-        "ann_returns": {
+        "ann_trust": {
           "type": "_announcement",
           "settings": {
-            "text": "30-day hassle-free returns • Pet-safe products • 4.8★ rated by 2,000+ families",
-            "link": "",
+            "text": "⭐ 4.8/5 rated • Pet-safe certified products • 186 curated items for dogs & cats",
+            "link": "/collections/all",
             "font": "var(--font-subheading--family)",
-            "font_size": "0.8rem",
+            "font_size": "0.82rem",
             "weight": "600",
-            "letter_spacing": "0.04em",
+            "letter_spacing": "0.03em",
             "case": "none"
           },
           "blocks": {}
         },
-        "ann_dogs": {
+        "ann_deal": {
           "type": "_announcement",
           "settings": {
-            "text": "Shop Dogs →",
-            "link": "/collections/dogs",
+            "text": "🐕 Shop Dogs → | 🐈 Shop Cats → | ✂️ Grooming → | 🎯 Toys →",
+            "link": "/collections/all",
             "font": "var(--font-subheading--family)",
-            "font_size": "0.8rem",
+            "font_size": "0.82rem",
             "weight": "700",
-            "letter_spacing": "0.06em",
-            "case": "none"
-          },
-          "blocks": {}
-        },
-        "ann_cats": {
-          "type": "_announcement",
-          "settings": {
-            "text": "Shop Cats →",
-            "link": "/collections/cats",
-            "font": "var(--font-subheading--family)",
-            "font_size": "0.8rem",
-            "weight": "700",
-            "letter_spacing": "0.06em",
+            "letter_spacing": "0.03em",
             "case": "none"
           },
           "blocks": {}
         }
       },
-      "block_order": ["ann_shipping", "ann_returns", "ann_dogs", "ann_cats"],
+      "block_order": ["ann_promo", "ann_trust", "ann_deal"],
       "name": "t:names.announcement_bar",
       "settings": {
         "speed": 5,

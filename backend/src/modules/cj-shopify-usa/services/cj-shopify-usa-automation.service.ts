@@ -9,6 +9,7 @@
  */
 
 import { prisma } from '../../../config/database.js';
+import { env } from '../../../config/env.js';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service.js';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service.js';
 
@@ -205,6 +206,14 @@ class CjShopifyUsaAutomationService {
       const perCycleLimit = Math.min(this.config.maxPerCycle, remainingToday);
       log('info', `Will publish up to ${perCycleLimit} products this cycle (${remainingToday} remaining today)`);
 
+      // ── Step 0: CJ Discovery — search for new pet products ──
+      log('info', 'Step 0: Discovering new CJ pet products...');
+      try {
+        await this.discoverNewPetProducts(userId);
+      } catch (err) {
+        log('warn', `Discovery step failed (non-blocking): ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+      }
+
       // ── Step 1: Find products with APPROVED evaluation and no active listing ──
       log('info', 'Scanning approved CJ products database...');
 
@@ -360,6 +369,128 @@ class CjShopifyUsaAutomationService {
   private pushHistory(cycle: CycleResult) {
     this.cycleHistory.push(cycle);
     if (this.cycleHistory.length > 20) this.cycleHistory.shift();
+  }
+
+  // ── CJ Discovery — searches for new pet products and evaluates them ────
+
+  private CJ_PET_SEARCHES = [
+    'dog collar', 'cat toy', 'pet grooming', 'dog leash', 'cat bed',
+    'pet carrier', 'dog treat', 'cat feeder', 'pet bowl', 'dog harness',
+    'cat scratching post', 'dog clothes', 'pet cage', 'dog training',
+    'cat litter box', 'pet brush', 'dog bag', 'cat tunnel',
+    'dog boots', 'pet stroller', 'rabbit cage', 'bird cage',
+    'dog nail trimmer', 'cat water fountain', 'pet seat belt',
+  ];
+
+  private CJ_PET_KW = ['pet','dog','cat','puppy','kitten','paw','leash','harness',
+    'grooming','collar','treat','chew','bowl','feeder','litter','catnip',
+    'hamster','bird','nail','brush','comb','scissors','coat','sweater',
+    'toy','fur','kennel','carrier','crate','cage','rabbit','bunny'];
+  private isPetProduct(title: string) {
+    const t = title.toLowerCase();
+    return this.CJ_PET_KW.some(k => t.includes(k));
+  }
+
+  private async discoverNewPetProducts(userId: number): Promise<void> {
+    const apiKey = env.CJ_API_KEY;
+    if (!apiKey) return;
+
+    // CJ token exchange
+    const authRes = await fetch('https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    });
+    const authJson = await authRes.json() as { data?: { accessToken?: string } };
+    const cjToken = authJson.data?.accessToken;
+    if (!cjToken) return;
+
+    const CH = { 'CJ-Access-Token': cjToken, 'Content-Type': 'application/json' };
+    const PAY = 0.054, FIX = 0.30, SHIP = 8.50, TARGET = 0.22;
+
+    // Pick 3 random searches each cycle to avoid always hitting the same products
+    const shuffled = [...this.CJ_PET_SEARCHES].sort(() => Math.random() - 0.5).slice(0, 3);
+
+    let newProducts = 0, newEvals = 0;
+
+    for (const query of shuffled) {
+      try {
+        const r = await fetch(
+          `https://developers.cjdropshipping.com/api2.0/v1/product/list?productNameEn=${encodeURIComponent(query)}&pageNum=1&pageSize=20&countryCode=US`,
+          { headers: CH },
+        );
+        const j = await r.json() as { data?: { list?: Record<string, unknown>[] } };
+        const items = j.data?.list ?? [];
+
+        for (const item of items as Record<string, unknown>[]) {
+          const pid      = item['pid'] as string | undefined;
+          const title    = (item['productNameEn'] as string | undefined) ?? query;
+          const image    = (item['productImage'] as string | undefined) ?? '';
+          const sellPriceStr = (item['sellPrice'] as string | undefined) ?? '0';
+
+          if (!pid || !this.isPetProduct(title)) continue;
+
+          // Skip if already in DB
+          const existing = await prisma.cjShopifyUsaProduct.findFirst({
+            where: { userId, cjProductId: pid },
+            select: { id: true },
+          });
+
+          let productId: number;
+          if (existing) {
+            productId = existing.id;
+          } else {
+            const created = await prisma.cjShopifyUsaProduct.create({
+              data: {
+                userId,
+                cjProductId: pid,
+                title,
+                description: title,
+                images: image ? [image] : [],
+                snapshotStatus: 'SYNCED',
+                lastSyncedAt: new Date(),
+              },
+            });
+            productId = created.id;
+            newProducts++;
+          }
+
+          // Skip if already evaluated
+          const evalExists = await prisma.cjShopifyUsaProductEvaluation.findFirst({
+            where: { userId, productId },
+            select: { id: true },
+          });
+          if (evalExists) continue;
+
+          // Quick evaluate
+          const cost = parseFloat(sellPriceStr) || 0;
+          if (cost === 0) continue;
+          const total = cost + SHIP + (cost + SHIP) * 0.03;
+          const rawPrice = (total + FIX) / (1 - TARGET - PAY);
+          const margin = ((rawPrice - total - rawPrice * PAY - FIX) / rawPrice) * 100;
+          const decision = cost > 0.5 && cost < 80 && margin >= 15 && rawPrice <= 150
+            ? 'APPROVED' : 'REJECTED';
+
+          await prisma.cjShopifyUsaProductEvaluation.create({
+            data: {
+              userId,
+              productId,
+              decision,
+              estimatedMarginPct: margin,
+              reasons: decision === 'REJECTED'
+                ? [`cost=${cost}, margin=${margin.toFixed(1)}%, price=${rawPrice.toFixed(2)}`]
+                : [],
+            },
+          });
+          newEvals++;
+        }
+      } catch { /* skip failed search */ }
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    if (newProducts > 0 || newEvals > 0) {
+      // log is not accessible here — use console
+    }
   }
 
   // ── Shopify collection assignment ──────────────────────────────────────
