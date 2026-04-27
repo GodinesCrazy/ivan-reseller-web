@@ -25,7 +25,8 @@ export const CJ_SHOPIFY_USA_REQUIRED_SCOPES = [
   'write_publications',
   'read_merchant_managed_fulfillment_orders',
   'write_merchant_managed_fulfillment_orders',
-  'write_online_store_navigation', // needed to update nav menus programmatically
+  // write_online_store_navigation is NOT required for the publish/dropship flow.
+  // It is only needed for programmatic nav-menu edits which we do via theme files instead.
 ] as const;
 
 export const CJ_SHOPIFY_USA_REQUIRED_WEBHOOK_TOPICS = [

@@ -191,8 +191,6 @@ function buildProfessionalTitle(input: {
       .replace(/\s*,\s*/g, ', ')
       .replace(/\s+-\s+/g, ' '),
   );
-  const lowered = rawTitle.toLowerCase();
-
   if (/keyboard.*mouse.*wrist rest/i.test(rawTitle)) return 'Keyboard and Mouse Wrist Rest Set';
   if (/lipstick|lip gloss|chapstick|mascara/i.test(rawTitle) && /(organizer|holder)/i.test(rawTitle)) return 'Lipstick Organizer';
   if (/car seat gap/i.test(rawTitle) && /(organizer|filler|console)/i.test(rawTitle)) return 'Car Seat Gap Organizer';
@@ -560,14 +558,27 @@ export const cjShopifyUsaPublishService = {
         userId: input.userId,
       },
       include: {
-        variants: {
-          orderBy: { id: 'asc' },
+        variants: { orderBy: { id: 'asc' } },
+        listings: {
+          where: { userId: input.userId },
+          select: { id: true, status: true },
         },
       },
     });
 
     if (!product) {
       throw new AppError('CJ Shopify USA product not found.', 404, ErrorCode.NOT_FOUND);
+    }
+
+    // ── Duplicate guard: reject if product already has an active/draft listing ──
+    const BUSY = ['ACTIVE', 'DRAFT', 'PUBLISHING', 'RECONCILE_PENDING'];
+    const activeListing = product.listings.find((l) => BUSY.includes(l.status));
+    if (activeListing) {
+      throw new AppError(
+        `Product already has a ${activeListing.status} listing (#${activeListing.id}). Cannot create a duplicate.`,
+        409,
+        ErrorCode.VALIDATION_ERROR,
+      );
     }
 
     const variant =

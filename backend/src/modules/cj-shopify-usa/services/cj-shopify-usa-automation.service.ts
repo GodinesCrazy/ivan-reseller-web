@@ -238,10 +238,24 @@ class CjShopifyUsaAutomationService {
 
       if (this.abortSignal) { cycle.status = 'ABORTED'; return; }
 
-      // ── Step 2: Filter — no active or pending listing yet ──
+      // ── Step 2: Filter — pet products only + no active/duplicate listing ──
       const BUSY_STATUSES = ['ACTIVE', 'DRAFT', 'PUBLISHING', 'RECONCILE_PENDING'];
 
+      // Keywords that identify a pet product by title
+      const PET_KEYWORDS = [
+        'pet', 'dog', 'cat', 'puppy', 'kitten', 'paw', 'leash', 'harness',
+        'grooming', 'collar', 'crate', 'litter', 'feeder', 'bowl', 'treat',
+        'chew', 'squeaky', 'catnip', 'hamster', 'bird', 'aquarium', 'reptile',
+      ];
+      const isPetProduct = (title: string): boolean => {
+        const t = title.toLowerCase();
+        return PET_KEYWORDS.some((kw) => t.includes(kw));
+      };
+
       const candidates = approvedEvaluations.filter((ev) => {
+        // Must be a pet product
+        if (!isPetProduct(ev.product.title ?? '')) return false;
+        // Must not already have an active/draft listing (duplicate guard)
         const hasActiveListing = ev.product.listings.some((l) =>
           BUSY_STATUSES.includes(l.status),
         );
@@ -255,6 +269,9 @@ class CjShopifyUsaAutomationService {
         seen.add(ev.product.id);
         return true;
       });
+      if (approvedEvaluations.length > uniqueCandidates.length) {
+        log('info', `Filtered: ${approvedEvaluations.length - uniqueCandidates.length} excluded (non-pet or already listed)`);
+      }
 
       cycle.productsApproved = uniqueCandidates.length;
       log('info', `${uniqueCandidates.length} unique products ready to publish`);
@@ -296,10 +313,15 @@ class CjShopifyUsaAutomationService {
 
           // ── Step 5: Auto-publish if configured ──
           if (this.config.autoPublish) {
-            await cjShopifyUsaPublishService.publishListing({ userId, listingId: listing.id });
+            const published = await cjShopifyUsaPublishService.publishListing({ userId, listingId: listing.id });
             cycle.published++;
             this.dailyPublishCount++;
             log('success', `Published: ${product.title?.slice(0, 40) ?? product.cjProductId} — daily total: ${this.dailyPublishCount}`);
+
+            // ── Step 6: Assign to pet collections ──
+            if (published.shopifyProductId) {
+              await this.assignToCollections(userId, published.shopifyProductId, product.title ?? '');
+            }
           }
 
           // Small delay to avoid API rate limits
@@ -338,6 +360,59 @@ class CjShopifyUsaAutomationService {
   private pushHistory(cycle: CycleResult) {
     this.cycleHistory.push(cycle);
     if (this.cycleHistory.length > 20) this.cycleHistory.shift();
+  }
+
+  // ── Shopify collection assignment ──────────────────────────────────────
+  // Maps product title keywords → Shopify collection handles.
+  // Runs best-effort (errors are swallowed — failing to categorise
+  // should never block or error the publish cycle).
+
+  private async assignToCollections(userId: number, shopifyProductId: string, title: string): Promise<void> {
+    try {
+      const settings = await cjShopifyUsaConfigService.getConfigSnapshot(userId);
+      const shopDomain = settings.settings?.shopifyStoreUrl;
+      if (!shopDomain) return;
+
+      // Determine target collection handles from title
+      const t = title.toLowerCase();
+      const handles: string[] = ['new-arrivals', 'bestsellers'];
+
+      if (t.match(/\bdog|puppy|canine|leash|harness|bark/)) handles.push('dogs');
+      if (t.match(/\bcat|kitten|feline|catnip/))            handles.push('cats');
+      if (t.match(/groom|brush|comb|scissors|shear|bath|lint/)) handles.push('grooming');
+      if (t.match(/toy|puzzle|chew|squeak|interactive|play/))   handles.push('toys');
+      if (t.match(/bowl|feed|treat|snack|food|water/))          handles.push('feeding');
+      if (t.match(/bed|cushion|mat|blanket|sweater|coat|warm/)) handles.push('beds');
+
+      const { cjShopifyUsaAdminService } = await import('./cj-shopify-usa-admin.service.js');
+      const token = await cjShopifyUsaAdminService.getAccessToken(userId);
+      const BASE = `https://${token.shopDomain}/admin/api/2026-04`;
+      const H = { 'X-Shopify-Access-Token': token.accessToken, 'Content-Type': 'application/json' };
+
+      // Fetch all custom collections once
+      const colRes = await fetch(`${BASE}/custom_collections.json?limit=250&fields=id,handle`, { headers: H });
+      if (!colRes.ok) return;
+      const { custom_collections } = await colRes.json() as { custom_collections: { id: number; handle: string }[] };
+      const colMap: Record<string, number> = {};
+      custom_collections.forEach((c) => { colMap[c.handle] = c.id; });
+
+      // Shopify product numeric ID
+      const numericId = shopifyProductId.includes('gid://')
+        ? Number(shopifyProductId.split('/').pop())
+        : Number(shopifyProductId);
+
+      // Assign to each matching collection
+      for (const handle of handles) {
+        const colId = colMap[handle];
+        if (!colId) continue;
+        await fetch(`${BASE}/collects.json`, {
+          method: 'POST', headers: H,
+          body: JSON.stringify({ collect: { product_id: numericId, collection_id: colId } }),
+        }).catch(() => { /* already in collection — ignore duplicate errors */ });
+      }
+    } catch {
+      // Non-blocking — collection assignment failure must not fail the cycle
+    }
   }
 }
 
