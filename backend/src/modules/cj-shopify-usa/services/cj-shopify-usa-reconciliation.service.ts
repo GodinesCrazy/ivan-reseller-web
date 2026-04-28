@@ -117,7 +117,9 @@ function normalizeShopifyVariantGid(value: string | null | undefined): string | 
 }
 
 function buildStorefrontUrl(shopDomain: string, productHandle: string): string {
-  const domain = trim(shopDomain).replace(/^https?:\/\//i, '').replace(/\/+$/g, '');
+  const raw = trim(shopDomain).replace(/^https?:\/\//i, '').replace(/\/+$/g, '');
+  // Use the branded custom domain for all public-facing product links
+  const domain = raw === 'ivanreseller-2.myshopify.com' ? 'shop.ivanreseller.com' : raw;
   const handle = trim(productHandle).replace(/^\/+|\/+$/g, '');
   return `https://${domain}/products/${encodeURIComponent(handle)}`;
 }
