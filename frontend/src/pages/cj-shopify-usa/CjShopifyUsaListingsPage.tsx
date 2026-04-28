@@ -15,6 +15,9 @@ type ListingRow = {
   storefrontUrl: string | null;
   publishTruth?: {
     reconciledAt?: string;
+    source?: 'SHOPIFY_ADMIN_LIVE' | 'LOCAL_DRAFT_ONLY';
+    localStatusBefore?: string;
+    localStatusAfter?: string;
     shopifyIdentifiersPresent: boolean;
     buyerFacingVerified: boolean;
     readyForStorefront?: boolean;
@@ -160,6 +163,14 @@ function reconciliationReasonText(reason: string): string {
   return reason;
 }
 
+function isPublishableStatus(status: string): boolean {
+  return ['DRAFT', 'PAUSED', 'FAILED', 'RECONCILE_PENDING'].includes(status);
+}
+
+function isShopifyLinked(row: ListingRow): boolean {
+  return Boolean(row.shopifyProductId && row.publishTruth?.shopify?.exists !== false);
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('es-CL', {
@@ -285,7 +296,15 @@ export default function CjShopifyUsaListingsPage() {
   const hasReconcilePending = listings.some((l) => l.status === 'RECONCILE_PENDING');
   const hasReconcileFailed = listings.some((l) => l.status === 'RECONCILE_FAILED');
 
-  const draftListings = listings.filter((l) => l.status === 'DRAFT');
+  const publishableListings = listings.filter((l) => isPublishableStatus(l.status));
+  const audit = {
+    buyerReady: listings.filter((l) => l.status === 'ACTIVE' && l.publishTruth?.buyerFacingVerified).length,
+    localDrafts: listings.filter((l) => l.status === 'DRAFT' && !l.shopifyProductId).length,
+    pausedInShopify: listings.filter((l) => l.status === 'PAUSED').length,
+    archivedInShopify: listings.filter((l) => l.status === 'ARCHIVED').length,
+    needsReview: listings.filter((l) => ['FAILED', 'RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(l.status)).length,
+    correctedByTruth: listings.filter((l) => l.publishTruth?.localStatusBefore && l.publishTruth.localStatusBefore !== l.publishTruth.localStatusAfter).length,
+  };
 
   const [bulkPublishing, setBulkPublishing] = useState(false);
   const [resyncing, setResyncing] = useState(false);
@@ -303,13 +322,13 @@ export default function CjShopifyUsaListingsPage() {
   }
 
   async function publishAllDrafts() {
-    if (draftListings.length === 0) return;
+    if (publishableListings.length === 0) return;
     setBulkPublishing(true);
     setError(null);
     setActionMsg(null);
     let ok = 0;
     const failedIds: number[] = [];
-    for (const listing of draftListings) {
+    for (const listing of publishableListings) {
       const draft = listing.draftPayload ?? null;
       const sellPrice = Number(listing.listedPriceUsd ?? draft?.pricingSnapshot?.suggestedSellPriceUsd ?? 0);
       if (Number.isFinite(sellPrice) && sellPrice > maxSellPriceUsd) {
@@ -350,17 +369,32 @@ export default function CjShopifyUsaListingsPage() {
           >
             {resyncing ? '…' : '🔄 Re-sync Shopify'}
           </button>
-          {draftListings.length > 0 && (
+          {publishableListings.length > 0 && (
             <button
               type="button"
               disabled={bulkPublishing}
               onClick={() => void publishAllDrafts()}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white px-3 py-1.5 text-sm font-semibold transition"
             >
-              {bulkPublishing ? '…publicando' : `Publicar todos (${draftListings.length})`}
+              {bulkPublishing ? '…publicando' : `Publicar pendientes (${publishableListings.length})`}
             </button>
           )}
         </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        {[
+          ['Buyer-ready', audit.buyerReady],
+          ['Draft local', audit.localDrafts],
+          ['Pausado Shopify', audit.pausedInShopify],
+          ['Archivado Shopify', audit.archivedInShopify],
+          ['Revisar', audit.needsReview],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/50">
+            <p className="font-medium text-slate-500 dark:text-slate-400">{label}</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">{value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Status banners */}
@@ -380,6 +414,12 @@ export default function CjShopifyUsaListingsPage() {
         <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-100 space-y-1">
           <p className="font-semibold">Reconciliación fallida — verificar en Shopify Admin</p>
           <p>El sistema no pudo confirmar el ID del producto en Shopify. Verificar manualmente en el panel de Shopify.</p>
+        </div>
+      )}
+      {audit.correctedByTruth > 0 && (
+        <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/40 px-4 py-3 text-sm text-blue-900 dark:text-blue-100 space-y-1">
+          <p className="font-semibold">Estado actualizado desde Shopify</p>
+          <p>{audit.correctedByTruth} listing(s) fueron corregidos con la verdad actual de Shopify durante esta carga.</p>
         </div>
       )}
 
@@ -425,13 +465,17 @@ export default function CjShopifyUsaListingsPage() {
                 const descriptionPreview = htmlPreview(draft?.descriptionHtml);
                 const rowSellPrice = Number(row.listedPriceUsd ?? pricing?.suggestedSellPriceUsd ?? 0);
                 const exceedsMaxPrice = Number.isFinite(rowSellPrice) && rowSellPrice > maxSellPriceUsd;
-                const canPublish = row.status === 'DRAFT' && !exceedsMaxPrice;
+                const canPublish = isPublishableStatus(row.status) && !exceedsMaxPrice;
                 const canPause =
-                  Boolean(row.shopifyProductId) &&
-                  !['DRAFT', 'PUBLISHING', 'PAUSED', 'ARCHIVED'].includes(row.status);
+                  isShopifyLinked(row) &&
+                  ['ACTIVE', 'RECONCILE_PENDING'].includes(row.status);
                 const canUnpublish =
-                  Boolean(row.shopifyProductId) &&
-                  !['DRAFT', 'PUBLISHING', 'ARCHIVED'].includes(row.status);
+                  isShopifyLinked(row) &&
+                  ['ACTIVE', 'PAUSED', 'RECONCILE_PENDING', 'RECONCILE_FAILED', 'FAILED'].includes(row.status);
+                const canExpandVariants =
+                  row.status === 'ACTIVE' &&
+                  Boolean(row.publishTruth?.buyerFacingVerified) &&
+                  !exceedsMaxPrice;
 
                 return (
                 <Fragment key={row.id}>
@@ -500,7 +544,7 @@ export default function CjShopifyUsaListingsPage() {
                             {busyId === row.id ? '…' : 'Despublicar'}
                           </button>
                         )}
-                        {row.status === 'ACTIVE' && (
+                        {canExpandVariants && (
                           <button
                             type="button"
                             disabled={busyId === row.id}
@@ -588,6 +632,7 @@ export default function CjShopifyUsaListingsPage() {
                           <div className="space-y-1 rounded border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/60">
                             <p className="mb-2 text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-500">Verdad Shopify</p>
                             <p><strong>Estado Ivan reconciliado:</strong> {row.status}</p>
+                            <p><strong>Estado antes de auditar:</strong> {row.publishTruth?.localStatusBefore ?? '—'}</p>
                             <p><strong>Shopify Admin status:</strong> {row.publishTruth?.shopify?.adminStatus ?? '—'}</p>
                             <p><strong>Shopify existe:</strong> {row.publishTruth?.shopify?.exists == null ? '—' : row.publishTruth.shopify.exists ? 'Sí' : 'No'}</p>
                             <p><strong>Publication:</strong> {row.publishTruth?.shopify?.publicationName ?? '—'} / {row.publishTruth?.shopify?.publishedOnPublication == null ? '—' : row.publishTruth.shopify.publishedOnPublication ? 'Publicado' : 'No publicado'}</p>

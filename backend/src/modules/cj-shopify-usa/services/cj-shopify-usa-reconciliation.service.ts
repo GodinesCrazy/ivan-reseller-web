@@ -318,6 +318,17 @@ export class CjShopifyUsaReconciliationService {
     listing: T,
     shopDomain: string | null,
   ): ReconciliationResult<T> {
+    const draftOnlyStatuses = new Set<string>([
+      CJ_SHOPIFY_USA_LISTING_STATUS.DRAFT,
+      CJ_SHOPIFY_USA_LISTING_STATUS.FAILED,
+    ]);
+    const nextStatus = draftOnlyStatuses.has(listing.status)
+      ? listing.status
+      : CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_FAILED;
+    const reasons = nextStatus === listing.status
+      ? ['No Shopify product id is stored for this listing yet.']
+      : [`Local status ${listing.status} claims Shopify state, but no Shopify product id is stored.`];
+
     let storefrontUrl: string | null = null;
     if (shopDomain && listing.shopifyHandle) {
       try {
@@ -329,18 +340,19 @@ export class CjShopifyUsaReconciliationService {
 
     return {
       ...listing,
+      status: nextStatus,
       storefrontUrl,
       publishTruth: {
         reconciledAt: new Date().toISOString(),
         source: 'LOCAL_DRAFT_ONLY',
         localStatusBefore: listing.status,
-        localStatusAfter: listing.status,
+        localStatusAfter: nextStatus,
         shopifyIdentifiersPresent: Boolean(
           listing.shopifyProductId && listing.shopifyVariantId && listing.shopifyHandle,
         ),
         buyerFacingVerified: false,
         readyForStorefront: false,
-        reasons: ['No Shopify product id is stored for this listing yet.'],
+        reasons,
         shopify: {
           exists: null,
           productId: listing.shopifyProductId ?? null,
@@ -374,7 +386,25 @@ export class CjShopifyUsaReconciliationService {
     const resolvedTargets = targets ?? await this.resolveTruthTargets(listing.userId);
     const productId = normalizeShopifyProductGid(listing.shopifyProductId);
     if (!productId) {
-      return this.buildLocalDraftTruth(listing, resolvedTargets.shopDomain);
+      const result = this.buildLocalDraftTruth(listing, resolvedTargets.shopDomain);
+      if (result.status !== listing.status) {
+        await prisma.cjShopifyUsaListing.update({
+          where: { id: listing.id },
+          data: {
+            status: result.status,
+            lastSyncedAt: new Date(),
+            publishedAt: null,
+            lastError: result.publishTruth.reasons.join(' '),
+          },
+        });
+        await recordTrace(listing.userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_RECONCILE_FAILED, 'listing.live_truth.missing_shopify_id', {
+          listingId: listing.id,
+          fromStatus: listing.status,
+          toStatus: result.status,
+          reasons: result.publishTruth.reasons,
+        } as Prisma.InputJsonValue);
+      }
+      return result;
     }
 
     const reasons: string[] = [];
@@ -440,7 +470,7 @@ export class CjShopifyUsaReconciliationService {
     if (!shopifyProduct) {
       nextStatus = CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_FAILED;
     } else if (adminStatus === 'DRAFT') {
-      nextStatus = CJ_SHOPIFY_USA_LISTING_STATUS.DRAFT;
+      nextStatus = CJ_SHOPIFY_USA_LISTING_STATUS.PAUSED;
     } else if (adminStatus === 'ARCHIVED') {
       nextStatus = CJ_SHOPIFY_USA_LISTING_STATUS.ARCHIVED;
     } else if (

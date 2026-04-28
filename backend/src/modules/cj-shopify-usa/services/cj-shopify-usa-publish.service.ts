@@ -810,6 +810,20 @@ export const cjShopifyUsaPublishService = {
       throw new AppError('Listing not found.', 404, ErrorCode.NOT_FOUND);
     }
 
+    const publishableStatuses = new Set<string>([
+      CJ_SHOPIFY_USA_LISTING_STATUS.DRAFT,
+      CJ_SHOPIFY_USA_LISTING_STATUS.PAUSED,
+      CJ_SHOPIFY_USA_LISTING_STATUS.FAILED,
+      CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
+    ]);
+    if (!publishableStatuses.has(listing.status)) {
+      throw new AppError(
+        `Listing status ${listing.status} cannot be published. Re-sync Shopify first or create a fresh draft.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
     const draft = (listing.draftPayload || null) as Record<string, any> | null;
     if (!draft) {
       throw new AppError('Listing draft payload is missing. Create a draft first.', 400, ErrorCode.VALIDATION_ERROR);

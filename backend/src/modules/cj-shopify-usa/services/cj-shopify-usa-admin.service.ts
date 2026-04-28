@@ -1163,6 +1163,61 @@ export class CjShopifyUsaAdminService {
     return product;
   }
 
+  async updateVariantPrice(input: {
+    userId: number;
+    productId: string;
+    variantId: string;
+    price: number;
+  }) {
+    const data = await this.graphql<{
+      productVariantsBulkUpdate?: {
+        product?: { id: string } | null;
+        productVariants?: Array<{ id: string; price: string }> | null;
+        userErrors?: ShopifyGraphqlUserError[] | null;
+      } | null;
+    }>({
+      userId: input.userId,
+      query: `
+        mutation CjShopifyUsaUpdateVariantPrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            product {
+              id
+            }
+            productVariants {
+              id
+              price
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      variables: {
+        productId: input.productId,
+        variants: [
+          {
+            id: input.variantId,
+            price: Number(input.price.toFixed(2)),
+          },
+        ],
+      },
+    });
+
+    const errors = data.productVariantsBulkUpdate?.userErrors ?? [];
+    const variant = data.productVariantsBulkUpdate?.productVariants?.[0] ?? null;
+    if (errors.length > 0 || !variant) {
+      throw new AppError(
+        `Shopify variant price update failed: ${errors.map((entry) => entry.message).join('; ') || 'unknown error'}`,
+        400,
+        ErrorCode.EXTERNAL_API_ERROR,
+      );
+    }
+
+    return variant;
+  }
+
   async listRecentOrders(input: {
     userId: number;
     first: number;

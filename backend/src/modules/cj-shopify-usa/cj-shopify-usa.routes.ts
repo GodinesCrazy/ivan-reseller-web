@@ -1070,55 +1070,39 @@ router.patch('/listings/:listingId/price', async (req: Request, res: Response, n
       return;
     }
 
-    // Update listing price in database
+    const shouldSyncToShopify = Boolean(listing.shopifyProductId && listing.shopifyVariantId);
+    if (shouldSyncToShopify) {
+      await cjShopifyUsaAdminService.updateVariantPrice({
+        userId,
+        productId: listing.shopifyProductId!,
+        variantId: listing.shopifyVariantId!,
+        price: sellPriceUsd!,
+      });
+    }
+
     await prisma.cjShopifyUsaListing.update({
       where: { id: listingId },
-      data: { listedPriceUsd: sellPriceUsd },
+      data: {
+        listedPriceUsd: sellPriceUsd,
+        lastSyncedAt: shouldSyncToShopify ? new Date() : listing.lastSyncedAt,
+        lastError: null,
+      },
     });
-
-    // Sync to Shopify if already published
-    if (listing.shopifyProductId && listing.status === CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE) {
-      const shopDomain = settings.shopifyStoreUrl ? settings.shopifyStoreUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '') : '';
-      
-      if (shopDomain && env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET) {
-        try {
-          const token = await cjShopifyUsaAdminService.getAccessToken(userId);
-          const accessToken = token.accessToken;
-          
-          // Update product price via Shopify Admin REST API
-          const variantUpdateRes = await fetch(
-            `https://${shopDomain}/admin/api/2026-04/variants/${listing.shopifyVariantId || listing.shopifyProductId}.json`,
-            {
-              method: 'PUT',
-              headers: {
-                'X-Shopify-Access-Token': accessToken,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                variant: {
-                  id: listing.shopifyVariantId || listing.shopifyProductId,
-                  price: String(sellPriceUsd),
-                },
-              }),
-            }
-          );
-
-          if (!variantUpdateRes.ok) {
-            const errorText = await variantUpdateRes.text();
-            console.warn(`Shopify price update warning: ${errorText}`);
-          }
-        } catch (shopifyError) {
-          console.warn('Shopify sync warning:', shopifyError);
-        }
-      }
-    }
 
     await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_COMPLETE, 'listing.price.updated', {
       listingId,
       newPrice: sellPriceUsd,
     } as Prisma.InputJsonValue);
 
-    res.json({ ok: true, listingId, sellPriceUsd, syncedToShopify: listing.status === CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE });
+    const updated = await prisma.cjShopifyUsaListing.findFirst({
+      where: { id: listingId, userId },
+      include: { product: true, variant: true },
+    });
+    const [reconciled] = updated
+      ? await cjShopifyUsaReconciliationService.reconcileListings(userId, [updated])
+      : [];
+
+    res.json({ ok: true, listingId, sellPriceUsd, syncedToShopify: shouldSyncToShopify, listing: reconciled ?? updated });
   } catch (error) {
     next(error);
   }
