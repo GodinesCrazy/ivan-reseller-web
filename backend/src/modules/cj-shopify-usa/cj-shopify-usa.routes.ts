@@ -14,6 +14,7 @@ import { cjShopifyUsaReconciliationService } from './services/cj-shopify-usa-rec
 import { cjShopifyUsaOrderIngestService } from './services/cj-shopify-usa-order-ingest.service';
 import { cjShopifyUsaTrackingService } from './services/cj-shopify-usa-tracking.service';
 import { automationService } from './services/cj-shopify-usa-automation.service';
+import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './services/cj-shopify-usa-policy.service';
 import {
   cjShopifyUsaListingDraftBodySchema,
   cjShopifyUsaListingPublishBodySchema,
@@ -165,20 +166,41 @@ router.get('/config/preview-impact', async (req: Request, res: Response, next: N
     const minMarginPct  = Number(req.query.minMarginPct  ?? 12);
     const minProfitUsd  = Number(req.query.minProfitUsd  ?? 1.5);
     const maxShippingUsd = Number(req.query.maxShippingUsd ?? 15);
+    const maxSellPriceUsd = Number(req.query.maxSellPriceUsd ?? 45);
     const minCostUsd    = Number(req.query.minCostUsd    ?? 2);
 
     const evaluations = await prisma.cjShopifyUsaProductEvaluation.findMany({
       where: { userId },
-      select: { estimatedMarginPct: true, decision: true },
+      select: {
+        estimatedMarginPct: true,
+        decision: true,
+        product: {
+          select: {
+            title: true,
+            description: true,
+            listings: {
+              where: { userId },
+              orderBy: { updatedAt: 'desc' },
+              take: 1,
+              select: { listedPriceUsd: true, draftPayload: true },
+            },
+          },
+        },
+      },
     });
 
     let approved = 0, rejected = 0;
     for (const ev of evaluations) {
       const margin = Number(ev.estimatedMarginPct ?? 0);
-      if (margin >= minMarginPct) approved++;
+      const listing = ev.product.listings[0];
+      const draft = (listing?.draftPayload || null) as Record<string, any> | null;
+      const sellPrice = Number(listing?.listedPriceUsd ?? draft?.pricingSnapshot?.suggestedSellPriceUsd ?? 0);
+      const pet = isCjShopifyUsaPetProduct({ title: ev.product.title, description: ev.product.description });
+      const priceOk = !Number.isFinite(sellPrice) || sellPrice <= 0 || sellPrice <= maxSellPriceUsd;
+      if (margin >= minMarginPct && pet && priceOk) approved++;
       else rejected++;
     }
-    res.json({ ok: true, approved, rejected, total: evaluations.length });
+    res.json({ ok: true, approved, rejected, total: evaluations.length, rules: { minMarginPct, minProfitUsd, maxShippingUsd, maxSellPriceUsd, minCostUsd } });
   } catch (error) { next(error); }
 });
 
@@ -704,6 +726,9 @@ router.get('/products', async (req: Request, res: Response, next: NextFunction) 
     const reconciledById = new Map(reconciledListings.map((listing) => [listing.id, listing]));
     const productsWithStorefront = products.map((product) => ({
       ...product,
+      policy: {
+        isPetProduct: isCjShopifyUsaPetProduct({ title: product.title }),
+      },
       listings: product.listings.map((listing) => {
         return reconciledById.get(listing.id) ?? listing;
       }),
@@ -1024,6 +1049,17 @@ router.patch('/listings/:listingId/price', async (req: Request, res: Response, n
       return;
     }
 
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const maxSellPriceUsd = resolveMaxSellPriceUsd(settings.maxSellPriceUsd);
+    if (sellPriceUsd! > maxSellPriceUsd) {
+      res.status(400).json({
+        ok: false,
+        error: 'PRICE_EXCEEDS_MAX_SELL_PRICE',
+        message: `El precio de venta $${sellPriceUsd!.toFixed(2)} supera el máximo configurado $${maxSellPriceUsd.toFixed(2)}.`,
+      });
+      return;
+    }
+
     const listing = await prisma.cjShopifyUsaListing.findFirst({
       where: { id: listingId, userId },
       include: { product: true, variant: true },
@@ -1042,7 +1078,6 @@ router.patch('/listings/:listingId/price', async (req: Request, res: Response, n
 
     // Sync to Shopify if already published
     if (listing.shopifyProductId && listing.status === CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE) {
-      const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
       const shopDomain = settings.shopifyStoreUrl ? settings.shopifyStoreUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '') : '';
       
       if (shopDomain && env.SHOPIFY_CLIENT_ID && env.SHOPIFY_CLIENT_SECRET) {

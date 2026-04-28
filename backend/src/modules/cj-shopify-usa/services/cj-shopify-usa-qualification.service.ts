@@ -1,4 +1,8 @@
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
+import {
+  CJ_SHOPIFY_USA_DEFAULT_MAX_SELL_PRICE_USD,
+  resolveMaxSellPriceUsd,
+} from './cj-shopify-usa-policy.service';
 
 export interface PricingBreakdown {
   supplierCostUsd: number;
@@ -27,7 +31,7 @@ const PRICING_DEFAULTS = {
   maxShippingUsd: 15.00,        // Allow broader candidate set before operator filtering
   minCostUsd: 2.00,             // Minimum supplier cost to ensure sellable margin
   minSellPriceUsd: 9.99,        // Psychological floor for viable product
-  maxSellPriceUsd: 150.00,      // Upper sanity limit for initial catalog
+  maxSellPriceUsd: CJ_SHOPIFY_USA_DEFAULT_MAX_SELL_PRICE_USD,
 } as const;
 
 function roundMoney(n: number): number {
@@ -81,6 +85,7 @@ export class CjShopifyUsaQualificationService {
     const incidentBufferPct = safeNum(settings.incidentBufferPct,          PRICING_DEFAULTS.incidentBufferPct);
     const marginPct         = safeNum(settings.minMarginPct,               PRICING_DEFAULTS.minMarginPct);
     const maxShippingUsd    = safeNum(settings.maxShippingUsd,             PRICING_DEFAULTS.maxShippingUsd);
+    const maxSellPriceUsd   = resolveMaxSellPriceUsd(settings.maxSellPriceUsd);
     const minProfitUsd      = safeNum(settings.minProfitUsd,               PRICING_DEFAULTS.minProfitUsd);
     const minCostUsd        = safeNum(settings.minCostUsd,                 PRICING_DEFAULTS.minCostUsd);
 
@@ -150,8 +155,8 @@ export class CjShopifyUsaQualificationService {
       };
     }
 
-    if (suggestedSellPriceUsd > PRICING_DEFAULTS.maxSellPriceUsd) {
-      reasons.push(`Suggested price too high: $${suggestedSellPriceUsd.toFixed(2)} > $${PRICING_DEFAULTS.maxSellPriceUsd} maximum`);
+    if (suggestedSellPriceUsd > maxSellPriceUsd) {
+      reasons.push(`Suggested price too high: $${suggestedSellPriceUsd.toFixed(2)} > $${maxSellPriceUsd.toFixed(2)} maximum`);
       return {
         decision: 'REJECTED',
         reasons,

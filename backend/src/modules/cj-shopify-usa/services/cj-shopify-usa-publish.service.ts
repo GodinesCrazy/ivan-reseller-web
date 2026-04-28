@@ -5,6 +5,7 @@ import { createCjSupplierAdapter } from '../../cj-ebay/adapters/cj-supplier.adap
 import { cjShopifyUsaAdminService } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
+import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service';
 import {
   CJ_SHOPIFY_USA_LISTING_STATUS,
   CJ_SHOPIFY_USA_TRACE_STEP,
@@ -570,6 +571,14 @@ export const cjShopifyUsaPublishService = {
       throw new AppError('CJ Shopify USA product not found.', 404, ErrorCode.NOT_FOUND);
     }
 
+    if (!isCjShopifyUsaPetProduct({ title: product.title, description: product.description })) {
+      throw new AppError(
+        'Only pet-related products can be drafted for the CJ → Shopify USA pet store.',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
     // ── Duplicate guard: reject if product already has an active/draft listing ──
     const BUSY = ['ACTIVE', 'DRAFT', 'PUBLISHING', 'RECONCILE_PENDING'];
     const activeListing = product.listings.find((l) => BUSY.includes(l.status));
@@ -660,6 +669,14 @@ export const cjShopifyUsaPublishService = {
     const suggestedSellPriceUsd = Number(
       qualification.breakdown.suggestedSellPriceUsd.toFixed(2),
     );
+    const maxSellPriceUsd = resolveMaxSellPriceUsd(settings.maxSellPriceUsd);
+    if (suggestedSellPriceUsd > maxSellPriceUsd) {
+      throw new AppError(
+        `Suggested sell price $${suggestedSellPriceUsd.toFixed(2)} exceeds configured maximum $${maxSellPriceUsd.toFixed(2)}.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
     const baseQuantity = input.quantity ?? 1;
     const safeQuantity = toSafeInt(baseQuantity);
     if (safeQuantity <= 0) {
@@ -710,6 +727,7 @@ export const cjShopifyUsaPublishService = {
         netProfitUsd: qualification.breakdown.netProfitUsd,
         netMarginPct: qualification.breakdown.netMarginPct,
         suggestedSellPriceUsd,
+        maxSellPriceUsd,
       },
       shippingSnapshot: shippingQuote
         ? {
@@ -799,6 +817,7 @@ export const cjShopifyUsaPublishService = {
 
     const { settings, probe, location, publication } = await resolveShopifyPublishTargets(input.userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
+    const maxSellPriceUsd = resolveMaxSellPriceUsd(settings.maxSellPriceUsd);
     const availableStock = listing.variant
       ? await resolveLatestVariantStock({
           userId: input.userId,
@@ -824,6 +843,32 @@ export const cjShopifyUsaPublishService = {
     if (desiredQuantity > availableStock) {
       throw new AppError(
         `Listing quantity ${desiredQuantity} exceeds current CJ stock ${availableStock}.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    const primaryPrice = Number(listing.listedPriceUsd || draft.pricingSnapshot?.suggestedSellPriceUsd || 0);
+    if (!Number.isFinite(primaryPrice) || primaryPrice <= 0) {
+      throw new AppError('Listing sell price is missing or invalid.', 400, ErrorCode.VALIDATION_ERROR);
+    }
+
+    if (primaryPrice > maxSellPriceUsd) {
+      throw new AppError(
+        `Listing sell price $${primaryPrice.toFixed(2)} exceeds configured maximum $${maxSellPriceUsd.toFixed(2)}.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    if (!isCjShopifyUsaPetProduct({
+      title: draft.title || listing.product.title,
+      description: draft.descriptionHtml || listing.product.description,
+      productType: draft.productType,
+      attributes: draft.variantAttributes ?? listing.variant?.attributes,
+    })) {
+      throw new AppError(
+        'Only pet-related products can be published to the CJ → Shopify USA pet store.',
         400,
         ErrorCode.VALIDATION_ERROR,
       );
@@ -906,6 +951,17 @@ export const cjShopifyUsaPublishService = {
             quantity: toSafeInt(l.quantity ?? lDraft.quantity ?? 0),
           };
         });
+
+        const overpricedRows = rows.filter((row) => row.price > maxSellPriceUsd);
+        if (overpricedRows.length > 0) {
+          throw new AppError(
+            `One or more variants exceed configured maximum sell price $${maxSellPriceUsd.toFixed(2)}: ${overpricedRows
+              .map((row) => `listing #${row.listingId} $${row.price.toFixed(2)}`)
+              .join(', ')}`,
+            400,
+            ErrorCode.VALIDATION_ERROR,
+          );
+        }
 
         const built = buildMultiVariantOptions(rows, productTitle);
         productOptions = built.productOptions;
@@ -1177,9 +1233,25 @@ export const cjShopifyUsaPublishService = {
     // 3. Resolve Shopify publish targets
     const { location } = await resolveShopifyPublishTargets(input.userId);
     if (!location?.id) throw new AppError('No Shopify location available for inventory sync.', 400, ErrorCode.EXTERNAL_API_ERROR);
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(input.userId);
+    const maxSellPriceUsd = resolveMaxSellPriceUsd(settings.maxSellPriceUsd);
 
     const basePrice = Number(primary.listedPriceUsd ?? 14.99);
+    if (basePrice > maxSellPriceUsd) {
+      throw new AppError(
+        `Primary listing sell price $${basePrice.toFixed(2)} exceeds configured maximum $${maxSellPriceUsd.toFixed(2)}.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
     const productTitle = String(primary.product.title);
+    if (!isCjShopifyUsaPetProduct({ title: productTitle, description: primary.product.description })) {
+      throw new AppError(
+        'Only pet-related products can be expanded in the CJ → Shopify USA pet store.',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
 
     // 4. Build the full variant option set for Shopify
     const variantRows = allCjVariants.map((v) => ({
@@ -1193,6 +1265,14 @@ export const cjShopifyUsaPublishService = {
     }));
 
     const { productOptions, variantInputs } = buildMultiVariantOptions(variantRows, productTitle);
+    const overpricedVariant = variantInputs.find((variant) => variant.price > maxSellPriceUsd);
+    if (overpricedVariant) {
+      throw new AppError(
+        `Variant ${overpricedVariant.sku} sell price $${overpricedVariant.price.toFixed(2)} exceeds configured maximum $${maxSellPriceUsd.toFixed(2)}.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
 
     // 5. Update the existing Shopify product with ALL variants
     const draft = (primary.draftPayload || {}) as Record<string, any>;

@@ -5,6 +5,7 @@ import { createCjSupplierAdapter } from '../../cj-ebay/adapters/cj-supplier.adap
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
+import { isCjShopifyUsaPetProduct } from './cj-shopify-usa-policy.service';
 import { CJ_SHOPIFY_USA_TRACE_STEP } from '../cj-shopify-usa.constants';
 import type {
   CjProductDetail,
@@ -103,10 +104,12 @@ export interface DiscoverAiSuggestionsResult {
 }
 
 const SHOPIFY_USA_AI_DISCOVERY_KEYWORDS = [
-  'car phone holder',
-  'kitchen organizer',
   'pet grooming',
-  'travel accessories',
+  'dog leash',
+  'cat toy',
+  'pet bowl',
+  'pet carrier',
+  'cat scratching post',
 ];
 
 function clamp(num: number, min: number, max: number): number {
@@ -167,6 +170,9 @@ export const cjShopifyUsaDiscoverService = {
   ): Promise<DiscoverEvaluationResult> {
     const adapter = createCjSupplierAdapter(userId);
     const product = await enrichProductDetailWithLiveStock(adapter, await adapter.getProductById(cjProductId));
+    if (!isCjShopifyUsaPetProduct({ title: product.title, description: product.description })) {
+      throw new AppError('CJ product is not related to the pet store catalog.', 400, ErrorCode.VALIDATION_ERROR);
+    }
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
     const firstVariant = product.variants[0] as CjVariantDetail | undefined;
@@ -236,6 +242,9 @@ export const cjShopifyUsaDiscoverService = {
   ): Promise<DiscoverImportDraftResult> {
     const adapter = createCjSupplierAdapter(userId);
     const product = await enrichProductDetailWithLiveStock(adapter, await adapter.getProductById(cjProductId));
+    if (!isCjShopifyUsaPetProduct({ title: product.title, description: product.description })) {
+      throw new AppError('CJ product is not related to the pet store catalog.', 400, ErrorCode.VALIDATION_ERROR);
+    }
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
 
@@ -404,6 +413,7 @@ export const cjShopifyUsaDiscoverService = {
 
         try {
           const detail = await adapter.getProductById(summary.cjProductId);
+          if (!isCjShopifyUsaPetProduct({ title: detail.title, description: detail.description })) continue;
           const variant =
             (detail.variants.find((v) => hasMinimumStock(v.stock, minStock)) as CjVariantDetail | undefined) ||
             (detail.variants[0] as CjVariantDetail | undefined);

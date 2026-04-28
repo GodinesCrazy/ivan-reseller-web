@@ -1,10 +1,12 @@
 import { prisma } from '../../../config/database';
 import { env } from '../../../config/env';
+import { CJ_SHOPIFY_USA_DEFAULT_MAX_SELL_PRICE_USD } from './cj-shopify-usa-policy.service';
 
 const CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS = {
   minMarginPct: 12,
   minProfitUsd: 1.5,
   maxShippingUsd: 15,
+  maxSellPriceUsd: CJ_SHOPIFY_USA_DEFAULT_MAX_SELL_PRICE_USD,
   minCostUsd: 2.0,
 } as const;
 
@@ -52,6 +54,7 @@ export class CjShopifyUsaConfigService {
           handlingBufferDays: 3,
           incidentBufferPct: 3.0,        // 3% buffer de riesgo
           maxShippingUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.maxShippingUsd,
+          maxSellPriceUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.maxSellPriceUsd,
           minCostUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.minCostUsd,
           defaultPaymentFeePct: 5.4,     // PayPal Express cross-border
           defaultPaymentFixedFeeUsd: 0.30,
@@ -73,6 +76,13 @@ export class CjShopifyUsaConfigService {
             minProfitUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.minProfitUsd,
             maxShippingUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.maxShippingUsd,
           },
+        });
+      }
+
+      if (settings.maxSellPriceUsd == null) {
+        settings = await prisma.cjShopifyUsaAccountSettings.update({
+          where: { id: settings.id },
+          data: { maxSellPriceUsd: CJ_SHOPIFY_USA_RECOMMENDED_DEFAULTS.maxSellPriceUsd },
         });
       }
     }

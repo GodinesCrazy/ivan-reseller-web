@@ -2728,6 +2728,7 @@ model CjShopifyUsaAccountSettings {
   minMarginPct               Decimal? @db.Decimal(6, 4)
   minProfitUsd               Decimal? @db.Decimal(18, 2)
   maxShippingUsd             Decimal? @db.Decimal(18, 2)
+  maxSellPriceUsd            Decimal? @default(45.00) @db.Decimal(18, 2)
   handlingBufferDays         Int      @default(3)
   minStock                   Int      @default(1)
   rejectOnUnknownShipping    Boolean  @default(true)

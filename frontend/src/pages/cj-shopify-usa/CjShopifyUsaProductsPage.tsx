@@ -53,6 +53,9 @@ type ProductRow = {
   variants: Variant[];
   evaluations: Evaluation[];
   listings: ListingRef[];
+  policy?: {
+    isPetProduct: boolean;
+  };
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -292,7 +295,8 @@ export default function CjShopifyUsaProductsPage() {
                 const draftListing = row.listings.find((l) => l.status === 'DRAFT') ?? null;
                 const hasShopifyLinkedListing = row.listings.some((l) => Boolean(l.shopifyProductId));
                 const hasBlockingListing = Boolean(activeListing) || hasShopifyLinkedListing;
-                const canDraft = ev?.decision === 'APPROVED' && !hasDraft && !activeListing && !hasShopifyLinkedListing;
+                const policyBlocked = row.policy?.isPetProduct === false;
+                const canDraft = ev?.decision === 'APPROVED' && !policyBlocked && !hasDraft && !activeListing && !hasShopifyLinkedListing;
 
                 return (
                   <>
@@ -309,6 +313,10 @@ export default function CjShopifyUsaProductsPage() {
                         {ev ? (
                           <span className={`rounded px-2 py-0.5 text-xs font-medium ${DECISION_BADGE[ev.decision] ?? ''}`}>
                             {DECISION_LABEL[ev.decision] ?? ev.decision}
+                          </span>
+                        ) : policyBlocked ? (
+                          <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                            Fuera pet
                           </span>
                         ) : (
                           <span className="text-xs text-slate-400">Sin evaluar</span>

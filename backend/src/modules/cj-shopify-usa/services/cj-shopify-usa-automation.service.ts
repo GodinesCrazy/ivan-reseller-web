@@ -12,6 +12,7 @@ import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service.js';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service.js';
+import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -224,6 +225,7 @@ class CjShopifyUsaAutomationService {
 
       const settings = await cjShopifyUsaConfigService.getConfigSnapshot(userId);
       const minMarginFromSettings = Number(settings.settings?.minMarginPct ?? this.config.minMarginPct);
+      const maxSellPriceUsd = resolveMaxSellPriceUsd(settings.settings?.maxSellPriceUsd);
 
       // Products with at least one APPROVED evaluation
       const approvedEvaluations = await prisma.cjShopifyUsaProductEvaluation.findMany({
@@ -255,20 +257,9 @@ class CjShopifyUsaAutomationService {
       // ── Step 2: Filter — pet products only + no active/duplicate listing ──
       const BUSY_STATUSES = ['ACTIVE', 'DRAFT', 'PUBLISHING', 'RECONCILE_PENDING'];
 
-      // Keywords that identify a pet product by title
-      const PET_KEYWORDS = [
-        'pet', 'dog', 'cat', 'puppy', 'kitten', 'paw', 'leash', 'harness',
-        'grooming', 'collar', 'crate', 'litter', 'feeder', 'bowl', 'treat',
-        'chew', 'squeaky', 'catnip', 'hamster', 'bird', 'aquarium', 'reptile',
-      ];
-      const isPetProduct = (title: string): boolean => {
-        const t = title.toLowerCase();
-        return PET_KEYWORDS.some((kw) => t.includes(kw));
-      };
-
       const candidates = approvedEvaluations.filter((ev) => {
         // Must be a pet product
-        if (!isPetProduct(ev.product.title ?? '')) return false;
+        if (!isCjShopifyUsaPetProduct({ title: ev.product.title })) return false;
         // Must not already have an active/draft listing (duplicate guard)
         const hasActiveListing = ev.product.listings.some((l) =>
           BUSY_STATUSES.includes(l.status),
@@ -428,12 +419,13 @@ class CjShopifyUsaAutomationService {
     const CH = { 'CJ-Access-Token': cjToken, 'Content-Type': 'application/json' };
 
     // Load from user settings so operator config is respected
-    const userSettings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
-    const PAY    = Number(userSettings.defaultPaymentFeePct ?? 5.4) / 100;
-    const FIX    = Number(userSettings.defaultPaymentFixedFeeUsd ?? 0.30);
-    const SHIP   = Number(userSettings.maxShippingUsd ?? 8.50);
-    const TARGET = Number(userSettings.minMarginPct ?? 12) / 100;
-    const MIN_MARGIN = Number(userSettings.minMarginPct ?? 12);
+      const userSettings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+      const PAY    = Number(userSettings.defaultPaymentFeePct ?? 5.4) / 100;
+      const FIX    = Number(userSettings.defaultPaymentFixedFeeUsd ?? 0.30);
+      const SHIP   = Number(userSettings.maxShippingUsd ?? 8.50);
+      const TARGET = Number(userSettings.minMarginPct ?? 12) / 100;
+      const MIN_MARGIN = Number(userSettings.minMarginPct ?? 12);
+      const MAX_SELL_PRICE = resolveMaxSellPriceUsd(userSettings.maxSellPriceUsd);
 
     // Fisher-Yates shuffle for truly random search order
     const arr = [...this.CJ_PET_SEARCHES];
@@ -460,7 +452,7 @@ class CjShopifyUsaAutomationService {
           const image    = (item['productImage'] as string | undefined) ?? '';
           const sellPriceStr = (item['sellPrice'] as string | undefined) ?? '0';
 
-          if (!pid || !this.isPetProduct(title)) continue;
+          if (!pid || !isCjShopifyUsaPetProduct({ title })) continue;
 
           // Skip if already in DB
           const existing = await prisma.cjShopifyUsaProduct.findFirst({
@@ -503,7 +495,7 @@ class CjShopifyUsaAutomationService {
           const rawPrice = (total + FIX) / (1 - TARGET - PAY);
           if (!Number.isFinite(rawPrice) || rawPrice <= 0) continue;
           const margin = ((rawPrice - total - rawPrice * PAY - FIX) / rawPrice) * 100;
-          const decision = cost < 80 && margin >= MIN_MARGIN && rawPrice <= 150
+          const decision = margin >= MIN_MARGIN && rawPrice <= MAX_SELL_PRICE
             ? 'APPROVED' : 'REJECTED';
 
           await prisma.cjShopifyUsaProductEvaluation.create({
@@ -513,7 +505,7 @@ class CjShopifyUsaAutomationService {
               decision,
               estimatedMarginPct: margin,
               reasons: decision === 'REJECTED'
-                ? [`cost=${cost}, margin=${margin.toFixed(1)}%, price=${rawPrice.toFixed(2)}`]
+                ? [`cost=${cost}, margin=${margin.toFixed(1)}%, price=${rawPrice.toFixed(2)}, max=${MAX_SELL_PRICE.toFixed(2)}`]
                 : [],
             },
           });

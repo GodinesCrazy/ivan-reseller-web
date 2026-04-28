@@ -184,14 +184,21 @@ export default function CjShopifyUsaListingsPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [maxSellPriceUsd, setMaxSellPriceUsd] = useState(45);
 
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.get<{ ok: boolean; listings: ListingRow[] }>('/api/cj-shopify-usa/listings');
+      const [res, configRes] = await Promise.all([
+        api.get<{ ok: boolean; listings: ListingRow[] }>('/api/cj-shopify-usa/listings'),
+        api.get<{ ok: boolean; settings?: { maxSellPriceUsd?: number | string | null } }>('/api/cj-shopify-usa/config'),
+      ]);
       if (res.data?.ok && Array.isArray(res.data.listings)) {
         setListings(res.data.listings);
+      }
+      if (configRes.data?.settings) {
+        setMaxSellPriceUsd(Number(configRes.data.settings.maxSellPriceUsd ?? 45));
       }
     } catch (e) {
       setError(axiosMsg(e, 'No se pudieron cargar los listings.'));
@@ -278,9 +285,7 @@ export default function CjShopifyUsaListingsPage() {
   const hasReconcilePending = listings.some((l) => l.status === 'RECONCILE_PENDING');
   const hasReconcileFailed = listings.some((l) => l.status === 'RECONCILE_FAILED');
 
-  const draftListings = listings.filter(
-    (l) => !['PUBLISHING', 'ACTIVE'].includes(l.status),
-  );
+  const draftListings = listings.filter((l) => l.status === 'DRAFT');
 
   const [bulkPublishing, setBulkPublishing] = useState(false);
   const [resyncing, setResyncing] = useState(false);
@@ -305,6 +310,12 @@ export default function CjShopifyUsaListingsPage() {
     let ok = 0;
     const failedIds: number[] = [];
     for (const listing of draftListings) {
+      const draft = listing.draftPayload ?? null;
+      const sellPrice = Number(listing.listedPriceUsd ?? draft?.pricingSnapshot?.suggestedSellPriceUsd ?? 0);
+      if (Number.isFinite(sellPrice) && sellPrice > maxSellPriceUsd) {
+        failedIds.push(listing.id);
+        continue;
+      }
       try {
         await api.post('/api/cj-shopify-usa/listings/publish', { listingId: listing.id });
         ok++;
@@ -412,7 +423,9 @@ export default function CjShopifyUsaListingsPage() {
                 const shipping = draft?.shippingSnapshot;
                 const draftImages = Array.isArray(draft?.images) ? draft.images.slice(0, 4) : [];
                 const descriptionPreview = htmlPreview(draft?.descriptionHtml);
-                const canPublish = !['PUBLISHING', 'ACTIVE'].includes(row.status);
+                const rowSellPrice = Number(row.listedPriceUsd ?? pricing?.suggestedSellPriceUsd ?? 0);
+                const exceedsMaxPrice = Number.isFinite(rowSellPrice) && rowSellPrice > maxSellPriceUsd;
+                const canPublish = row.status === 'DRAFT' && !exceedsMaxPrice;
                 const canPause =
                   Boolean(row.shopifyProductId) &&
                   !['DRAFT', 'PUBLISHING', 'PAUSED', 'ARCHIVED'].includes(row.status);
@@ -459,6 +472,11 @@ export default function CjShopifyUsaListingsPage() {
                             <Send className="h-3.5 w-3.5" aria-hidden="true" />
                             {busyId === row.id ? '…' : 'Publicar'}
                           </button>
+                        )}
+                        {row.status === 'DRAFT' && exceedsMaxPrice && (
+                          <span className="inline-flex h-7 items-center rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300">
+                            Precio &gt; ${maxSellPriceUsd.toFixed(2)}
+                          </span>
                         )}
                         {canPause && (
                           <button

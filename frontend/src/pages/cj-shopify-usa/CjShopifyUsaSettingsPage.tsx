@@ -7,6 +7,7 @@ type SettingsPayload = {
   minMarginPct: number;
   minProfitUsd: number;
   maxShippingUsd: number;
+  maxSellPriceUsd: number;
   minCostUsd: number;
 };
 
@@ -31,6 +32,7 @@ export default function CjShopifyUsaSettingsPage() {
     minMarginPct: 12,
     minProfitUsd: 1.5,
     maxShippingUsd: 15,
+    maxSellPriceUsd: 45,
     minCostUsd: 2,
   });
   const [loading, setLoading] = useState(true);
@@ -51,6 +53,7 @@ export default function CjShopifyUsaSettingsPage() {
             minMarginPct: Number(settings.minMarginPct ?? 12),
             minProfitUsd: Number(settings.minProfitUsd ?? 1.5),
             maxShippingUsd: Number(settings.maxShippingUsd ?? 15),
+            maxSellPriceUsd: Number(settings.maxSellPriceUsd ?? 45),
             minCostUsd: Number(settings.minCostUsd ?? 2),
           });
         }
@@ -125,6 +128,18 @@ export default function CjShopifyUsaSettingsPage() {
               step="0.01"
               value={values.maxShippingUsd}
               onChange={(e) => setValues((prev) => ({ ...prev, maxShippingUsd: parseNumericInput(e.target.value, prev.maxShippingUsd) }))}
+              className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Max sell price USD</span>
+            <input
+              type="number"
+              min={0.01}
+              step="0.01"
+              value={values.maxSellPriceUsd}
+              onChange={(e) => setValues((prev) => ({ ...prev, maxSellPriceUsd: parseNumericInput(e.target.value, prev.maxSellPriceUsd) }))}
               className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
             />
           </label>
