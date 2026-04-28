@@ -958,7 +958,7 @@ router.patch('/listings/:listingId/price', async (req: Request, res: Response, n
           
           // Update product price via Shopify Admin REST API
           const variantUpdateRes = await fetch(
-            `https://${shopDomain}/admin/api/2024-01/variants/${listing.shopifyVariantId || listing.shopifyProductId}.json`,
+            `https://${shopDomain}/admin/api/2026-04/variants/${listing.shopifyVariantId || listing.shopifyProductId}.json`,
             {
               method: 'PUT',
               headers: {
@@ -1025,7 +1025,7 @@ router.post('/collections/create', async (req: Request, res: Response, next: Nex
 
     // Create custom collection via REST API
     const createRes = await fetch(
-      `https://${shopDomain}/admin/api/2024-01/custom_collections.json`,
+      `https://${shopDomain}/admin/api/2026-04/custom_collections.json`,
       {
         method: 'POST',
         headers: {
@@ -1097,7 +1097,7 @@ router.post('/collections/assign', async (req: Request, res: Response, next: Nex
 
     // Create collect (product-collection link) via REST API
     const collectRes = await fetch(
-      `https://${shopDomain}/admin/api/2024-01/collects.json`,
+      `https://${shopDomain}/admin/api/2026-04/collects.json`,
       {
         method: 'POST',
         headers: {
@@ -1153,7 +1153,7 @@ router.get('/collections', async (req: Request, res: Response, next: NextFunctio
 
     // Fetch collections from Shopify
     const collectionsRes = await fetch(
-      `https://${shopDomain}/admin/api/2024-01/custom_collections.json`,
+      `https://${shopDomain}/admin/api/2026-04/custom_collections.json`,
       {
         headers: {
           'X-Shopify-Access-Token': accessToken,

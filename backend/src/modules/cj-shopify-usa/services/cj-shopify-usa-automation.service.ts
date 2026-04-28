@@ -426,10 +426,22 @@ class CjShopifyUsaAutomationService {
     if (!cjToken) return;
 
     const CH = { 'CJ-Access-Token': cjToken, 'Content-Type': 'application/json' };
-    const PAY = 0.054, FIX = 0.30, SHIP = 8.50, TARGET = 0.22;
 
-    // Pick 3 random searches each cycle to avoid always hitting the same products
-    const shuffled = [...this.CJ_PET_SEARCHES].sort(() => Math.random() - 0.5).slice(0, 3);
+    // Load from user settings so operator config is respected
+    const userSettings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const PAY    = Number(userSettings.defaultPaymentFeePct ?? 5.4) / 100;
+    const FIX    = Number(userSettings.defaultPaymentFixedFeeUsd ?? 0.30);
+    const SHIP   = Number(userSettings.maxShippingUsd ?? 8.50);
+    const TARGET = Number(userSettings.minMarginPct ?? 12) / 100;
+    const MIN_MARGIN = Number(userSettings.minMarginPct ?? 12);
+
+    // Fisher-Yates shuffle for truly random search order
+    const arr = [...this.CJ_PET_SEARCHES];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    const shuffled = arr.slice(0, 3);
 
     let newProducts = 0, newEvals = 0;
 
@@ -482,13 +494,16 @@ class CjShopifyUsaAutomationService {
           });
           if (evalExists) continue;
 
-          // Quick evaluate
-          const cost = parseFloat(sellPriceStr) || 0;
-          if (cost === 0) continue;
+          // Quick evaluate using operator settings
+          const cost = parseFloat(sellPriceStr);
+          if (!Number.isFinite(cost) || cost <= 0) continue;
+          const minCost = Number(userSettings.minCostUsd ?? 2.0);
+          if (cost < minCost) continue;
           const total = cost + SHIP + (cost + SHIP) * 0.03;
           const rawPrice = (total + FIX) / (1 - TARGET - PAY);
+          if (!Number.isFinite(rawPrice) || rawPrice <= 0) continue;
           const margin = ((rawPrice - total - rawPrice * PAY - FIX) / rawPrice) * 100;
-          const decision = cost > 0.5 && cost < 80 && margin >= 15 && rawPrice <= 150
+          const decision = cost < 80 && margin >= MIN_MARGIN && rawPrice <= 150
             ? 'APPROVED' : 'REJECTED';
 
           await prisma.cjShopifyUsaProductEvaluation.create({
@@ -504,7 +519,10 @@ class CjShopifyUsaAutomationService {
           });
           newEvals++;
         }
-      } catch { /* skip failed search */ }
+      } catch (searchErr) {
+        // Log instead of silently swallowing — operator needs visibility into CJ API failures
+        console.error(`[Automation] Search failed for "${query}":`, searchErr instanceof Error ? searchErr.message : String(searchErr));
+      }
       await new Promise(r => setTimeout(r, 400));
     }
 
