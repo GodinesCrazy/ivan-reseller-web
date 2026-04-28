@@ -57,6 +57,16 @@ const STATUS_LABEL: Record<string, string> = {
   SUPPLIER_PAYMENT_BLOCKED: 'Pago bloqueado',
 };
 
+const STATUS_COLORS: Record<string, string> = {
+  DETECTED: 'bg-slate-100 text-slate-700', VALIDATED: 'bg-blue-100 text-blue-700',
+  CJ_ORDER_PLACING: 'bg-indigo-100 text-indigo-700', CJ_ORDER_PLACED: 'bg-indigo-100 text-indigo-700',
+  CJ_ORDER_CONFIRMED: 'bg-violet-100 text-violet-700', CJ_PAYMENT_PENDING: 'bg-amber-100 text-amber-700',
+  CJ_PAYMENT_COMPLETED: 'bg-emerald-100 text-emerald-700', CJ_FULFILLING: 'bg-teal-100 text-teal-700',
+  CJ_SHIPPED: 'bg-cyan-100 text-cyan-700', TRACKING_ON_SHOPIFY: 'bg-sky-100 text-sky-700',
+  COMPLETED: 'bg-emerald-200 text-emerald-800', FAILED: 'bg-red-100 text-red-700',
+  NEEDS_MANUAL: 'bg-orange-100 text-orange-700', SUPPLIER_PAYMENT_BLOCKED: 'bg-red-200 text-red-800',
+};
+
 function usd(n: number | null | undefined): string {
   if (n == null) return '—';
   return `$${Number(n).toFixed(2)}`;
@@ -133,12 +143,19 @@ export default function CjShopifyUsaOrderDetailPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center gap-4">
-        <button type="button" onClick={() => navigate(-1)} className="text-sm text-primary-600 dark:text-primary-400 underline">← Órdenes</button>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-          Orden: <span className="font-mono">{order.shopifyOrderId}</span>
-        </h2>
-      </div>
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+        <button type="button" onClick={() => navigate('/cj-shopify-usa/orders')} className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+          Órdenes
+        </button>
+        <span>/</span>
+        <span className="font-mono text-slate-700 dark:text-slate-300">{order.shopifyOrderId.replace('gid://shopify/Order/', '#')}</span>
+        <span className="ml-auto">
+          <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[order.status] ?? 'bg-slate-100 text-slate-700'}`}>
+            {STATUS_LABEL[order.status] ?? order.status}
+          </span>
+        </span>
+      </nav>
 
       {/* Header card */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-5 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">

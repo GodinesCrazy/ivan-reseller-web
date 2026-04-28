@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { CheckCircle2, XCircle, AlertCircle, Loader2, Search, Package, ShoppingBag, ClipboardList, ArrowRight } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertCircle, Loader2, Search, Package, ShoppingBag, ClipboardList, ArrowRight, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 
 interface ReadinessCheck {
   id: string;
@@ -30,41 +30,53 @@ interface OverviewCounts {
   tracesLast24h: number;
 }
 
+interface WebhookHealth {
+  lastOrderReceived: string | null;
+  hasRecentActivity: boolean;
+  ordersNeedingAttention: number;
+}
+
 export default function CjShopifyUsaOverviewPage() {
   const navigate = useNavigate();
   const [counts, setCounts] = useState<OverviewCounts | null>(null);
+  const [webhookHealth, setWebhookHealth] = useState<WebhookHealth | null>(null);
   const [readiness, setReadiness] = useState<{ ready: boolean; checks: ReadinessCheck[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [resParams, resOverview] = await Promise.all([
-          api.get('/api/cj-shopify-usa/system-readiness'),
-          api.get('/api/cj-shopify-usa/overview'),
-        ]);
-        if (!cancelled) {
-          if (resParams.data) setReadiness(resParams.data);
-          if (resOverview.data?.ok && resOverview.data.counts) setCounts(resOverview.data.counts);
-        }
-      } catch (e: unknown) {
-        let msg = 'No se pudo cargar el resumen.';
-        if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
-          const err = (e.response.data as { error?: string }).error;
-          if (err === 'CJ_SHOPIFY_USA_MODULE_DISABLED') msg = 'Módulo desactivado en el servidor (ENABLE_CJ_SHOPIFY_USA_MODULE).';
-          else if (e.response.status === 404) msg = 'Ruta no disponible.';
-        } else if (e instanceof Error) {
-          msg = e.message;
-        }
-        if (!cancelled) setError(msg);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
+    try {
+      const [resParams, resOverview] = await Promise.all([
+        api.get('/api/cj-shopify-usa/system-readiness'),
+        api.get('/api/cj-shopify-usa/overview'),
+      ]);
+      if (resParams.data) setReadiness(resParams.data);
+      if (resOverview.data?.ok && resOverview.data.counts) setCounts(resOverview.data.counts);
+      if (resOverview.data?.webhookHealth) setWebhookHealth(resOverview.data.webhookHealth);
+      setError(null);
+    } catch (e: unknown) {
+      let msg = 'No se pudo cargar el resumen.';
+      if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
+        const err = (e.response.data as { error?: string }).error;
+        if (err === 'CJ_SHOPIFY_USA_MODULE_DISABLED') msg = 'Módulo desactivado en el servidor (ENABLE_CJ_SHOPIFY_USA_MODULE).';
+        else if (e.response.status === 404) msg = 'Ruta no disponible.';
+      } else if (e instanceof Error) { msg = e.message; }
+      setError(msg);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  // Initial load + auto-refresh every 30s
+  useEffect(() => {
+    void load();
+    const t = setInterval(() => void load(true), 30_000);
+    return () => clearInterval(t);
+  }, [load]);
 
   if (loading) return <p className="text-sm text-slate-500">Cargando resumen de integración…</p>;
 
@@ -81,6 +93,52 @@ export default function CjShopifyUsaOverviewPage() {
 
   return (
     <div className="space-y-8">
+
+      {/* Header with refresh */}
+      <div className="flex items-center justify-between">
+        <div />
+        <button
+          type="button"
+          onClick={() => void load(true)}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Actualizando…' : 'Actualizar'}
+        </button>
+      </div>
+
+      {/* Webhook health banner */}
+      {webhookHealth && (
+        <section>
+          {webhookHealth.ordersNeedingAttention > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate('/cj-shopify-usa/orders')}
+              className="w-full flex items-center justify-between gap-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-800 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors mb-2"
+            >
+              <div className="flex items-center gap-2">
+                <XCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{webhookHealth.ordersNeedingAttention} orden{webhookHealth.ordersNeedingAttention > 1 ? 'es' : ''} requieren atención (FAILED / NEEDS_MANUAL)</span>
+              </div>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
+          <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-sm ${webhookHealth.hasRecentActivity ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200' : 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200'}`}>
+            {webhookHealth.hasRecentActivity
+              ? <Wifi className="w-4 h-4 flex-shrink-0" />
+              : <WifiOff className="w-4 h-4 flex-shrink-0" />}
+            <span>
+              Webhook Shopify:{' '}
+              {webhookHealth.hasRecentActivity
+                ? `Activo — última orden recibida ${webhookHealth.lastOrderReceived ? new Date(webhookHealth.lastOrderReceived).toLocaleString('es-CL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'recientemente'}`
+                : 'Sin órdenes en las últimas 48h — verifica que el webhook esté registrado en Shopify'}
+            </span>
+          </div>
+        </section>
+      )}
+
+
 
       {/* Pipeline CTA strip */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -172,6 +172,21 @@ export default function CjShopifyUsaProductsPage() {
     }
   }
 
+  async function reEvaluateProduct(product: ProductRow) {
+    setBusyId(product.id);
+    setActionMsg(null);
+    setError(null);
+    try {
+      await api.post(`/api/cj-shopify-usa/products/${product.id}/re-evaluate`);
+      setActionMsg(`Re-evaluación completada: ${product.title}`);
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, 'Error al re-evaluar.'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function deleteProduct(product: ProductRow) {
     const confirmed = window.confirm(
       `Eliminar "${product.title}" del catálogo CJ Shopify USA?\n\nEsta acción borra el artículo local y sus drafts no publicados.`,
@@ -368,6 +383,15 @@ export default function CjShopifyUsaProductsPage() {
                         >
                           <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                           {expandedId === row.id ? 'Ocultar' : 'Detalle'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === row.id}
+                          title="Re-evaluar márgenes con precios actuales de CJ"
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-40 dark:border-blue-800/70 dark:bg-blue-950/30 dark:text-blue-300"
+                          onClick={() => void reEvaluateProduct(row)}
+                        >
+                          🔄 {busyId === row.id ? '…' : 'Re-evaluar'}
                         </button>
                         <button
                           type="button"

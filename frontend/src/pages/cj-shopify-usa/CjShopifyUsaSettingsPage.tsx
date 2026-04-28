@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { Loader2, Save, SlidersHorizontal } from 'lucide-react';
+import { Loader2, Save, SlidersHorizontal, Info } from 'lucide-react';
 
 type SettingsPayload = {
   minMarginPct: number;
@@ -37,6 +37,8 @@ export default function CjShopifyUsaSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [impactPreview, setImpactPreview] = useState<{ approved: number; rejected: number; total: number } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +64,18 @@ export default function CjShopifyUsaSettingsPage() {
       cancelled = true;
     };
   }, []);
+
+  async function previewImpact() {
+    setLoadingPreview(true);
+    try {
+      const res = await api.get<{ ok: boolean; approved: number; rejected: number; total: number }>(
+        '/api/cj-shopify-usa/config/preview-impact',
+        { params: values },
+      );
+      if (res.data?.ok) setImpactPreview({ approved: res.data.approved, rejected: res.data.rejected, total: res.data.total });
+    } catch { /* preview is best-effort */ }
+    finally { setLoadingPreview(false); }
+  }
 
   async function saveSettings() {
     // Guard: reject if any field is NaN before sending (avoids backend reset to defaults)
@@ -153,10 +167,30 @@ export default function CjShopifyUsaSettingsPage() {
           </label>
         </div>
 
-        <div className="mt-4 flex items-center gap-2">
+        {/* Impact preview */}
+        {impactPreview && (
+          <div className="mt-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-xs text-blue-800 dark:text-blue-200 flex items-start gap-2">
+            <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>
+              Con estas reglas: <strong>{impactPreview.approved}</strong> productos aprobados,{' '}
+              <strong>{impactPreview.rejected}</strong> rechazados de {impactPreview.total} evaluados.
+            </span>
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-2 flex-wrap">
           <button
             type="button"
-            onClick={saveSettings}
+            onClick={() => void previewImpact()}
+            disabled={loadingPreview}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
+          >
+            {loadingPreview ? <Loader2 className="w-4 h-4 animate-spin" /> : <Info className="w-4 h-4" />}
+            Ver impacto
+          </button>
+          <button
+            type="button"
+            onClick={() => void saveSettings()}
             disabled={saving}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm disabled:opacity-60"
           >

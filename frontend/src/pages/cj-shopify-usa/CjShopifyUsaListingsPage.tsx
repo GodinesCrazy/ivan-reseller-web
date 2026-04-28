@@ -283,6 +283,19 @@ export default function CjShopifyUsaListingsPage() {
   );
 
   const [bulkPublishing, setBulkPublishing] = useState(false);
+  const [resyncing, setResyncing] = useState(false);
+
+  async function resyncReconcile() {
+    setResyncing(true);
+    setError(null);
+    try {
+      await api.post('/api/cj-shopify-usa/listings/reconcile');
+      setActionMsg('Re-sincronización iniciada. Recarga en unos segundos para ver el estado actualizado.');
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error al re-sincronizar');
+    } finally { setResyncing(false); }
+  }
 
   async function publishAllDrafts() {
     if (draftListings.length === 0) return;
@@ -317,16 +330,26 @@ export default function CjShopifyUsaListingsPage() {
         <p className="text-sm text-slate-600 dark:text-slate-300">
           Productos en tu tienda Shopify. Drafts listos para publicar, listings activos y su estado de sincronización.
         </p>
-        {draftListings.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
           <button
             type="button"
-            disabled={bulkPublishing}
-            onClick={() => void publishAllDrafts()}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white px-3 py-1.5 text-sm font-semibold transition"
+            disabled={resyncing}
+            onClick={() => void resyncReconcile()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 transition"
           >
-            {bulkPublishing ? '…publicando' : `Publicar todos (${draftListings.length})`}
+            {resyncing ? '…' : '🔄 Re-sync Shopify'}
           </button>
-        )}
+          {draftListings.length > 0 && (
+            <button
+              type="button"
+              disabled={bulkPublishing}
+              onClick={() => void publishAllDrafts()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white px-3 py-1.5 text-sm font-semibold transition"
+            >
+              {bulkPublishing ? '…publicando' : `Publicar todos (${draftListings.length})`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Status banners */}

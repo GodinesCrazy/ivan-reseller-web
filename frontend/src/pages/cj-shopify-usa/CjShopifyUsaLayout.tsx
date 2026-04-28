@@ -1,14 +1,16 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 const links = [
-  { to: '/cj-shopify-usa/overview', label: 'Overview' },
-  { to: '/cj-shopify-usa/discover', label: '✦ Descubrir' },
-  { to: '/cj-shopify-usa/products', label: 'Products' },
-  { to: '/cj-shopify-usa/listings', label: 'Store Products' },
-  { to: '/cj-shopify-usa/orders', label: 'Orders' },
-  { to: '/cj-shopify-usa/alerts', label: 'Alerts' },
-  { to: '/cj-shopify-usa/profit', label: 'Profit' },
-  { to: '/cj-shopify-usa/logs', label: 'Logs' },
+  { to: '/cj-shopify-usa/overview',    label: 'Overview' },
+  { to: '/cj-shopify-usa/discover',    label: '✦ Descubrir' },
+  { to: '/cj-shopify-usa/products',    label: 'Productos CJ' },
+  { to: '/cj-shopify-usa/listings',    label: 'Store Products' },
+  { to: '/cj-shopify-usa/orders',      label: 'Órdenes' },
+  { to: '/cj-shopify-usa/alerts',      label: 'Alertas' },
+  { to: '/cj-shopify-usa/profit',      label: 'Profit' },
+  { to: '/cj-shopify-usa/automation',  label: '⚡ Automatización' },
+  { to: '/cj-shopify-usa/settings',    label: '⚙ Config' },
+  { to: '/cj-shopify-usa/logs',        label: 'Logs' },
 ] as const;
 
 export default function CjShopifyUsaLayout() {

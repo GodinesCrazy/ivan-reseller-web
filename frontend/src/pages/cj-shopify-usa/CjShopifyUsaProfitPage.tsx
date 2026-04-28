@@ -66,30 +66,33 @@ function axiosMsg(e: unknown, fb: string): string {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function CjShopifyUsaProfitPage() {
-  const [data, setData] = useState<ProfitData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// Default date range: last 30 days
+function defaultFrom() { return new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10); }
+function defaultTo()   { return new Date().toISOString().slice(0, 10); }
 
-  const load = useCallback(async () => {
+export default function CjShopifyUsaProfitPage() {
+  const [data, setData]     = useState<ProfitData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]   = useState<string | null>(null);
+  const [from, setFrom]     = useState(defaultFrom());
+  const [to, setTo]         = useState(defaultTo());
+
+  const load = useCallback(async (f = from, t = to) => {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.get<{ ok: boolean } & ProfitData>('/api/cj-shopify-usa/profit');
+      const res = await api.get<{ ok: boolean } & ProfitData>('/api/cj-shopify-usa/profit', {
+        params: { from: f, to: t },
+      });
       if (res.data?.ok) {
-        setData({
-          kpis: res.data.kpis,
-          snapshots: res.data.snapshots,
-          orders: res.data.orders,
-          period: res.data.period,
-        });
+        setData({ kpis: res.data.kpis, snapshots: res.data.snapshots, orders: res.data.orders, period: res.data.period });
       }
     } catch (e) {
       setError(axiosMsg(e, 'No se pudieron cargar los datos de profit.'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [from, to]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -111,6 +114,31 @@ export default function CjShopifyUsaProfitPage() {
 
   return (
     <div className="space-y-6">
+
+      {/* Date range filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <label className="text-slate-500 dark:text-slate-400 font-medium">Desde</label>
+          <input type="date" value={from} max={to} title="Fecha inicio" placeholder="Fecha inicio"
+            onChange={e => setFrom(e.target.value)}
+            className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-sm" />
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <label className="text-slate-500 dark:text-slate-400 font-medium">Hasta</label>
+          <input type="date" value={to} min={from} max={defaultTo()} title="Fecha fin" placeholder="Fecha fin"
+            onChange={e => setTo(e.target.value)}
+            className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-sm" />
+        </div>
+        <button type="button" onClick={() => void load(from, to)} disabled={loading}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white disabled:opacity-50">
+          {loading ? 'Cargando…' : 'Aplicar'}
+        </button>
+        <button type="button" onClick={() => { setFrom(defaultFrom()); setTo(defaultTo()); void load(defaultFrom(), defaultTo()); }}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700">
+          Últimos 30 días
+        </button>
+      </div>
+
       {/* Data note */}
       {kpis.dataNote && (
         <div className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/20 px-4 py-3 text-sm text-sky-800 dark:text-sky-200">

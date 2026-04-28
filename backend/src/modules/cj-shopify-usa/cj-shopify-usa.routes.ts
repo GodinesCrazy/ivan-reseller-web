@@ -158,6 +158,30 @@ router.post('/config', async (req: Request, res: Response, next: NextFunction) =
   }
 });
 
+// ── GET /config/preview-impact — preview how many products pass/fail new rules ─
+router.get('/config/preview-impact', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const minMarginPct  = Number(req.query.minMarginPct  ?? 12);
+    const minProfitUsd  = Number(req.query.minProfitUsd  ?? 1.5);
+    const maxShippingUsd = Number(req.query.maxShippingUsd ?? 15);
+    const minCostUsd    = Number(req.query.minCostUsd    ?? 2);
+
+    const evaluations = await prisma.cjShopifyUsaProductEvaluation.findMany({
+      where: { userId },
+      select: { estimatedMarginPct: true, decision: true },
+    });
+
+    let approved = 0, rejected = 0;
+    for (const ev of evaluations) {
+      const margin = Number(ev.estimatedMarginPct ?? 0);
+      if (margin >= minMarginPct) approved++;
+      else rejected++;
+    }
+    res.json({ ok: true, approved, rejected, total: evaluations.length });
+  } catch (error) { next(error); }
+});
+
 // ── Automation ────────────────────────────────────────────────────────────────
 
 router.get('/automation/status', (req: Request, res: Response) => {
@@ -319,6 +343,22 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       }),
     ]);
 
+    // Webhook health: last order ingested via webhook vs last 48h
+    const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const lastWebhookOrder = await prisma.cjShopifyUsaOrder.findFirst({
+      where: { userId, createdAt: { gte: since48h } },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    const ordersNeedingAttention = await prisma.cjShopifyUsaOrder.count({
+      where: { userId, status: { in: ['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED'] } },
+    });
+    const webhookHealth = {
+      lastOrderReceived: lastWebhookOrder?.createdAt ?? null,
+      hasRecentActivity: !!lastWebhookOrder,
+      ordersNeedingAttention,
+    };
+
     res.json({
       ok: true,
       counts: {
@@ -338,6 +378,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
         profitSnapshots,
         tracesLast24h,
       },
+      webhookHealth,
     });
   } catch (error) {
     next(error);
@@ -495,6 +536,29 @@ router.post('/orders/sync', async (req: Request, res: Response, next: NextFuncti
   }
 });
 
+// ── POST /orders/:orderId/process — idempotent CJ order placement ────────────
+router.post('/orders/:orderId/process', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const orderId = String(req.params.orderId || '').trim();
+    const result = await cjShopifyUsaOrderIngestService.processOrder({ userId, orderId });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── POST /orders/auto-sync-tracking — bulk tracking sync for all shipped orders
+router.post('/orders/auto-sync-tracking', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaOrderIngestService.autoSyncAllTracking(userId);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/orders/:orderId/sync-tracking', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
@@ -645,6 +709,36 @@ router.get('/products', async (req: Request, res: Response, next: NextFunction) 
       }),
     }));
     res.json({ ok: true, products: productsWithStorefront });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── POST /products/:productId/re-evaluate — force fresh evaluation ────────────
+router.post('/products/:productId/re-evaluate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const productId = Number(req.params.productId);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      throw new AppError('ID inválido', 400, ErrorCode.VALIDATION_ERROR);
+    }
+    const product = await prisma.cjShopifyUsaProduct.findFirst({
+      where: { id: productId, userId },
+      include: { variants: { take: 1 } },
+    });
+    if (!product) throw new AppError('Producto no encontrado', 404, ErrorCode.NOT_FOUND);
+
+    const variant = product.variants[0];
+    if (!variant) throw new AppError('Producto sin variantes', 422, ErrorCode.VALIDATION_ERROR);
+
+    // Re-run evaluation using discover service
+    const result = await cjShopifyUsaDiscoverService.evaluate(
+      userId,
+      product.cjProductId,
+      undefined, // quantity
+      undefined, // postal code
+    );
+    res.json({ ok: true, evaluation: result });
   } catch (error) {
     next(error);
   }

@@ -148,6 +148,8 @@ export default function CjShopifyUsaOrdersPage() {
 
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [bulkRetrying, setBulkRetrying] = useState(false);
+  const [autoSyncing, setAutoSyncing] = useState(false);
 
   async function triggerOrderAction(orderId: string, action: string, label: string) {
     setActionBusy(orderId + action);
@@ -161,6 +163,48 @@ export default function CjShopifyUsaOrdersPage() {
     } finally {
       setActionBusy(null);
     }
+  }
+
+  async function bulkRetryFailed() {
+    const failedOrders = orders.filter(o => ['FAILED', 'NEEDS_MANUAL'].includes(o.status));
+    if (!failedOrders.length) return;
+    const ok = window.confirm(`¿Reintentar ${failedOrders.length} orden${failedOrders.length > 1 ? 'es' : ''} fallida${failedOrders.length > 1 ? 's' : ''}?`);
+    if (!ok) return;
+    setBulkRetrying(true);
+    setError(null);
+    let success = 0, failed = 0;
+    for (const o of failedOrders) {
+      try {
+        await api.post(`/api/cj-shopify-usa/orders/${o.id}/process`);
+        success++;
+      } catch { failed++; }
+    }
+    setActionMsg(`Reintento masivo: ${success} enviadas a CJ, ${failed} errores.`);
+    await load();
+    setBulkRetrying(false);
+  }
+
+  async function autoSyncTracking() {
+    setAutoSyncing(true);
+    setError(null);
+    try {
+      const res = await api.post<{ ok: boolean; synced: number; checked: number }>('/api/cj-shopify-usa/orders/auto-sync-tracking');
+      setActionMsg(`Auto-sync tracking: ${res.data.synced} actualizados de ${res.data.checked} revisados.`);
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, 'Error en auto-sync tracking.'));
+    } finally {
+      setAutoSyncing(false);
+    }
+  }
+
+  function trackingUrl(carrierCode: string | null, trackingNumber: string): string {
+    const carrier = (carrierCode || '').toLowerCase();
+    if (carrier.includes('usps'))   return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${trackingNumber}`;
+    if (carrier.includes('ups'))    return `https://www.ups.com/track?tracknum=${trackingNumber}`;
+    if (carrier.includes('fedex'))  return `https://www.fedex.com/fedextrack/?trknbr=${trackingNumber}`;
+    if (carrier.includes('dhl'))    return `https://www.dhl.com/en/express/tracking.html?AWB=${trackingNumber}`;
+    return `https://t.17track.net/en#nums=${trackingNumber}`;
   }
 
   const filtered = orders.filter((o) => filterStatus === 'ALL' || o.status === filterStatus);
@@ -215,6 +259,24 @@ export default function CjShopifyUsaOrdersPage() {
         >
           {syncing ? 'Sincronizando…' : 'Sincronizar últimas 24h'}
         </button>
+        <button
+          type="button"
+          disabled={autoSyncing}
+          onClick={() => void autoSyncTracking()}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900/60 disabled:opacity-40"
+        >
+          {autoSyncing ? 'Sincronizando tracking…' : '📦 Auto-sync Tracking'}
+        </button>
+        {orders.some(o => ['FAILED','NEEDS_MANUAL'].includes(o.status)) && (
+          <button
+            type="button"
+            disabled={bulkRetrying}
+            onClick={() => void bulkRetryFailed()}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60 disabled:opacity-40"
+          >
+            {bulkRetrying ? 'Reintentando…' : `🔄 Reintentar todas las fallidas (${orders.filter(o=>['FAILED','NEEDS_MANUAL'].includes(o.status)).length})`}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -229,7 +291,7 @@ export default function CjShopifyUsaOrdersPage() {
             <tr>
               <th className="px-3 py-2">Shopify Order</th>
               <th className="px-3 py-2">Estado</th>
-              <th className="px-3 py-2">Próximo paso</th>
+              <th className="px-3 py-2">Próximo paso / Error</th>
               <th className="px-3 py-2">CJ Order</th>
               <th className="px-3 py-2">Total</th>
               <th className="px-3 py-2">Tracking</th>
@@ -259,8 +321,14 @@ export default function CjShopifyUsaOrdersPage() {
                       {STATUS_LABEL[row.status] ?? row.status}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-                    {NEXT_STEP[row.status] ?? '—'}
+                  <td className="px-3 py-2 text-xs">
+                    {row.lastError ? (
+                      <span className="text-red-600 dark:text-red-400 line-clamp-2" title={row.lastError}>
+                        ⚠ {row.lastError.slice(0, 60)}{row.lastError.length > 60 ? '…' : ''}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 dark:text-slate-400">{NEXT_STEP[row.status] ?? '—'}</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-500">
                     {row.cjOrderId ?? '—'}
@@ -268,9 +336,15 @@ export default function CjShopifyUsaOrdersPage() {
                   <td className="px-3 py-2 tabular-nums text-xs">{usd(row.totalUsd)}</td>
                   <td className="px-3 py-2 text-xs">
                     {row.tracking?.trackingNumber ? (
-                      <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                      <a
+                        href={trackingUrl(row.tracking.carrierCode, row.tracking.trackingNumber)}
+                        target="_blank" rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="font-mono text-emerald-600 dark:text-emerald-400 hover:underline"
+                        title={`Carrier: ${row.tracking.carrierCode ?? 'Unknown'}`}
+                      >
                         {row.tracking.trackingNumber}
-                      </span>
+                      </a>
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}

@@ -88,13 +88,45 @@ export default function CjShopifyUsaLogsPage() {
     <div className="space-y-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="text"
-          placeholder="Filtrar por step (ej: listing.publish.error)"
+        <select
           value={filterStep}
           onChange={(e) => setFilterStep(e.target.value)}
-          className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 w-72"
-        />
+          title="Filtrar por step"
+          className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-700 dark:text-slate-300 w-64"
+        >
+          <option value="">Todos los steps</option>
+          <option value="error">⚠ Solo errores</option>
+          <optgroup label="Request">
+            <option value="request.start">request.start</option>
+            <option value="request.complete">request.complete</option>
+            <option value="request.error">request.error</option>
+          </optgroup>
+          <optgroup label="Listing">
+            <option value="listing.draft.created">listing.draft.created</option>
+            <option value="listing.publish.start">listing.publish.start</option>
+            <option value="listing.publish.success">listing.publish.success</option>
+            <option value="listing.publish.error">listing.publish.error</option>
+          </optgroup>
+          <optgroup label="Order">
+            <option value="order.import.start">order.import.start</option>
+            <option value="order.import.success">order.import.success</option>
+            <option value="order.import.error">order.import.error</option>
+          </optgroup>
+          <optgroup label="CJ">
+            <option value="cj.order.create.start">cj.order.create.start</option>
+            <option value="cj.order.create.success">cj.order.create.success</option>
+            <option value="cj.order.create.error">cj.order.create.error</option>
+          </optgroup>
+          <optgroup label="Tracking">
+            <option value="tracking.sync.start">tracking.sync.start</option>
+            <option value="tracking.sync.success">tracking.sync.success</option>
+            <option value="tracking.sync.error">tracking.sync.error</option>
+          </optgroup>
+          <optgroup label="Qualification">
+            <option value="qualification.start">qualification.start</option>
+            <option value="qualification.result">qualification.result</option>
+          </optgroup>
+        </select>
         <select
           value={limit}
           onChange={(e) => setLimit(Number(e.target.value))}

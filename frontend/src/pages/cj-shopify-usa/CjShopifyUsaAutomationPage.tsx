@@ -267,13 +267,22 @@ function ConfigPanel({ config, onChange, onSave }: {
 
       <label className="flex items-center gap-3 cursor-pointer">
         <div
-          onClick={() => onChange({ autoPublish: !config.autoPublish })}
+          onClick={() => {
+            if (!config.autoPublish) {
+              const confirmed = window.confirm(
+                '⚠️ ¿Activar auto-publicación?\n\nTodos los productos aprobados en cada ciclo se publicarán DIRECTAMENTE en Shopify sin revisión manual.\n\nAsegúrate de que el margen mínimo y filtros estén configurados correctamente antes de activar.'
+              );
+              if (!confirmed) return;
+            }
+            onChange({ autoPublish: !config.autoPublish });
+          }}
           className={`relative w-10 h-5 rounded-full transition-colors ${config.autoPublish ? 'bg-emerald-500' : 'bg-slate-700'}`}
         >
           <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${config.autoPublish ? 'translate-x-5' : 'translate-x-0.5'}`} />
         </div>
         <span className="text-sm text-slate-300">
           Auto-publicar (si OFF → solo crea drafts)
+          {config.autoPublish && <span className="ml-2 text-xs bg-amber-500/20 text-amber-300 rounded px-1.5 py-0.5">ACTIVO — publica sin revisión</span>}
         </span>
       </label>
 
