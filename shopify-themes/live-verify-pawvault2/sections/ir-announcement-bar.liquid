@@ -1,0 +1,318 @@
+{%- comment -%}
+  IVAN RESELLER - Premium Announcement Bar
+  Executive-grade top bar with refined messaging
+{%- endcomment -%}
+
+{%- liquid
+  assign show_bar = section.settings.show_bar
+  assign message = section.settings.message
+  assign link_text = section.settings.link_text
+  assign link_url = section.settings.link_url
+  assign highlight_text = section.settings.highlight_text
+-%}
+
+{% if show_bar and message != blank %}
+  <div class="ir-announcement-bar color-{{ section.settings.color_scheme }}" data-section-id="{{ section.id }}">
+    <div class="ir-announcement-bar__container">
+      <div class="ir-announcement-bar__content">
+        {% if section.settings.show_icon %}
+          <span class="ir-announcement-bar__icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              {% if section.settings.icon == 'truck' %}
+                <path d="M5 17H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1M9 17h6"/>
+                <circle cx="7" cy="17" r="2"/>
+                <circle cx="17" cy="17" r="2"/>
+              {% elsif section.settings.icon == 'shield' %}
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              {% elsif section.settings.icon == 'star' %}
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              {% elsif section.settings.icon == 'gift' %}
+                <polyline points="20 12 20 22 4 22 4 12"/>
+                <rect x="2" y="7" width="20" height="5"/>
+                <line x1="12" y1="22" x2="12" y2="7"/>
+                <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/>
+                <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/>
+              {% else %}
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              {% endif %}
+            </svg>
+          </span>
+        {% endif %}
+        
+        <span class="ir-announcement-bar__message">
+          {{ message }}
+          {% if highlight_text != blank %}
+            <span class="ir-announcement-bar__highlight">{{ highlight_text }}</span>
+          {% endif %}
+        </span>
+        
+        {% if link_text != blank and link_url != blank %}
+          <a href="{{ link_url }}" class="ir-announcement-bar__link">
+            {{ link_text }}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </a>
+        {% endif %}
+      </div>
+      
+      {% if section.settings.show_close %}
+        <button 
+          type="button" 
+          class="ir-announcement-bar__close" 
+          aria-label="Close announcement"
+          onclick="this.closest('.ir-announcement-bar').style.display='none'; localStorage.setItem('ir-announcement-closed', '{{ section.id }}');"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>
+    // Check if user previously closed this announcement
+    document.addEventListener('DOMContentLoaded', function() {
+      var closedId = localStorage.getItem('ir-announcement-closed');
+      var currentId = '{{ section.id }}';
+      if (closedId === currentId) {
+        var bar = document.querySelector('[data-section-id="{{ section.id }}"]');
+        if (bar) bar.style.display = 'none';
+      }
+    });
+  </script>
+{% endif %}
+
+<style>
+  .ir-announcement-bar {
+    position: relative;
+    z-index: 100;
+    background: linear-gradient(90deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    padding: 12px 0;
+  }
+  
+  .ir-announcement-bar.color-scheme-2 {
+    background: linear-gradient(90deg, #1e293b 0%, #334155 50%, #1e293b 100%);
+  }
+  
+  .ir-announcement-bar.color-scheme-3 {
+    background: #fafaf9;
+    color: #171717;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }
+  
+  .ir-announcement-bar__container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  
+  .ir-announcement-bar__content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+  }
+  
+  .ir-announcement-bar__icon {
+    display: flex;
+    align-items: center;
+    color: #22c55e;
+    margin-right: 4px;
+  }
+  
+  .ir-announcement-bar__message {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  
+  .ir-announcement-bar__highlight {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  
+  .color-scheme-3 .ir-announcement-bar__highlight {
+    background: #0f172a;
+    color: white;
+  }
+  
+  .ir-announcement-bar__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-weight: 600;
+    margin-left: 4px;
+    transition: opacity 0.2s ease;
+  }
+  
+  .ir-announcement-bar__link:hover {
+    opacity: 0.8;
+  }
+  
+  .ir-announcement-bar__link svg {
+    transition: transform 0.2s ease;
+  }
+  
+  .ir-announcement-bar__link:hover svg {
+    transform: translateX(3px);
+  }
+  
+  .ir-announcement-bar__close {
+    position: absolute;
+    right: 48px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease, background 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .ir-announcement-bar__close:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  .color-scheme-3 .ir-announcement-bar__close:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+  
+  @media screen and (max-width: 749px) {
+    .ir-announcement-bar {
+      font-size: 0.75rem;
+      padding: 10px 0;
+    }
+    
+    .ir-announcement-bar__container {
+      padding: 0 16px;
+    }
+    
+    .ir-announcement-bar__close {
+      right: 16px;
+    }
+  }
+  
+  @media screen and (max-width: 480px) {
+    .ir-announcement-bar__icon {
+      display: none;
+    }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "IR - Announcement Bar",
+  "class": "ir-announcement-bar-section",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_bar",
+      "label": "Show announcement bar",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "message",
+      "label": "Message",
+      "default": "Free shipping on orders over $50"
+    },
+    {
+      "type": "text",
+      "id": "highlight_text",
+      "label": "Highlighted text (optional)",
+      "info": "Will be styled with accent background"
+    },
+    {
+      "type": "text",
+      "id": "link_text",
+      "label": "Link text (optional)",
+      "default": "Shop Now"
+    },
+    {
+      "type": "url",
+      "id": "link_url",
+      "label": "Link URL"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_icon",
+      "label": "Show icon",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "icon",
+      "label": "Icon",
+      "options": [
+        {
+          "value": "truck",
+          "label": "Truck (Shipping)"
+        },
+        {
+          "value": "shield",
+          "label": "Shield (Security)"
+        },
+        {
+          "value": "star",
+          "label": "Star (Featured)"
+        },
+        {
+          "value": "gift",
+          "label": "Gift (Offer)"
+        },
+        {
+          "value": "info",
+          "label": "Info"
+        }
+      ],
+      "default": "truck"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_close",
+      "label": "Allow users to close",
+      "default": true
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Color scheme",
+      "default": "scheme-5"
+    }
+  ],
+  "presets": [
+    {
+      "name": "IR - Announcement Bar",
+      "category": "Ivan Reseller"
+    }
+  ]
+}
+{% endschema %}

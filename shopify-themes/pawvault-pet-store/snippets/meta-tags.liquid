@@ -5,6 +5,7 @@
 {% enddoc %}
 
 <meta charset="utf-8">
+<meta name="google-site-verification" content="RWBvLk4B5eMwTqssNC0eY-RZfwhD9PZda7ifHyguv6g" />
 <meta
   http-equiv="X-UA-Compatible"
   content="IE=edge"
@@ -74,54 +75,64 @@
   content="{{ og_description | escape }}"
 >
 
-{%- if page_image -%}
-  <meta
-    property="og:image"
-    content="http:{{ page_image | image_url }}"
-  >
-  <meta
-    property="og:image:secure_url"
-    content="https:{{ page_image | image_url }}"
-  >
-  <meta
-    property="og:image:width"
-    content="{{ page_image.width }}"
-  >
-  <meta
-    property="og:image:height"
-    content="{{ page_image.height }}"
-  >
+{%- liquid
+  assign og_image_url = nil
+  assign og_image_width = nil
+  assign og_image_height = nil
+  assign og_image_alt = og_title
+
+  if request.page_type == 'product' and product.featured_image
+    assign og_image_url = product.featured_image | image_url: width: 1200
+    assign og_image_width = product.featured_image.width | at_most: 1200
+    assign og_image_height = product.featured_image.height
+    assign og_image_alt = product.featured_image.alt | default: product.title
+  elsif request.page_type == 'collection' and collection.image
+    assign og_image_url = collection.image | image_url: width: 1200
+    assign og_image_width = collection.image.width | at_most: 1200
+    assign og_image_height = collection.image.height
+  elsif request.page_type == 'article' and article.image
+    assign og_image_url = article.image | image_url: width: 1200
+    assign og_image_width = article.image.width | at_most: 1200
+    assign og_image_height = article.image.height
+    assign og_image_alt = article.image.alt | default: article.title
+  elsif page_image
+    assign og_image_url = page_image | image_url: width: 1200
+    assign og_image_width = page_image.width | at_most: 1200
+    assign og_image_height = page_image.height
+  endif
+%}
+
+{%- if og_image_url -%}
+  <meta property="og:image" content="https:{{ og_image_url }}">
+  <meta property="og:image:secure_url" content="https:{{ og_image_url }}">
+  {%- if og_image_width -%}
+    <meta property="og:image:width" content="{{ og_image_width }}">
+    <meta property="og:image:height" content="{{ og_image_height }}">
+  {%- endif -%}
+  <meta property="og:image:alt" content="{{ og_image_alt | escape }}">
+  <meta property="og:image:type" content="image/jpeg">
 {%- endif -%}
 
 {%- if request.page_type == 'product' -%}
-  <meta
-    property="og:price:amount"
-    content="{{ product.price | money_without_currency | strip_html }}"
-  >
-  <meta
-    property="og:price:currency"
-    content="{{ cart.currency.iso_code }}"
-  >
+  <meta property="og:price:amount" content="{{ product.price | money_without_currency | strip_html }}">
+  <meta property="og:price:currency" content="{{ cart.currency.iso_code }}">
+  <meta property="product:price:amount" content="{{ product.price | money_without_currency | strip_html }}">
+  <meta property="product:price:currency" content="{{ cart.currency.iso_code }}">
+  <meta property="product:availability" content="{% if product.available %}in stock{% else %}out of stock{% endif %}">
+  <meta property="product:condition" content="new">
+  <meta property="product:retailer_item_id" content="{{ product.variants.first.sku | default: product.id }}">
 {%- endif -%}
 
 {%- if settings.social_twitter_link != blank -%}
-  <meta
-    name="twitter:site"
-    content="{{ settings.social_twitter_link | split: 'twitter.com/' | last | prepend: '@' }}"
-  >
+  <meta name="twitter:site" content="{{ settings.social_twitter_link | split: 'twitter.com/' | last | prepend: '@' }}">
 {%- endif -%}
-<meta
-  name="twitter:card"
-  content="summary_large_image"
->
-<meta
-  name="twitter:title"
-  content="{{ og_title | escape }}"
->
-<meta
-  name="twitter:description"
-  content="{{ og_description | escape }}"
->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ og_title | escape }}">
+<meta name="twitter:description" content="{{ og_description | escape }}">
+{%- if og_image_url -%}
+  <meta name="twitter:image" content="https:{{ og_image_url }}">
+  <meta name="twitter:image:alt" content="{{ og_image_alt | escape }}">
+{%- endif -%}
 
 <title>
   {{ page_title }}

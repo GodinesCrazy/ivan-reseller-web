@@ -32,7 +32,7 @@ import {
   SlidersHorizontal,
   Zap,
 } from 'lucide-react';
-import { isCjEbayModuleEnabled, isCjMlChileModuleEnabled, isCjShopifyUsaModuleEnabled } from '@/config/feature-flags';
+import { isCjEbayModuleEnabled, isCjMlChileModuleEnabled, isCjShopifyUsaModuleEnabled, isTopDawgShopifyUsaModuleEnabled } from '@/config/feature-flags';
 
 interface NavItem {
   path: string;
@@ -70,6 +70,21 @@ const cjMlChileNavGroup: NavGroup = {
     { path: '/cj-ml-chile/alerts', label: 'Alertas', icon: Bell },
     { path: '/cj-ml-chile/profit', label: 'Profit', icon: LineChart },
     { path: '/cj-ml-chile/logs', label: 'Logs', icon: ScrollText },
+  ],
+};
+
+const topDawgShopifyUsaNavGroup: NavGroup = {
+  title: 'TopDawg → Shopify USA',
+  items: [
+    { path: '/topdawg-shopify-usa/overview',   label: 'Resumen',        icon: LayoutDashboard },
+    { path: '/topdawg-shopify-usa/discover',   label: 'Descubrir',      icon: Search },
+    { path: '/topdawg-shopify-usa/listings',   label: 'Store Products', icon: List },
+    { path: '/topdawg-shopify-usa/orders',     label: 'Órdenes',        icon: Truck },
+    { path: '/topdawg-shopify-usa/alerts',     label: 'Alertas',        icon: Bell },
+    { path: '/topdawg-shopify-usa/profit',     label: 'Profit',         icon: LineChart },
+    { path: '/topdawg-shopify-usa/automation', label: 'Automatización', icon: Zap },
+    { path: '/topdawg-shopify-usa/settings',   label: 'Configuración',  icon: SlidersHorizontal },
+    { path: '/topdawg-shopify-usa/logs',       label: 'Logs',           icon: ScrollText },
   ],
 };
 
@@ -151,6 +166,7 @@ export default function Sidebar() {
     ...(isCjEbayModuleEnabled() ? [cjEbayNavGroup] : []),
     ...(isCjMlChileModuleEnabled() ? [cjMlChileNavGroup] : []),
     ...(isCjShopifyUsaModuleEnabled() ? [cjShopifyUsaNavGroup] : []),
+    ...(isTopDawgShopifyUsaModuleEnabled() ? [topDawgShopifyUsaNavGroup] : []),
     ...navGroups,
   ];
 

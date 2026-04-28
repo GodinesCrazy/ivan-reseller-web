@@ -16,3 +16,7 @@ export function isCjEbayUkModuleEnabled(): boolean {
 export function isCjShopifyUsaModuleEnabled(): boolean {
   return String(import.meta.env.VITE_ENABLE_CJ_SHOPIFY_USA_MODULE || '').toLowerCase() === 'true';
 }
+
+export function isTopDawgShopifyUsaModuleEnabled(): boolean {
+  return String(import.meta.env.VITE_ENABLE_TOPDAWG_SHOPIFY_USA_MODULE || '').toLowerCase() === 'true';
+}

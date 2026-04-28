@@ -1,0 +1,75 @@
+{%- layout none -%}
+{%- assign all_products = collections.all.products -%}
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+  <channel>
+    <title>{{ shop.name | xml_escape }}</title>
+    <link>{{ shop.url }}</link>
+    <description>Premium pet supplies for dogs and cats. Free shipping on orders $50+. USA wide.</description>
+    {%- for product in all_products limit: 500 -%}
+      {%- unless product.available -%}{%- continue -%}{%- endunless -%}
+      {%- assign variant = product.variants.first -%}
+      {%- assign product_url = shop.url | append: product.url -%}
+      {%- assign image_url = '' -%}
+      {%- if product.featured_image -%}
+        {%- assign image_url = product.featured_image | image_url: width: 1200 | prepend: 'https:' -%}
+      {%- endif -%}
+      {%- assign price_val = variant.price | money_without_currency | remove: ',' -%}
+      {%- assign compare_val = variant.compare_at_price | money_without_currency | remove: ',' -%}
+      <item>
+        <g:id>{{ variant.id }}</g:id>
+        <g:item_group_id>{{ product.id }}</g:item_group_id>
+        <title>{{ product.title | xml_escape | truncate: 150, '' }}</title>
+        <description>{{ product.description | strip_html | xml_escape | truncate: 5000, '' }}</description>
+        <link>{{ product_url }}</link>
+        {%- if image_url != '' -%}
+          <g:image_link>{{ image_url | xml_escape }}</g:image_link>
+        {%- endif -%}
+        {%- for image in product.images offset: 1 limit: 9 -%}
+          <g:additional_image_link>{{ image | image_url: width: 1200 | prepend: 'https:' | xml_escape }}</g:additional_image_link>
+        {%- endfor -%}
+        <g:availability>{% if variant.available %}in stock{% else %}out of stock{% endif %}</g:availability>
+        <g:price>{{ price_val }} USD</g:price>
+        {%- if variant.compare_at_price > variant.price -%}
+          <g:sale_price>{{ price_val }} USD</g:sale_price>
+          <g:sale_price_effective_date>{{ 'now' | date: '%Y-%m-%dT00:00-08:00' }}/{{ 'now' | date: '%Y' | plus: 1 }}-12-31T23:59-08:00</g:sale_price_effective_date>
+        {%- endif -%}
+        <g:brand>PawVault</g:brand>
+        <g:condition>new</g:condition>
+        <g:product_type>Pet Supplies</g:product_type>
+        {%- assign product_type_lower = product.type | downcase -%}
+        {%- assign title_lower = product.title | downcase -%}
+        {%- if title_lower contains 'dog' or title_lower contains 'puppy' or title_lower contains 'canine' -%}
+          <g:custom_label_0>dogs</g:custom_label_0>
+        {%- elsif title_lower contains 'cat' or title_lower contains 'kitten' or title_lower contains 'feline' -%}
+          <g:custom_label_0>cats</g:custom_label_0>
+        {%- else -%}
+          <g:custom_label_0>pets</g:custom_label_0>
+        {%- endif -%}
+        {%- if title_lower contains 'groom' or title_lower contains 'brush' or title_lower contains 'shampoo' or title_lower contains 'trimmer' -%}
+          <g:custom_label_1>grooming</g:custom_label_1>
+        {%- elsif title_lower contains 'toy' or title_lower contains 'ball' or title_lower contains 'chew' or title_lower contains 'puzzle' -%}
+          <g:custom_label_1>toys</g:custom_label_1>
+        {%- elsif title_lower contains 'bed' or title_lower contains 'mat' or title_lower contains 'cushion' or title_lower contains 'house' -%}
+          <g:custom_label_1>beds</g:custom_label_1>
+        {%- elsif title_lower contains 'bowl' or title_lower contains 'feeder' or title_lower contains 'fountain' -%}
+          <g:custom_label_1>feeding</g:custom_label_1>
+        {%- elsif title_lower contains 'collar' or title_lower contains 'harness' or title_lower contains 'leash' -%}
+          <g:custom_label_1>leash-harness</g:custom_label_1>
+        {%- else -%}
+          <g:custom_label_1>accessories</g:custom_label_1>
+        {%- endif -%}
+        <g:shipping>
+          <g:country>US</g:country>
+          <g:service>Standard</g:service>
+          <g:price>0.00 USD</g:price>
+        </g:shipping>
+        <g:identifier_exists>no</g:identifier_exists>
+        {%- if variant.sku != '' and variant.sku != blank -%}
+          <g:mpn>{{ variant.sku | xml_escape }}</g:mpn>
+        {%- endif -%}
+        <g:google_product_category>5</g:google_product_category>
+      </item>
+    {%- endfor -%}
+  </channel>
+</rss>

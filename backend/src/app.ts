@@ -77,6 +77,7 @@ import cjEbayRoutes from './modules/cj-ebay/cj-ebay.routes';
 import cjMlChileRoutes from './modules/cj-ml-chile/cj-ml-chile.routes';
 import cjEbayUkRoutes from './modules/cj-ebay-uk/cj-ebay-uk.routes';
 import cjShopifyUsaRoutes from './modules/cj-shopify-usa/cj-shopify-usa.routes';
+import topDawgShopifyUsaRoutes from './modules/topdawg-shopify-usa/topdawg-shopify-usa.routes';
 
 // ✅ FIX STABILITY: Import overload protection and timeout middlewares
 import { overloadProtectionMiddleware } from './middleware/overload-protection.middleware';
@@ -1153,6 +1154,7 @@ app.use('/api/cj-ebay', cjEbayRoutes);
 app.use('/api/cj-ebay-uk', cjEbayUkRoutes);
 app.use('/api/cj-ml-chile', cjMlChileRoutes);
 app.use('/api/cj-shopify-usa', cjShopifyUsaRoutes);
+app.use('/api/topdawg-shopify-usa', topDawgShopifyUsaRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/proxies', proxiesRoutes);

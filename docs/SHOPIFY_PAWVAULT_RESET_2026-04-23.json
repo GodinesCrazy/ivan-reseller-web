@@ -1,0 +1,92 @@
+{
+  "executedAt": "2026-04-23T23:45:17.541Z",
+  "shop": "ivanreseller-2.myshopify.com",
+  "activeBefore": 31,
+  "archivedInShopify": 31,
+  "archiveFailures": 0,
+  "activeAfter": 0,
+  "localListingsMarkedArchived": 29,
+  "localStatusBreakdown": [
+    {
+      "_count": {
+        "_all": 30
+      },
+      "status": "ARCHIVED"
+    },
+    {
+      "_count": {
+        "_all": 11
+      },
+      "status": "DRAFT"
+    },
+    {
+      "_count": {
+        "_all": 2
+      },
+      "status": "FAILED"
+    }
+  ],
+  "archivedSample": [
+    {
+      "id": 9146323697876,
+      "title": "10,000mAh Portable Power Bank",
+      "handle": "portable-mini-large-ccity-10000mah-power-bank-cjsjsjcd00363-white-10000mah"
+    },
+    {
+      "id": 9146323763412,
+      "title": "2-in-1 Screen Cleaner Kit",
+      "handle": "2-in-1-phone-computer-screen-cleaner-kit-for-screen-dust-removal-microfiber-cloth-set-cjsj"
+    },
+    {
+      "id": 9146510278868,
+      "title": "6-Piece Travel Storage Bag Set",
+      "handle": "6-piece-travel-storage-bag-set-26"
+    },
+    {
+      "id": 9146322780372,
+      "title": "9pcs Clothes Storage Bags Water Resistant",
+      "handle": "9pcs-clothes-storage-bags-water-resistant-travel-luggage-organizer-clothing-packing-cubes"
+    },
+    {
+      "id": 9146323435732,
+      "title": "Adjustable Aluminum Laptop Stand",
+      "handle": "simple-vertical-aluminum-laptop-stand-adjustable-cjjt169656604dw"
+    },
+    {
+      "id": 9146323534036,
+      "title": "Anti-Fatigue Desk Mat",
+      "handle": "anti-fatigue-rubber-floor-mat-dome-hollow-anti-static-cjyd253208001az"
+    },
+    {
+      "id": 9146323665108,
+      "title": "Bluetooth Key Finder",
+      "handle": "bluetooth-tracker-key-finder-cjjsaqjb00013-champagne"
+    },
+    {
+      "id": 9146323501268,
+      "title": "Cable Management Box",
+      "handle": "dust-proof-storage-cable-management-box-hub-organizer-box-cjcc121180401az"
+    },
+    {
+      "id": 9150036345044,
+      "title": "Car phone holder",
+      "handle": "car-phone-holder-cjsjsjsj00347-red3"
+    },
+    {
+      "id": 9150083137748,
+      "title": "Car Phone Holder Air Outlet",
+      "handle": "car-phone-holder-air-outlet-cjsj110176501az"
+    },
+    {
+      "id": 9146515226836,
+      "title": "Car Seat Gap Organizer",
+      "handle": "car-seat-gap-organizer-31"
+    },
+    {
+      "id": 9146514473172,
+      "title": "Carbon Fiber RFID Wallet",
+      "handle": "rfid-carbon-fiber-card-holder-18"
+    }
+  ],
+  "failures": []
+}

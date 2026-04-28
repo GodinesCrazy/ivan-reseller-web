@@ -2,3 +2,11 @@ publish-pet-drafts.mjs
 run-automation.mjs
 start-automation.mjs
 sync-db-shopify.mjs
+
+# Scripts with hardcoded credentials
+create-blog-posts.mjs
+create-more-content.mjs
+seo-titles-v2.mjs
+seo-descriptions.mjs
+seo-collections.mjs
+merge-variants.mjs

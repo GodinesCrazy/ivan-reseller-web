@@ -96,6 +96,17 @@ const CjShopifyUsaLogsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyU
 const CjShopifyUsaDiscoverPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaDiscoverPage'));
 const CjShopifyUsaSettingsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaSettingsPage'));
 const CjShopifyUsaAutomationPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaAutomationPage'));
+const TopDawgShopifyUsaModuleGate    = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaModuleGate'));
+const TopDawgShopifyUsaLayout        = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaLayout'));
+const TopDawgShopifyUsaOverviewPage  = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaOverviewPage'));
+const TopDawgShopifyUsaDiscoverPage  = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaDiscoverPage'));
+const TopDawgShopifyUsaListingsPage  = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaListingsPage'));
+const TopDawgShopifyUsaOrdersPage    = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaOrdersPage'));
+const TopDawgShopifyUsaAlertsPage    = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaAlertsPage'));
+const TopDawgShopifyUsaProfitPage    = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaProfitPage'));
+const TopDawgShopifyUsaLogsPage      = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaLogsPage'));
+const TopDawgShopifyUsaSettingsPage  = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaSettingsPage'));
+const TopDawgShopifyUsaAutomationPage= lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaAutomationPage'));
 const Listings = lazy(() => import('@pages/Listings'));
 const ControlCenter = lazy(() => import('@pages/ControlCenter'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
@@ -352,6 +363,21 @@ function AppContent() {
             <Route path="logs" element={<CjShopifyUsaLogsPage />} />
             <Route path="discover" element={<CjShopifyUsaDiscoverPage />} />
             <Route path="automation" element={<CjShopifyUsaAutomationPage />} />
+          </Route>
+        </Route>
+
+        <Route path="topdawg-shopify-usa" element={<TopDawgShopifyUsaModuleGate />}>
+          <Route element={<TopDawgShopifyUsaLayout />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview"    element={<TopDawgShopifyUsaOverviewPage />} />
+            <Route path="discover"    element={<TopDawgShopifyUsaDiscoverPage />} />
+            <Route path="listings"    element={<TopDawgShopifyUsaListingsPage />} />
+            <Route path="orders"      element={<TopDawgShopifyUsaOrdersPage />} />
+            <Route path="alerts"      element={<TopDawgShopifyUsaAlertsPage />} />
+            <Route path="profit"      element={<TopDawgShopifyUsaProfitPage />} />
+            <Route path="logs"        element={<TopDawgShopifyUsaLogsPage />} />
+            <Route path="settings"    element={<TopDawgShopifyUsaSettingsPage />} />
+            <Route path="automation"  element={<TopDawgShopifyUsaAutomationPage />} />
           </Route>
         </Route>
 
