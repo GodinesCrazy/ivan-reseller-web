@@ -313,6 +313,33 @@ class CjShopifyUsaAutomationService {
             preferredShippingQuoteId: ev.shippingQuoteId ?? null,
           });
 
+          // ── Step 4b: Auto-draft sibling variants for multi-variant publishing ──
+          // Load ALL variants for this product and create sibling drafts
+          const allVariants = await prisma.cjShopifyUsaProductVariant.findMany({
+            where: { productId: product.id },
+            orderBy: { id: 'asc' },
+          });
+          let siblingsDrafted = 0;
+          for (const sibVar of allVariants) {
+            if (sibVar.id === firstVariant.id) continue;
+            if (Number(sibVar.unitCostUsd ?? 0) <= 0) continue;
+            if (Number(sibVar.stockLastKnown ?? 0) < 1) continue;
+            try {
+              await cjShopifyUsaPublishService.buildDraft({
+                userId,
+                productId: product.id,
+                variantId: sibVar.id,
+                quantity: 1,
+              });
+              siblingsDrafted++;
+            } catch {
+              // Sibling draft failure is non-blocking
+            }
+          }
+          if (siblingsDrafted > 0) {
+            log('info', `Auto-drafted ${siblingsDrafted} sibling variants for multi-variant publishing`);
+          }
+
           cycle.draftsCreated++;
           log('success', `Draft created: listing #${listing.id}`);
 
@@ -326,6 +353,16 @@ class CjShopifyUsaAutomationService {
             // ── Step 6: Assign to pet collections ──
             if (published.shopifyProductId) {
               await this.assignToCollections(userId, published.shopifyProductId, product.title ?? '');
+            }
+
+            // ── Step 7: Expand variants (safety net for products with unpublished variants) ──
+            try {
+              const expandResult = await cjShopifyUsaPublishService.expandProductVariants({ userId, listingId: listing.id });
+              if (expandResult.expanded > 0) {
+                log('success', `Expanded: +${expandResult.expanded} variants for ${product.title?.slice(0, 40)}`);
+              }
+            } catch {
+              // Expand failure is non-blocking — product is already published
             }
           }
 

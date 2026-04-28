@@ -147,6 +147,8 @@ export interface DiscoverImportDraftResult {
     listedPriceUsd: number | null;
     shopifySku: string | null;
   };
+  /** Number of additional variant drafts created as siblings for multi-variant publishing. */
+  siblingsDrafted?: number;
 }
 
 export const cjShopifyUsaDiscoverService = {
@@ -373,6 +375,35 @@ export const cjShopifyUsaDiscoverService = {
       quantity,
     });
 
+    // ── Auto-draft ALL other eligible variants as siblings ──
+    // When publishListing runs on the primary listing, it will detect these
+    // sibling DRAFT listings and create a multi-variant Shopify product with
+    // a proper variant picker (Color / Size / Style selector).
+    const otherEligible = eligibleVariants.filter(
+      (v) => v.id !== targetVariant.id && Number(v.unitCostUsd ?? 0) > 0,
+    );
+    let siblingsDrafted = 0;
+
+    for (const sibVar of otherEligible) {
+      try {
+        await cjShopifyUsaPublishService.buildDraft({
+          userId,
+          productId: dbProduct.id,
+          variantId: sibVar.id,
+          quantity: 1,
+        });
+        siblingsDrafted++;
+      } catch {
+        // Sibling draft failure is non-blocking; primary draft is already created.
+      }
+    }
+
+    if (siblingsDrafted > 0) {
+      console.log(
+        `[ShopifyDiscover] Auto-drafted ${siblingsDrafted} sibling variants for product ${cjProductId} (total eligible: ${eligibleVariants.length})`,
+      );
+    }
+
     return {
       dbProductId: dbProduct.id,
       listing: {
@@ -381,6 +412,7 @@ export const cjShopifyUsaDiscoverService = {
         listedPriceUsd: listing.listedPriceUsd ? Number(listing.listedPriceUsd) : null,
         shopifySku: listing.shopifySku,
       },
+      siblingsDrafted,
     };
   },
 

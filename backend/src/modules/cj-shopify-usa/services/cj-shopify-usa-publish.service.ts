@@ -38,6 +38,31 @@ function buildVariantLabel(attrs: unknown, productTitle: string): string {
   return raw;
 }
 
+/**
+ * Infer the most appropriate Shopify option name (Color, Size, Style, Variant)
+ * from the set of variant labels coming from CJ.
+ */
+function inferOptionName(labels: string[]): string {
+  if (labels.length === 0) return 'Variant';
+
+  const colorPatterns = /\b(red|blue|green|black|white|pink|yellow|orange|purple|brown|gray|grey|navy|beige|gold|silver|khaki|rose|sky|ivory|teal|coral|aqua|maroon|magenta|lavender|cream|olive|tan|peach|violet|indigo|ruby|mint|sapphire|turquoise|charcoal|champagne|burgundy|emerald|crimson|scarlet|onyx|ivory|jet)\b/i;
+  const sizePatterns = /\b(small|medium|large|xl|xxl|xxxl|xs|s|m|l|\d+\s*(cm|mm|inch|in|ft|oz|ml|kg|lb))\b/i;
+
+  let colorHits = 0;
+  let sizeHits = 0;
+  for (const label of labels) {
+    const lower = label.toLowerCase();
+    if (colorPatterns.test(lower)) colorHits++;
+    if (sizePatterns.test(lower)) sizeHits++;
+  }
+
+  const threshold = labels.length * 0.4;
+  if (colorHits > sizeHits && colorHits >= threshold) return 'Color';
+  if (sizeHits > colorHits && sizeHits >= threshold) return 'Size';
+  if (colorHits > 0 || sizeHits > 0) return colorHits >= sizeHits ? 'Color' : 'Size';
+  return 'Style';
+}
+
 function buildMultiVariantOptions(
   rows: VariantRow[],
   productTitle: string,
@@ -47,23 +72,32 @@ function buildMultiVariantOptions(
 } {
   const seen = new Set<string>();
   const variantInputs: VariantInput[] = [];
+  const allLabels: string[] = [];
 
   for (const row of rows) {
     const label = buildVariantLabel(row.attrs, productTitle);
     if (seen.has(label)) continue;
     seen.add(label);
+    allLabels.push(label);
     variantInputs.push({
       sku: row.cjSku,
       price: row.price,
-      optionValues: [{ optionName: 'Variant', name: label }],
+      optionValues: [], // filled below once optionName is resolved
       listingId: row.listingId,
       quantity: row.quantity,
     });
   }
 
+  const optionName = inferOptionName(allLabels);
+
+  // Fill optionValues with the resolved optionName
+  for (let i = 0; i < variantInputs.length; i++) {
+    variantInputs[i].optionValues = [{ optionName, name: allLabels[i] }];
+  }
+
   return {
     productOptions: [
-      { name: 'Variant', position: 1, values: variantInputs.map((v) => ({ name: v.optionValues[0].name })) },
+      { name: optionName, position: 1, values: variantInputs.map((v) => ({ name: v.optionValues[0].name })) },
     ],
     variantInputs,
   };
@@ -562,7 +596,7 @@ export const cjShopifyUsaPublishService = {
         variants: { orderBy: { id: 'asc' } },
         listings: {
           where: { userId: input.userId },
-          select: { id: true, status: true },
+          select: { id: true, status: true, variantId: true },
         },
       },
     });
@@ -579,15 +613,36 @@ export const cjShopifyUsaPublishService = {
       );
     }
 
-    // ── Duplicate guard: reject if product already has an active/draft listing ──
-    const BUSY = ['ACTIVE', 'DRAFT', 'PUBLISHING', 'RECONCILE_PENDING'];
+    // ── Duplicate guard: reject if THIS VARIANT already has an active/draft listing ──
+    // Allows multiple drafts for different variants of the same product (multi-variant publishing).
+    const BUSY = ['ACTIVE', 'PUBLISHING', 'RECONCILE_PENDING'];
+    const DRAFT_BUSY = ['DRAFT', ...BUSY];
+    const resolvedVariantId = input.variantId
+      ? input.variantId
+      : product.variants[0]?.id ?? null;
+
+    // Block if ANY listing is already ACTIVE/PUBLISHING (product is live on Shopify)
     const activeListing = product.listings.find((l) => BUSY.includes(l.status));
     if (activeListing) {
       throw new AppError(
-        `Product already has a ${activeListing.status} listing (#${activeListing.id}). Cannot create a duplicate.`,
+        `Product already has a ${activeListing.status} listing (#${activeListing.id}). Use expandProductVariants to add more variants.`,
         409,
         ErrorCode.VALIDATION_ERROR,
       );
+    }
+
+    // Block if THIS specific variant already has a DRAFT listing
+    if (resolvedVariantId) {
+      const variantDraftListing = product.listings.find(
+        (l) => l.status === 'DRAFT' && l.variantId === resolvedVariantId,
+      );
+      if (variantDraftListing) {
+        throw new AppError(
+          `Variant already has a DRAFT listing (#${variantDraftListing.id}). Publish it or remove it first.`,
+          409,
+          ErrorCode.VALIDATION_ERROR,
+        );
+      }
     }
 
     const variant =
