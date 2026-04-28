@@ -284,7 +284,7 @@ export const cjShopifyUsaDiscoverService = {
             productId: dbProduct.id,
             cjSku: v.cjSku,
             cjVid: v.cjVid ?? null,
-            attributes: (v.attributes ?? {}) as Prisma.InputJsonValue,
+            attributes: { ...(v.attributes ?? {}), variantImage: v.variantImage } as Prisma.InputJsonValue,
             unitCostUsd: v.unitCostUsd > 0 ? v.unitCostUsd : null,
             stockLastKnown: v.stock ?? null,
             stockCheckedAt: new Date(),

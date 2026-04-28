@@ -981,6 +981,33 @@ export class CjShopifyUsaAdminService {
     return data.product?.media?.nodes?.length ?? 0;
   }
 
+  async getProductMedia(input: { userId: number; productId: string }) {
+    const data = await this.graphql<{
+      product?: {
+        media?: {
+          nodes?: Array<{ id: string; alt: string | null; preview?: { image?: { url: string } } }>;
+        } | null;
+      } | null;
+    }>({
+      userId: input.userId,
+      query: `
+        query CjShopifyUsaProductMediaFull($productId: ID!) {
+          product(id: $productId) {
+            media(first: 50) {
+              nodes {
+                id
+                alt
+                preview { image { url } }
+              }
+            }
+          }
+        }
+      `,
+      variables: { productId: input.productId },
+    });
+    return data.product?.media?.nodes ?? [];
+  }
+
   async productCreateMedia(input: {
     userId: number;
     productId: string;
@@ -1161,6 +1188,64 @@ export class CjShopifyUsaAdminService {
     }
 
     return product;
+  }
+
+  async deleteProduct(input: { userId: number; productId: string }) {
+    await this.graphql<any>({
+      userId: input.userId,
+      query: `
+        mutation productDelete($input: ProductDeleteInput!) {
+          productDelete(input: $input) {
+            deletedProductId
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      variables: {
+        input: { id: input.productId },
+      },
+    });
+  }
+
+  async updateVariantMedia(input: {
+    userId: number;
+    variantId: string;
+    mediaId: string;
+  }) {
+    const data = await this.graphql<{
+      productVariantUpdate?: {
+        userErrors?: ShopifyGraphqlUserError[] | null;
+      } | null;
+    }>({
+      userId: input.userId,
+      query: `
+        mutation CjShopifyUsaUpdateVariantMedia($input: ProductVariantInput!) {
+          productVariantUpdate(input: $input) {
+            productVariant {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          id: input.variantId,
+          mediaId: input.mediaId,
+        },
+      },
+    });
+
+    const errors = data.productVariantUpdate?.userErrors ?? [];
+    if (errors.length > 0) {
+      console.warn(`[ShopifyAdmin] updateVariantMedia failed for ${input.variantId}:`, errors.map((e) => e.message).join('; '));
+    }
   }
 
   async updateVariantPrice(input: {

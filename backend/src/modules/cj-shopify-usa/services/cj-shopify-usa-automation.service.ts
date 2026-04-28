@@ -261,6 +261,14 @@ class CjShopifyUsaAutomationService {
         log('warn', `Retry queue step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
 
+      // ── Step 0.8: Sync active listing prices (Phase 4) ──
+      log('info', 'Step 0.8: Syncing prices for active listings...');
+      try {
+        await this.syncActiveListingPrices(userId, log);
+      } catch (err) {
+        log('warn', `Price sync step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+      }
+
       // ── Step 1: Find products with APPROVED evaluation and no active listing ──
       log('info', 'Scanning approved CJ products database...');
 
@@ -651,6 +659,106 @@ class CjShopifyUsaAutomationService {
       }
     } catch {
       // Non-blocking — collection assignment failure must not fail the cycle
+    }
+  }
+
+  // ── Phase 4: Price Synchronization ─────────────────────────────────────
+  // Protect margins by monitoring CJ supplier costs. If supplier raises price,
+  // we proportionally raise Shopify price.
+
+  private async syncActiveListingPrices(userId: number, log: (level: CycleEvent['level'], message: string) => void): Promise<void> {
+    const { createCjSupplierAdapter } = await import('./../../cj-ebay/adapters/cj-supplier.adapter.js');
+    const { cjShopifyUsaQualificationService } = await import('./cj-shopify-usa-qualification.service.js');
+    const { cjShopifyUsaAdminService } = await import('./cj-shopify-usa-admin.service.js');
+
+    const activeListings = await prisma.cjShopifyUsaListing.findMany({
+      where: { userId, status: 'ACTIVE' },
+      include: {
+        variant: { include: { product: true } },
+        shippingQuote: true,
+      },
+    });
+
+    if (activeListings.length === 0) return;
+
+    // Group by CJ Product ID to minimize CJ API calls
+    const listingsByProduct = new Map<number, typeof activeListings>();
+    for (const listing of activeListings) {
+      if (!listing.variant?.product) continue;
+      const pid = listing.variant.productId;
+      if (!listingsByProduct.has(pid)) listingsByProduct.set(pid, []);
+      listingsByProduct.get(pid)!.push(listing);
+    }
+
+    log('info', `Checking CJ prices for ${listingsByProduct.size} active products...`);
+    const adapter = createCjSupplierAdapter(userId);
+    let priceChanges = 0;
+
+    for (const [productId, productListings] of listingsByProduct.entries()) {
+      const cjPid = productListings[0].variant!.product.cjProductId;
+      let cjVariants: any[] = [];
+      
+      try {
+        cjVariants = await adapter.getVariantsForProduct(cjPid);
+      } catch (err) {
+        // Skip on API failure
+        continue;
+      }
+
+      for (const listing of productListings) {
+        const matchingCjVariant = cjVariants.find((v) => v.cjVid === listing.variant!.cjVid || v.cjSku === listing.variant!.cjSku);
+        if (!matchingCjVariant) continue;
+
+        const currentCjCost = matchingCjVariant.unitCostUsd;
+        if (currentCjCost <= 0) continue;
+
+        const currentShippingUsd = listing.shippingQuote ? Number(listing.shippingQuote.amountUsd ?? 0) : 0;
+        
+        // Evaluate new pricing
+        const evalResult = await cjShopifyUsaQualificationService.evaluate(userId, currentCjCost, currentShippingUsd);
+        if (evalResult.decision !== 'APPROVED') continue;
+
+        const newSuggestedPrice = evalResult.breakdown.suggestedSellPriceUsd;
+        const currentListedPrice = Number(listing.listedPriceUsd ?? 0);
+
+        // Update if price increased by at least $0.50 (to avoid micro-fluctuations)
+        // Or if the margin is no longer valid
+        if (newSuggestedPrice > currentListedPrice + 0.49) {
+          log('info', `Price Sync: Increasing ${listing.shopifySku} from $${currentListedPrice.toFixed(2)} to $${newSuggestedPrice.toFixed(2)} (CJ Cost increased)`);
+          
+          if (listing.shopifyProductId && listing.shopifyVariantId) {
+            try {
+              await cjShopifyUsaAdminService.updateVariantPrice({
+                userId,
+                productId: listing.shopifyProductId,
+                variantId: listing.shopifyVariantId,
+                price: newSuggestedPrice,
+              });
+
+              await prisma.cjShopifyUsaListing.update({
+                where: { id: listing.id },
+                data: { listedPriceUsd: newSuggestedPrice },
+              });
+
+              await prisma.cjShopifyUsaProductVariant.update({
+                where: { id: listing.variant!.id },
+                data: { unitCostUsd: currentCjCost, stockLastKnown: matchingCjVariant.stock },
+              });
+
+              priceChanges++;
+            } catch (err) {
+              log('warn', `Failed to update Shopify price for ${listing.shopifySku}: ${err}`);
+            }
+          }
+        }
+      }
+
+      // Respect CJ API rate limits
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    if (priceChanges > 0) {
+      log('success', `Price Sync: Updated ${priceChanges} listing prices successfully.`);
     }
   }
 }

@@ -25,6 +25,7 @@ type VariantInput = {
   optionValues: Array<{ optionName: string; name: string }>;
   listingId: number;
   quantity: number;
+  attrs: Record<string, any> | null;
 };
 
 function buildVariantLabel(attrs: unknown, productTitle: string): string {
@@ -85,6 +86,7 @@ function buildMultiVariantOptions(
       optionValues: [], // filled below once optionName is resolved
       listingId: row.listingId,
       quantity: row.quantity,
+      attrs: (row.attrs as Record<string, any>) || null,
     });
   }
 
@@ -988,6 +990,7 @@ export const cjShopifyUsaPublishService = {
         .map((src: string) => ({
           originalSource: src,
           mediaContentType: 'IMAGE' as const,
+          alt: src, // Link original URL for variant image mapping
         }));
 
       const siblingDrafts = await prisma.cjShopifyUsaListing.findMany({
@@ -1107,6 +1110,38 @@ export const cjShopifyUsaPublishService = {
           ];
 
       await Promise.all(inventoryCalls);
+
+      // Phase 3: Map Variant Images
+      try {
+        const fullMedia = await cjShopifyUsaAdminService.getProductMedia({ userId: input.userId, productId: upserted.productId });
+        const mediaMap = new Map<string, string>();
+        for (const m of fullMedia) {
+          if (m.alt) mediaMap.set(m.alt.trim(), m.id);
+        }
+
+        const variantMediaCalls = isMultiVariant ? variantConfig.map((vc) => {
+          const sv = shopifyVariantBySku.get(vc.sku);
+          const vImg = vc.attrs?.variantImage;
+          if (sv && vImg && typeof vImg === 'string') {
+            const mediaId = mediaMap.get(vImg.trim());
+            if (mediaId) {
+              return cjShopifyUsaAdminService.updateVariantMedia({
+                userId: input.userId,
+                variantId: sv.id,
+                mediaId,
+              });
+            }
+          }
+          return null;
+        }).filter(Boolean) : [];
+
+        if (variantMediaCalls.length > 0) {
+          await Promise.all(variantMediaCalls);
+          console.log(`[ShopifyPublish] Mapped ${variantMediaCalls.length} variant images.`);
+        }
+      } catch (err) {
+        console.warn(`[ShopifyPublish] Failed to map variant images:`, err);
+      }
 
       await cjShopifyUsaAdminService.publishProductToPublication({
         userId: input.userId,
