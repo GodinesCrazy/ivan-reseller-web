@@ -68,7 +68,7 @@ export class TopDawgShopifyUsaOrderIngestService {
         shopifyLineItemId: String(order.line_items?.[0]?.id ?? ''),
         status:            TOPDAWG_SHOPIFY_USA_ORDER_STATUS.DETECTED,
         totalUsd:          total,
-        rawShopifyOrder:   order as unknown as Record<string, unknown>,
+        rawShopifyOrder:   order as never,
       },
     });
 

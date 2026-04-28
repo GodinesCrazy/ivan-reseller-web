@@ -52,13 +52,13 @@ export class TopDawgShopifyUsaDiscoverService {
         category:    product.category,
         upc:         product.upc,
         images:      product.images,
-        rawPayload:  product as unknown as Record<string, unknown>,
+        rawPayload:  product as never,
       },
       update: {
         title:       product.title,
         description: product.description,
         images:      product.images,
-        rawPayload:  product as unknown as Record<string, unknown>,
+        rawPayload:  product as never,
       },
     });
 
@@ -88,7 +88,7 @@ export class TopDawgShopifyUsaDiscoverService {
         productId: dbProduct.id,
         variantId: dbVariant.id,
         status:    qualification.approved ? 'APPROVED' : 'REJECTED',
-        result:    qualification as unknown as Record<string, unknown>,
+        result:    qualification as never,
       },
     });
 
