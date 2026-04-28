@@ -10,3 +10,12 @@ seo-titles-v2.mjs
 seo-descriptions.mjs
 seo-collections.mjs
 merge-variants.mjs
+audit-db.mjs
+fix-discounts-and-orphans.mjs
+fix-shopify-products.mjs
+fix-variant-id-mapping.mjs
+fix-variant-map.mjs
+fix-variant-merge.mjs
+fix-variant-sku-match.mjs
+fix-variants-final.mjs
+massive-cycle.mjs
