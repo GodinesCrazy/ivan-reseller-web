@@ -1,27 +1,31 @@
-{%- comment -%} PawVault — Logo mark + wordmark. HTML-based for crisp font rendering. {%- endcomment -%}
+{%- comment -%} PawVault — Logo. Uses official Shopify logo image if set; falls back to SVG wordmark. {%- endcomment -%}
 
-<a href="{{ routes.root_url }}" class="pvlogo" aria-label="PawVault — Premium Pet Supplies">
+<a href="{{ routes.root_url }}" class="pvlogo" aria-label="PawVault — Tu Tienda de Mascotas Premium">
 
-  {%- comment -%} Icon mark: paw in a rounded square {%- endcomment -%}
-  <svg class="pvlogo__mark" width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <rect width="38" height="38" rx="10" fill="#10233b"/>
-
-    {%- comment -%} Toe pads — 4 circles {%- endcomment -%}
-    <ellipse cx="11.5" cy="14"   rx="3.2" ry="3.6" fill="#f2a93b"/>
-    <ellipse cx="19"   cy="11.5" rx="3.6" ry="4"   fill="#f2a93b"/>
-    <ellipse cx="26.5" cy="14"   rx="3.2" ry="3.6" fill="#f2a93b"/>
-
-    {%- comment -%} Main central pad {%- endcomment -%}
-    <path d="M10 23.5C10 19.63 13.13 16.5 17 16.5H21C24.87 16.5 28 19.63 28 23.5C28 25.98 25.98 28 23.5 28H14.5C12.02 28 10 25.98 10 23.5Z" fill="#f2a93b"/>
-
-    {%- comment -%} Accent star dot top-right {%- endcomment -%}
-    <circle cx="31" cy="8" r="2" fill="#8fc77a"/>
-  </svg>
-
-  {%- comment -%} Wordmark {%- endcomment -%}
-  <span class="pvlogo__wordmark" aria-hidden="true">
-    <span class="pvlogo__paw">PAW</span><span class="pvlogo__vault">VAULT</span>
-  </span>
+  {%- if settings.logo != blank -%}
+    {%- comment -%} Official store logo uploaded via Shopify Admin → Settings → Brand {%- endcomment -%}
+    <img
+      src="{{ settings.logo | image_url: width: 180 }}"
+      alt="{{ shop.name }}"
+      width="180"
+      height="{{ 180 | divided_by: settings.logo.aspect_ratio | round }}"
+      class="pvlogo__img"
+      loading="eager"
+    >
+  {%- else -%}
+    {%- comment -%} SVG fallback while no logo is uploaded {%- endcomment -%}
+    <svg class="pvlogo__mark" width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect width="38" height="38" rx="10" fill="#10233b"/>
+      <ellipse cx="11.5" cy="14"   rx="3.2" ry="3.6" fill="#f2a93b"/>
+      <ellipse cx="19"   cy="11.5" rx="3.6" ry="4"   fill="#f2a93b"/>
+      <ellipse cx="26.5" cy="14"   rx="3.2" ry="3.6" fill="#f2a93b"/>
+      <path d="M10 23.5C10 19.63 13.13 16.5 17 16.5H21C24.87 16.5 28 19.63 28 23.5C28 25.98 25.98 28 23.5 28H14.5C12.02 28 10 25.98 10 23.5Z" fill="#f2a93b"/>
+      <circle cx="31" cy="8" r="2" fill="#8fc77a"/>
+    </svg>
+    <span class="pvlogo__wordmark" aria-hidden="true">
+      <span class="pvlogo__paw">PAW</span><span class="pvlogo__vault">VAULT</span>
+    </span>
+  {%- endif -%}
 
 </a>
 
@@ -33,13 +37,17 @@
     text-decoration: none;
     flex-shrink: 0;
   }
-
   .pvlogo:hover { opacity: 0.88; }
-  .pvlogo:hover .pvlogo__mark rect { fill: #1c3a5e; }
-  .pvlogo__mark rect { transition: fill 200ms ease; }
-
+  .pvlogo__img {
+    display: block;
+    height: 52px;
+    width: auto;
+    object-fit: contain;
+    max-width: 180px;
+  }
   .pvlogo__mark { display: block; flex-shrink: 0; }
-
+  .pvlogo__mark rect { transition: fill 200ms ease; }
+  .pvlogo:hover .pvlogo__mark rect { fill: #1c3a5e; }
   .pvlogo__wordmark {
     display: inline-flex;
     align-items: baseline;
@@ -48,21 +56,9 @@
     letter-spacing: -0.04em;
     user-select: none;
   }
-
-  .pvlogo__paw {
-    font-weight: 900;
-    color: #10233b;
-    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
-  }
-
-  .pvlogo__vault {
-    font-weight: 500;
-    color: #607286;
-    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
-    letter-spacing: -0.03em;
-  }
-
-  /* Compact size in announcement bar / footer contexts */
+  .pvlogo__paw   { font-weight: 900; color: #10233b; font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; }
+  .pvlogo__vault { font-weight: 500; color: #607286; font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; letter-spacing: -0.03em; }
   .pv-footer .pvlogo__wordmark { font-size: 1.1rem; }
   .pv-footer .pvlogo__mark { width: 32px; height: 32px; }
+  .pv-footer .pvlogo__img { height: 40px; }
 </style>
