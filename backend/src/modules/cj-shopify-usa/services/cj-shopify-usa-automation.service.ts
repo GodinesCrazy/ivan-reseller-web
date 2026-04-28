@@ -51,11 +51,16 @@ export interface CycleResult {
 // ── Singleton state ────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: AutomationConfig = {
-  intervalHours: 3,
-  maxDailyPublish: 200,
-  maxPerCycle: 40,
-  minMarginPct: 15,
-  categories: ['pet supplies', 'dog accessories', 'cat accessories', 'pet grooming', 'pet toys'],
+  intervalHours: 2,
+  maxDailyPublish: 500,
+  maxPerCycle: 80,
+  minMarginPct: 12,
+  categories: [
+    'pet supplies', 'dog accessories', 'cat accessories',
+    'pet grooming', 'pet toys', 'pet beds', 'pet clothing',
+    'pet carriers', 'pet bowls', 'pet collars', 'pet harness',
+    'pet training', 'pet health', 'aquarium', 'bird supplies',
+  ],
   autoPublish: true,
   enabled: false,
 };
@@ -380,12 +385,27 @@ class CjShopifyUsaAutomationService {
     'cat litter box', 'pet brush', 'dog bag', 'cat tunnel',
     'dog boots', 'pet stroller', 'rabbit cage', 'bird cage',
     'dog nail trimmer', 'cat water fountain', 'pet seat belt',
+    'dog puzzle toy', 'cat tree', 'dog orthopedic bed', 'pet camera',
+    'dog shampoo', 'cat shampoo', 'dog clicker', 'pet first aid',
+    'cat collar', 'dog life jacket', 'pet blanket', 'dog car seat',
+    'cat harness', 'dog agility', 'pet dental', 'dog cooling mat',
+    'cat window perch', 'dog slow feeder', 'pet gate', 'dog playpen',
+    'aquarium fish', 'fish tank', 'hamster cage', 'bird toy',
+    'reptile supplies', 'small animal bedding', 'pet deodorizer',
   ];
 
-  private CJ_PET_KW = ['pet','dog','cat','puppy','kitten','paw','leash','harness',
+  private CJ_PET_KW = [
+    'pet','dog','cat','puppy','kitten','paw','leash','harness',
     'grooming','collar','treat','chew','bowl','feeder','litter','catnip',
     'hamster','bird','nail','brush','comb','scissors','coat','sweater',
-    'toy','fur','kennel','carrier','crate','cage','rabbit','bunny'];
+    'toy','fur','kennel','carrier','crate','cage','rabbit','bunny',
+    'aquarium','fish','reptile','turtle','guinea pig','ferret',
+    'dental','shampoo','flea','tick','dewormer','vitamin',
+    'training','clicker','agility','playpen','gate','fence',
+    'cooling','heating','blanket','cushion','orthopedic',
+    'fountain','dispenser','automatic','slow feeder',
+    'scratch','tunnel','perch','tree','climbing',
+  ];
   private isPetProduct(title: string) {
     const t = title.toLowerCase();
     return this.CJ_PET_KW.some(k => t.includes(k));
