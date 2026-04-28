@@ -541,6 +541,22 @@ export const cjShopifyUsaOrderIngestService = {
             create: { orderId: order.id, trackingNumber: trackNumber, carrierCode: logisticName || null, status: 'SHIPPED' },
             update: { trackingNumber: trackNumber, carrierCode: logisticName || null },
           });
+
+          // Phase 2: Push tracking back to Shopify to notify the customer
+          try {
+            const { cjShopifyUsaTrackingService } = await import('./cj-shopify-usa-tracking.service');
+            await cjShopifyUsaTrackingService.syncTracking({
+              userId,
+              orderId: order.id,
+              carrierCode: logisticName || null,
+              trackingNumber: trackNumber,
+              notifyCustomer: true,
+            });
+            await appendOrderEvent(order.id, 'TRACKING_PUSHED', `Successfully pushed tracking ${trackNumber} to Shopify.`);
+          } catch (pushErr) {
+            await appendOrderEvent(order.id, 'TRACKING_PUSH_FAILED', `Failed to push tracking to Shopify: ${pushErr instanceof Error ? pushErr.message : String(pushErr)}`);
+          }
+
           synced++;
         }
 

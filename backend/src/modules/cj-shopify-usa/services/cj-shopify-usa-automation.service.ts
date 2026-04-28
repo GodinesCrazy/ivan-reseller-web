@@ -220,6 +220,47 @@ class CjShopifyUsaAutomationService {
         log('warn', `Discovery step failed (non-blocking): ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
 
+      // ── Step 0.5: Retry blocked orders (Insufficient Funds) ──
+      log('info', 'Step 0.5: Checking for blocked orders (SUPPLIER_PAYMENT_BLOCKED)...');
+      try {
+        const blockedOrders = await prisma.cjShopifyUsaOrder.findMany({
+          where: { userId, status: 'SUPPLIER_PAYMENT_BLOCKED' },
+          orderBy: { createdAt: 'asc' },
+          take: 10,
+        });
+
+        if (blockedOrders.length > 0) {
+          log('info', `Found ${blockedOrders.length} blocked orders. Attempting to re-process...`);
+          const { cjShopifyUsaOrderIngestService } = await import('./cj-shopify-usa-order-ingest.service');
+          
+          let retrySuccess = 0;
+          for (const order of blockedOrders) {
+            try {
+              log('info', `Retrying order ${order.shopifyOrderId}...`);
+              const res = await cjShopifyUsaOrderIngestService.processOrder({ userId, orderId: order.id });
+              if (res.status === 'CJ_ORDER_PLACED') {
+                retrySuccess++;
+                log('success', `Successfully recovered order ${order.shopifyOrderId} -> CJ Order: ${res.cjOrderId}`);
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              log('warn', `Retry failed for ${order.shopifyOrderId}: ${msg.slice(0, 80)}`);
+              // If it's a balance issue, stop trying the rest in this cycle to avoid API spam
+              if (msg.toLowerCase().includes('balance') || msg.toLowerCase().includes('payment')) {
+                log('warn', 'Balance is still insufficient. Aborting retry queue for this cycle.');
+                break;
+              }
+            }
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+          if (retrySuccess > 0) {
+            log('success', `Recovered ${retrySuccess} blocked orders in this cycle.`);
+          }
+        }
+      } catch (err) {
+        log('warn', `Retry queue step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+      }
+
       // ── Step 1: Find products with APPROVED evaluation and no active listing ──
       log('info', 'Scanning approved CJ products database...');
 
