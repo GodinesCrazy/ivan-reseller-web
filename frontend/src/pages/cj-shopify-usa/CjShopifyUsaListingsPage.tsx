@@ -1,7 +1,19 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { Archive, ExternalLink, Eye, GitMerge, Pause, Send } from 'lucide-react';
+import {
+  Archive,
+  ArrowUpDown,
+  CheckSquare,
+  ExternalLink,
+  Eye,
+  GitMerge,
+  Pause,
+  RefreshCw,
+  Search,
+  Send,
+  Square,
+} from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,6 +93,18 @@ type ListingRow = {
     unitCostUsd?: number | string | null;
   } | null;
 };
+
+type StatusFilter =
+  | 'ALL'
+  | 'BUYER_READY'
+  | 'DRAFT'
+  | 'PUBLISHABLE'
+  | 'ACTIVE'
+  | 'PAUSED'
+  | 'ARCHIVED'
+  | 'NEEDS_REVIEW';
+
+type SortKey = 'updatedDesc' | 'updatedAsc' | 'publishedDesc' | 'priceDesc' | 'priceAsc' | 'status' | 'idDesc';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -171,6 +195,53 @@ function isShopifyLinked(row: ListingRow): boolean {
   return Boolean(row.shopifyProductId && row.publishTruth?.shopify?.exists !== false);
 }
 
+function sellPrice(row: ListingRow): number {
+  const draft = row.draftPayload ?? null;
+  const value = Number(row.listedPriceUsd ?? draft?.pricingSnapshot?.suggestedSellPriceUsd ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function productTitle(row: ListingRow): string {
+  return String(row.product?.title || row.draftPayload?.title || '').trim();
+}
+
+function isBuyerReady(row: ListingRow): boolean {
+  return row.status === 'ACTIVE' && Boolean(row.publishTruth?.buyerFacingVerified);
+}
+
+function needsReview(row: ListingRow): boolean {
+  return ['FAILED', 'RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(row.status) ||
+    (row.status === 'ACTIVE' && !row.publishTruth?.buyerFacingVerified);
+}
+
+function publishBlockReason(row: ListingRow, maxSellPriceUsd: number): string | null {
+  if (!isPublishableStatus(row.status)) return `Estado ${statusLabel(row)} no permite publicar.`;
+  const price = sellPrice(row);
+  if (price > maxSellPriceUsd) return `Precio ${usd(price)} supera el máximo configurado ${usd(maxSellPriceUsd)}.`;
+  return null;
+}
+
+function pauseBlockReason(row: ListingRow): string | null {
+  if (!isShopifyLinked(row)) return 'Sin producto Shopify vinculado.';
+  if (!['ACTIVE', 'RECONCILE_PENDING'].includes(row.status)) return `Estado ${statusLabel(row)} no permite pausar.`;
+  return null;
+}
+
+function unpublishBlockReason(row: ListingRow): string | null {
+  if (!isShopifyLinked(row)) return 'Sin producto Shopify vinculado.';
+  if (!['ACTIVE', 'PAUSED', 'RECONCILE_PENDING', 'RECONCILE_FAILED', 'FAILED'].includes(row.status)) {
+    return `Estado ${statusLabel(row)} no permite despublicar.`;
+  }
+  return null;
+}
+
+function expandBlockReason(row: ListingRow, maxSellPriceUsd: number): string | null {
+  if (row.status !== 'ACTIVE') return 'Solo listings activos pueden ampliar variantes.';
+  if (!row.publishTruth?.buyerFacingVerified) return 'Primero debe estar buyer-ready.';
+  if (sellPrice(row) > maxSellPriceUsd) return `Precio ${usd(sellPrice(row))} supera el máximo configurado.`;
+  return null;
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('es-CL', {
@@ -196,6 +267,14 @@ export default function CjShopifyUsaListingsPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [maxSellPriceUsd, setMaxSellPriceUsd] = useState(45);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [sortKey, setSortKey] = useState<SortKey>('updatedDesc');
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkPublishing, setBulkPublishing] = useState(false);
+  const [bulkPausing, setBulkPausing] = useState(false);
+  const [bulkUnpublishing, setBulkUnpublishing] = useState(false);
+  const [resyncing, setResyncing] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -219,6 +298,10 @@ export default function CjShopifyUsaListingsPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    setSelectedIds((current) => current.filter((id) => listings.some((listing) => listing.id === id)));
+  }, [listings]);
 
   async function withAction(
     id: number,
@@ -292,22 +375,81 @@ export default function CjShopifyUsaListingsPage() {
     );
   }
 
-  const hasFailed = listings.some((l) => l.status === 'FAILED');
-  const hasReconcilePending = listings.some((l) => l.status === 'RECONCILE_PENDING');
-  const hasReconcileFailed = listings.some((l) => l.status === 'RECONCILE_FAILED');
+  const publishableListings = useMemo(
+    () => listings.filter((l) => publishBlockReason(l, maxSellPriceUsd) == null),
+    [listings, maxSellPriceUsd],
+  );
 
-  const publishableListings = listings.filter((l) => isPublishableStatus(l.status));
-  const audit = {
-    buyerReady: listings.filter((l) => l.status === 'ACTIVE' && l.publishTruth?.buyerFacingVerified).length,
+  const selectedRows = useMemo(
+    () => listings.filter((listing) => selectedIds.includes(listing.id)),
+    [listings, selectedIds],
+  );
+
+  const audit = useMemo(() => ({
+    total: listings.length,
+    buyerReady: listings.filter(isBuyerReady).length,
     localDrafts: listings.filter((l) => l.status === 'DRAFT' && !l.shopifyProductId).length,
+    publishable: publishableListings.length,
     pausedInShopify: listings.filter((l) => l.status === 'PAUSED').length,
     archivedInShopify: listings.filter((l) => l.status === 'ARCHIVED').length,
-    needsReview: listings.filter((l) => ['FAILED', 'RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(l.status)).length,
+    needsReview: listings.filter(needsReview).length,
+    failed: listings.filter((l) => l.status === 'FAILED').length,
+    reconcilePending: listings.filter((l) => l.status === 'RECONCILE_PENDING').length,
+    reconcileFailed: listings.filter((l) => l.status === 'RECONCILE_FAILED').length,
     correctedByTruth: listings.filter((l) => l.publishTruth?.localStatusBefore && l.publishTruth.localStatusBefore !== l.publishTruth.localStatusAfter).length,
-  };
+  }), [listings, publishableListings.length]);
 
-  const [bulkPublishing, setBulkPublishing] = useState(false);
-  const [resyncing, setResyncing] = useState(false);
+  const filteredListings = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return listings
+      .filter((row) => {
+        if (statusFilter === 'BUYER_READY') return isBuyerReady(row);
+        if (statusFilter === 'DRAFT') return row.status === 'DRAFT';
+        if (statusFilter === 'PUBLISHABLE') return publishBlockReason(row, maxSellPriceUsd) == null;
+        if (statusFilter === 'ACTIVE') return row.status === 'ACTIVE';
+        if (statusFilter === 'PAUSED') return row.status === 'PAUSED';
+        if (statusFilter === 'ARCHIVED') return row.status === 'ARCHIVED';
+        if (statusFilter === 'NEEDS_REVIEW') return needsReview(row);
+        return true;
+      })
+      .filter((row) => {
+        if (!q) return true;
+        const haystack = [
+          row.id,
+          row.status,
+          productTitle(row),
+          row.product?.cjProductId,
+          row.variant?.cjSku,
+          row.shopifyProductId,
+          row.shopifyHandle,
+          row.lastError,
+        ].join(' ').toLowerCase();
+        return haystack.includes(q);
+      })
+      .sort((a, b) => {
+        if (sortKey === 'updatedAsc') return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+        if (sortKey === 'publishedDesc') return new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime();
+        if (sortKey === 'priceDesc') return sellPrice(b) - sellPrice(a);
+        if (sortKey === 'priceAsc') return sellPrice(a) - sellPrice(b);
+        if (sortKey === 'status') return statusLabel(a).localeCompare(statusLabel(b));
+        if (sortKey === 'idDesc') return b.id - a.id;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+  }, [listings, maxSellPriceUsd, query, sortKey, statusFilter]);
+
+  const visibleSelectedCount = filteredListings.filter((row) => selectedIds.includes(row.id)).length;
+  const allVisibleSelected = filteredListings.length > 0 && visibleSelectedCount === filteredListings.length;
+  const selectedPublishableRows = selectedRows.filter((row) => publishBlockReason(row, maxSellPriceUsd) == null);
+  const selectedPausableRows = selectedRows.filter((row) => pauseBlockReason(row) == null);
+  const selectedUnpublishableRows = selectedRows.filter((row) => unpublishBlockReason(row) == null);
+  const metricCards: Array<{ label: string; value: number; filter: StatusFilter }> = [
+    { label: 'Total', value: audit.total, filter: 'ALL' },
+    { label: 'Buyer-ready', value: audit.buyerReady, filter: 'BUYER_READY' },
+    { label: 'Publicables', value: audit.publishable, filter: 'PUBLISHABLE' },
+    { label: 'Draft local', value: audit.localDrafts, filter: 'DRAFT' },
+    { label: 'Pausado', value: audit.pausedInShopify, filter: 'PAUSED' },
+    { label: 'Revisar', value: audit.needsReview, filter: 'NEEDS_REVIEW' },
+  ];
 
   async function resyncReconcile() {
     setResyncing(true);
@@ -321,20 +463,30 @@ export default function CjShopifyUsaListingsPage() {
     } finally { setResyncing(false); }
   }
 
+  function toggleRow(id: number) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  }
+
+  function toggleVisibleRows() {
+    const visibleIds = filteredListings.map((row) => row.id);
+    if (allVisibleSelected) {
+      setSelectedIds((current) => current.filter((id) => !visibleIds.includes(id)));
+      return;
+    }
+    setSelectedIds((current) => Array.from(new Set([...current, ...visibleIds])));
+  }
+
   async function publishAllDrafts() {
-    if (publishableListings.length === 0) return;
+    const targets = selectedPublishableRows.length > 0 ? selectedPublishableRows : publishableListings;
+    if (targets.length === 0) return;
     setBulkPublishing(true);
     setError(null);
     setActionMsg(null);
     let ok = 0;
     const failedIds: number[] = [];
-    for (const listing of publishableListings) {
-      const draft = listing.draftPayload ?? null;
-      const sellPrice = Number(listing.listedPriceUsd ?? draft?.pricingSnapshot?.suggestedSellPriceUsd ?? 0);
-      if (Number.isFinite(sellPrice) && sellPrice > maxSellPriceUsd) {
-        failedIds.push(listing.id);
-        continue;
-      }
+    for (const listing of targets) {
       try {
         await api.post('/api/cj-shopify-usa/listings/publish', { listingId: listing.id });
         ok++;
@@ -352,68 +504,186 @@ export default function CjShopifyUsaListingsPage() {
     );
   }
 
+  async function pauseSelected() {
+    if (selectedPausableRows.length === 0) return;
+    setBulkPausing(true);
+    setError(null);
+    setActionMsg(null);
+    let ok = 0;
+    const failedIds: number[] = [];
+    for (const listing of selectedPausableRows) {
+      try {
+        await api.post(`/api/cj-shopify-usa/listings/${listing.id}/pause`);
+        ok++;
+      } catch {
+        failedIds.push(listing.id);
+      }
+    }
+    await load();
+    setBulkPausing(false);
+    if (failedIds.length > 0) setError(`${failedIds.length} listings fallaron al pausar: IDs ${failedIds.join(', ')}.`);
+    setActionMsg(`Pausa masiva completada: ${ok} pausados${failedIds.length > 0 ? `, ${failedIds.length} fallidos` : ''}.`);
+  }
+
+  async function unpublishSelected() {
+    if (selectedUnpublishableRows.length === 0) return;
+    const confirmed = window.confirm(
+      `¿Despublicar ${selectedUnpublishableRows.length} artículo(s) seleccionado(s) de Shopify?`,
+    );
+    if (!confirmed) return;
+    setBulkUnpublishing(true);
+    setError(null);
+    setActionMsg(null);
+    let ok = 0;
+    const failedIds: number[] = [];
+    for (const listing of selectedUnpublishableRows) {
+      try {
+        await api.post(`/api/cj-shopify-usa/listings/${listing.id}/unpublish`);
+        ok++;
+      } catch {
+        failedIds.push(listing.id);
+      }
+    }
+    await load();
+    setBulkUnpublishing(false);
+    if (failedIds.length > 0) setError(`${failedIds.length} listings fallaron al despublicar: IDs ${failedIds.join(', ')}.`);
+    setActionMsg(`Despublicación masiva completada: ${ok} despublicados${failedIds.length > 0 ? `, ${failedIds.length} fallidos` : ''}.`);
+  }
+
   if (loading) return <p className="text-sm text-slate-500">Cargando store products…</p>;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          Productos en tu tienda Shopify. Drafts listos para publicar, listings activos y su estado de sincronización.
-        </p>
-        <div className="flex gap-2 flex-wrap">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+            Store Products
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {filteredListings.length} visibles de {listings.length} listings · {selectedIds.length} seleccionados
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap justify-end">
           <button
             type="button"
             disabled={resyncing}
             onClick={() => void resyncReconcile()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 transition"
           >
-            {resyncing ? '…' : '🔄 Re-sync Shopify'}
+            <RefreshCw className={`h-4 w-4 ${resyncing ? 'animate-spin' : ''}`} aria-hidden="true" />
+            Re-sync Shopify
           </button>
-          {publishableListings.length > 0 && (
-            <button
-              type="button"
-              disabled={bulkPublishing}
-              onClick={() => void publishAllDrafts()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white px-3 py-1.5 text-sm font-semibold transition"
-            >
-              {bulkPublishing ? '…publicando' : `Publicar pendientes (${publishableListings.length})`}
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={bulkPublishing || (selectedPublishableRows.length === 0 && publishableListings.length === 0)}
+            onClick={() => void publishAllDrafts()}
+            title={selectedPublishableRows.length > 0 ? 'Publicar seleccionados permitidos' : 'Publicar todos los pendientes permitidos'}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50 text-white px-3 py-1.5 text-sm font-semibold transition"
+          >
+            <Send className="h-4 w-4" aria-hidden="true" />
+            {bulkPublishing
+              ? 'Publicando'
+              : selectedPublishableRows.length > 0
+                ? `Publicar (${selectedPublishableRows.length})`
+                : `Publicar pendientes (${publishableListings.length})`}
+          </button>
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        {[
-          ['Buyer-ready', audit.buyerReady],
-          ['Draft local', audit.localDrafts],
-          ['Pausado Shopify', audit.pausedInShopify],
-          ['Archivado Shopify', audit.archivedInShopify],
-          ['Revisar', audit.needsReview],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/50">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+        {metricCards.map(({ label, value, filter }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => setStatusFilter(filter)}
+            className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
+              statusFilter === filter
+                ? 'border-primary-400 bg-primary-50 dark:border-primary-700 dark:bg-primary-950/30'
+                : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/50 dark:hover:bg-slate-900'
+            }`}
+          >
             <p className="font-medium text-slate-500 dark:text-slate-400">{label}</p>
             <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">{value}</p>
-          </div>
+          </button>
         ))}
       </div>
 
+      <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_180px_190px_minmax(260px,auto)]">
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar producto, SKU, ID, handle o error"
+            className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          />
+        </label>
+        <select
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+        >
+          <option value="ALL">Todos</option>
+          <option value="BUYER_READY">Buyer-ready</option>
+          <option value="PUBLISHABLE">Publicables</option>
+          <option value="DRAFT">Draft local</option>
+          <option value="ACTIVE">Activos</option>
+          <option value="PAUSED">Pausados</option>
+          <option value="ARCHIVED">Archivados</option>
+          <option value="NEEDS_REVIEW">Revisar</option>
+        </select>
+        <select
+          value={sortKey}
+          onChange={(event) => setSortKey(event.target.value as SortKey)}
+          className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+        >
+          <option value="updatedDesc">Actualizado: reciente</option>
+          <option value="updatedAsc">Actualizado: antiguo</option>
+          <option value="publishedDesc">Publicado: reciente</option>
+          <option value="priceDesc">Precio: mayor</option>
+          <option value="priceAsc">Precio: menor</option>
+          <option value="status">Estado</option>
+          <option value="idDesc">ID: mayor</option>
+        </select>
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          <button
+            type="button"
+            disabled={selectedPausableRows.length === 0 || bulkPausing}
+            onClick={() => void pauseSelected()}
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+          >
+            <Pause className="h-4 w-4" aria-hidden="true" />
+            Pausar ({selectedPausableRows.length})
+          </button>
+          <button
+            type="button"
+            disabled={selectedUnpublishableRows.length === 0 || bulkUnpublishing}
+            onClick={() => void unpublishSelected()}
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 text-sm font-medium text-rose-800 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200"
+          >
+            <Archive className="h-4 w-4" aria-hidden="true" />
+            Despublicar ({selectedUnpublishableRows.length})
+          </button>
+        </div>
+      </div>
+
       {/* Status banners */}
-      {hasFailed && (
+      {audit.failed > 0 && (
         <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-100 space-y-1">
-          <p className="font-semibold">Listings fallidos — acción requerida</p>
-          <p>Uno o más listings tienen estado <strong>FAILED</strong>. Revisar el error en Detalle y reintentar publicar.</p>
+          <p className="font-semibold">{audit.failed} listings fallidos</p>
+          <p>Revisar el detalle antes de reintentar publicación.</p>
         </div>
       )}
-      {hasReconcilePending && (
+      {audit.reconcilePending > 0 && (
         <div className="rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/40 px-4 py-3 text-sm text-violet-900 dark:text-violet-100 space-y-1">
-          <p className="font-semibold">Shopify no está buyer-ready</p>
-          <p>Uno o más productos existen en Shopify pero no pasan toda la verdad actual: estado Admin, publicación, inventario o storefront.</p>
+          <p className="font-semibold">{audit.reconcilePending} listings no buyer-ready</p>
+          <p>Existen en Shopify, pero falta confirmar publicación, inventario o storefront.</p>
         </div>
       )}
-      {hasReconcileFailed && (
+      {audit.reconcileFailed > 0 && (
         <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-900 dark:text-red-100 space-y-1">
-          <p className="font-semibold">Reconciliación fallida — verificar en Shopify Admin</p>
-          <p>El sistema no pudo confirmar el ID del producto en Shopify. Verificar manualmente en el panel de Shopify.</p>
+          <p className="font-semibold">{audit.reconcileFailed} reconciliaciones fallidas</p>
+          <p>No se pudo confirmar el producto en Shopify Admin.</p>
         </div>
       )}
       {audit.correctedByTruth > 0 && (
@@ -439,6 +709,17 @@ export default function CjShopifyUsaListingsPage() {
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 dark:bg-slate-900/80 text-left text-xs font-medium text-slate-500 uppercase">
             <tr>
+              <th className="px-3 py-2">
+                <button
+                  type="button"
+                  onClick={toggleVisibleRows}
+                  disabled={filteredListings.length === 0}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-800"
+                  title={allVisibleSelected ? 'Quitar selección visible' : 'Seleccionar visibles'}
+                >
+                  {allVisibleSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                </button>
+              </th>
               <th className="px-3 py-2">ID</th>
               <th className="px-3 py-2">Estado</th>
               <th className="px-3 py-2">Producto</th>
@@ -446,18 +727,24 @@ export default function CjShopifyUsaListingsPage() {
               <th className="px-3 py-2">SKU CJ</th>
               <th className="px-3 py-2">Shopify ID</th>
               <th className="px-3 py-2">Shopify truth</th>
+              <th className="px-3 py-2">
+                <span className="inline-flex items-center gap-1">
+                  Fechas
+                  <ArrowUpDown className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+              </th>
               <th className="px-3 py-2">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {listings.length === 0 ? (
+            {filteredListings.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-slate-500 text-sm">
-                  Sin listings. Ve a <strong>Products</strong>, selecciona un producto APPROVED y crea un draft.
+                <td colSpan={10} className="px-3 py-8 text-center text-slate-500 text-sm">
+                  Sin resultados para los filtros actuales.
                 </td>
               </tr>
             ) : (
-              listings.map((row) => {
+              filteredListings.map((row) => {
                 const draft = row.draftPayload ?? null;
                 const pricing = draft?.pricingSnapshot;
                 const shipping = draft?.shippingSnapshot;
@@ -465,21 +752,25 @@ export default function CjShopifyUsaListingsPage() {
                 const descriptionPreview = htmlPreview(draft?.descriptionHtml);
                 const rowSellPrice = Number(row.listedPriceUsd ?? pricing?.suggestedSellPriceUsd ?? 0);
                 const exceedsMaxPrice = Number.isFinite(rowSellPrice) && rowSellPrice > maxSellPriceUsd;
-                const canPublish = isPublishableStatus(row.status) && !exceedsMaxPrice;
-                const canPause =
-                  isShopifyLinked(row) &&
-                  ['ACTIVE', 'RECONCILE_PENDING'].includes(row.status);
-                const canUnpublish =
-                  isShopifyLinked(row) &&
-                  ['ACTIVE', 'PAUSED', 'RECONCILE_PENDING', 'RECONCILE_FAILED', 'FAILED'].includes(row.status);
-                const canExpandVariants =
-                  row.status === 'ACTIVE' &&
-                  Boolean(row.publishTruth?.buyerFacingVerified) &&
-                  !exceedsMaxPrice;
+                const publishReason = publishBlockReason(row, maxSellPriceUsd);
+                const pauseReason = pauseBlockReason(row);
+                const unpublishReason = unpublishBlockReason(row);
+                const expandReason = expandBlockReason(row, maxSellPriceUsd);
+                const selected = selectedIds.includes(row.id);
 
                 return (
                 <Fragment key={row.id}>
-                  <tr className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40">
+                  <tr className={`border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40 ${selected ? 'bg-primary-50/60 dark:bg-primary-950/20' : ''}`}>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleRow(row.id)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200 dark:hover:bg-slate-800"
+                        title={selected ? 'Quitar selección' : 'Seleccionar'}
+                      >
+                        {selected ? <CheckSquare className="h-4 w-4 text-primary-600" /> : <Square className="h-4 w-4" />}
+                      </button>
+                    </td>
                     <td className="px-3 py-2 font-mono tabular-nums text-xs">{row.id}</td>
                     <td className="px-3 py-2">
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusBadge(row)}`}>
@@ -504,58 +795,57 @@ export default function CjShopifyUsaListingsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{truthSummary(row)}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+                      <p>Upd {fmtDate(row.updatedAt)}</p>
+                      <p>Pub {fmtDate(row.publishedAt)}</p>
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex min-w-[360px] flex-wrap items-center gap-1.5">
-                        {canPublish && (
-                          <button
-                            type="button"
-                            disabled={busyId === row.id}
-                            className="inline-flex h-7 items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2.5 text-xs font-medium text-primary-700 transition hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-primary-800/70 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-900/40"
-                            onClick={() => void publish(row.id)}
-                          >
-                            <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                            {busyId === row.id ? '…' : 'Publicar'}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          disabled={busyId === row.id || Boolean(publishReason)}
+                          title={publishReason ?? 'Publicar en Shopify'}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2.5 text-xs font-medium text-primary-700 transition hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-primary-800/70 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-900/40"
+                          onClick={() => void publish(row.id)}
+                        >
+                          <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                          {busyId === row.id ? '...' : 'Publicar'}
+                        </button>
                         {row.status === 'DRAFT' && exceedsMaxPrice && (
                           <span className="inline-flex h-7 items-center rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300">
                             Precio &gt; ${maxSellPriceUsd.toFixed(2)}
                           </span>
                         )}
-                        {canPause && (
-                          <button
-                            type="button"
-                            disabled={busyId === row.id}
-                            className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40"
-                            onClick={() => void pauseListing(row.id)}
-                          >
-                            <Pause className="h-3.5 w-3.5" aria-hidden="true" />
-                            {busyId === row.id ? '…' : 'Pausar'}
-                          </button>
-                        )}
-                        {canUnpublish && (
-                          <button
-                            type="button"
-                            disabled={busyId === row.id}
-                            className="inline-flex h-7 items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
-                            onClick={() => void unpublishListing(row.id)}
-                          >
-                            <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-                            {busyId === row.id ? '…' : 'Despublicar'}
-                          </button>
-                        )}
-                        {canExpandVariants && (
-                          <button
-                            type="button"
-                            disabled={busyId === row.id}
-                            title="Agregar todas las variantes CJ (colores, tallas) al producto de Shopify"
-                            className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-800/70 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/40"
-                            onClick={() => void expandVariants(row.id)}
-                          >
-                            <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
-                            {busyId === row.id ? '…' : 'Ampliar variantes'}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          disabled={busyId === row.id || Boolean(pauseReason)}
+                          title={pauseReason ?? 'Pausar en Shopify'}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                          onClick={() => void pauseListing(row.id)}
+                        >
+                          <Pause className="h-3.5 w-3.5" aria-hidden="true" />
+                          {busyId === row.id ? '...' : 'Pausar'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === row.id || Boolean(unpublishReason)}
+                          title={unpublishReason ?? 'Despublicar de Shopify'}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
+                          onClick={() => void unpublishListing(row.id)}
+                        >
+                          <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                          {busyId === row.id ? '...' : 'Despublicar'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === row.id || Boolean(expandReason)}
+                          title={expandReason ?? 'Agregar variantes CJ al producto Shopify'}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-800/70 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/40"
+                          onClick={() => void expandVariants(row.id)}
+                        >
+                          <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
+                          {busyId === row.id ? '...' : 'Variantes'}
+                        </button>
                         {row.status === 'ACTIVE' && row.storefrontUrl && row.publishTruth?.buyerFacingVerified && (
                           <a
                             href={row.storefrontUrl}
@@ -580,7 +870,7 @@ export default function CjShopifyUsaListingsPage() {
                   </tr>
                   {expandedId === row.id && (
                     <tr className="bg-slate-50/90 dark:bg-slate-950/50">
-                      <td colSpan={8} className="px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
+                      <td colSpan={10} className="px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
                           <div className="space-y-3">
                             <div>
