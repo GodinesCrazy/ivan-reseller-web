@@ -113,6 +113,10 @@ function resolvePrimarySku(
   return String(listing.shopifySku || listing.variant?.cjSku || draft.cjSku || '').trim();
 }
 
+function normalizeToken(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase();
+}
+
 function sanitizeHandle(input: string): string {
   return input
     .toLowerCase()
@@ -1061,16 +1065,175 @@ export const cjShopifyUsaPublishService = {
         console.log(`[ShopifyPublish] Publishing listing ${listing.id} with ${mediaPayload.length} images`);
       }
 
+      const requestedHandle = String(listing.shopifyHandle || draft.handle || '').trim();
+      const expectedCjTag = `cj-product:${listing.product.cjProductId}`;
+      const expectedSkus = new Set(
+        allToPublish
+          .map((candidate) => {
+            const candidateDraft = (candidate.draftPayload || {}) as Record<string, any>;
+            return normalizeToken(resolvePrimarySku(candidate, candidateDraft));
+          })
+          .filter(Boolean),
+      );
+      const primarySkuForUpsert = resolvePrimarySku(listing, draft);
+      let identifierIdForUpsert = listing.shopifyProductId;
+
+      if (!identifierIdForUpsert && requestedHandle) {
+        const existingProduct = await cjShopifyUsaAdminService.findProductByHandle({
+          userId: input.userId,
+          handle: requestedHandle,
+        });
+
+        if (existingProduct) {
+          const existingTags = new Set((existingProduct.tags ?? []).map(normalizeToken));
+          const existingSkus = new Set(
+            (existingProduct.variants?.nodes ?? [])
+              .map((variant) => normalizeToken(variant.sku))
+              .filter(Boolean),
+          );
+          const matchesCjTag = existingTags.has(normalizeToken(expectedCjTag));
+          const matchesSku = [...expectedSkus].some((sku) => existingSkus.has(sku));
+
+          if (matchesCjTag || matchesSku) {
+            const existingVariantBySku = new Map(
+              (existingProduct.variants?.nodes ?? [])
+                .map((variant) => [normalizeToken(variant.sku), variant] as const)
+                .filter(([sku, variant]) => Boolean(sku && variant.inventoryItem?.id)),
+            );
+            const primaryExistingVariant = existingVariantBySku.get(normalizeToken(primarySkuForUpsert));
+
+            if (normalizeToken(existingProduct.status) === 'active' && primaryExistingVariant?.inventoryItem?.id) {
+              console.log(
+                `[ShopifyPublish] Adopting existing Shopify product for handle ${requestedHandle}: ${existingProduct.id}`,
+              );
+
+              await cjShopifyUsaAdminService.setInventoryQuantity({
+                userId: input.userId,
+                inventoryItemId: primaryExistingVariant.inventoryItem.id,
+                locationId: location.id,
+                quantity: desiredQuantity,
+                referenceDocumentUri: `logistics://cj-shopify-usa/adopt/${listing.id}`,
+                idempotencyKey: `adopt-${listing.id}-${primarySkuForUpsert}-${desiredQuantity}`,
+              });
+
+              await cjShopifyUsaAdminService.publishProductToPublication({
+                userId: input.userId,
+                productId: existingProduct.id,
+                publicationId: publication.id,
+              });
+
+              await cjShopifyUsaAdminService.setProductMetafields({
+                userId: input.userId,
+                productId: existingProduct.id,
+                metafields: [
+                  {
+                    namespace: 'ivan_reseller',
+                    key: 'shipping_eta',
+                    type: 'single_line_text_field',
+                    value: buildShippingEta((draft.shippingSnapshot ?? null) as Record<string, unknown> | null),
+                  },
+                  {
+                    namespace: 'ivan_reseller',
+                    key: 'fulfillment_origin',
+                    type: 'single_line_text_field',
+                    value: String(draft.shippingSnapshot?.originCountryCode || 'US').toUpperCase(),
+                  },
+                ],
+              });
+
+              const storefrontVerification = await cjShopifyUsaAdminService.verifyStorefrontProductPage({
+                userId: input.userId,
+                productHandle: existingProduct.handle,
+              });
+
+              const readyForStorefront = storefrontVerification.buyerFacingOk;
+              const adoptedStatus = readyForStorefront
+                ? CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE
+                : CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING;
+              const adoptionError = readyForStorefront
+                ? null
+                : `Adopted existing Shopify product, but buyer-facing storefront verification failed: storefrontUrl=${storefrontVerification.storefrontUrl}; status=${storefrontVerification.status ?? 'FETCH_ERROR'}; passwordGate=${storefrontVerification.passwordGate}; hasAddToCart=${storefrontVerification.hasAddToCart}; hasPrice=${storefrontVerification.hasPrice}`;
+
+              for (const sibling of siblingDrafts) {
+                const siblingDraft = (sibling.draftPayload || {}) as Record<string, any>;
+                const siblingSku = resolvePrimarySku(sibling, siblingDraft);
+                const siblingVariant = existingVariantBySku.get(normalizeToken(siblingSku));
+                if (!siblingVariant?.inventoryItem?.id) continue;
+
+                await cjShopifyUsaAdminService.setInventoryQuantity({
+                  userId: input.userId,
+                  inventoryItemId: siblingVariant.inventoryItem.id,
+                  locationId: location.id,
+                  quantity: toSafeInt(sibling.quantity ?? siblingDraft.quantity ?? 1),
+                  referenceDocumentUri: `logistics://cj-shopify-usa/adopt/${sibling.id}`,
+                  idempotencyKey: `adopt-${sibling.id}-${siblingSku}-${toSafeInt(sibling.quantity ?? siblingDraft.quantity ?? 1)}`,
+                });
+
+                await prisma.cjShopifyUsaListing.update({
+                  where: { id: sibling.id },
+                  data: {
+                    status: adoptedStatus,
+                    shopifyProductId: existingProduct.id,
+                    shopifyVariantId: siblingVariant.id,
+                    shopifyHandle: existingProduct.handle,
+                    shopifySku: siblingSku,
+                    publishedAt: readyForStorefront ? new Date() : null,
+                    lastSyncedAt: new Date(),
+                    lastError: adoptionError,
+                  },
+                });
+              }
+
+              const adopted = await prisma.cjShopifyUsaListing.update({
+                where: { id: listing.id },
+                data: {
+                  status: adoptedStatus,
+                  shopifyProductId: existingProduct.id,
+                  shopifyVariantId: primaryExistingVariant.id,
+                  shopifyHandle: existingProduct.handle,
+                  shopifySku: primarySkuForUpsert,
+                  publishedAt: readyForStorefront ? new Date() : null,
+                  lastSyncedAt: new Date(),
+                  lastError: adoptionError,
+                },
+              });
+
+              await recordTrace(input.userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_PUBLISH_SUCCESS, 'listing.publish.adopt-existing-handle', {
+                listingId: listing.id,
+                shopifyProductId: existingProduct.id,
+                shopifyVariantId: primaryExistingVariant.id,
+                shopifyHandle: existingProduct.handle,
+                storefrontVerification,
+                siblingCount: siblingDrafts.length,
+              } as Prisma.InputJsonValue);
+
+              return adopted;
+            }
+
+            identifierIdForUpsert = existingProduct.id;
+            console.log(
+              `[ShopifyPublish] Reusing existing Shopify product identifier for handle ${requestedHandle}: ${existingProduct.id}`,
+            );
+          } else {
+            throw new AppError(
+              `Shopify handle '${requestedHandle}' is already used by another product (${existingProduct.title}, ${existingProduct.status}, ${existingProduct.id}). Choose a different handle before publishing this CJ product.`,
+              400,
+              ErrorCode.EXTERNAL_API_ERROR,
+            );
+          }
+        }
+      }
+
       const upserted = await cjShopifyUsaAdminService.upsertProduct({
         userId: input.userId,
-        identifierId: listing.shopifyProductId,
-        handle: listing.shopifyHandle || draft.handle || null,
+        identifierId: identifierIdForUpsert,
+        handle: requestedHandle || null,
         title: productTitle,
         descriptionHtml: String(draft.descriptionHtml || ''),
         vendor: String(draft.vendor || 'CJ Dropshipping'),
         productType: String(draft.productType || 'CJ Dropshipping'),
         tags: ['cj-shopify-usa', `cj-product:${listing.product.cjProductId}`],
-        sku: resolvePrimarySku(listing, draft),
+        sku: primarySkuForUpsert,
         price: Number(listing.listedPriceUsd || draft.pricingSnapshot?.suggestedSellPriceUsd || 0),
         media: mediaPayload,
         status: 'ACTIVE',

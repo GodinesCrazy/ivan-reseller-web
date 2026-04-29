@@ -22,6 +22,22 @@ type ShopifyGraphqlUserError = {
   message: string;
 };
 
+export type ShopifyProductHandleLookup = {
+  id: string;
+  title: string;
+  handle: string;
+  status: string;
+  tags?: string[] | null;
+  variants?: {
+    nodes?: Array<{
+      id: string;
+      sku: string;
+      price?: string | null;
+      inventoryItem?: { id: string } | null;
+    }>;
+  } | null;
+};
+
 export type StorefrontVerificationResult = {
   shopDomain: string;
   storefrontUrl: string;
@@ -728,6 +744,52 @@ export class CjShopifyUsaAdminService {
           inventoryItemId: v.inventoryItem!.id,
         })),
     };
+  }
+
+  async findProductByHandle(input: {
+    userId: number;
+    handle: string;
+  }): Promise<ShopifyProductHandleLookup | null> {
+    const handle = trimOrEmpty(input.handle).toLowerCase();
+    if (!handle) return null;
+
+    const data = await this.graphql<{
+      products?: {
+        nodes?: ShopifyProductHandleLookup[];
+      } | null;
+    }>({
+      userId: input.userId,
+      query: `
+        query CjShopifyUsaProductByHandle($query: String!) {
+          products(first: 5, query: $query) {
+            nodes {
+              id
+              title
+              handle
+              status
+              tags
+              variants(first: 100) {
+                nodes {
+                  id
+                  sku
+                  price
+                  inventoryItem {
+                    id
+                  }
+                }
+              }
+            }
+          }
+        }
+      `,
+      variables: {
+        query: `handle:${handle}`,
+      },
+    });
+
+    return (data.products?.nodes ?? []).find(
+      (product) => trimOrEmpty(product.handle).toLowerCase() === handle,
+    ) ?? null;
   }
 
   async setInventoryQuantity(input: {

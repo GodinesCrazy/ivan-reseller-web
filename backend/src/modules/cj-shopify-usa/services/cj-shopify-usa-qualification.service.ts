@@ -147,7 +147,9 @@ export class CjShopifyUsaQualificationService {
 
     // === RECHAZO POR PRECIO FUERA DE RANGO COMERCIAL ===
     if (suggestedSellPriceUsd < PRICING_DEFAULTS.minSellPriceUsd) {
-      reasons.push(`Suggested price too low: $${suggestedSellPriceUsd.toFixed(2)} < $${PRICING_DEFAULTS.minSellPriceUsd} minimum`);
+      reasons.push(
+        `Rejected by minimum sell price rule: suggested Shopify price $${suggestedSellPriceUsd.toFixed(2)} is below the $${PRICING_DEFAULTS.minSellPriceUsd.toFixed(2)} minimum. Product is too low-ticket for the configured economics.`,
+      );
       return {
         decision: 'REJECTED',
         reasons,
@@ -156,7 +158,9 @@ export class CjShopifyUsaQualificationService {
     }
 
     if (suggestedSellPriceUsd > maxSellPriceUsd) {
-      reasons.push(`Suggested price too high: $${suggestedSellPriceUsd.toFixed(2)} > $${maxSellPriceUsd.toFixed(2)} maximum`);
+      reasons.push(
+        `Rejected by maximum sell price rule: suggested Shopify price $${suggestedSellPriceUsd.toFixed(2)} exceeds the configured $${maxSellPriceUsd.toFixed(2)} maximum. The product may be valid, but it is outside the current store price cap.`,
+      );
       return {
         decision: 'REJECTED',
         reasons,
