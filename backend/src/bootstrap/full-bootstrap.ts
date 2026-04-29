@@ -469,6 +469,19 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       console.warn('??  Warning: Could not initialize or start autopilot:', autopilotError?.message || autopilotError);
     }
 
+    // CJ Shopify USA Automation: auto-start if env flag is set
+    if (process.env.ENABLE_CJ_SHOPIFY_USA_MODULE === 'true' && process.env.AUTO_START_CJ_SHOPIFY_AUTOMATION === 'true') {
+      setImmediate(async () => {
+        try {
+          const { automationService } = await import('../modules/cj-shopify-usa/services/cj-shopify-usa-automation.service');
+          const status = await automationService.start(1);
+          console.log('[BOOT] ✅ CJ Shopify USA automation auto-started:', status.state);
+        } catch (err: any) {
+          console.warn('[BOOT] ⚠️  CJ Shopify USA automation auto-start failed (non-fatal):', err?.message);
+        }
+      });
+    }
+
     const totalInitTime = Date.now() - startTime;
     logMilestone(`Full bootstrap completed (total: ${totalInitTime}ms)`);
     console.log('');
