@@ -984,6 +984,8 @@ export const cjShopifyUsaPublishService = {
       locationId: location.id,
     } as Prisma.InputJsonValue);
 
+    let publishAttemptListingIds = [listing.id];
+
     try {
       const mediaPayload = (Array.isArray(draft.images) ? draft.images : [])
         .map((src: string) => String(src).trim())
@@ -1005,6 +1007,7 @@ export const cjShopifyUsaPublishService = {
       });
 
       const allToPublish = [listing, ...siblingDrafts];
+      publishAttemptListingIds = allToPublish.map((candidate) => candidate.id);
       const isMultiVariant = allToPublish.length > 1;
       const productTitle = String(draft.title || listing.product.title || 'Pet Product');
 
@@ -1203,6 +1206,18 @@ export const cjShopifyUsaPublishService = {
 
         const primarySkuPending = resolvePrimarySku(listing, draft);
         const pendingVariantId = shopifyVariantBySku.get(primarySkuPending)?.id ?? upserted.variantId;
+        if (isMultiVariant && siblingDrafts.length > 0) {
+          await prisma.cjShopifyUsaListing.updateMany({
+            where: { id: { in: siblingDrafts.map((sibling) => sibling.id) } },
+            data: {
+              status: CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
+              shopifyProductId: upserted.productId,
+              shopifyHandle: upserted.handle,
+              lastSyncedAt: new Date(),
+              lastError: `Shopify product was created/published but buyer-facing storefront verification failed: ${reason}`,
+            },
+          });
+        }
         const pending = await prisma.cjShopifyUsaListing.update({
           where: { id: listing.id },
           data: {
@@ -1228,8 +1243,10 @@ export const cjShopifyUsaPublishService = {
       }
 
       if (isMultiVariant && variantConfig.length > 0) {
+        const handledListingIds = new Set<number>([listing.id]);
         for (const vc of variantConfig) {
           if (vc.listingId === listing.id) continue; // handled below
+          handledListingIds.add(vc.listingId);
           const sv = shopifyVariantBySku.get(vc.sku);
           await prisma.cjShopifyUsaListing.update({
             where: { id: vc.listingId },
@@ -1241,6 +1258,21 @@ export const cjShopifyUsaPublishService = {
               publishedAt: new Date(),
               lastSyncedAt: new Date(),
               lastError: null,
+            },
+          });
+        }
+
+        const collapsedDuplicateIds = siblingDrafts
+          .map((sibling) => sibling.id)
+          .filter((id) => !handledListingIds.has(id));
+        if (collapsedDuplicateIds.length > 0) {
+          await prisma.cjShopifyUsaListing.updateMany({
+            where: { id: { in: collapsedDuplicateIds } },
+            data: {
+              status: CJ_SHOPIFY_USA_LISTING_STATUS.ARCHIVED,
+              lastSyncedAt: new Date(),
+              publishedAt: null,
+              lastError: `Archived duplicate draft collapsed into Shopify product ${upserted.productId}`,
             },
           });
         }
@@ -1288,8 +1320,11 @@ export const cjShopifyUsaPublishService = {
       return updated;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await prisma.cjShopifyUsaListing.update({
-        where: { id: listing.id },
+      await prisma.cjShopifyUsaListing.updateMany({
+        where: {
+          id: { in: publishAttemptListingIds },
+          status: CJ_SHOPIFY_USA_LISTING_STATUS.PUBLISHING,
+        },
         data: {
           status: CJ_SHOPIFY_USA_LISTING_STATUS.FAILED,
           lastError: message,
