@@ -6,6 +6,7 @@ import { cjShopifyUsaAdminService } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service';
+import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service';
 import {
   CJ_SHOPIFY_USA_LISTING_STATUS,
   CJ_SHOPIFY_USA_TRACE_STEP,
@@ -1275,6 +1276,14 @@ export const cjShopifyUsaPublishService = {
         siblingCount: siblingDrafts.length,
         isMultiVariant,
       } as Prisma.InputJsonValue);
+
+      // Non-blocking: distribute to social channels after successful publish.
+      // Errors inside schedulePost are swallowed and persisted to CjShopifyUsaSocialPost.
+      cjShopifyUsaSocialService.schedulePost({
+        userId: input.userId,
+        listingId: listing.id,
+        title: draft.title || listing.product.title,
+      });
 
       return updated;
     } catch (error) {

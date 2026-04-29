@@ -87,6 +87,10 @@ export const CJ_SHOPIFY_USA_TRACE_STEP = {
   REFUND_STATUS_UPDATED: 'refund.status.updated',
   ALERT_CREATED: 'alert.created',
   ALERT_RESOLVED: 'alert.resolved',
+  SOCIAL_POST_START: 'social.post.start',
+  SOCIAL_POST_SUCCESS: 'social.post.success',
+  SOCIAL_POST_ERROR: 'social.post.error',
+  SOCIAL_POST_RETRY: 'social.post.retry',
 } as const;
 
 export const CJ_SHOPIFY_USA_POST_CREATE_CHECKOUT_MODE = {
@@ -144,6 +148,17 @@ export const CJ_SHOPIFY_USA_ALERT_TYPE = {
   REFUND_FAILED: 'REFUND_FAILED',
   ORDER_LOSS: 'ORDER_LOSS',
   SHOPIFY_DISCONNECTED: 'SHOPIFY_DISCONNECTED',
+} as const;
+
+export const CJ_SHOPIFY_USA_SOCIAL_POST_PLATFORM = {
+  PINTEREST: 'PINTEREST',
+} as const;
+
+export const CJ_SHOPIFY_USA_SOCIAL_POST_STATUS = {
+  PENDING: 'PENDING',
+  RETRYING: 'RETRYING',
+  SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
 } as const;
 
 export const CJ_SHOPIFY_USA_LISTING_STATUS = {

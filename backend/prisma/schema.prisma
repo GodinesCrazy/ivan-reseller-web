@@ -129,6 +129,7 @@ model User {
   cjShopifyUsaExecutionTraces   CjShopifyUsaExecutionTrace[]
   cjShopifyUsaOpportunityRuns   CjShopifyUsaOpportunityRun[]
   cjShopifyUsaOpportunityCandidates CjShopifyUsaOpportunityCandidate[]
+  cjShopifyUsaSocialPosts       CjShopifyUsaSocialPost[]
 
   // TopDawg → Shopify USA vertical (isolated module)
   topDawgShopifyUsaAccountSettings   TopDawgShopifyUsaAccountSettings?
@@ -2889,6 +2890,7 @@ model CjShopifyUsaListing {
   evaluation    CjShopifyUsaProductEvaluation? @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
   shippingQuote CjShopifyUsaShippingQuote?     @relation(fields: [shippingQuoteId], references: [id], onDelete: SetNull)
   orders        CjShopifyUsaOrder[]
+  socialPosts   CjShopifyUsaSocialPost[]
 
   @@index([userId])
   @@index([userId, status])
@@ -3115,6 +3117,29 @@ model CjShopifyUsaOpportunityCandidate {
   @@index([userId, status])
   @@index([userId, totalScore])
   @@map("cj_shopify_usa_opportunity_candidates")
+}
+
+model CjShopifyUsaSocialPost {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  listingId  Int
+  platform   String
+  title      String   @db.Text
+  externalId String?
+  status     String   @default("PENDING")
+  url        String?  @db.Text
+  errorMsg   String?  @db.Text
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing CjShopifyUsaListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([userId, platform])
+  @@index([listingId])
+  @@index([userId, status])
+  @@map("cj_shopify_usa_social_posts")
 }
 
 // ── TopDawg → Shopify USA ─────────────────────────────────────────────────────
