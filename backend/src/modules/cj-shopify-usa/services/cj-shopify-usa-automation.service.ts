@@ -340,9 +340,45 @@ class CjShopifyUsaAutomationService {
         return;
       }
 
+      // ── Step 2.5: Publish existing DRAFT listings (backlog) ──
+      log('info', 'Step 2.5: Publishing existing DRAFT listings backlog...');
+      try {
+        const draftBacklog = await prisma.cjShopifyUsaListing.findMany({
+          where: { userId, status: 'DRAFT', draftPayload: { not: {} } },
+          orderBy: { updatedAt: 'desc' },
+          take: Math.min(perCycleLimit, 20),
+          select: { id: true, draftPayload: true },
+        });
+        if (draftBacklog.length > 0) {
+          log('info', `Found ${draftBacklog.length} DRAFT listings to publish from backlog`);
+          let backlogPublished = 0;
+          for (const draft of draftBacklog) {
+            if (this.abortSignal) break;
+            if (this.dailyPublishCount >= this.config.maxDailyPublish) break;
+            try {
+              await cjShopifyUsaPublishService.publishListing({ userId, listingId: draft.id });
+              backlogPublished++;
+              this.dailyPublishCount++;
+              cycle.published++;
+              log('success', `Backlog published listing ${draft.id}`);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              log('warn', `Backlog listing ${draft.id} failed: ${msg.slice(0, 80)}`);
+            }
+            await new Promise((r) => setTimeout(r, 6000));
+          }
+          log('info', `Backlog step done: ${backlogPublished} published`);
+        } else {
+          log('info', 'No DRAFT backlog to process');
+        }
+      } catch (err) {
+        log('warn', `Backlog publish step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+      }
+
       // ── Step 3: Take top N by margin ──
-      const toProcess = uniqueCandidates.slice(0, perCycleLimit);
-      log('info', `Processing top ${toProcess.length} products this cycle`);
+      const remainingSlots = Math.min(this.config.maxPerCycle, this.config.maxDailyPublish - this.dailyPublishCount);
+      const toProcess = uniqueCandidates.slice(0, remainingSlots);
+      log('info', `Processing top ${toProcess.length} new products this cycle`);
 
       // ── Step 4: Create drafts + optionally publish ──
       for (const ev of toProcess) {
