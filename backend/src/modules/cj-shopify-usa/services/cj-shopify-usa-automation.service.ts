@@ -627,7 +627,7 @@ class CjShopifyUsaAutomationService {
         } catch (err) {
           cycle.errors++;
           const msg = err instanceof Error ? err.message : String(err);
-          log('error', `Failed for ${product.cjProductId}: ${msg.slice(0, 120)}`);
+          log('error', `Failed for ${product.cjProductId}: ${msg.slice(0, 260)}`);
         }
       }
 
