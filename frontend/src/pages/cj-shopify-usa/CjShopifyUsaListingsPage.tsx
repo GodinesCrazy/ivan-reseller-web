@@ -131,6 +131,15 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function statusBadge(row: ListingRow): string {
+  if (row.status === 'RECONCILE_PENDING') {
+    const inventory = row.publishTruth?.shopify?.inventoryQuantity;
+    if (inventory != null && inventory <= 0) {
+      return 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-200';
+    }
+    if (row.publishTruth?.shopify?.adminStatus === 'ACTIVE' && row.publishTruth?.shopify?.publishedOnPublication) {
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+    }
+  }
   if (row.status === 'ACTIVE' && !row.publishTruth?.buyerFacingVerified) {
     return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
   }
@@ -138,6 +147,13 @@ function statusBadge(row: ListingRow): string {
 }
 
 function statusLabel(row: ListingRow): string {
+  if (row.status === 'RECONCILE_PENDING') {
+    const inventory = row.publishTruth?.shopify?.inventoryQuantity;
+    if (inventory != null && inventory <= 0) return 'Publicado sin stock';
+    if (row.publishTruth?.shopify?.adminStatus === 'ACTIVE' && row.publishTruth?.shopify?.publishedOnPublication) {
+      return 'Publicado, revisar storefront';
+    }
+  }
   if (row.status === 'ACTIVE' && !row.publishTruth?.buyerFacingVerified) {
     return 'Shopify Active no verificado';
   }
@@ -157,7 +173,12 @@ function truthSummary(row: ListingRow): string {
     truth?.shopify?.inventoryQuantity == null
       ? 'stock: —'
       : `stock: ${truth.shopify.inventoryQuantity}`;
-  return `${admin} / ${publication} / ${inventory}`;
+  const storefront = truth?.buyerFacingVerified
+    ? 'storefront: OK'
+    : truth?.storefront
+      ? 'storefront: revisar'
+      : 'storefront: —';
+  return `${admin} / ${publication} / ${inventory} / ${storefront}`;
 }
 
 function usd(n: number | null | undefined): string {
@@ -215,7 +236,13 @@ function needsReview(row: ListingRow): boolean {
 }
 
 function publishBlockReason(row: ListingRow, maxSellPriceUsd: number): string | null {
-  if (!isPublishableStatus(row.status)) return `Estado ${statusLabel(row)} no permite publicar.`;
+  if (row.status === 'RECONCILE_PENDING' && isShopifyLinked(row)) {
+    return 'Ya existe en Shopify. Publicar no corrige este estado; usa Re-sync y revisa storefront/inventario en Detalle.';
+  }
+  if (row.status === 'FAILED' && isShopifyLinked(row)) {
+    return 'Tiene producto Shopify vinculado pero falló una verificación. Revisa Detalle o despublica antes de recrear.';
+  }
+  if (!['DRAFT', 'PAUSED', 'FAILED'].includes(row.status)) return `Estado ${statusLabel(row)} no permite publicar.`;
   const price = sellPrice(row);
   if (price > maxSellPriceUsd) return `Precio ${usd(price)} supera el máximo configurado ${usd(maxSellPriceUsd)}.`;
   return null;
@@ -240,6 +267,27 @@ function expandBlockReason(row: ListingRow, maxSellPriceUsd: number): string | n
   if (!row.publishTruth?.buyerFacingVerified) return 'Primero debe estar buyer-ready.';
   if (sellPrice(row) > maxSellPriceUsd) return `Precio ${usd(sellPrice(row))} supera el máximo configurado.`;
   return null;
+}
+
+function storefrontBlockReason(row: ListingRow): string | null {
+  if (!row.storefrontUrl) return 'Sin URL de storefront disponible.';
+  if (!isShopifyLinked(row)) return 'Sin producto Shopify vinculado.';
+  return null;
+}
+
+function primaryIssue(row: ListingRow): string {
+  const reasons = row.publishTruth?.reasons ?? [];
+  const inventory = row.publishTruth?.shopify?.inventoryQuantity;
+  if (inventory != null && inventory <= 0) return 'Inventario Shopify en 0';
+  if (row.publishTruth?.storefront?.passwordGate) return 'Storefront protegido por password';
+  if (row.publishTruth?.storefront?.status && row.publishTruth.storefront.status >= 400) {
+    return `Storefront HTTP ${row.publishTruth.storefront.status}`;
+  }
+  if (row.publishTruth?.storefront?.hasAddToCart === false) return 'No se detecta botón Add to cart';
+  if (row.publishTruth?.storefront?.hasPrice === false) return 'No se detecta precio público';
+  if (reasons.length > 0) return reconciliationReasonText(reasons[0]);
+  if (row.lastError) return row.lastError;
+  return statusLabel(row);
 }
 
 function fmtDate(iso: string | null): string {
@@ -727,6 +775,7 @@ export default function CjShopifyUsaListingsPage() {
               <th className="px-3 py-2">SKU CJ</th>
               <th className="px-3 py-2">Shopify ID</th>
               <th className="px-3 py-2">Shopify truth</th>
+              <th className="px-3 py-2">Bloqueo actual</th>
               <th className="px-3 py-2">
                 <span className="inline-flex items-center gap-1">
                   Fechas
@@ -739,7 +788,7 @@ export default function CjShopifyUsaListingsPage() {
           <tbody>
             {filteredListings.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-slate-500 text-sm">
+                <td colSpan={11} className="px-3 py-8 text-center text-slate-500 text-sm">
                   Sin resultados para los filtros actuales.
                 </td>
               </tr>
@@ -756,7 +805,14 @@ export default function CjShopifyUsaListingsPage() {
                 const pauseReason = pauseBlockReason(row);
                 const unpublishReason = unpublishBlockReason(row);
                 const expandReason = expandBlockReason(row, maxSellPriceUsd);
+                const storefrontReason = storefrontBlockReason(row);
                 const selected = selectedIds.includes(row.id);
+                const publishLabel =
+                  row.status === 'RECONCILE_PENDING' && isShopifyLinked(row)
+                    ? 'Ya publicado'
+                    : row.status === 'ACTIVE'
+                      ? 'Publicado'
+                      : 'Publicar';
 
                 return (
                 <Fragment key={row.id}>
@@ -795,6 +851,9 @@ export default function CjShopifyUsaListingsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{truthSummary(row)}</td>
+                    <td className="px-3 py-2 max-w-[190px] text-xs text-slate-500 dark:text-slate-400">
+                      <p className="line-clamp-2" title={primaryIssue(row)}>{primaryIssue(row)}</p>
+                    </td>
                     <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
                       <p>Upd {fmtDate(row.updatedAt)}</p>
                       <p>Pub {fmtDate(row.publishedAt)}</p>
@@ -809,7 +868,7 @@ export default function CjShopifyUsaListingsPage() {
                           onClick={() => void publish(row.id)}
                         >
                           <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                          {busyId === row.id ? '...' : 'Publicar'}
+                          {busyId === row.id ? '...' : publishLabel}
                         </button>
                         {row.status === 'DRAFT' && exceedsMaxPrice && (
                           <span className="inline-flex h-7 items-center rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300">
@@ -846,15 +905,20 @@ export default function CjShopifyUsaListingsPage() {
                           <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
                           {busyId === row.id ? '...' : 'Variantes'}
                         </button>
-                        {row.status === 'ACTIVE' && row.storefrontUrl && row.publishTruth?.buyerFacingVerified && (
+                        {row.storefrontUrl && (
                           <a
                             href={row.storefrontUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+                            title={storefrontReason ?? (row.publishTruth?.buyerFacingVerified ? 'Abrir producto buyer-ready' : 'Abrir storefront para diagnosticar')}
+                            className={`inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-xs font-medium transition ${
+                              row.publishTruth?.buyerFacingVerified
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-900/40'
+                                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                            }`}
                           >
                             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                            Ver tienda
+                            {row.publishTruth?.buyerFacingVerified ? 'Ver tienda' : 'Probar tienda'}
                           </a>
                         )}
                         <button
@@ -870,7 +934,7 @@ export default function CjShopifyUsaListingsPage() {
                   </tr>
                   {expandedId === row.id && (
                     <tr className="bg-slate-50/90 dark:bg-slate-950/50">
-                      <td colSpan={10} className="px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
+                      <td colSpan={11} className="px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)]">
                           <div className="space-y-3">
                             <div>
