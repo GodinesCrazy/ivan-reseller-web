@@ -206,8 +206,11 @@ router.get('/config/preview-impact', async (req: Request, res: Response, next: N
 
 // ── Automation ────────────────────────────────────────────────────────────────
 
-router.get('/automation/status', (req: Request, res: Response) => {
-  res.json({ ok: true, ...automationService.getStatus() });
+router.get('/automation/status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    res.json({ ok: true, ...await automationService.getStatus(userId) });
+  } catch (e) { next(e); }
 });
 
 router.post('/automation/start', async (req: Request, res: Response, next: NextFunction) => {
@@ -218,8 +221,11 @@ router.post('/automation/start', async (req: Request, res: Response, next: NextF
   } catch (e) { next(e); }
 });
 
-router.post('/automation/pause', (_req: Request, res: Response) => {
-  res.json({ ok: true, ...automationService.pause() });
+router.post('/automation/pause', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const status = await automationService.pause(req.user!.userId);
+    res.json({ ok: true, ...status });
+  } catch (e) { next(e); }
 });
 
 router.post('/automation/resume', async (req: Request, res: Response, next: NextFunction) => {
@@ -230,13 +236,18 @@ router.post('/automation/resume', async (req: Request, res: Response, next: Next
   } catch (e) { next(e); }
 });
 
-router.post('/automation/stop', (_req: Request, res: Response) => {
-  res.json({ ok: true, ...automationService.stop() });
+router.post('/automation/stop', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const status = await automationService.stop(req.user!.userId);
+    res.json({ ok: true, ...status });
+  } catch (e) { next(e); }
 });
 
-router.post('/automation/config', (req: Request, res: Response) => {
-  const config = automationService.updateConfig(req.body as Parameters<typeof automationService.updateConfig>[0]);
-  res.json({ ok: true, config });
+router.post('/automation/config', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const config = await automationService.updateConfig(req.user!.userId, req.body as Parameters<typeof automationService.updateConfig>[1]);
+    res.json({ ok: true, config });
+  } catch (e) { next(e); }
 });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────

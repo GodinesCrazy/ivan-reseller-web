@@ -66,6 +66,44 @@ const DEFAULT_CONFIG: AutomationConfig = {
   enabled: false,
 };
 
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(parsed)));
+}
+
+function cycleToResponse(row: {
+  id: string;
+  startedAt: Date;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  productsScanned: number;
+  productsApproved: number;
+  draftsCreated: number;
+  published: number;
+  skipped: number;
+  errors: number;
+  status: string;
+  events: unknown;
+}): CycleResult {
+  return {
+    cycleId: row.id,
+    startedAt: row.startedAt.toISOString(),
+    finishedAt: row.finishedAt?.toISOString(),
+    duration: row.durationMs ?? undefined,
+    productsScanned: row.productsScanned,
+    productsApproved: row.productsApproved,
+    draftsCreated: row.draftsCreated,
+    published: row.published,
+    skipped: row.skipped,
+    errors: row.errors,
+    status: ['RUNNING', 'COMPLETED', 'FAILED', 'ABORTED'].includes(row.status)
+      ? row.status as CycleResult['status']
+      : 'FAILED',
+    events: Array.isArray(row.events) ? row.events as CycleEvent[] : [],
+  };
+}
+
 class CjShopifyUsaAutomationService {
   private state: AutomationState = 'IDLE';
   private config: AutomationConfig = { ...DEFAULT_CONFIG };
@@ -80,7 +118,110 @@ class CjShopifyUsaAutomationService {
 
   // ── Public API ─────────────────────────────────────────────────────────
 
-  getStatus() {
+  private configFromSettings(settings: Awaited<ReturnType<typeof cjShopifyUsaConfigService.getOrCreateSettings>>): AutomationConfig {
+    return {
+      intervalHours: clampInt(settings.automationIntervalHours, 1, 24, DEFAULT_CONFIG.intervalHours),
+      maxDailyPublish: clampInt(settings.automationMaxDailyPublish, 1, 500, DEFAULT_CONFIG.maxDailyPublish),
+      maxPerCycle: clampInt(settings.automationMaxPerCycle, 1, 100, DEFAULT_CONFIG.maxPerCycle),
+      minMarginPct: Math.max(0, Math.min(100, Number(settings.automationMinMarginPct ?? settings.minMarginPct ?? DEFAULT_CONFIG.minMarginPct))),
+      categories: DEFAULT_CONFIG.categories,
+      autoPublish: Boolean(settings.automationAutoPublish),
+      enabled: Boolean(settings.automationEnabled),
+    };
+  }
+
+  private async loadPersistedState(userId: number) {
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    this.config = this.configFromSettings(settings);
+    this.dailyPublishCount = clampInt(settings.automationDailyPublishCount, 0, 10_000, 0);
+    this.dailyCountDate = settings.automationDailyCountDate ?? '';
+    this.lastRunAt = settings.automationLastRunAt ?? null;
+    this.nextRunAt = this.timer ? this.nextRunAt : settings.automationNextRunAt ?? null;
+    if (this.state !== 'RUNNING' && this.state !== 'PAUSED') {
+      this.state = settings.automationState === 'PAUSED'
+        ? 'PAUSED'
+        : settings.automationEnabled
+          ? 'RUNNING'
+          : settings.automationState === 'ERROR'
+            ? 'ERROR'
+            : 'IDLE';
+    }
+  }
+
+  private ensureScheduler(userId: number) {
+    if (!this.config.enabled || this.state !== 'RUNNING' || this.timer) return;
+    this.schedule(userId);
+    if (!this.nextRunAt || this.nextRunAt.getTime() <= Date.now() + 5_000) {
+      void this.runCycle(userId);
+    }
+  }
+
+  private async persistRuntime(userId: number, patch: Record<string, unknown> = {}) {
+    await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    await prisma.cjShopifyUsaAccountSettings.update({
+      where: { userId },
+      data: {
+        automationEnabled: this.config.enabled,
+        automationState: this.state,
+        automationIntervalHours: this.config.intervalHours,
+        automationMaxDailyPublish: this.config.maxDailyPublish,
+        automationMaxPerCycle: this.config.maxPerCycle,
+        automationMinMarginPct: this.config.minMarginPct,
+        automationAutoPublish: this.config.autoPublish,
+        automationDailyPublishCount: this.dailyPublishCount,
+        automationDailyCountDate: this.dailyCountDate || null,
+        automationLastRunAt: this.lastRunAt,
+        automationNextRunAt: this.nextRunAt,
+        ...patch,
+      },
+    });
+  }
+
+  private async persistCycle(userId: number, cycle: CycleResult) {
+    await prisma.cjShopifyUsaAutomationCycle.upsert({
+      where: { id: cycle.cycleId },
+      create: {
+        id: cycle.cycleId,
+        userId,
+        status: cycle.status,
+        startedAt: new Date(cycle.startedAt),
+        finishedAt: cycle.finishedAt ? new Date(cycle.finishedAt) : null,
+        durationMs: cycle.duration ?? null,
+        productsScanned: cycle.productsScanned,
+        productsApproved: cycle.productsApproved,
+        draftsCreated: cycle.draftsCreated,
+        published: cycle.published,
+        skipped: cycle.skipped,
+        errors: cycle.errors,
+        events: cycle.events as any,
+      },
+      update: {
+        status: cycle.status,
+        finishedAt: cycle.finishedAt ? new Date(cycle.finishedAt) : null,
+        durationMs: cycle.duration ?? null,
+        productsScanned: cycle.productsScanned,
+        productsApproved: cycle.productsApproved,
+        draftsCreated: cycle.draftsCreated,
+        published: cycle.published,
+        skipped: cycle.skipped,
+        errors: cycle.errors,
+        events: cycle.events as any,
+      },
+    });
+  }
+
+  async getStatus(userId?: number) {
+    let persistedHistory: CycleResult[] = [];
+    if (userId) {
+      await this.loadPersistedState(userId);
+      this.ensureScheduler(userId);
+      const rows = await prisma.cjShopifyUsaAutomationCycle.findMany({
+        where: { userId },
+        orderBy: { startedAt: 'desc' },
+        take: 10,
+      });
+      persistedHistory = rows.reverse().map(cycleToResponse);
+    }
     return {
       state: this.state,
       config: this.config,
@@ -88,40 +229,55 @@ class CjShopifyUsaAutomationService {
       lastRunAt: this.lastRunAt?.toISOString() ?? null,
       nextRunAt: this.nextRunAt?.toISOString() ?? null,
       dailyPublishCount: this.dailyPublishCount,
-      cycleHistory: this.cycleHistory.slice(-10),
+      cycleHistory: this.cycleHistory.length > 0 ? this.cycleHistory.slice(-10) : persistedHistory,
     };
   }
 
-  updateConfig(patch: Partial<AutomationConfig>) {
-    this.config = { ...this.config, ...patch };
+  async updateConfig(userId: number, patch: Partial<AutomationConfig>) {
+    await this.loadPersistedState(userId);
+    this.config = {
+      ...this.config,
+      ...patch,
+      intervalHours: clampInt(patch.intervalHours ?? this.config.intervalHours, 1, 24, this.config.intervalHours),
+      maxDailyPublish: clampInt(patch.maxDailyPublish ?? this.config.maxDailyPublish, 1, 500, this.config.maxDailyPublish),
+      maxPerCycle: clampInt(patch.maxPerCycle ?? this.config.maxPerCycle, 1, 100, this.config.maxPerCycle),
+      minMarginPct: Math.max(0, Math.min(100, Number(patch.minMarginPct ?? this.config.minMarginPct))),
+      autoPublish: typeof patch.autoPublish === 'boolean' ? patch.autoPublish : this.config.autoPublish,
+      enabled: this.config.enabled,
+    };
     // If running, reschedule with new interval
     if (this.state === 'RUNNING' && 'intervalHours' in patch) {
-      this.reschedule();
+      this.schedule(userId);
     }
+    await this.persistRuntime(userId);
     return this.config;
   }
 
   async start(userId: number) {
-    if (this.state === 'RUNNING') return this.getStatus();
+    await this.loadPersistedState(userId);
+    if (this.state === 'RUNNING') return this.getStatus(userId);
     this.config.enabled = true;
     this.abortSignal = false;
     this.state = 'RUNNING';
     this.schedule(userId);
+    await this.persistRuntime(userId);
     // Fire first cycle immediately
     void this.runCycle(userId);
-    return this.getStatus();
+    return this.getStatus(userId);
   }
 
-  pause() {
-    if (this.state !== 'RUNNING') return this.getStatus();
+  async pause(userId: number) {
+    if (this.state !== 'RUNNING') return this.getStatus(userId);
     this.state = 'PAUSED';
     this.abortSignal = true;
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
     this.nextRunAt = null;
-    return this.getStatus();
+    this.config.enabled = true;
+    await this.persistRuntime(userId);
+    return this.getStatus(userId);
   }
 
-  stop() {
+  async stop(userId: number) {
     this.state = 'IDLE';
     this.config.enabled = false;
     this.abortSignal = true;
@@ -131,18 +287,34 @@ class CjShopifyUsaAutomationService {
       this.currentCycle.status = 'ABORTED';
       this.currentCycle.finishedAt = new Date().toISOString();
       this.pushHistory(this.currentCycle);
+      await this.persistCycle(userId, this.currentCycle);
       this.currentCycle = null;
     }
-    return this.getStatus();
+    await this.persistRuntime(userId);
+    return this.getStatus(userId);
   }
 
-  resume(userId: number) {
-    if (this.state !== 'PAUSED') return this.getStatus();
+  async resume(userId: number) {
+    await this.loadPersistedState(userId);
+    if (this.state !== 'PAUSED') return this.getStatus(userId);
+    this.state = 'RUNNING';
+    this.config.enabled = true;
+    this.abortSignal = false;
+    this.schedule(userId);
+    await this.persistRuntime(userId);
+    void this.runCycle(userId);
+    return this.getStatus(userId);
+  }
+
+  async startIfEnabled(userId: number) {
+    await this.loadPersistedState(userId);
+    if (!this.config.enabled || this.state === 'PAUSED') return this.getStatus(userId);
     this.state = 'RUNNING';
     this.abortSignal = false;
     this.schedule(userId);
+    await this.persistRuntime(userId);
     void this.runCycle(userId);
-    return this.getStatus();
+    return this.getStatus(userId);
   }
 
   // ── Scheduling ─────────────────────────────────────────────────────────
@@ -186,6 +358,7 @@ class CjShopifyUsaAutomationService {
     };
     this.currentCycle = cycle;
     this.abortSignal = false;
+    await this.persistCycle(userId, cycle);
 
     try {
       log('info', `Cycle ${cycleId} started — checking daily limits`);
@@ -204,8 +377,6 @@ class CjShopifyUsaAutomationService {
         cycle.status = 'COMPLETED';
         cycle.finishedAt = new Date().toISOString();
         this.lastRunAt = new Date();
-        this.pushHistory(cycle);
-        this.currentCycle = null;
         return;
       }
 
@@ -335,8 +506,6 @@ class CjShopifyUsaAutomationService {
         cycle.status = 'COMPLETED';
         cycle.finishedAt = new Date().toISOString();
         this.lastRunAt = new Date();
-        this.pushHistory(cycle);
-        this.currentCycle = null;
         return;
       }
 
@@ -480,6 +649,8 @@ class CjShopifyUsaAutomationService {
       }
 
       this.pushHistory(cycle);
+      await this.persistCycle(userId, cycle);
+      await this.persistRuntime(userId);
       this.currentCycle = null;
     }
   }

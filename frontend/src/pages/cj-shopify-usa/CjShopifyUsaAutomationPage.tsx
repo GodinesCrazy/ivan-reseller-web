@@ -553,6 +553,7 @@ export default function CjShopifyUsaAutomationPage() {
                 ['📝', 'Crea drafts automáticamente (hasta máx. por ciclo)'],
                 ['🚀', 'Si auto-publicar ON → publica directo a Shopify'],
                 ['⏰', 'Repite cada N horas configurado'],
+                ['♻️', 'Mantiene el estado activo aunque Railway reinicie'],
                 ['📈', 'Registra estadísticas de cada ciclo para análisis'],
               ].map(([icon, text], i) => (
                 <li key={i} className="flex gap-2">
@@ -568,6 +569,7 @@ export default function CjShopifyUsaAutomationPage() {
             <p className="font-bold text-amber-300">💡 Optimización</p>
             <p>Para mejores resultados: primero ejecuta <strong>Descubrir</strong> manualmente para poblar la BD con evaluaciones recientes, luego activa la automatización.</p>
             <p className="mt-1">El sistema prioriza productos con <strong>mayor margen</strong> — ajusta el mínimo de margen para filtrar solo los más rentables.</p>
+            <p className="mt-1">La configuración queda guardada en la base de datos; si el backend se reinicia, el ciclo vuelve a programarse automáticamente.</p>
           </div>
         </div>
       </div>

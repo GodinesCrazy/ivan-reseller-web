@@ -127,6 +127,7 @@ model User {
   cjShopifyUsaAlerts            CjShopifyUsaAlert[]
   cjShopifyUsaProfitSnapshots   CjShopifyUsaProfitSnapshot[]
   cjShopifyUsaExecutionTraces   CjShopifyUsaExecutionTrace[]
+  cjShopifyUsaAutomationCycles   CjShopifyUsaAutomationCycle[]
   cjShopifyUsaOpportunityRuns   CjShopifyUsaOpportunityRun[]
   cjShopifyUsaOpportunityCandidates CjShopifyUsaOpportunityCandidate[]
   cjShopifyUsaSocialPosts       CjShopifyUsaSocialPost[]
@@ -2746,6 +2747,20 @@ model CjShopifyUsaAccountSettings {
   defaultPaymentFeePct       Decimal? @db.Decimal(6, 4)
   defaultPaymentFixedFeeUsd  Decimal? @db.Decimal(18, 2)
   cjPostCreateCheckoutMode   String   @default("MANUAL")
+
+  // Automation runtime configuration. Persisted so Railway/Vercel deploys do not silently disable the scheduler.
+  automationEnabled          Boolean  @default(false)
+  automationState            String   @default("IDLE")
+  automationIntervalHours    Int      @default(2)
+  automationMaxDailyPublish  Int      @default(500)
+  automationMaxPerCycle      Int      @default(80)
+  automationMinMarginPct     Decimal  @default(12.00) @db.Decimal(6, 2)
+  automationAutoPublish      Boolean  @default(true)
+  automationDailyPublishCount Int     @default(0)
+  automationDailyCountDate   String?
+  automationLastRunAt        DateTime?
+  automationNextRunAt        DateTime?
+
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 
@@ -3043,6 +3058,30 @@ model CjShopifyUsaExecutionTrace {
   @@index([userId, createdAt])
   @@index([correlationId])
   @@map("cj_shopify_usa_execution_traces")
+}
+
+model CjShopifyUsaAutomationCycle {
+  id               String   @id
+  userId           Int
+  status           String
+  startedAt        DateTime
+  finishedAt       DateTime?
+  durationMs       Int?
+  productsScanned  Int      @default(0)
+  productsApproved Int      @default(0)
+  draftsCreated    Int      @default(0)
+  published        Int      @default(0)
+  skipped          Int      @default(0)
+  errors           Int      @default(0)
+  events           Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+  @@index([userId, status])
+  @@map("cj_shopify_usa_automation_cycles")
 }
 
 model CjShopifyUsaOpportunityRun {
