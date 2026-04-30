@@ -150,8 +150,9 @@ class CjShopifyUsaAutomationService {
 
   private ensureScheduler(userId: number) {
     if (!this.config.enabled || this.state !== 'RUNNING' || this.timer) return;
+    const shouldRunNow = !this.nextRunAt || this.nextRunAt.getTime() <= Date.now() + 5_000;
     this.schedule(userId);
-    if (!this.nextRunAt || this.nextRunAt.getTime() <= Date.now() + 5_000) {
+    if (shouldRunNow) {
       void this.runCycle(userId);
     }
   }
