@@ -322,6 +322,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       shippingQuotes,
       listings,
       listingsActive,
+      listingsActiveOrPendingShopifyProducts,
       orders,
       ordersOpen,
       ordersWithTracking,
@@ -339,6 +340,20 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       prisma.cjShopifyUsaListing.count({ where: { userId } }),
       prisma.cjShopifyUsaListing.count({
         where: { userId, status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE },
+      }),
+      prisma.cjShopifyUsaListing.findMany({
+        where: {
+          userId,
+          status: {
+            in: [
+              CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+              CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
+            ],
+          },
+          shopifyProductId: { not: null },
+        },
+        distinct: ['shopifyProductId'],
+        select: { shopifyProductId: true },
       }),
       prisma.cjShopifyUsaOrder.count({ where: { userId } }),
       prisma.cjShopifyUsaOrder.count({
@@ -393,6 +408,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
         shippingQuotes,
         listings,
         listingsActive,
+        shopifyProductsInSoftware: listingsActiveOrPendingShopifyProducts.length,
         orders,
         ordersOpen,
         ordersWithTracking,
@@ -410,31 +426,56 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
 router.get('/listings', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const listings = await prisma.cjShopifyUsaListing.findMany({
-      where: { userId },
-      include: {
-        product: {
-          select: {
-            id: true,
-            cjProductId: true,
-            title: true,
+    const [listings, total, activeOrPendingShopifyProducts] = await Promise.all([
+      prisma.cjShopifyUsaListing.findMany({
+        where: { userId },
+        include: {
+          product: {
+            select: {
+              id: true,
+              cjProductId: true,
+              title: true,
+            },
+          },
+          variant: {
+            select: {
+              id: true,
+              cjSku: true,
+              cjVid: true,
+              stockLastKnown: true,
+              unitCostUsd: true,
+            },
           },
         },
-        variant: {
-          select: {
-            id: true,
-            cjSku: true,
-            cjVid: true,
-            stockLastKnown: true,
-            unitCostUsd: true,
+        orderBy: { updatedAt: 'desc' },
+        take: 100,
+      }),
+      prisma.cjShopifyUsaListing.count({ where: { userId } }),
+      prisma.cjShopifyUsaListing.findMany({
+        where: {
+          userId,
+          status: {
+            in: [
+              CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+              CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
+            ],
           },
+          shopifyProductId: { not: null },
         },
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 100,
-    });
+        distinct: ['shopifyProductId'],
+        select: { shopifyProductId: true },
+      }),
+    ]);
     const listingsWithStorefront = await cjShopifyUsaReconciliationService.reconcileListings(userId, listings);
-    res.json({ ok: true, listings: listingsWithStorefront });
+    res.json({
+      ok: true,
+      listings: listingsWithStorefront,
+      meta: {
+        total,
+        returned: listingsWithStorefront.length,
+        shopifyProductsInSoftware: activeOrPendingShopifyProducts.length,
+      },
+    });
   } catch (error) {
     next(error);
   }

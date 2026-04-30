@@ -150,6 +150,10 @@ function toRepairQuantity(stock: unknown): number {
   return Math.min(toSafeInt(stock), SHOPIFY_INVENTORY_REPAIR_CAP);
 }
 
+function inventoryRepairKeyPart(value: string | null | undefined): string {
+  return trim(value).replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').slice(0, 80) || 'unknown';
+}
+
 function chooseVariant(listing: ListingLike, product: ShopifyProductTruth): ShopifyVariantTruth | null {
   const variants = product.variants?.nodes ?? [];
   if (variants.length === 0) return null;
@@ -396,13 +400,15 @@ export class CjShopifyUsaReconciliationService {
       if (repairQuantity <= 0) continue;
 
       try {
+        const inventoryKey = inventoryRepairKeyPart(inventoryItemId.split('/').pop());
+        const skuKey = inventoryRepairKeyPart(shopifyVariant.sku ?? sku);
         await cjShopifyUsaAdminService.setInventoryQuantity({
           userId: input.listing.userId,
           inventoryItemId,
           locationId: input.locationId,
           quantity: repairQuantity,
-          referenceDocumentUri: `logistics://cj-shopify-usa/reconcile-inventory/${input.listing.id}/${sku}`,
-          idempotencyKey: `reconcile-inventory-${input.listing.id}-${sku}-${repairQuantity}`,
+          referenceDocumentUri: `logistics://cj-shopify-usa/reconcile-inventory/${input.listing.id}/${inventoryKey}/${skuKey}`,
+          idempotencyKey: `reconcile-inventory-${input.listing.id}-${inventoryKey}-${repairQuantity}`,
         });
 
         if (liveStock.has(trim(localVariant.cjVid))) {

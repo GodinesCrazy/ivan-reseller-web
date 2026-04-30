@@ -108,6 +108,9 @@ type SortKey = 'updatedDesc' | 'updatedAsc' | 'publishedDesc' | 'priceDesc' | 'p
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const FILTER_CONTROL_CLASS =
+  'h-10 rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-100 dark:[color-scheme:dark]';
+
 const STATUS_BADGE: Record<string, string> = {
   DRAFT:             'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
   PUBLISHING:        'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -204,6 +207,17 @@ function htmlPreview(html: string | null | undefined): string {
 function reconciliationReasonText(reason: string): string {
   if (reason === 'No Shopify product id is stored for this listing yet.') {
     return 'Draft interno: aún no se ha creado el producto en Shopify. Presiona Publicar para enviarlo.';
+  }
+  if (reason === 'Shopify available inventory is 0.') {
+    return 'No buyer-ready: Shopify informa inventario disponible 0. No se puede vender hasta sincronizar stock real o despublicar.';
+  }
+  if (reason.startsWith('Shopify inventory repaired from CJ stock')) {
+    return reason.replace('Shopify inventory repaired from CJ stock for', 'Inventario reparado desde stock CJ para').replace('variant(s).', 'variante(s).');
+  }
+  if (reason.startsWith('Inventory repair failed for SKU')) {
+    return reason
+      .replace('Inventory repair failed for SKU', 'Falló la reparación de inventario para SKU')
+      .replace('Shopify inventory sync failed:', 'Shopify rechazó la sincronización:');
   }
   return reason;
 }
@@ -310,6 +324,7 @@ function axiosMsg(e: unknown, fb: string): string {
 
 export default function CjShopifyUsaListingsPage() {
   const [listings, setListings] = useState<ListingRow[]>([]);
+  const [listingsMeta, setListingsMeta] = useState<{ total: number; returned: number; shopifyProductsInSoftware: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -330,11 +345,12 @@ export default function CjShopifyUsaListingsPage() {
     setLoading(true);
     try {
       const [res, configRes] = await Promise.all([
-        api.get<{ ok: boolean; listings: ListingRow[] }>('/api/cj-shopify-usa/listings'),
+        api.get<{ ok: boolean; listings: ListingRow[]; meta?: { total: number; returned: number; shopifyProductsInSoftware: number } }>('/api/cj-shopify-usa/listings'),
         api.get<{ ok: boolean; settings?: { maxSellPriceUsd?: number | string | null } }>('/api/cj-shopify-usa/config'),
       ]);
       if (res.data?.ok && Array.isArray(res.data.listings)) {
         setListings(res.data.listings);
+        setListingsMeta(res.data.meta ?? null);
       }
       if (configRes.data?.settings) {
         setMaxSellPriceUsd(Number(configRes.data.settings.maxSellPriceUsd ?? 45));
@@ -657,6 +673,12 @@ export default function CjShopifyUsaListingsPage() {
         ))}
       </div>
 
+      {listingsMeta && (
+        <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-300">
+          Mostrando {listingsMeta.returned} listings recientes de {listingsMeta.total} en el software. Esos listings activos/en revisión corresponden a {listingsMeta.shopifyProductsInSoftware} productos Shopify únicos; Shopify cuenta productos, no variantes/listings.
+        </div>
+      )}
+
       <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_180px_190px_minmax(260px,auto)]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
@@ -664,13 +686,13 @@ export default function CjShopifyUsaListingsPage() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar producto, SKU, ID, handle o error"
-            className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className={`${FILTER_CONTROL_CLASS} w-full pl-9 pr-3`}
           />
         </label>
         <select
           value={statusFilter}
           onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-          className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          className={FILTER_CONTROL_CLASS}
         >
           <option value="ALL">Todos</option>
           <option value="BUYER_READY">Buyer-ready</option>
@@ -684,7 +706,7 @@ export default function CjShopifyUsaListingsPage() {
         <select
           value={sortKey}
           onChange={(event) => setSortKey(event.target.value as SortKey)}
-          className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-primary-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          className={FILTER_CONTROL_CLASS}
         >
           <option value="updatedDesc">Actualizado: reciente</option>
           <option value="updatedAsc">Actualizado: antiguo</option>

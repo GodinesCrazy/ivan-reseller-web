@@ -22,6 +22,7 @@ interface OverviewCounts {
   shippingQuotes: number;
   listings: number;
   listingsActive: number;
+  shopifyProductsInSoftware: number;
   orders: number;
   ordersOpen: number;
   ordersWithTracking: number;
@@ -161,7 +162,7 @@ export default function CjShopifyUsaOverviewPage() {
           },
           {
             label: 'Store Products (Listings)',
-            description: `${counts?.listings ?? 0} total · ${counts?.listingsActive ?? 0} activos en Shopify`,
+            description: `${counts?.shopifyProductsInSoftware ?? 0} productos Shopify · ${counts?.listingsActive ?? 0} listings activos`,
             icon: ShoppingBag,
             path: '/cj-shopify-usa/listings',
             accent: 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50',
@@ -256,7 +257,7 @@ export default function CjShopifyUsaOverviewPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { label: 'Productos CJ', value: counts.products, sub: `${counts.variants} variantes`, onClick: () => navigate('/cj-shopify-usa/products') },
-              { label: 'Listings Activos', value: counts.listingsActive, sub: `${counts.listings} total`, onClick: () => navigate('/cj-shopify-usa/listings') },
+              { label: 'Productos Shopify', value: counts.shopifyProductsInSoftware, sub: `${counts.listingsActive} listings activos · ${counts.listings} total`, onClick: () => navigate('/cj-shopify-usa/listings') },
               { label: 'Órdenes abiertas', value: counts.ordersOpen, sub: `${counts.orders} total · ${counts.ordersWithTracking} con tracking`, onClick: () => navigate('/cj-shopify-usa/orders') },
               { label: 'Actividad 24h', value: counts.tracesLast24h, sub: 'trazas de ejecución', onClick: () => navigate('/cj-shopify-usa/logs') },
             ].map(({ label, value, sub, onClick }) => (
