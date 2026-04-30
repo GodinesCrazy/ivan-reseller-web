@@ -278,6 +278,7 @@ function storefrontBlockReason(row: ListingRow): string | null {
 function primaryIssue(row: ListingRow): string {
   const reasons = row.publishTruth?.reasons ?? [];
   const inventory = row.publishTruth?.shopify?.inventoryQuantity;
+  if (isBuyerReady(row)) return 'Sin bloqueo';
   if (inventory != null && inventory <= 0) return 'Inventario Shopify en 0';
   if (row.publishTruth?.storefront?.passwordGate) return 'Storefront protegido por password';
   if (row.publishTruth?.storefront?.status && row.publishTruth.storefront.status >= 400) {

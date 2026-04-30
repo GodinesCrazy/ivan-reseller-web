@@ -8,10 +8,14 @@ import {
   cjShopifyUsaAdminService,
 } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
+import { createCjSupplierAdapter } from '../../cj-ebay/adapters/cj-supplier.adapter';
+
+const SHOPIFY_INVENTORY_REPAIR_CAP = 50;
 
 type ListingLike = {
   id: number;
   userId: number;
+  productId?: number | null;
   status: string;
   shopifyProductId?: string | null;
   shopifyVariantId?: string | null;
@@ -19,6 +23,13 @@ type ListingLike = {
   shopifySku?: string | null;
   quantity?: number | null;
   publishedAt?: Date | string | null;
+  variant?: {
+    id: number;
+    productId?: number | null;
+    cjSku?: string | null;
+    cjVid?: string | null;
+    stockLastKnown?: number | Prisma.Decimal | string | null;
+  } | null;
 };
 
 type ShopifyVariantTruth = {
@@ -128,6 +139,15 @@ function availableQuantity(variant: ShopifyVariantTruth | null): number | null {
   const quantities = variant?.inventoryItem?.inventoryLevel?.quantities ?? [];
   const available = quantities.find((entry) => entry.name === 'available');
   return Number.isFinite(available?.quantity) ? Number(available?.quantity) : null;
+}
+
+function toSafeInt(value: unknown): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+}
+
+function toRepairQuantity(stock: unknown): number {
+  return Math.min(toSafeInt(stock), SHOPIFY_INVENTORY_REPAIR_CAP);
 }
 
 function chooseVariant(listing: ListingLike, product: ShopifyProductTruth): ShopifyVariantTruth | null {
@@ -314,6 +334,127 @@ export class CjShopifyUsaReconciliationService {
     return data.node ?? null;
   }
 
+  private async repairZeroInventoryFromCj(input: {
+    listing: ListingLike;
+    product: ShopifyProductTruth;
+    productId: string;
+    productHandle: string | null;
+    locationId: string | null;
+  }): Promise<{ repairedCount: number; primaryInventoryQuantity: number | null; errors: string[] }> {
+    if (!input.locationId) {
+      return { repairedCount: 0, primaryInventoryQuantity: null, errors: ['No Shopify location is available for inventory repair.'] };
+    }
+
+    const localProductId = input.listing.variant?.productId ?? input.listing.productId ?? null;
+    const localVariants = localProductId
+      ? await prisma.cjShopifyUsaProductVariant.findMany({ where: { productId: localProductId } })
+      : input.listing.variant
+        ? [input.listing.variant]
+        : [];
+
+    if (localVariants.length === 0) {
+      return { repairedCount: 0, primaryInventoryQuantity: null, errors: ['No local CJ variants available for inventory repair.'] };
+    }
+
+    const localBySku = new Map(
+      localVariants
+        .map((variant) => [trim(variant.cjSku).toLowerCase(), variant] as const)
+        .filter(([sku]) => Boolean(sku)),
+    );
+    const vids = localVariants.map((variant) => trim(variant.cjVid)).filter(Boolean);
+    const liveStock = new Map<string, number>();
+
+    if (vids.length > 0) {
+      try {
+        const adapter = createCjSupplierAdapter(input.listing.userId);
+        const stockMap = await adapter.getStockForSkus(vids);
+        for (const [vid, stock] of stockMap.entries()) {
+          if (Number.isFinite(stock)) liveStock.set(vid, Math.max(0, Math.floor(stock)));
+        }
+      } catch {
+        // Use local stockLastKnown if CJ live stock is temporarily unavailable.
+      }
+    }
+
+    const errors: string[] = [];
+    let repairedCount = 0;
+    let primaryInventoryQuantity: number | null = null;
+    const storedPrimaryVariantId = normalizeShopifyVariantGid(input.listing.shopifyVariantId);
+    const primarySku = trim(input.listing.shopifySku).toLowerCase();
+
+    for (const shopifyVariant of input.product.variants?.nodes ?? []) {
+      const sku = trim(shopifyVariant.sku).toLowerCase();
+      const localVariant = localBySku.get(sku);
+      const inventoryItemId = shopifyVariant.inventoryItem?.id ?? null;
+      if (!sku || !localVariant || !inventoryItemId) continue;
+
+      const currentAvailable = availableQuantity(shopifyVariant);
+      if (currentAvailable != null && currentAvailable > 0) continue;
+
+      const stock = liveStock.get(trim(localVariant.cjVid)) ?? localVariant.stockLastKnown ?? 0;
+      const repairQuantity = toRepairQuantity(stock);
+      if (repairQuantity <= 0) continue;
+
+      try {
+        await cjShopifyUsaAdminService.setInventoryQuantity({
+          userId: input.listing.userId,
+          inventoryItemId,
+          locationId: input.locationId,
+          quantity: repairQuantity,
+          referenceDocumentUri: `logistics://cj-shopify-usa/reconcile-inventory/${input.listing.id}/${sku}`,
+          idempotencyKey: `reconcile-inventory-${input.listing.id}-${sku}-${repairQuantity}`,
+        });
+
+        if (liveStock.has(trim(localVariant.cjVid))) {
+          await prisma.cjShopifyUsaProductVariant.update({
+            where: { id: localVariant.id },
+            data: { stockLastKnown: liveStock.get(trim(localVariant.cjVid)), stockCheckedAt: new Date() },
+          });
+        }
+
+        await prisma.cjShopifyUsaListing.updateMany({
+          where: {
+            userId: input.listing.userId,
+            productId: localVariant.productId ?? localProductId ?? undefined,
+            variantId: localVariant.id,
+          },
+          data: {
+            shopifyProductId: input.productId,
+            shopifyVariantId: shopifyVariant.id,
+            shopifyHandle: input.productHandle,
+            shopifySku: shopifyVariant.sku ?? localVariant.cjSku,
+            quantity: repairQuantity,
+            lastSyncedAt: new Date(),
+          },
+        });
+
+        repairedCount++;
+        if (shopifyVariant.id === storedPrimaryVariantId || sku === primarySku) {
+          primaryInventoryQuantity = repairQuantity;
+        }
+      } catch (error) {
+        errors.push(
+          `Inventory repair failed for SKU ${shopifyVariant.sku ?? sku}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    if (repairedCount > 0) {
+      await recordTrace(input.listing.userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_RECONCILE_SUCCESS, 'listing.inventory.repaired_from_cj', {
+        listingId: input.listing.id,
+        shopifyProductId: input.productId,
+        shopifyHandle: input.productHandle,
+        repairedCount,
+        cap: SHOPIFY_INVENTORY_REPAIR_CAP,
+        errors,
+      } as Prisma.InputJsonValue);
+    }
+
+    return { repairedCount, primaryInventoryQuantity, errors };
+  }
+
   private buildLocalDraftTruth<T extends ListingLike>(
     listing: T,
     shopDomain: string | null,
@@ -423,15 +564,50 @@ export class CjShopifyUsaReconciliationService {
       reasons.push(`Shopify Admin lookup failed: ${lookupError}`);
     }
 
-    const variant = shopifyProduct ? chooseVariant(listing, shopifyProduct) : null;
-    const inventoryQuantity = availableQuantity(variant);
-    const adminStatus = trim(shopifyProduct?.status).toUpperCase() || null;
-    const adminHandle = trim(shopifyProduct?.handle) || null;
-    const mediaCount = shopifyProduct?.media?.nodes?.length ?? null;
-    const publishedOnPublication =
+    let variant = shopifyProduct ? chooseVariant(listing, shopifyProduct) : null;
+    let inventoryQuantity = availableQuantity(variant);
+    let adminStatus = trim(shopifyProduct?.status).toUpperCase() || null;
+    let adminHandle = trim(shopifyProduct?.handle) || null;
+    let mediaCount = shopifyProduct?.media?.nodes?.length ?? null;
+    let publishedOnPublication =
       typeof shopifyProduct?.publishedOnPublication === 'boolean'
         ? shopifyProduct.publishedOnPublication
         : null;
+    let inventoryRepair: Awaited<ReturnType<CjShopifyUsaReconciliationService['repairZeroInventoryFromCj']>> | null = null;
+
+    if (
+      shopifyProduct &&
+      adminStatus === 'ACTIVE' &&
+      variant?.inventoryItem?.id &&
+      inventoryQuantity != null &&
+      inventoryQuantity <= 0
+    ) {
+      inventoryRepair = await this.repairZeroInventoryFromCj({
+        listing,
+        product: shopifyProduct,
+        productId,
+        productHandle: adminHandle,
+        locationId: resolvedTargets.locationId,
+      });
+
+      if (inventoryRepair.repairedCount > 0) {
+        shopifyProduct = await this.fetchShopifyProduct({
+          userId: listing.userId,
+          productId,
+          publicationId: resolvedTargets.publicationId,
+          locationId: resolvedTargets.locationId,
+        });
+        variant = shopifyProduct ? chooseVariant(listing, shopifyProduct) : null;
+        inventoryQuantity = availableQuantity(variant) ?? inventoryRepair.primaryInventoryQuantity;
+        adminStatus = trim(shopifyProduct?.status).toUpperCase() || null;
+        adminHandle = trim(shopifyProduct?.handle) || null;
+        mediaCount = shopifyProduct?.media?.nodes?.length ?? null;
+        publishedOnPublication =
+          typeof shopifyProduct?.publishedOnPublication === 'boolean'
+            ? shopifyProduct.publishedOnPublication
+            : null;
+      }
+    }
 
     let storefrontUrl: string | null = null;
     let storefront: StorefrontVerificationResult | null = null;
@@ -458,6 +634,8 @@ export class CjShopifyUsaReconciliationService {
       if (mediaCount === 0) reasons.push('Shopify Admin product has no product images.');
       if (publishedOnPublication === false) reasons.push('Product is not published on the selected Shopify publication.');
       if (inventoryQuantity != null && inventoryQuantity <= 0) reasons.push('Shopify available inventory is 0.');
+      if (inventoryRepair?.repairedCount) reasons.push(`Shopify inventory repaired from CJ stock for ${inventoryRepair.repairedCount} variant(s).`);
+      for (const repairError of inventoryRepair?.errors ?? []) reasons.push(repairError);
       if (variant && normalizeShopifyVariantGid(listing.shopifyVariantId) && variant.id !== normalizeShopifyVariantGid(listing.shopifyVariantId)) {
         reasons.push('Stored Shopify variant id did not match the live SKU/variant chosen from Shopify.');
       }
