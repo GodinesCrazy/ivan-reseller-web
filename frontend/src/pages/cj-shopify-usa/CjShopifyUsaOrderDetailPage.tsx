@@ -29,6 +29,17 @@ type Refund = {
   createdAt: string;
 };
 
+type BuyerPayload = {
+  name?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  provinceCode?: string | null;
+  zip?: string | null;
+  countryCodeV2?: string | null;
+  phone?: string | null;
+};
+
 type OrderDetail = {
   id: string;
   shopifyOrderId: string;
@@ -41,6 +52,7 @@ type OrderDetail = {
   tracking: TrackingInfo | null;
   events: OrderEvent[];
   refunds: Refund[];
+  buyerPayload?: BuyerPayload | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -77,6 +89,16 @@ function fmtDate(iso: string): string {
     year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
+}
+
+function trackingEmptyMessage(order: OrderDetail): string {
+  if (order.tracking?.status === 'NOT_AVAILABLE') {
+    return 'CJ fue consultado, pero todavía no informa número de tracking para esta orden.';
+  }
+  if (['CJ_ORDER_PLACED', 'CJ_ORDER_CREATED', 'CJ_ORDER_CONFIRMED', 'CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING'].includes(order.status)) {
+    return 'Aún pendiente del proveedor. El tracking aparece cuando CJ despacha la orden.';
+  }
+  return 'Sin tracking aún.';
 }
 
 function axiosMsg(e: unknown, fb: string): string {
@@ -181,6 +203,28 @@ export default function CjShopifyUsaOrderDetailPage() {
         </div>
       </div>
 
+      {/* Shipping address */}
+      <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-5">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">Dirección del cliente</h3>
+        {order.buyerPayload ? (
+          <div className="grid sm:grid-cols-2 gap-3 text-sm">
+            <p><span className="text-slate-500">Nombre:</span> {order.buyerPayload.name || '—'}</p>
+            <p>
+              <span className="text-slate-500">País:</span>{' '}
+              <span className={order.buyerPayload.countryCodeV2 ? 'font-semibold' : 'text-red-600 font-semibold'}>
+                {order.buyerPayload.countryCodeV2 || 'Falta país'}
+              </span>
+            </p>
+            <p className="sm:col-span-2"><span className="text-slate-500">Dirección:</span> {[order.buyerPayload.address1, order.buyerPayload.address2].filter(Boolean).join(', ') || '—'}</p>
+            <p><span className="text-slate-500">Ciudad/Estado:</span> {[order.buyerPayload.city, order.buyerPayload.provinceCode].filter(Boolean).join(', ') || '—'}</p>
+            <p><span className="text-slate-500">ZIP:</span> {order.buyerPayload.zip || '—'}</p>
+            <p><span className="text-slate-500">Teléfono:</span> {order.buyerPayload.phone || '—'}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-red-600 dark:text-red-400">Shopify no entregó dirección de envío para esta orden.</p>
+        )}
+      </section>
+
       {/* Last error */}
       {order.lastError && (
         <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm text-red-900 dark:text-red-100">
@@ -225,7 +269,7 @@ export default function CjShopifyUsaOrderDetailPage() {
             )}
           </div>
         ) : (
-          <p className="text-sm text-slate-400">Sin tracking aún.</p>
+          <p className="text-sm text-slate-400">{trackingEmptyMessage(order)}</p>
         )}
       </section>
 

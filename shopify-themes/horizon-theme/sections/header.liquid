@@ -337,30 +337,19 @@
   <div class="ir-retail-shell">
     <div class="ir-retail-promo">
       <div class="ir-retail-promo__track" aria-label="Store benefits">
-        <span>Monthly deals and curated drops</span>
+        <span>Curated pet essentials</span>
         <span>Free shipping over $50</span>
         <span>Secure checkout</span>
-        <span>Useful tech, travel, and workspace upgrades</span>
+        <span>30-day easy returns</span>
       </div>
     </div>
 
     <div class="ir-retail-main">
-      <div class="ir-retail-brand">
-        {{ logo }}
-      </div>
+      <div class="ir-retail-main__spacer" aria-hidden="true"></div>
 
-      <form action="{{ routes.search_url }}" method="get" role="search" class="ir-retail-search">
-        <button type="button" class="ir-retail-search__category" tabindex="-1">
-          All categories
-          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        <input type="search" name="q" value="{{ search.terms | escape }}" placeholder="Search power banks, workspace tools, travel gear..." aria-label="Search IvanReseller">
-        <button type="submit" class="ir-retail-search__submit" aria-label="Search">
-          {{ 'icon-search.svg' | inline_asset_content }}
-        </button>
-      </form>
+      <a href="{{ routes.root_url }}" class="ir-retail-brand" aria-label="{{ shop.name }}">
+        {{ logo }}
+      </a>
 
       <div class="ir-retail-actions">
         <a href="{{ routes.search_url }}" class="ir-retail-action" aria-label="Search">
@@ -377,17 +366,6 @@
         </a>
       </div>
     </div>
-
-    <nav class="ir-retail-nav" aria-label="Primary commerce navigation">
-      <a href="{{ routes.all_products_collection_url }}">All Products</a>
-      <a href="{{ routes.search_url }}?q=power+bank">Power and Charging</a>
-      <a href="{{ routes.search_url }}?q=phone">Phones and Accessories</a>
-      <a href="{{ routes.search_url }}?q=workspace">Workspace</a>
-      <a href="{{ routes.search_url }}?q=travel">Travel</a>
-      <a href="{{ routes.search_url }}?q=tech">Trending Tech</a>
-      <a href="{{ routes.search_url }}?q=pet+grooming">Pets</a>
-      <a href="{{ routes.all_products_collection_url }}" class="ir-retail-nav__deal">Deals</a>
-    </nav>
   </div>
 
   {% for row in rows %}
@@ -548,20 +526,24 @@
 
   .ir-retail-main {
     width: min(1560px, calc(100vw - 48px));
-    min-height: 84px;
+    min-height: 74px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: minmax(13rem, 21rem) minmax(22rem, 1fr) auto;
+    grid-template-columns: minmax(8rem, 1fr) auto minmax(8rem, 1fr);
     align-items: center;
-    gap: clamp(1.2rem, 2.6vw, 2.8rem);
+    gap: clamp(0.8rem, 2vw, 2rem);
   }
 
   .ir-retail-brand {
     min-width: 0;
+    justify-self: center;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
   }
 
   .ir-retail-brand .ir-logo-svg {
-    height: 52px;
+    height: 44px;
   }
 
   .ir-retail-brand .ir-logo-full {
@@ -629,6 +611,7 @@
   }
 
   .ir-retail-actions {
+    justify-self: end;
     display: flex;
     align-items: center;
     gap: 0.7rem;
@@ -669,62 +652,14 @@
     font-weight: 800;
   }
 
-  .ir-retail-nav {
-    width: min(1560px, calc(100vw - 48px));
-    min-height: 52px;
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    gap: clamp(0.9rem, 2vw, 2rem);
-    overflow-x: auto;
-    scrollbar-width: none;
-    border-top: 1px solid rgba(12, 18, 28, 0.06);
-  }
-
-  .ir-retail-nav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .ir-retail-nav a {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    min-height: 52px;
-    flex: 0 0 auto;
-    color: #20242c;
-    text-decoration: none;
-    font-size: 0.94rem;
-    font-weight: 720;
-  }
-
-  .ir-retail-nav a::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 3px;
-    border-radius: 999px 999px 0 0;
-    background: transparent;
-  }
-
-  .ir-retail-nav a:hover::after,
-  .ir-retail-nav__deal::after {
-    background: #1e3a8a;
-  }
-
-  .ir-retail-nav__deal {
-    color: #b91c1c !important;
-  }
-
   body {
-    --header-height: 187px;
+    --header-height: 116px;
     --header-group-height: var(--header-height);
   }
 
   @media screen and (min-width: 750px) {
     #header-component[data-menu-style='menu'] :is(.header-menu, .dropdown-localization) {
-      display: flex;
+      display: none !important;
     }
   }
 
@@ -745,43 +680,17 @@
 
     .ir-retail-main {
       width: min(100vw - 28px, 760px);
-      min-height: 80px;
-      grid-template-columns: minmax(0, 1fr) auto;
+      min-height: 72px;
+      grid-template-columns: minmax(4rem, 1fr) auto minmax(4rem, 1fr);
       gap: 0.9rem;
     }
 
-    .ir-retail-brand .ir-logo-full {
-      display: none;
-    }
-
-    .ir-retail-brand .ir-logo-compact {
-      display: block;
-    }
-
-    .ir-retail-search {
-      grid-column: 1 / -1;
-      grid-row: 2;
-      min-height: 3.25rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .ir-retail-search__category {
-      display: none;
-    }
-
-    .ir-retail-nav {
-      width: calc(100vw - 28px);
-      min-height: 48px;
-      gap: 1.2rem;
-    }
-
-    .ir-retail-nav a {
-      min-height: 48px;
-      font-size: 0.86rem;
+    .ir-retail-brand .ir-logo-svg {
+      height: 40px;
     }
 
     body {
-      --header-height: 230px;
+      --header-height: 114px;
       --header-group-height: var(--header-height);
     }
   }

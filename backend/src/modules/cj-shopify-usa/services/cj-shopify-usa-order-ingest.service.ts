@@ -386,7 +386,16 @@ export const cjShopifyUsaOrderIngestService = {
   async processOrder(input: { userId: number; orderId: string }) {
     const order = await prisma.cjShopifyUsaOrder.findFirst({
       where: { id: input.orderId, userId: input.userId },
-      include: { variant: { select: { cjSku: true, cjVid: true } } },
+      include: {
+        variant: { select: { cjSku: true, cjVid: true } },
+        listing: {
+          select: {
+            shippingQuote: {
+              select: { originCountryCode: true },
+            },
+          },
+        },
+      },
     });
 
     if (!order) throw new AppError('Order not found', 404, ErrorCode.NOT_FOUND);
@@ -408,6 +417,27 @@ export const cjShopifyUsaOrderIngestService = {
         data: { status: CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL, lastError: 'Missing shipping address on order' },
       });
       throw new AppError('Order has no shipping address', 422, ErrorCode.VALIDATION_ERROR);
+    }
+
+    const shippingCountry = String(buyer.countryCodeV2 || '').trim().toUpperCase();
+    const rawFromCountry = String(order.listing?.shippingQuote?.originCountryCode || '')
+      .trim()
+      .toUpperCase();
+    const fromCountryCode = /^[A-Z]{2}$/.test(rawFromCountry) ? rawFromCountry : 'CN';
+    if (!shippingCountry) {
+      await prisma.cjShopifyUsaOrder.update({
+        where: { id: input.orderId },
+        data: {
+          status: CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+          lastError: 'Missing shipping country on Shopify order. The customer shipping address must include a country before placing the CJ order.',
+        },
+      });
+      await appendOrderEvent(
+        input.orderId,
+        CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+        'Order blocked before CJ placement: missing shipping country in Shopify shipping address.',
+      );
+      throw new AppError('Order has no shipping country', 422, ErrorCode.VALIDATION_ERROR);
     }
 
     const cjSku = order.shopifySku || order.variant?.cjSku;
@@ -433,7 +463,8 @@ export const cjShopifyUsaOrderIngestService = {
       const cjPayload = {
         orderNumber: `PAWVAULT-${order.shopifyOrderId.replace('gid://shopify/Order/', '').slice(-8)}`,
         shippingZip: buyer.zip || '',
-        shippingCountry: buyer.countryCodeV2 || 'US',
+        shippingCountry,
+        fromCountryCode,
         shippingProvince: buyer.provinceCode || '',
         shippingCity: buyer.city || '',
         shippingAddress: buyer.address1 || '',
@@ -558,6 +589,22 @@ export const cjShopifyUsaOrderIngestService = {
           }
 
           synced++;
+        } else {
+          await prisma.cjShopifyUsaTracking.upsert({
+            where: { orderId: order.id },
+            create: {
+              orderId: order.id,
+              trackingNumber: null,
+              carrierCode: logisticName || null,
+              status: 'NOT_AVAILABLE',
+              rawPayload: { orderStatus, logisticName } as Prisma.InputJsonValue,
+            },
+            update: {
+              carrierCode: logisticName || null,
+              status: 'NOT_AVAILABLE',
+              rawPayload: { orderStatus, logisticName } as Prisma.InputJsonValue,
+            },
+          });
         }
 
         await new Promise(r => setTimeout(r, 300));

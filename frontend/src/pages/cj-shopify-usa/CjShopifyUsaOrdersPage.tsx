@@ -12,6 +12,17 @@ type TrackingInfo = {
   status: string | null;
 };
 
+type BuyerPayload = {
+  name?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  provinceCode?: string | null;
+  zip?: string | null;
+  countryCodeV2?: string | null;
+  phone?: string | null;
+};
+
 type OrderRow = {
   id: string;
   shopifyOrderId: string;
@@ -21,6 +32,7 @@ type OrderRow = {
   lastError: string | null;
   updatedAt: string;
   tracking: TrackingInfo | null;
+  buyerPayload?: BuyerPayload | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -94,6 +106,25 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString('es-CL', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+}
+
+function shippingCountry(order: OrderRow): string {
+  const code = order.buyerPayload?.countryCodeV2?.trim();
+  return code ? code.toUpperCase() : 'Falta país';
+}
+
+function shippingCity(order: OrderRow): string {
+  const buyer = order.buyerPayload;
+  return [buyer?.city, buyer?.provinceCode].filter(Boolean).join(', ') || '—';
+}
+
+function trackingLabel(order: OrderRow): string {
+  if (order.tracking?.trackingNumber) return order.tracking.trackingNumber;
+  if (order.tracking?.status === 'NOT_AVAILABLE') return 'CJ aún sin tracking';
+  if (['CJ_ORDER_PLACED', 'CJ_ORDER_CREATED', 'CJ_ORDER_CONFIRMED', 'CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING'].includes(order.status)) {
+    return 'Pendiente proveedor';
+  }
+  return '—';
 }
 
 function axiosMsg(e: unknown, fb: string): string {
@@ -293,6 +324,7 @@ export default function CjShopifyUsaOrdersPage() {
               <th className="px-3 py-2">Estado</th>
               <th className="px-3 py-2">Próximo paso / Error</th>
               <th className="px-3 py-2">CJ Order</th>
+              <th className="px-3 py-2">Destino</th>
               <th className="px-3 py-2">Total</th>
               <th className="px-3 py-2">Tracking</th>
               <th className="px-3 py-2">Actualizado</th>
@@ -302,7 +334,7 @@ export default function CjShopifyUsaOrdersPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-slate-500 text-sm">
+                <td colSpan={9} className="px-3 py-8 text-center text-slate-500 text-sm">
                   {orders.length === 0
                     ? 'Sin órdenes. Las órdenes de Shopify aparecen aquí cuando llegan por webhook o se sincronizan manualmente.'
                     : 'Sin órdenes con ese filtro.'}
@@ -333,6 +365,12 @@ export default function CjShopifyUsaOrdersPage() {
                   <td className="px-3 py-2 font-mono text-xs text-slate-500">
                     {row.cjOrderId ?? '—'}
                   </td>
+                  <td className="px-3 py-2 text-xs">
+                    <div className={row.buyerPayload?.countryCodeV2 ? 'text-slate-600 dark:text-slate-300' : 'text-red-600 dark:text-red-400 font-semibold'}>
+                      {shippingCountry(row)}
+                    </div>
+                    <div className="text-slate-400">{shippingCity(row)}</div>
+                  </td>
                   <td className="px-3 py-2 tabular-nums text-xs">{usd(row.totalUsd)}</td>
                   <td className="px-3 py-2 text-xs">
                     {row.tracking?.trackingNumber ? (
@@ -346,7 +384,7 @@ export default function CjShopifyUsaOrdersPage() {
                         {row.tracking.trackingNumber}
                       </a>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-slate-400">{trackingLabel(row)}</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-400">{fmtDate(row.updatedAt)}</td>
