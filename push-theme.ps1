@@ -1,11 +1,11 @@
 $ErrorActionPreference = 'Stop'
 $shopifyPath = "C:\Users\ivanm\AppData\Roaming\npm\shopify.cmd"
-$workingDir = "c:\Ivan_Reseller_Web\shopify-themes\horizon-theme"
+$workingDir = "c:\Ivan_Reseller_Web\shopify-themes\pawvault-pet-store"
 
 # Create process info
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $shopifyPath
-$psi.Arguments = "theme push --theme 161552826580 --store ivanreseller-2.myshopify.com --force"
+$psi.Arguments = "theme push --theme 161729773780 --store ivanreseller-2.myshopify.com --allow-live"
 $psi.WorkingDirectory = $workingDir
 $psi.UseShellExecute = $false
 $psi.RedirectStandardInput = $true

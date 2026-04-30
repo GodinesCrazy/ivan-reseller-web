@@ -53,17 +53,9 @@
   endcapture
 
   # theme-check-disable UniqueStaticBlockId
-  capture menu
-    content_for 'block', type: '_header-menu', id: 'header-menu'
-  endcapture
-
-  capture drawer_menu
-    content_for 'block', type: '_header-menu', id: 'header-menu', variant: 'mobile'
-  endcapture
-
-  capture navigation_bar
-    content_for 'block', type: '_header-menu', id: 'header-menu', variant: 'navigation_bar', transparent: transparent
-  endcapture
+  assign menu = blank
+  assign drawer_menu = blank
+  assign navigation_bar = blank
   # theme-check-enable UniqueStaticBlockId
 
   capture actions
@@ -439,7 +431,7 @@
 
   @media screen and (min-width: 750px) {
     #header-component[data-menu-style='menu'] :is(.header-menu, .dropdown-localization) {
-      display: flex;
+      display: none;
     }
   }
 
