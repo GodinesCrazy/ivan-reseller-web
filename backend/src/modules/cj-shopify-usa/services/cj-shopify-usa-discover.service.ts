@@ -153,8 +153,10 @@ export interface DiscoverImportDraftResult {
 
 export const cjShopifyUsaDiscoverService = {
   async search(userId: number, keyword: string, page: number, pageSize: number): Promise<CjProductSummary[]> {
+    console.log(`[cj-shopify-usa-discover] Starting search for user ${userId}: "${keyword}" (page ${page})`);
     const adapter = createCjSupplierAdapter(userId);
     const results = await adapter.searchProducts({ keyword, page, pageSize });
+    console.log(`[cj-shopify-usa-discover] Search returned ${results.length} results from adapter`);
     await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_COMPLETE, 'discover.search', {
       keyword,
       page,
@@ -427,6 +429,7 @@ export const cjShopifyUsaDiscoverService = {
     userId: number,
     input?: { count?: number; destPostalCode?: string; keywords?: string[] },
   ): Promise<DiscoverAiSuggestionsResult> {
+    console.log(`[cj-shopify-usa-discover] Starting AI suggestions for user ${userId}`, input);
     const adapter = createCjSupplierAdapter(userId);
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
