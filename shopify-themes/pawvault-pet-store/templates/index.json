@@ -34,56 +34,11 @@
       "type": "pv-bestsellers",
       "settings": {
         "eyebrow":          "Shop now",
-        "title":            "Featured Products",
+        "title":            "In-stock pet picks",
         "collection":       "all",
-        "products_to_show": "8"
-      }
-    },
-    "pv_products_2": {
-      "type": "pv-bestsellers",
-      "settings": {
-        "eyebrow":          "New arrivals",
-        "title":            "Just Added",
-        "collection":       "new-arrivals",
-        "products_to_show": "4"
-      }
-    },
-    "pv_testimonials": {
-      "type": "pv-testimonials",
-      "blocks": {
-        "rev_1": {
-          "type": "review",
-          "settings": {
-            "quote": "Finally a pet store that feels curated and trustworthy. The quality is genuinely impressive — my dog Biscuit is obsessed with his new harness.",
-            "name": "Sarah M.",
-            "pet": "Biscuit the Golden"
-          }
-        },
-        "rev_2": {
-          "type": "review",
-          "settings": {
-            "quote": "Luna hasn't left her new cat bed since it arrived. Beautiful packaging, fast delivery. Absolutely ordering again.",
-            "name": "Mike T.",
-            "pet": "Luna the Tabby"
-          }
-        },
-        "rev_3": {
-          "type": "review",
-          "settings": {
-            "quote": "Shopping here feels different — like someone actually thought about what dog parents need. The grooming tools are excellent quality.",
-            "name": "Jennifer K.",
-            "pet": "Pepper the Labrador"
-          }
-        }
-      },
-      "block_order": ["rev_1","rev_2","rev_3"],
-      "settings": {
-        "eyebrow":      "What pet parents say",
-        "title":        "Loved by thousands of dogs and cats.",
-        "rating":       "4.8",
-        "review_count": "2,000+"
+        "products_to_show": "12"
       }
     }
   },
-  "order": ["pv_hero","pv_catstrip","pv_trust_bar","pv_products","pv_products_2","pv_testimonials"]
+  "order": ["pv_hero","pv_catstrip","pv_trust_bar","pv_products"]
 }

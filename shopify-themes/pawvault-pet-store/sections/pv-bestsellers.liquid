@@ -4,6 +4,7 @@
     assign src = collections.all
   endif
   assign lim = section.settings.products_to_show | default: 8 | plus: 0
+  assign shown = 0
 -%}
 
 <section class="pvgrid">
@@ -24,7 +25,14 @@
 
   <div class="pvgrid__body">
     <div class="pvgrid__grid">
-      {%- for p in src.products limit: lim -%}
+      {%- for p in src.products limit: 60 -%}
+        {%- unless p.available -%}
+          {%- continue -%}
+        {%- endunless -%}
+        {%- if shown >= lim -%}
+          {%- break -%}
+        {%- endif -%}
+        {%- assign shown = shown | plus: 1 -%}
         {%- liquid
           assign img        = p.featured_image
           assign on_sale    = false
@@ -92,12 +100,14 @@
           </div>
         </div>
 
-      {%- else -%}
+      {%- endfor -%}
+
+      {%- if shown == 0 -%}
         <div class="pvgrid__empty">
-          <p>No products yet in this collection. Add products in <strong>Shopify Admin → Products</strong>.</p>
+          <p>No in-stock products are available in this collection right now.</p>
           <a href="{{ routes.all_products_collection_url }}" class="pvgrid__all">Browse all</a>
         </div>
-      {%- endfor -%}
+      {%- endif -%}
     </div>
   </div>
 </section>
