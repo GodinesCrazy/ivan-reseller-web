@@ -221,6 +221,14 @@ router.post('/automation/start', async (req: Request, res: Response, next: NextF
   } catch (e) { next(e); }
 });
 
+router.post('/automation/run-now', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const status = await automationService.runNow(userId);
+    res.json({ ok: true, ...status });
+  } catch (e) { next(e); }
+});
+
 router.post('/automation/pause', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const status = await automationService.pause(req.user!.userId);

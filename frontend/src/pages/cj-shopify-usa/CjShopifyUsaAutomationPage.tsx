@@ -68,6 +68,30 @@ function countdown(iso: string | null): string {
   return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
+function scheduleProgress(input: {
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  intervalHours?: number;
+}): { percent: number; total: string; remaining: string } {
+  const totalMs = Math.max(1, Number(input.intervalHours ?? 0)) * 3_600_000;
+  const nextMs = input.nextRunAt ? new Date(input.nextRunAt).getTime() : NaN;
+  const startMs = input.lastRunAt
+    ? new Date(input.lastRunAt).getTime()
+    : Number.isFinite(nextMs)
+      ? nextMs - totalMs
+      : Date.now();
+  const nowMs = Date.now();
+  const spanMs = Number.isFinite(nextMs) && nextMs > startMs ? nextMs - startMs : totalMs;
+  const elapsedMs = Math.max(0, nowMs - startMs);
+  const percent = Math.max(0, Math.min(100, (elapsedMs / spanMs) * 100));
+
+  return {
+    percent,
+    total: `${input.intervalHours ?? '—'}h`,
+    remaining: countdown(input.nextRunAt),
+  };
+}
+
 const STATE_COLOR: Record<AutoState, string> = {
   IDLE:    'text-slate-400',
   RUNNING: 'text-emerald-400',
@@ -365,6 +389,12 @@ export default function CjShopifyUsaAutomationPage() {
 
   const history = status?.cycleHistory ?? [];
   const lastCycle = history[history.length - 1];
+  const nextSchedule = scheduleProgress({
+    lastRunAt: status?.lastRunAt ?? null,
+    nextRunAt: status?.nextRunAt ?? null,
+    intervalHours: status?.config.intervalHours,
+  });
+  const runningCycleNow = cycle?.status === 'RUNNING';
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6 space-y-6">
@@ -411,15 +441,28 @@ export default function CjShopifyUsaAutomationPage() {
                   </p>
                 </div>
 
-                {/* Last / Next */}
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                {/* Last / schedule */}
+                <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-[0.8fr_1.2fr]">
                   <div>
                     <p className="text-slate-500 mb-0.5">Último ciclo</p>
                     <p className="text-slate-300 font-mono">{fmt(status?.lastRunAt ?? null)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500 mb-0.5">Intervalo</p>
-                    <p className="text-slate-300 font-mono">{status?.config.intervalHours ?? '—'}h</p>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <p className="text-slate-500">Progreso al próximo ciclo</p>
+                      <p className="font-mono text-slate-300">{Math.round(nextSchedule.percent)}%</p>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+                        style={{ width: `${state === 'RUNNING' ? nextSchedule.percent : 0}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 font-mono text-slate-500">
+                      {state === 'RUNNING'
+                        ? `faltan ${nextSchedule.remaining} · intervalo ${nextSchedule.total}`
+                        : `intervalo ${nextSchedule.total}`}
+                    </p>
                   </div>
                 </div>
 
@@ -432,6 +475,11 @@ export default function CjShopifyUsaAutomationPage() {
                     </button>
                   ) : state === 'RUNNING' ? (
                     <>
+                      <button disabled={busy || runningCycleNow} onClick={() => void call('run-now')}
+                        title={runningCycleNow ? 'Ya hay un ciclo en ejecución' : 'Iniciar un ciclo en este momento'}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-4 py-2.5 text-sm transition">
+                        <span className="text-base">▶</span> Ejecutar ahora
+                      </button>
                       <button disabled={busy} onClick={() => void call('pause')}
                         className="inline-flex items-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold px-4 py-2.5 text-sm transition">
                         <span className="text-base">⏸</span> Pausar
@@ -443,6 +491,10 @@ export default function CjShopifyUsaAutomationPage() {
                     </>
                   ) : state === 'PAUSED' ? (
                     <>
+                      <button disabled={busy} onClick={() => void call('run-now')}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-4 py-2.5 text-sm transition">
+                        <span className="text-base">▶</span> Ejecutar ahora
+                      </button>
                       <button disabled={busy} onClick={() => void call('resume')}
                         className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-4 py-2.5 text-sm transition">
                         <span className="text-base">▶</span> Reanudar

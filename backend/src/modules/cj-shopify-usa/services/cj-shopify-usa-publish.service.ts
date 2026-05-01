@@ -5,6 +5,7 @@ import { createCjSupplierAdapter } from '../../cj-ebay/adapters/cj-supplier.adap
 import { cjShopifyUsaAdminService } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
+import { cjShopifyUsaCategorizationService } from './cj-shopify-usa-categorization.service';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service';
 import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service';
 import {
@@ -104,6 +105,27 @@ function buildMultiVariantOptions(
     ],
     variantInputs,
   };
+}
+
+async function assignPetCollectionsBestEffort(input: {
+  userId: number;
+  shopifyProductId: string | null | undefined;
+  title: string;
+}) {
+  if (!input.shopifyProductId) return;
+  try {
+    await cjShopifyUsaCategorizationService.assignProductToPetCollections({
+      userId: input.userId,
+      shopifyProductId: input.shopifyProductId,
+      title: input.title,
+    });
+  } catch (error) {
+    console.warn(
+      `[ShopifyPublish] Category assignment failed for ${input.shopifyProductId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 function resolvePrimarySku(
@@ -776,7 +798,7 @@ export const cjShopifyUsaPublishService = {
       title: draftTitle,
       descriptionHtml,
       vendor: 'CJ Dropshipping',
-      productType: 'CJ Dropshipping',
+      productType: cjShopifyUsaCategorizationService.inferProductType(draftTitle),
       handle,
       images: (Array.isArray(product.images) ? product.images : []) as Prisma.InputJsonValue,
       quantity: safeQuantity,
@@ -1000,7 +1022,7 @@ export const cjShopifyUsaPublishService = {
           alt: src, // Link original URL for variant image mapping
         }));
 
-      const siblingDrafts = await prisma.cjShopifyUsaListing.findMany({
+      const siblingDraftRows = await prisma.cjShopifyUsaListing.findMany({
         where: {
           userId: input.userId,
           productId: listing.productId,
@@ -1009,6 +1031,11 @@ export const cjShopifyUsaPublishService = {
         },
         include: { variant: true },
       });
+      const siblingDrafts = siblingDraftRows.filter((candidate) =>
+        Number(candidate.variant?.unitCostUsd ?? 0) > 0 &&
+        Number(candidate.variant?.stockLastKnown ?? 0) > 0 &&
+        toSafeInt(candidate.quantity ?? ((candidate.draftPayload || {}) as Record<string, any>).quantity ?? 0) > 0,
+      );
 
       const allToPublish = [listing, ...siblingDrafts];
       publishAttemptListingIds = allToPublish.map((candidate) => candidate.id);
@@ -1207,6 +1234,12 @@ export const cjShopifyUsaPublishService = {
                 siblingCount: siblingDrafts.length,
               } as Prisma.InputJsonValue);
 
+              await assignPetCollectionsBestEffort({
+                userId: input.userId,
+                shopifyProductId: existingProduct.id,
+                title: productTitle,
+              });
+
               return adopted;
             }
 
@@ -1224,6 +1257,12 @@ export const cjShopifyUsaPublishService = {
         }
       }
 
+      const categoryProductType = cjShopifyUsaCategorizationService.inferProductType(productTitle);
+      const categoryTags = cjShopifyUsaCategorizationService.buildProductTags(
+        listing.product.cjProductId,
+        productTitle,
+      );
+
       const upserted = await cjShopifyUsaAdminService.upsertProduct({
         userId: input.userId,
         identifierId: identifierIdForUpsert,
@@ -1231,8 +1270,8 @@ export const cjShopifyUsaPublishService = {
         title: productTitle,
         descriptionHtml: String(draft.descriptionHtml || ''),
         vendor: String(draft.vendor || 'CJ Dropshipping'),
-        productType: String(draft.productType || 'CJ Dropshipping'),
-        tags: ['cj-shopify-usa', `cj-product:${listing.product.cjProductId}`],
+        productType: categoryProductType,
+        tags: categoryTags,
         sku: primarySkuForUpsert,
         price: Number(listing.listedPriceUsd || draft.pricingSnapshot?.suggestedSellPriceUsd || 0),
         media: mediaPayload,
@@ -1314,6 +1353,12 @@ export const cjShopifyUsaPublishService = {
         userId: input.userId,
         productId: upserted.productId,
         publicationId: publication.id,
+      });
+
+      await assignPetCollectionsBestEffort({
+        userId: input.userId,
+        shopifyProductId: upserted.productId,
+        title: productTitle,
       });
 
       await cjShopifyUsaAdminService.setProductMetafields({
@@ -1537,7 +1582,12 @@ export const cjShopifyUsaPublishService = {
       orderBy: { id: 'asc' },
     });
 
-    if (allCjVariants.length <= 1) {
+    const sellableCjVariants = allCjVariants.filter((variant) =>
+      Number(variant.unitCostUsd ?? 0) > 0 &&
+      Number(variant.stockLastKnown ?? 0) > 0,
+    );
+
+    if (sellableCjVariants.length <= 1) {
       return { message: 'Product has only one variant — nothing to expand.', expanded: 0 };
     }
 
@@ -1565,7 +1615,7 @@ export const cjShopifyUsaPublishService = {
     }
 
     // 4. Build the full variant option set for Shopify
-    const variantRows = allCjVariants.map((v) => ({
+    const variantRows = sellableCjVariants.map((v) => ({
       listingId: v.listings[0]?.id ?? null,       // null = no existing listing
       cjSku: v.cjSku,
       attrs: v.attributes,
@@ -1587,6 +1637,11 @@ export const cjShopifyUsaPublishService = {
 
     // 5. Update the existing Shopify product with ALL variants
     const draft = (primary.draftPayload || {}) as Record<string, any>;
+    const categoryProductType = cjShopifyUsaCategorizationService.inferProductType(productTitle);
+    const categoryTags = cjShopifyUsaCategorizationService.buildProductTags(
+      primary.product.cjProductId,
+      productTitle,
+    );
     const upserted = await cjShopifyUsaAdminService.upsertProduct({
       userId: input.userId,
       identifierId: primary.shopifyProductId,
@@ -1594,8 +1649,8 @@ export const cjShopifyUsaPublishService = {
       title: productTitle,
       descriptionHtml: String(draft.descriptionHtml || ''),
       vendor: String(draft.vendor || 'CJ Dropshipping'),
-      productType: String(draft.productType || 'CJ Dropshipping'),
-      tags: ['cj-shopify-usa', `cj-product:${primary.product.cjProductId}`],
+      productType: categoryProductType,
+      tags: categoryTags,
       sku: String(primary.shopifySku || '').trim(),
       price: basePrice,
       status: 'ACTIVE',
@@ -1605,7 +1660,7 @@ export const cjShopifyUsaPublishService = {
 
     const shopifyVariantBySku = new Map(upserted.allVariants.map((v) => [v.sku, v]));
     // O(1) lookup instead of O(N) find inside loop
-    const cjVariantBySku = new Map(allCjVariants.map((v) => [v.cjSku, v]));
+    const cjVariantBySku = new Map(sellableCjVariants.map((v) => [v.cjSku, v]));
 
     // Parallel inventory calls
     await Promise.all(
@@ -1658,7 +1713,7 @@ export const cjShopifyUsaPublishService = {
               cjVid: cjVarRow.cjVid,
               title: productTitle,
               vendor: 'CJ Dropshipping',
-              productType: 'CJ Dropshipping',
+              productType: categoryProductType,
               pricingSnapshot: { suggestedSellPriceUsd: vc.price },
               variantAttributes: cjVarRow.attributes,
             } as Prisma.InputJsonValue,
@@ -1674,6 +1729,12 @@ export const cjShopifyUsaPublishService = {
       totalVariants: variantInputs.length,
       newVariantsAdded: expanded,
     } as Prisma.InputJsonValue);
+
+    await assignPetCollectionsBestEffort({
+      userId: input.userId,
+      shopifyProductId: upserted.productId,
+      title: productTitle,
+    });
 
     return {
       message: `Product updated with ${variantInputs.length} variants. ${expanded} new variants added.`,

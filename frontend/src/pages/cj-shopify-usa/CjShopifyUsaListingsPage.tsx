@@ -656,21 +656,24 @@ export default function CjShopifyUsaListingsPage() {
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-        {metricCards.map(({ label, value, filter }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => setStatusFilter(filter)}
-            className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
-              statusFilter === filter
-                ? 'border-primary-400 bg-primary-50 dark:border-primary-700 dark:bg-primary-950/30'
-                : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/50 dark:hover:bg-slate-900'
-            }`}
-          >
-            <p className="font-medium text-slate-500 dark:text-slate-400">{label}</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">{value}</p>
-          </button>
-        ))}
+        {metricCards.map(({ label, value, filter }) => {
+          const activeMetric = statusFilter === filter;
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setStatusFilter(filter)}
+              className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
+                activeMetric
+                  ? 'border-primary-400 bg-primary-950/75 shadow-[0_0_0_1px_rgba(96,165,250,0.24)]'
+                  : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/50 dark:hover:bg-slate-900'
+              }`}
+            >
+              <p className={`font-medium ${activeMetric ? 'text-primary-200' : 'text-slate-500 dark:text-slate-400'}`}>{label}</p>
+              <p className={`mt-1 text-lg font-semibold tabular-nums ${activeMetric ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>{value}</p>
+            </button>
+          );
+        })}
       </div>
 
       {listingsMeta && (

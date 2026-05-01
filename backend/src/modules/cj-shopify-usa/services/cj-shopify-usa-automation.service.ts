@@ -267,6 +267,19 @@ class CjShopifyUsaAutomationService {
     return this.getStatus(userId);
   }
 
+  async runNow(userId: number) {
+    await this.loadPersistedState(userId);
+    this.config.enabled = true;
+    this.abortSignal = false;
+    if (this.state !== 'RUNNING') {
+      this.state = 'RUNNING';
+      this.schedule(userId);
+      await this.persistRuntime(userId);
+    }
+    void this.runCycle(userId);
+    return this.getStatus(userId);
+  }
+
   async pause(userId: number) {
     if (this.state !== 'RUNNING') return this.getStatus(userId);
     this.state = 'PAUSED';
@@ -458,7 +471,17 @@ class CjShopifyUsaAutomationService {
         include: {
           product: {
             include: {
-              variants: { orderBy: { id: 'asc' }, take: 1 },
+              variants: {
+                where: {
+                  unitCostUsd: { gt: 0 },
+                  stockLastKnown: { gt: 0 },
+                },
+                orderBy: [
+                  { stockLastKnown: 'desc' },
+                  { id: 'asc' },
+                ],
+                take: 10,
+              },
               listings: {
                 where: { userId },
                 select: { id: true, status: true },
@@ -467,7 +490,7 @@ class CjShopifyUsaAutomationService {
           },
         },
         orderBy: { estimatedMarginPct: 'desc' },
-        take: 200,
+        take: 1000,
       });
 
       cycle.productsScanned = approvedEvaluations.length;
@@ -485,7 +508,10 @@ class CjShopifyUsaAutomationService {
         const hasActiveListing = ev.product.listings.some((l) =>
           BUSY_STATUSES.includes(l.status),
         );
-        return !hasActiveListing && ev.product.variants.length > 0;
+        return !hasActiveListing && ev.product.variants.some((variant) =>
+          Number(variant.unitCostUsd ?? 0) > 0 &&
+          Number(variant.stockLastKnown ?? 0) > 0,
+        );
       });
 
       // De-duplicate by productId (keep highest margin evaluation per product)
