@@ -14,6 +14,7 @@ import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service.js';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service.js';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service.js';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service.js';
+import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,17 @@ interface DiscoveryStats {
   rejected: number;
   skippedExistingRecent: number;
   skippedNoStock: number;
+  errors: number;
+}
+
+interface EvaluationBacklogStats {
+  scanned: number;
+  petCandidates: number;
+  evaluationsCreated: number;
+  approved: number;
+  rejected: number;
+  skippedRecent: number;
+  skippedNoSellableVariant: number;
   errors: number;
 }
 
@@ -120,6 +132,20 @@ const DISCOVERY_REQUEST_TIMEOUT_MS = clampInt(
   5_000,
   60_000,
   20_000,
+);
+
+const EVALUATION_BACKLOG_PER_CYCLE = clampInt(
+  process.env.CJ_SHOPIFY_USA_EVALUATION_BACKLOG_PER_CYCLE,
+  10,
+  300,
+  80,
+);
+
+const PINTEREST_BACKLOG_PER_CYCLE = clampInt(
+  process.env.CJ_SHOPIFY_USA_PINTEREST_BACKLOG_PER_CYCLE,
+  1,
+  100,
+  25,
 );
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -573,6 +599,38 @@ class CjShopifyUsaAutomationService {
         log('warn', `Price sync step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
 
+      // ── Step 0.9: Turn eligible catalog backlog into fresh evaluations ──
+      log('info', 'Step 0.9: Evaluating unlisted catalog backlog...');
+      try {
+        const backlogEval = await this.evaluatePendingCatalogBacklog(userId, log);
+        if (backlogEval.evaluationsCreated > 0) {
+          log(
+            'success',
+            `Backlog evaluation created ${backlogEval.evaluationsCreated} decisions: ` +
+              `${backlogEval.approved} approved, ${backlogEval.rejected} rejected.`,
+          );
+        } else {
+          log(
+            'info',
+            `Backlog evaluation found no fresh decisions ` +
+              `(${backlogEval.scanned} scanned, ${backlogEval.skippedRecent} recently evaluated, ` +
+              `${backlogEval.skippedNoSellableVariant} without sellable stock/cost).`,
+          );
+        }
+      } catch (err) {
+        log('warn', `Backlog evaluation step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+      }
+
+      // ── Step 0.95: Retry Pinterest pin backlog with Shopify image fallback ──
+      try {
+        const socialBacklog = await cjShopifyUsaSocialService.processBacklog(userId, PINTEREST_BACKLOG_PER_CYCLE);
+        if (socialBacklog.queued > 0) {
+          log('info', `Pinterest backlog queued ${socialBacklog.queued} pending/failed pins for retry`);
+        }
+      } catch (err) {
+        log('warn', `Pinterest backlog step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+      }
+
       // ── Step 1: Find products with APPROVED evaluation and no active listing ──
       log('info', 'Scanning approved CJ products database...');
 
@@ -580,12 +638,10 @@ class CjShopifyUsaAutomationService {
       const minMarginFromSettings = Number(settings.settings?.minMarginPct ?? this.config.minMarginPct);
       const maxSellPriceUsd = resolveMaxSellPriceUsd(settings.settings?.maxSellPriceUsd);
 
-      // Products with at least one APPROVED evaluation
-      const approvedEvaluations = await prisma.cjShopifyUsaProductEvaluation.findMany({
+      // Latest evaluation per product only. Older approvals must not override a newer rejection.
+      const evaluationRows = await prisma.cjShopifyUsaProductEvaluation.findMany({
         where: {
           userId,
-          decision: 'APPROVED',
-          estimatedMarginPct: { gte: minMarginFromSettings },
         },
         include: {
           product: {
@@ -608,12 +664,29 @@ class CjShopifyUsaAutomationService {
             },
           },
         },
-        orderBy: { estimatedMarginPct: 'desc' },
-        take: 1000,
+        orderBy: [
+          { evaluatedAt: 'desc' },
+          { id: 'desc' },
+        ],
+        take: 2500,
       });
 
+      const latestByProduct = new Map<number, (typeof evaluationRows)[number]>();
+      for (const ev of evaluationRows) {
+        if (!latestByProduct.has(ev.productId)) latestByProduct.set(ev.productId, ev);
+      }
+      const approvedEvaluations = Array.from(latestByProduct.values())
+        .filter((ev) =>
+          ev.decision === 'APPROVED' &&
+          Number(ev.estimatedMarginPct ?? 0) >= minMarginFromSettings,
+        )
+        .sort((a, b) => Number(b.estimatedMarginPct ?? 0) - Number(a.estimatedMarginPct ?? 0));
+
       cycle.productsScanned = approvedEvaluations.length;
-      log('info', `Found ${approvedEvaluations.length} approved evaluations ≥ ${minMarginFromSettings}% margin`);
+      log(
+        'info',
+        `Found ${approvedEvaluations.length} latest approved product evaluations ≥ ${minMarginFromSettings}% margin`,
+      );
 
       if (this.abortSignal) { cycle.status = 'ABORTED'; return; }
 
@@ -895,6 +968,197 @@ class CjShopifyUsaAutomationService {
   private isPetProduct(title: string) {
     const t = title.toLowerCase();
     return this.CJ_PET_KW.some(k => t.includes(k));
+  }
+
+  private async evaluatePendingCatalogBacklog(
+    userId: number,
+    log?: (level: CycleEvent['level'], message: string) => void,
+  ): Promise<EvaluationBacklogStats> {
+    const stats: EvaluationBacklogStats = {
+      scanned: 0,
+      petCandidates: 0,
+      evaluationsCreated: 0,
+      approved: 0,
+      rejected: 0,
+      skippedRecent: 0,
+      skippedNoSellableVariant: 0,
+      errors: 0,
+    };
+
+    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const minStock = Math.max(1, Number(settings.minStock ?? 1));
+    const fallbackShippingUsd = Number(settings.maxShippingUsd ?? 8.50);
+    const reevalAfter = Date.now() - DISCOVERY_REEVALUATE_HOURS * 60 * 60 * 1000;
+    const busyStatuses = ['ACTIVE', 'DRAFT', 'PUBLISHING', 'RECONCILE_PENDING'];
+
+    const products = await prisma.cjShopifyUsaProduct.findMany({
+      where: {
+        userId,
+        listings: {
+          none: {
+            userId,
+            status: { in: busyStatuses },
+          },
+        },
+        variants: {
+          some: {
+            unitCostUsd: { gt: 0 },
+            stockLastKnown: { gt: 0 },
+          },
+        },
+      },
+      include: {
+        variants: {
+          where: {
+            unitCostUsd: { gt: 0 },
+            stockLastKnown: { gt: 0 },
+          },
+          orderBy: [
+            { stockLastKnown: 'desc' },
+            { id: 'asc' },
+          ],
+          take: 10,
+        },
+        evaluations: {
+          orderBy: [
+            { evaluatedAt: 'desc' },
+            { id: 'desc' },
+          ],
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: EVALUATION_BACKLOG_PER_CYCLE * 3,
+    });
+
+    let adapter: {
+      quoteShippingToUsWarehouseAware: (input: {
+        variantId?: string;
+        productId?: string;
+        quantity: number;
+        destCountryCode: string;
+      }) => Promise<{
+        quote: { cost: number; method?: string | null; estimatedDays?: number | null; warehouseEvidence?: string };
+        fulfillmentOrigin: string;
+      }>;
+    } | null = null;
+    if (env.CJ_API_KEY) {
+      try {
+        const { createCjSupplierAdapter } = await import('./../../cj-ebay/adapters/cj-supplier.adapter.js');
+        adapter = createCjSupplierAdapter(userId);
+      } catch {
+        adapter = null;
+      }
+    }
+
+    for (const product of products) {
+      if (stats.evaluationsCreated >= EVALUATION_BACKLOG_PER_CYCLE) break;
+      if (this.abortSignal) break;
+      stats.scanned++;
+
+      if (!isCjShopifyUsaPetProduct({ title: product.title, description: product.description ?? undefined })) {
+        continue;
+      }
+      stats.petCandidates++;
+
+      const latestEvaluation = product.evaluations[0];
+      if (latestEvaluation?.evaluatedAt.getTime() >= reevalAfter) {
+        stats.skippedRecent++;
+        continue;
+      }
+
+      const selected = product.variants.find((variant) =>
+        Number(variant.stockLastKnown ?? 0) >= minStock &&
+        Number(variant.unitCostUsd ?? 0) > 0,
+      );
+      if (!selected) {
+        stats.skippedNoSellableVariant++;
+        continue;
+      }
+
+      try {
+        let shippingAmountUsd = fallbackShippingUsd;
+        let shippingQuoteId: number | null = null;
+        let serviceName: string | null = null;
+        let estimatedMaxDays: number | null = null;
+        let confidence = 'unknown';
+        let originCountryCode: string | null = 'UNKNOWN';
+
+        if (adapter) {
+          try {
+            const waResult = await withTimeout(
+              adapter.quoteShippingToUsWarehouseAware({
+                variantId: selected.cjVid ?? undefined,
+                productId: product.cjProductId,
+                quantity: 1,
+                destCountryCode: 'US',
+              }),
+              DISCOVERY_REQUEST_TIMEOUT_MS,
+              `CJ freight backlog "${product.cjProductId}"`,
+            );
+            shippingAmountUsd = waResult.quote.cost;
+            serviceName = waResult.quote.method ?? null;
+            estimatedMaxDays = waResult.quote.estimatedDays ?? null;
+            confidence = waResult.quote.warehouseEvidence === 'assumed' ? 'unknown' : 'known';
+            originCountryCode = waResult.fulfillmentOrigin;
+          } catch (err) {
+            log?.(
+              'warn',
+              `Backlog freight fallback for ${product.cjProductId}: ${
+                err instanceof Error ? err.message.slice(0, 80) : String(err).slice(0, 80)
+              }`,
+            );
+          }
+        }
+
+        const quote = await prisma.cjShopifyUsaShippingQuote.create({
+          data: {
+            userId,
+            productId: product.id,
+            variantId: selected.id,
+            quantity: 1,
+            amountUsd: shippingAmountUsd,
+            currency: 'USD',
+            serviceName,
+            estimatedMaxDays,
+            confidence,
+            originCountryCode,
+          },
+        });
+        shippingQuoteId = quote.id;
+
+        const qualification = await cjShopifyUsaQualificationService.evaluate(
+          userId,
+          Number(selected.unitCostUsd),
+          shippingAmountUsd,
+        );
+        await prisma.cjShopifyUsaProductEvaluation.create({
+          data: {
+            userId,
+            productId: product.id,
+            variantId: selected.id,
+            shippingQuoteId,
+            decision: qualification.decision,
+            estimatedMarginPct: qualification.breakdown.netMarginPct,
+            reasons: qualification.reasons,
+          },
+        });
+
+        stats.evaluationsCreated++;
+        if (qualification.decision === 'APPROVED') stats.approved++;
+        else stats.rejected++;
+      } catch (err) {
+        stats.errors++;
+        log?.(
+          'warn',
+          `Backlog evaluation failed for ${product.cjProductId}: ${
+            err instanceof Error ? err.message.slice(0, 80) : String(err).slice(0, 80)
+          }`,
+        );
+      }
+    }
+
+    return stats;
   }
 
   private async discoverNewPetProducts(
