@@ -108,6 +108,34 @@ const DISCOVERY_REEVALUATE_HOURS = clampInt(
   24,
 );
 
+const DISCOVERY_MAX_ENRICH_PER_CYCLE = clampInt(
+  process.env.CJ_SHOPIFY_USA_DISCOVERY_MAX_ENRICH_PER_CYCLE,
+  10,
+  120,
+  45,
+);
+
+const DISCOVERY_REQUEST_TIMEOUT_MS = clampInt(
+  process.env.CJ_SHOPIFY_USA_DISCOVERY_REQUEST_TIMEOUT_MS,
+  5_000,
+  60_000,
+  20_000,
+);
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 function cycleToResponse(row: {
   id: string;
   startedAt: Date;
@@ -436,7 +464,7 @@ class CjShopifyUsaAutomationService {
       // ── Step 0: CJ Discovery — search for new pet products ──
       log('info', 'Step 0: Discovering new CJ pet products...');
       try {
-        const discovery = await this.discoverNewPetProducts(userId);
+        const discovery = await this.discoverNewPetProducts(userId, log);
         log(
           'info',
           `Discovery enriched ${discovery.productsUpserted} pet products / ${discovery.variantsUpserted} variants from ${discovery.itemsSeen} CJ results; ` +
@@ -782,7 +810,10 @@ class CjShopifyUsaAutomationService {
     return this.CJ_PET_KW.some(k => t.includes(k));
   }
 
-  private async discoverNewPetProducts(userId: number): Promise<DiscoveryStats> {
+  private async discoverNewPetProducts(
+    userId: number,
+    log?: (level: CycleEvent['level'], message: string) => void,
+  ): Promise<DiscoveryStats> {
     const stats: DiscoveryStats = {
       searchedKeywords: 0,
       itemsSeen: 0,
@@ -813,24 +844,57 @@ class CjShopifyUsaAutomationService {
     const shuffled = arr.slice(0, DISCOVERY_SEARCHES_PER_CYCLE);
 
     for (const query of shuffled) {
+      if (stats.productsUpserted >= DISCOVERY_MAX_ENRICH_PER_CYCLE) {
+        log?.('info', `Discovery enrichment cap reached (${DISCOVERY_MAX_ENRICH_PER_CYCLE}); moving to publishing scan.`);
+        break;
+      }
       try {
-        const items = await adapter.searchProducts({ keyword: query, page: 1, pageSize: DISCOVERY_PAGE_SIZE });
+        const items = await withTimeout(
+          adapter.searchProducts({ keyword: query, page: 1, pageSize: DISCOVERY_PAGE_SIZE }),
+          DISCOVERY_REQUEST_TIMEOUT_MS,
+          `CJ search "${query}"`,
+        );
         stats.searchedKeywords++;
         stats.itemsSeen += items.length;
 
         for (const item of items) {
+          if (stats.productsUpserted >= DISCOVERY_MAX_ENRICH_PER_CYCLE) break;
           if (!item.cjProductId || !isCjShopifyUsaPetProduct({ title: item.title })) continue;
           stats.petMatches++;
 
           try {
-            const detail = await adapter.getProductById(item.cjProductId);
+            const existing = await prisma.cjShopifyUsaProduct.findUnique({
+              where: { userId_cjProductId: { userId, cjProductId: item.cjProductId } },
+              select: {
+                id: true,
+                evaluations: {
+                  orderBy: { evaluatedAt: 'desc' },
+                  take: 1,
+                  select: { evaluatedAt: true },
+                },
+              },
+            });
+            if (existing?.evaluations[0]?.evaluatedAt.getTime() >= reevalAfter) {
+              stats.skippedExistingRecent++;
+              continue;
+            }
+
+            const detail = await withTimeout(
+              adapter.getProductById(item.cjProductId),
+              DISCOVERY_REQUEST_TIMEOUT_MS,
+              `CJ detail "${item.cjProductId}"`,
+            );
             if (!isCjShopifyUsaPetProduct({ title: detail.title, description: detail.description })) continue;
 
             const probeKeys = detail.variants
               .map((variant) => String(variant.cjVid || '').trim())
               .filter(Boolean);
             const liveStock = probeKeys.length > 0
-              ? await adapter.getStockForSkus(probeKeys).catch(() => new Map<string, number>())
+              ? await withTimeout(
+                  adapter.getStockForSkus(probeKeys),
+                  DISCOVERY_REQUEST_TIMEOUT_MS,
+                  `CJ stock "${detail.cjProductId}"`,
+                ).catch(() => new Map<string, number>())
               : new Map<string, number>();
             const variants = detail.variants.map((variant) => {
               const key = String(variant.cjVid || '').trim();
@@ -894,26 +958,20 @@ class CjShopifyUsaAutomationService {
               continue;
             }
 
-            const latestEval = await prisma.cjShopifyUsaProductEvaluation.findFirst({
-              where: { userId, productId: dbProduct.id },
-              orderBy: { evaluatedAt: 'desc' },
-              select: { id: true, evaluatedAt: true },
-            });
-            if (latestEval && latestEval.evaluatedAt.getTime() >= reevalAfter) {
-              stats.skippedExistingRecent++;
-              continue;
-            }
-
             const sourceVariant = variants.find((variant) => variant.cjSku === selected.cjSku) ?? variants[0];
             let shippingAmountUsd = fallbackShippingUsd;
             let shippingQuoteId: number | null = null;
             try {
-              const waResult = await adapter.quoteShippingToUsWarehouseAware({
-                variantId: sourceVariant?.cjVid,
-                productId: detail.cjProductId,
-                quantity: 1,
-                destCountryCode: 'US',
-              });
+              const waResult = await withTimeout(
+                adapter.quoteShippingToUsWarehouseAware({
+                  variantId: sourceVariant?.cjVid,
+                  productId: detail.cjProductId,
+                  quantity: 1,
+                  destCountryCode: 'US',
+                }),
+                DISCOVERY_REQUEST_TIMEOUT_MS,
+                `CJ freight "${detail.cjProductId}"`,
+              );
               shippingAmountUsd = waResult.quote.cost;
               const quote = await prisma.cjShopifyUsaShippingQuote.create({
                 data: {
@@ -966,6 +1024,11 @@ class CjShopifyUsaAutomationService {
         stats.errors++;
         console.error(`[Automation] Search failed for "${query}":`, searchErr instanceof Error ? searchErr.message : String(searchErr));
       }
+      log?.(
+        'info',
+        `Discovery "${query}": ${stats.productsUpserted}/${DISCOVERY_MAX_ENRICH_PER_CYCLE} enriched total; ` +
+          `${stats.approved} approved, ${stats.rejected} rejected, ${stats.skippedExistingRecent} recent skipped.`,
+      );
       await new Promise(r => setTimeout(r, 400));
     }
 
