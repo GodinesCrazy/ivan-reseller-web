@@ -686,12 +686,18 @@ router.get('/orders/:orderId', async (req: Request, res: Response, next: NextFun
 // ── Discover — live CJ catalog search + evaluate + import-and-draft ───────────
 
 router.get('/discover/search', async (req: Request, res: Response, next: NextFunction) => {
+  const userId = req.user?.userId || 0;
   try {
-    const userId = req.user!.userId;
     const query = cjShopifyUsaDiscoverSearchSchema.parse(req.query);
     const results = await cjShopifyUsaDiscoverService.search(userId, query.keyword, query.page, query.pageSize);
     res.json({ ok: true, results, count: results.length, page: query.page, pageSize: query.pageSize });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_ERROR, 'discover.search.failed', {
+      error: msg,
+      stack: error instanceof Error ? error.stack : undefined,
+      query: req.query
+    } as Prisma.InputJsonValue).catch(() => {});
     next(error);
   }
 });
