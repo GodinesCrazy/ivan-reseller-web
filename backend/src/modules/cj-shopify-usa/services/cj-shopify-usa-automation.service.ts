@@ -194,11 +194,31 @@ class CjShopifyUsaAutomationService {
     };
   }
 
+  private async countPublishedTodayFromCycles(userId: number, dateKey: string): Promise<number> {
+    const start = new Date(`${dateKey}T00:00:00.000Z`);
+    const result = await prisma.cjShopifyUsaAutomationCycle.aggregate({
+      where: {
+        userId,
+        status: 'COMPLETED',
+        startedAt: { gte: start },
+      },
+      _sum: { published: true },
+    });
+    return clampInt(result._sum.published ?? 0, 0, 10_000, 0);
+  }
+
   private async loadPersistedState(userId: number) {
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
     this.config = this.configFromSettings(settings);
-    this.dailyPublishCount = clampInt(settings.automationDailyPublishCount, 0, 10_000, 0);
-    this.dailyCountDate = settings.automationDailyCountDate ?? '';
+    const today = new Date().toISOString().slice(0, 10);
+    const persistedDailyCount = settings.automationDailyCountDate === today
+      ? clampInt(settings.automationDailyPublishCount, 0, 10_000, 0)
+      : 0;
+    if (!(this.currentCycle?.status === 'RUNNING' && this.dailyCountDate === today)) {
+      const completedCycleCount = await this.countPublishedTodayFromCycles(userId, today);
+      this.dailyPublishCount = Math.max(persistedDailyCount, completedCycleCount);
+      this.dailyCountDate = today;
+    }
     this.lastRunAt = settings.automationLastRunAt ?? null;
     this.nextRunAt = this.timer ? this.nextRunAt : settings.automationNextRunAt ?? null;
     if (this.state !== 'RUNNING' && this.state !== 'PAUSED') {
