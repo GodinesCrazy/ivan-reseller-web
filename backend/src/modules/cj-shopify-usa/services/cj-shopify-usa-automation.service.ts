@@ -12,6 +12,7 @@ import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service.js';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service.js';
+import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service.js';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -49,6 +50,20 @@ export interface CycleResult {
   events: CycleEvent[];
 }
 
+interface DiscoveryStats {
+  searchedKeywords: number;
+  itemsSeen: number;
+  petMatches: number;
+  productsUpserted: number;
+  variantsUpserted: number;
+  evaluationsCreated: number;
+  approved: number;
+  rejected: number;
+  skippedExistingRecent: number;
+  skippedNoStock: number;
+  errors: number;
+}
+
 // ── Singleton state ────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: AutomationConfig = {
@@ -71,6 +86,27 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(parsed)));
 }
+
+const DISCOVERY_SEARCHES_PER_CYCLE = clampInt(
+  process.env.CJ_SHOPIFY_USA_DISCOVERY_SEARCHES_PER_CYCLE,
+  3,
+  25,
+  12,
+);
+
+const DISCOVERY_PAGE_SIZE = clampInt(
+  process.env.CJ_SHOPIFY_USA_DISCOVERY_PAGE_SIZE,
+  10,
+  50,
+  30,
+);
+
+const DISCOVERY_REEVALUATE_HOURS = clampInt(
+  process.env.CJ_SHOPIFY_USA_DISCOVERY_REEVALUATE_HOURS,
+  6,
+  168,
+  24,
+);
 
 function cycleToResponse(row: {
   id: string;
@@ -400,7 +436,12 @@ class CjShopifyUsaAutomationService {
       // ── Step 0: CJ Discovery — search for new pet products ──
       log('info', 'Step 0: Discovering new CJ pet products...');
       try {
-        await this.discoverNewPetProducts(userId);
+        const discovery = await this.discoverNewPetProducts(userId);
+        log(
+          'info',
+          `Discovery enriched ${discovery.productsUpserted} pet products / ${discovery.variantsUpserted} variants from ${discovery.itemsSeen} CJ results; ` +
+            `${discovery.approved} approved, ${discovery.rejected} rejected, ${discovery.skippedNoStock} without stock.`,
+        );
       } catch (err) {
         log('warn', `Discovery step failed (non-blocking): ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
@@ -703,6 +744,25 @@ class CjShopifyUsaAutomationService {
     'cat window perch', 'dog slow feeder', 'pet gate', 'dog playpen',
     'aquarium fish', 'fish tank', 'hamster cage', 'bird toy',
     'reptile supplies', 'small animal bedding', 'pet deodorizer',
+    'dog toy', 'dog bed', 'cat collar', 'cat brush', 'pet hair remover',
+    'dog toothbrush', 'cat nail clipper', 'dog raincoat', 'dog sweater',
+    'cat interactive toy', 'dog chew toy', 'pet water fountain',
+    'dog poop bag', 'dog waste bag', 'pet travel bottle', 'dog car harness',
+    'pet car seat cover', 'cat litter mat', 'dog training pad',
+    'puppy training pads', 'dog muzzle', 'pet stairs', 'pet ramp',
+    'dog backpack', 'cat backpack carrier', 'pet sling carrier',
+    'dog grooming glove', 'cat grooming glove', 'pet massage brush',
+    'dog toothbrush toy', 'pet nail grinder', 'dog paw cleaner',
+    'dog booties', 'dog bandana', 'cat hammock', 'cat bed cave',
+    'cat toy ball', 'cat teaser wand', 'cat laser toy', 'cat food mat',
+    'dog placemat', 'pet food storage', 'dog treat pouch',
+    'pet first aid kit', 'dog seat belt', 'dog life vest',
+    'dog cooling vest', 'dog winter coat', 'dog hoodie', 'pet costume',
+    'bird feeder', 'bird perch', 'bird swing', 'hamster wheel',
+    'hamster water bottle', 'rabbit feeder', 'rabbit litter box',
+    'guinea pig bed', 'small pet carrier', 'aquarium filter',
+    'aquarium decoration', 'fish feeder', 'reptile heat lamp',
+    'reptile hide', 'turtle basking platform',
   ];
 
   private CJ_PET_KW = [
@@ -722,125 +782,194 @@ class CjShopifyUsaAutomationService {
     return this.CJ_PET_KW.some(k => t.includes(k));
   }
 
-  private async discoverNewPetProducts(userId: number): Promise<void> {
-    const apiKey = env.CJ_API_KEY;
-    if (!apiKey) return;
+  private async discoverNewPetProducts(userId: number): Promise<DiscoveryStats> {
+    const stats: DiscoveryStats = {
+      searchedKeywords: 0,
+      itemsSeen: 0,
+      petMatches: 0,
+      productsUpserted: 0,
+      variantsUpserted: 0,
+      evaluationsCreated: 0,
+      approved: 0,
+      rejected: 0,
+      skippedExistingRecent: 0,
+      skippedNoStock: 0,
+      errors: 0,
+    };
+    if (!env.CJ_API_KEY) return stats;
 
-    // CJ token exchange
-    const authRes = await fetch('https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey }),
-    });
-    const authJson = await authRes.json() as { data?: { accessToken?: string } };
-    const cjToken = authJson.data?.accessToken;
-    if (!cjToken) return;
+    const { createCjSupplierAdapter } = await import('./../../cj-ebay/adapters/cj-supplier.adapter.js');
+    const adapter = createCjSupplierAdapter(userId);
+    const userSettings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    const minStock = Math.max(1, Number(userSettings.minStock ?? 1));
+    const fallbackShippingUsd = Number(userSettings.maxShippingUsd ?? 8.50);
+    const reevalAfter = Date.now() - DISCOVERY_REEVALUATE_HOURS * 60 * 60 * 1000;
 
-    const CH = { 'CJ-Access-Token': cjToken, 'Content-Type': 'application/json' };
-
-    // Load from user settings so operator config is respected
-      const userSettings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
-      const PAY    = Number(userSettings.defaultPaymentFeePct ?? 5.4) / 100;
-      const FIX    = Number(userSettings.defaultPaymentFixedFeeUsd ?? 0.30);
-      const SHIP   = Number(userSettings.maxShippingUsd ?? 8.50);
-      const TARGET = Number(userSettings.minMarginPct ?? 12) / 100;
-      const MIN_MARGIN = Number(userSettings.minMarginPct ?? 12);
-      const MAX_SELL_PRICE = resolveMaxSellPriceUsd(userSettings.maxSellPriceUsd);
-
-    // Fisher-Yates shuffle for truly random search order
     const arr = [...this.CJ_PET_SEARCHES];
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    const shuffled = arr.slice(0, 3);
-
-    let newProducts = 0, newEvals = 0;
+    const shuffled = arr.slice(0, DISCOVERY_SEARCHES_PER_CYCLE);
 
     for (const query of shuffled) {
       try {
-        const r = await fetch(
-          `https://developers.cjdropshipping.com/api2.0/v1/product/list?productNameEn=${encodeURIComponent(query)}&pageNum=1&pageSize=20&countryCode=US`,
-          { headers: CH },
-        );
-        const j = await r.json() as { data?: { list?: Record<string, unknown>[] } };
-        const items = j.data?.list ?? [];
+        const items = await adapter.searchProducts({ keyword: query, page: 1, pageSize: DISCOVERY_PAGE_SIZE });
+        stats.searchedKeywords++;
+        stats.itemsSeen += items.length;
 
-        for (const item of items as Record<string, unknown>[]) {
-          const pid      = item['pid'] as string | undefined;
-          const title    = (item['productNameEn'] as string | undefined) ?? query;
-          const image    = (item['productImage'] as string | undefined) ?? '';
-          const sellPriceStr = (item['sellPrice'] as string | undefined) ?? '0';
+        for (const item of items) {
+          if (!item.cjProductId || !isCjShopifyUsaPetProduct({ title: item.title })) continue;
+          stats.petMatches++;
 
-          if (!pid || !isCjShopifyUsaPetProduct({ title })) continue;
+          try {
+            const detail = await adapter.getProductById(item.cjProductId);
+            if (!isCjShopifyUsaPetProduct({ title: detail.title, description: detail.description })) continue;
 
-          // Skip if already in DB
-          const existing = await prisma.cjShopifyUsaProduct.findFirst({
-            where: { userId, cjProductId: pid },
-            select: { id: true },
-          });
+            const probeKeys = detail.variants
+              .map((variant) => String(variant.cjVid || '').trim())
+              .filter(Boolean);
+            const liveStock = probeKeys.length > 0
+              ? await adapter.getStockForSkus(probeKeys).catch(() => new Map<string, number>())
+              : new Map<string, number>();
+            const variants = detail.variants.map((variant) => {
+              const key = String(variant.cjVid || '').trim();
+              const stock = key ? liveStock.get(key) : undefined;
+              return stock === undefined ? variant : { ...variant, stock };
+            });
 
-          let productId: number;
-          if (existing) {
-            productId = existing.id;
-          } else {
-            const created = await prisma.cjShopifyUsaProduct.create({
-              data: {
+            const dbProduct = await prisma.cjShopifyUsaProduct.upsert({
+              where: { userId_cjProductId: { userId, cjProductId: detail.cjProductId } },
+              create: {
                 userId,
-                cjProductId: pid,
-                title,
-                description: title,
-                images: image ? [image] : [],
+                cjProductId: detail.cjProductId,
+                title: detail.title,
+                description: detail.description ?? null,
+                images: (detail.imageUrls ?? []) as any,
+                snapshotStatus: 'SYNCED',
+                lastSyncedAt: new Date(),
+              },
+              update: {
+                title: detail.title,
+                description: detail.description ?? null,
+                images: (detail.imageUrls ?? []) as any,
                 snapshotStatus: 'SYNCED',
                 lastSyncedAt: new Date(),
               },
             });
-            productId = created.id;
-            newProducts++;
-          }
+            stats.productsUpserted++;
 
-          // Skip if already evaluated
-          const evalExists = await prisma.cjShopifyUsaProductEvaluation.findFirst({
-            where: { userId, productId },
-            select: { id: true },
-          });
-          if (evalExists) continue;
+            const dbVariants = [];
+            for (const variant of variants) {
+              if (!variant.cjSku) continue;
+              const dbVariant = await prisma.cjShopifyUsaProductVariant.upsert({
+                where: { productId_cjSku: { productId: dbProduct.id, cjSku: variant.cjSku } },
+                create: {
+                  productId: dbProduct.id,
+                  cjSku: variant.cjSku,
+                  cjVid: variant.cjVid ?? null,
+                  attributes: { ...(variant.attributes ?? {}), variantImage: variant.variantImage } as any,
+                  unitCostUsd: variant.unitCostUsd > 0 ? variant.unitCostUsd : null,
+                  stockLastKnown: Number.isFinite(variant.stock) ? variant.stock : null,
+                  stockCheckedAt: new Date(),
+                },
+                update: {
+                  cjVid: variant.cjVid ?? null,
+                  attributes: { ...(variant.attributes ?? {}), variantImage: variant.variantImage } as any,
+                  unitCostUsd: variant.unitCostUsd > 0 ? variant.unitCostUsd : null,
+                  stockLastKnown: Number.isFinite(variant.stock) ? variant.stock : null,
+                  stockCheckedAt: new Date(),
+                },
+              });
+              dbVariants.push(dbVariant);
+              stats.variantsUpserted++;
+            }
 
-          // Quick evaluate using operator settings
-          const cost = parseFloat(sellPriceStr);
-          if (!Number.isFinite(cost) || cost <= 0) continue;
-          const minCost = Number(userSettings.minCostUsd ?? 2.0);
-          if (cost < minCost) continue;
-          const total = cost + SHIP + (cost + SHIP) * 0.03;
-          const rawPrice = (total + FIX) / (1 - TARGET - PAY);
-          if (!Number.isFinite(rawPrice) || rawPrice <= 0) continue;
-          const margin = ((rawPrice - total - rawPrice * PAY - FIX) / rawPrice) * 100;
-          const decision = margin >= MIN_MARGIN && rawPrice <= MAX_SELL_PRICE
-            ? 'APPROVED' : 'REJECTED';
+            const eligible = dbVariants
+              .filter((variant) => Number(variant.stockLastKnown ?? 0) >= minStock && Number(variant.unitCostUsd ?? 0) > 0)
+              .sort((a, b) => Number(b.stockLastKnown ?? 0) - Number(a.stockLastKnown ?? 0));
+            const selected = eligible[0];
+            if (!selected) {
+              stats.skippedNoStock++;
+              continue;
+            }
 
-          await prisma.cjShopifyUsaProductEvaluation.create({
-            data: {
+            const latestEval = await prisma.cjShopifyUsaProductEvaluation.findFirst({
+              where: { userId, productId: dbProduct.id },
+              orderBy: { evaluatedAt: 'desc' },
+              select: { id: true, evaluatedAt: true },
+            });
+            if (latestEval && latestEval.evaluatedAt.getTime() >= reevalAfter) {
+              stats.skippedExistingRecent++;
+              continue;
+            }
+
+            const sourceVariant = variants.find((variant) => variant.cjSku === selected.cjSku) ?? variants[0];
+            let shippingAmountUsd = fallbackShippingUsd;
+            let shippingQuoteId: number | null = null;
+            try {
+              const waResult = await adapter.quoteShippingToUsWarehouseAware({
+                variantId: sourceVariant?.cjVid,
+                productId: detail.cjProductId,
+                quantity: 1,
+                destCountryCode: 'US',
+              });
+              shippingAmountUsd = waResult.quote.cost;
+              const quote = await prisma.cjShopifyUsaShippingQuote.create({
+                data: {
+                  userId,
+                  productId: dbProduct.id,
+                  variantId: selected.id,
+                  quantity: 1,
+                  amountUsd: shippingAmountUsd,
+                  currency: 'USD',
+                  serviceName: waResult.quote.method ?? null,
+                  estimatedMaxDays: waResult.quote.estimatedDays ?? null,
+                  confidence: waResult.quote.warehouseEvidence === 'assumed' ? 'unknown' : 'known',
+                  originCountryCode: waResult.fulfillmentOrigin,
+                },
+              });
+              shippingQuoteId = quote.id;
+            } catch {
+              shippingAmountUsd = fallbackShippingUsd;
+            }
+
+            const qualification = await cjShopifyUsaQualificationService.evaluate(
               userId,
-              productId,
-              decision,
-              estimatedMarginPct: margin,
-              reasons: decision === 'REJECTED'
-                ? [`cost=${cost}, margin=${margin.toFixed(1)}%, price=${rawPrice.toFixed(2)}, max=${MAX_SELL_PRICE.toFixed(2)}`]
-                : [],
-            },
-          });
-          newEvals++;
+              Number(selected.unitCostUsd),
+              shippingAmountUsd,
+            );
+            await prisma.cjShopifyUsaProductEvaluation.create({
+              data: {
+                userId,
+                productId: dbProduct.id,
+                variantId: selected.id,
+                shippingQuoteId,
+                decision: qualification.decision,
+                estimatedMarginPct: qualification.breakdown.netMarginPct,
+                reasons: qualification.reasons,
+              },
+            });
+            stats.evaluationsCreated++;
+            if (qualification.decision === 'APPROVED') stats.approved++;
+            else stats.rejected++;
+          } catch (itemErr) {
+            stats.errors++;
+            console.error(
+              `[Automation] Enrichment failed for "${item.cjProductId}":`,
+              itemErr instanceof Error ? itemErr.message : String(itemErr),
+            );
+          }
         }
       } catch (searchErr) {
         // Log instead of silently swallowing — operator needs visibility into CJ API failures
+        stats.errors++;
         console.error(`[Automation] Search failed for "${query}":`, searchErr instanceof Error ? searchErr.message : String(searchErr));
       }
       await new Promise(r => setTimeout(r, 400));
     }
 
-    if (newProducts > 0 || newEvals > 0) {
-      // log is not accessible here — use console
-    }
+    return stats;
   }
 
   // ── Shopify collection assignment ──────────────────────────────────────
