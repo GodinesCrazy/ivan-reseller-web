@@ -620,17 +620,32 @@ class CjShopifyUsaAutomationService {
       // ── Step 2: Filter — pet products only + no active/duplicate listing ──
       const BUSY_STATUSES = ['ACTIVE', 'DRAFT', 'PUBLISHING', 'RECONCILE_PENDING'];
 
+      const exclusionStats = {
+        nonPet: 0,
+        alreadyBusy: 0,
+        noSellableVariant: 0,
+      };
       const candidates = approvedEvaluations.filter((ev) => {
-        // Must be a pet product
-        if (!isCjShopifyUsaPetProduct({ title: ev.product.title })) return false;
-        // Must not already have an active/draft listing (duplicate guard)
-        const hasActiveListing = ev.product.listings.some((l) =>
+        if (!isCjShopifyUsaPetProduct({ title: ev.product.title })) {
+          exclusionStats.nonPet++;
+          return false;
+        }
+        const hasBusyListing = ev.product.listings.some((l) =>
           BUSY_STATUSES.includes(l.status),
         );
-        return !hasActiveListing && ev.product.variants.some((variant) =>
+        if (hasBusyListing) {
+          exclusionStats.alreadyBusy++;
+          return false;
+        }
+        const hasSellableVariant = ev.product.variants.some((variant) =>
           Number(variant.unitCostUsd ?? 0) > 0 &&
           Number(variant.stockLastKnown ?? 0) > 0,
         );
+        if (!hasSellableVariant) {
+          exclusionStats.noSellableVariant++;
+          return false;
+        }
+        return true;
       });
 
       // De-duplicate by productId (keep highest margin evaluation per product)
@@ -640,26 +655,37 @@ class CjShopifyUsaAutomationService {
         seen.add(ev.product.id);
         return true;
       });
-      if (approvedEvaluations.length > uniqueCandidates.length) {
-        log('info', `Filtered: ${approvedEvaluations.length - uniqueCandidates.length} excluded (non-pet or already listed)`);
+      const duplicateEvaluations = candidates.length - uniqueCandidates.length;
+      const totalExcluded = approvedEvaluations.length - uniqueCandidates.length;
+      if (totalExcluded > 0) {
+        log(
+          'info',
+          `Filtered: ${totalExcluded} excluded ` +
+            `(${exclusionStats.nonPet} non-pet, ${exclusionStats.alreadyBusy} already listed/draft/pending, ` +
+            `${exclusionStats.noSellableVariant} without sellable stock/cost, ${duplicateEvaluations} duplicate evaluations)`,
+        );
       }
 
       cycle.productsApproved = uniqueCandidates.length;
       log('info', `${uniqueCandidates.length} unique products ready to publish`);
 
-      if (uniqueCandidates.length === 0) {
-        log('warn', 'No new candidates. Run a discovery scan to find more products.');
-        cycle.status = 'COMPLETED';
-        cycle.finishedAt = new Date().toISOString();
-        this.lastRunAt = new Date();
-        return;
-      }
-
       // ── Step 2.5: Publish existing DRAFT listings (backlog) ──
       log('info', 'Step 2.5: Publishing existing DRAFT listings backlog...');
       try {
         const draftBacklog = await prisma.cjShopifyUsaListing.findMany({
-          where: { userId, status: 'DRAFT', draftPayload: { not: {} } },
+          where: {
+            userId,
+            status: 'DRAFT',
+            draftPayload: { not: {} },
+            product: {
+              listings: {
+                none: {
+                  userId,
+                  status: { in: ['ACTIVE', 'PUBLISHING', 'RECONCILE_PENDING'] },
+                },
+              },
+            },
+          },
           orderBy: { updatedAt: 'desc' },
           take: Math.min(perCycleLimit, 20),
           select: { id: true, draftPayload: true },
@@ -688,6 +714,17 @@ class CjShopifyUsaAutomationService {
         }
       } catch (err) {
         log('warn', `Backlog publish step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+      }
+
+      if (uniqueCandidates.length === 0) {
+        log(
+          'warn',
+          'No new candidates after discovery/backlog. Remaining catalog rows need fresh evaluation, fail the pet policy, or already have active/draft/pending listings.',
+        );
+        cycle.status = 'COMPLETED';
+        cycle.finishedAt = new Date().toISOString();
+        this.lastRunAt = new Date();
+        return;
       }
 
       // ── Step 3: Take top N by margin ──
