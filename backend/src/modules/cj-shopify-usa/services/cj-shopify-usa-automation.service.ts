@@ -112,7 +112,7 @@ const DISCOVERY_MAX_ENRICH_PER_CYCLE = clampInt(
   process.env.CJ_SHOPIFY_USA_DISCOVERY_MAX_ENRICH_PER_CYCLE,
   10,
   120,
-  45,
+  25,
 );
 
 const DISCOVERY_REQUEST_TIMEOUT_MS = clampInt(
@@ -922,6 +922,13 @@ class CjShopifyUsaAutomationService {
               },
             });
             stats.productsUpserted++;
+            if (stats.productsUpserted % 5 === 0) {
+              log?.(
+                'info',
+                `Discovery progress: ${stats.productsUpserted}/${DISCOVERY_MAX_ENRICH_PER_CYCLE} products enriched, ` +
+                  `${stats.variantsUpserted} variants synced, ${stats.approved} approved so far.`,
+              );
+            }
 
             const dbVariants = [];
             for (const variant of variants) {
