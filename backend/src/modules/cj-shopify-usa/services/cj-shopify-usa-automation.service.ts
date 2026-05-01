@@ -275,11 +275,41 @@ class CjShopifyUsaAutomationService {
     });
   }
 
+  private async closeInterruptedCycles(userId: number) {
+    if (this.currentCycle) return;
+    const interrupted = await prisma.cjShopifyUsaAutomationCycle.findMany({
+      where: { userId, status: 'RUNNING', finishedAt: null },
+      orderBy: { startedAt: 'asc' },
+      take: 10,
+    });
+    if (interrupted.length === 0) return;
+
+    const now = new Date();
+    for (const cycle of interrupted) {
+      const events = Array.isArray(cycle.events) ? cycle.events as unknown as CycleEvent[] : [];
+      events.push({
+        ts: now.toISOString(),
+        level: 'warn',
+        message: 'Cycle interrupted by backend restart/deploy before completion.',
+      });
+      await prisma.cjShopifyUsaAutomationCycle.update({
+        where: { id: cycle.id },
+        data: {
+          status: 'ABORTED',
+          finishedAt: now,
+          durationMs: Math.max(0, now.getTime() - cycle.startedAt.getTime()),
+          events: events as any,
+        },
+      });
+    }
+  }
+
   async getStatus(userId?: number) {
     let persistedHistory: CycleResult[] = [];
     if (userId) {
       await this.loadPersistedState(userId);
       this.ensureScheduler(userId);
+      await this.closeInterruptedCycles(userId);
       const rows = await prisma.cjShopifyUsaAutomationCycle.findMany({
         where: { userId },
         orderBy: { startedAt: 'desc' },
