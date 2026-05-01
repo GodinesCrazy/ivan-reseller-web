@@ -820,7 +820,7 @@ router.post('/products/:productId/re-evaluate', async (req: Request, res: Respon
     const result = await cjShopifyUsaDiscoverService.evaluate(
       userId,
       product.cjProductId,
-      undefined, // quantity
+      1, // quantity (fixed: was undefined)
       undefined, // postal code
     );
     res.json({ ok: true, evaluation: result });

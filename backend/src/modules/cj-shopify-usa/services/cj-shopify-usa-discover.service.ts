@@ -170,69 +170,76 @@ export const cjShopifyUsaDiscoverService = {
     quantity: number,
     destPostalCode?: string,
   ): Promise<DiscoverEvaluationResult> {
-    const adapter = createCjSupplierAdapter(userId);
-    const product = await enrichProductDetailWithLiveStock(adapter, await adapter.getProductById(cjProductId));
-    if (!isCjShopifyUsaPetProduct({ title: product.title, description: product.description })) {
-      throw new AppError('CJ product is not related to the pet store catalog.', 400, ErrorCode.VALIDATION_ERROR);
-    }
-    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
-    const minStock = Math.max(0, Number(settings.minStock ?? 1));
-    const firstVariant = product.variants[0] as CjVariantDetail | undefined;
-    const candidateVariant =
-      product.variants.find((variant) => hasMinimumStock(variant.stock, minStock)) as CjVariantDetail | undefined;
-    const selectedVariant = candidateVariant ?? firstVariant;
-
-    let shippingResult: DiscoverShippingResult | null = null;
-    let shippingError: string | undefined;
-
-    if (selectedVariant) {
-      try {
-        const waResult = await adapter.quoteShippingToUsWarehouseAware({
-          variantId: selectedVariant.cjVid,
-          productId: cjProductId,
-          quantity,
-          destPostalCode,
-          destCountryCode: 'US',
-        });
-        shippingResult = {
-          amountUsd: waResult.quote.cost,
-          method: waResult.quote.method,
-          estimatedDays: waResult.quote.estimatedDays,
-          fulfillmentOrigin: waResult.fulfillmentOrigin,
-          confidence: confidenceFromEvidence(waResult.quote.warehouseEvidence),
-        };
-      } catch (err) {
-        shippingError = err instanceof Error ? err.message : String(err);
+    try {
+      const adapter = createCjSupplierAdapter(userId);
+      const product = await enrichProductDetailWithLiveStock(adapter, await adapter.getProductById(cjProductId));
+      if (!isCjShopifyUsaPetProduct({ title: product.title, description: product.description })) {
+        throw new AppError('CJ product is not related to the pet store catalog.', 400, ErrorCode.VALIDATION_ERROR);
       }
-    }
+      const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+      const minStock = Math.max(0, Number(settings.minStock ?? 1));
+      const firstVariant = product.variants[0] as CjVariantDetail | undefined;
+      const candidateVariant =
+        product.variants.find((variant) => hasMinimumStock(variant.stock, minStock)) as CjVariantDetail | undefined;
+      const selectedVariant = candidateVariant ?? firstVariant;
 
-    let qualification: DiscoverEvaluationResult['qualification'] = null;
-    if (selectedVariant && selectedVariant.unitCostUsd > 0) {
-      const shippingUsd = shippingResult?.amountUsd ?? 0;
-      qualification = await cjShopifyUsaQualificationService.evaluate(userId, selectedVariant.unitCostUsd, shippingUsd);
-      if (!hasMinimumStock(selectedVariant.stock, minStock)) {
-        qualification = {
-          ...qualification,
-          decision: 'REJECTED',
-        };
-        shippingError = shippingError ?? `No CJ variant meets minimum stock requirement (${minStock}).`;
+      let shippingResult: DiscoverShippingResult | null = null;
+      let shippingError: string | undefined;
+
+      if (selectedVariant) {
+        try {
+          const waResult = await adapter.quoteShippingToUsWarehouseAware({
+            variantId: selectedVariant.cjVid,
+            productId: cjProductId,
+            quantity,
+            destPostalCode,
+            destCountryCode: 'US',
+          });
+          shippingResult = {
+            amountUsd: waResult.quote.cost,
+            method: waResult.quote.method,
+            estimatedDays: waResult.quote.estimatedDays,
+            fulfillmentOrigin: waResult.fulfillmentOrigin,
+            confidence: confidenceFromEvidence(waResult.quote.warehouseEvidence),
+          };
+        } catch (err) {
+          shippingError = err instanceof Error ? err.message : String(err);
+        }
       }
+
+      let qualification: DiscoverEvaluationResult['qualification'] = null;
+      if (selectedVariant && selectedVariant.unitCostUsd > 0) {
+        const shippingUsd = shippingResult?.amountUsd ?? 0;
+        qualification = await cjShopifyUsaQualificationService.evaluate(userId, selectedVariant.unitCostUsd, shippingUsd);
+        if (!hasMinimumStock(selectedVariant.stock, minStock)) {
+          qualification = {
+            ...qualification,
+            decision: 'REJECTED',
+          };
+          shippingError = shippingError ?? `No CJ variant meets minimum stock requirement (${minStock}).`;
+        }
+      }
+
+      await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_COMPLETE, 'discover.evaluate', {
+        cjProductId,
+        decision: qualification?.decision ?? 'NO_COST_DATA',
+      } as Prisma.InputJsonValue);
+
+      return {
+        cjProductId: product.cjProductId,
+        title: product.title,
+        imageUrls: product.imageUrls,
+        variants: product.variants,
+        shipping: shippingResult,
+        qualification,
+        shippingError,
+      };
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      // Map CJ specific errors to 400 for better UX (avoid 500s on search/eval)
+      throw new AppError(`Error evaluando producto CJ: ${msg}`, 400, ErrorCode.EXTERNAL_API_ERROR);
     }
-
-    await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_COMPLETE, 'discover.evaluate', {
-      cjProductId,
-      decision: qualification?.decision ?? 'NO_COST_DATA',
-    } as Prisma.InputJsonValue);
-
-    return {
-      cjProductId: product.cjProductId,
-      title: product.title,
-      imageUrls: product.imageUrls,
-      variants: product.variants,
-      shipping: shippingResult,
-      qualification,
-      shippingError,
-    };
   },
 
   async importAndDraft(
@@ -427,7 +434,7 @@ export const cjShopifyUsaDiscoverService = {
     const keywordPool = (input?.keywords && input.keywords.length > 0
       ? input.keywords
       : SHOPIFY_USA_AI_DISCOVERY_KEYWORDS
-    ).slice(0, 5);
+    ).slice(0, 3); // Reduced from 5 to 3 to prevent 502 timeouts (sequential CJ API calls)
 
     const ranked: DiscoverAiSuggestionItem[] = [];
     let analyzed = 0;
