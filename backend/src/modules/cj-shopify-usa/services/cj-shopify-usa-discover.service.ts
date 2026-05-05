@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { AppError, ErrorCode } from '../../../middleware/error.middleware';
 import { createCjSupplierAdapter } from '../../cj-ebay/adapters/cj-supplier.adapter';
+import { CjSupplierError } from '../../cj-ebay/adapters/cj-supplier.errors';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
@@ -111,6 +112,26 @@ const SHOPIFY_USA_AI_DISCOVERY_KEYWORDS = [
   'pet carrier',
   'cat scratching post',
 ];
+const CJ_RATE_LIMIT_RETRY_AFTER_SECONDS = 60;
+
+function isCjRateLimitError(err: unknown): err is CjSupplierError {
+  return err instanceof CjSupplierError && err.code === 'CJ_RATE_LIMIT';
+}
+
+function createCjRateLimitError(action: string): AppError {
+  return new AppError(
+    'CJ esta limitando temporalmente las solicitudes. Espera cerca de 1 minuto antes de evaluar mas productos.',
+    429,
+    ErrorCode.API_RATE_LIMIT,
+    {
+      supplier: 'CJ',
+      code: 'CJ_RATE_LIMIT',
+      retryAfterSeconds: CJ_RATE_LIMIT_RETRY_AFTER_SECONDS,
+      retryable: true,
+      action,
+    },
+  );
+}
 
 async function withSoftTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -219,7 +240,11 @@ export const cjShopifyUsaDiscoverService = {
             confidence: confidenceFromEvidence(waResult.quote.warehouseEvidence),
           };
         } catch (err) {
-          shippingError = err instanceof Error ? err.message : String(err);
+          if (isCjRateLimitError(err)) {
+            shippingError = 'CJ esta limitando las cotizaciones de envio. Espera cerca de 1 minuto y vuelve a evaluar.';
+          } else {
+            shippingError = err instanceof Error ? err.message : String(err);
+          }
         }
       }
 
@@ -252,8 +277,17 @@ export const cjShopifyUsaDiscoverService = {
       };
     } catch (err) {
       if (err instanceof AppError) throw err;
+      if (isCjRateLimitError(err)) {
+        await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_ERROR, 'discover.evaluate.rate_limited', {
+          cjProductId,
+          error: err.message,
+          code: err.code,
+          retryAfterSeconds: CJ_RATE_LIMIT_RETRY_AFTER_SECONDS,
+        } as Prisma.InputJsonValue).catch(() => {});
+        throw createCjRateLimitError('discover.evaluate');
+      }
       const msg = err instanceof Error ? err.message : String(err);
-      // Map CJ specific errors to 400 for better UX (avoid 500s on search/eval)
+      // Map remaining CJ/runtime failures to 400 for better UX (avoid 500s on search/eval).
       throw new AppError(`Error evaluando producto CJ: ${msg}`, 400, ErrorCode.EXTERNAL_API_ERROR);
     }
   },

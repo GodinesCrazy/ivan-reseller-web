@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
@@ -80,15 +80,51 @@ function usd(n: number | null | undefined): string {
   return `$${Number(n).toFixed(2)}`;
 }
 
-function extractApiError(e: unknown): string {
+type ApiErrorInfo = {
+  message: string;
+  status?: number;
+  code?: string;
+  retryAfterSeconds?: number;
+};
+
+function extractApiErrorInfo(e: unknown): ApiErrorInfo {
   if (axios.isAxiosError(e)) {
     const data = e.response?.data as Record<string, unknown> | undefined;
-    if (typeof data?.error === 'string') return data.error;
-    if (e.response?.status === 404) return 'Módulo no disponible o desactivado.';
-    if (e.response?.status === 503) return 'CJ API temporalmente no disponible.';
+    const details = data?.details && typeof data.details === 'object' ? data.details as Record<string, unknown> : undefined;
+    const retryAfterSeconds =
+      typeof details?.retryAfterSeconds === 'number'
+        ? details.retryAfterSeconds
+        : typeof data?.retryAfterSeconds === 'number'
+        ? data.retryAfterSeconds
+        : undefined;
+    const code =
+      typeof data?.errorCode === 'string'
+        ? data.errorCode
+        : typeof data?.code === 'string'
+        ? data.code
+        : typeof details?.code === 'string'
+        ? details.code
+        : undefined;
+    if (e.response?.status === 429 || code === 'API_RATE_LIMIT' || code === 'CJ_RATE_LIMIT') {
+      return {
+        message: typeof data?.error === 'string'
+          ? data.error
+          : 'CJ esta limitando temporalmente las solicitudes. Espera cerca de 1 minuto antes de evaluar mas productos.',
+        status: e.response?.status,
+        code,
+        retryAfterSeconds: retryAfterSeconds ?? 60,
+      };
+    }
+    if (typeof data?.error === 'string') return { message: data.error, status: e.response?.status, code };
+    if (e.response?.status === 404) return { message: 'Módulo no disponible o desactivado.', status: 404, code };
+    if (e.response?.status === 503) return { message: 'CJ API temporalmente no disponible.', status: 503, code };
   }
-  if (e instanceof Error) return e.message;
-  return 'Error desconocido.';
+  if (e instanceof Error) return { message: e.message };
+  return { message: 'Error desconocido.' };
+}
+
+function extractApiError(e: unknown): string {
+  return extractApiErrorInfo(e).message;
 }
 
 function OriginBadge({ origin }: { origin?: 'US' | 'CN' | 'UNKNOWN' }) {
@@ -171,9 +207,13 @@ type CardState =
 function ProductCard({
   product,
   onDrafted,
+  rateLimitUntil,
+  onRateLimited,
 }: {
   product: SearchResult;
   onDrafted: (result: DraftResult) => void;
+  rateLimitUntil: number | null;
+  onRateLimited: (retryAfterSeconds?: number) => void;
 }) {
   const [cardState, setCardState] = useState<CardState>({ kind: 'idle' });
   const [showEval, setShowEval] = useState(false);
@@ -192,7 +232,11 @@ function ProductCard({
       });
       setCardState({ kind: 'evaluated', data: res.data as EvaluationResult });
     } catch (e) {
-      setCardState({ kind: 'eval_error', msg: extractApiError(e) });
+      const apiError = extractApiErrorInfo(e);
+      if (apiError.status === 429 || apiError.code === 'API_RATE_LIMIT' || apiError.code === 'CJ_RATE_LIMIT') {
+        onRateLimited(apiError.retryAfterSeconds);
+      }
+      setCardState({ kind: 'eval_error', msg: apiError.message });
     }
   }
 
@@ -211,7 +255,11 @@ function ProductCard({
         evaluation = evalRes.data as EvaluationResult;
         setCardState({ kind: 'evaluated', data: evaluation });
       } catch (e) {
-        setCardState({ kind: 'eval_error', msg: extractApiError(e) });
+        const apiError = extractApiErrorInfo(e);
+        if (apiError.status === 429 || apiError.code === 'API_RATE_LIMIT' || apiError.code === 'CJ_RATE_LIMIT') {
+          onRateLimited(apiError.retryAfterSeconds);
+        }
+        setCardState({ kind: 'eval_error', msg: apiError.message });
         return;
       }
     }
@@ -243,6 +291,7 @@ function ProductCard({
   const isDrafted = cardState.kind === 'drafted';
   const isDrafting = cardState.kind === 'drafting';
   const isEvaluating = cardState.kind === 'evaluating';
+  const isRateLimited = Boolean(rateLimitUntil && rateLimitUntil > Date.now());
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
@@ -291,7 +340,7 @@ function ProductCard({
               </div>
             )}
             {cardState.kind === 'eval_error' && (
-              <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
                 {cardState.msg}
               </div>
             )}
@@ -334,8 +383,9 @@ function ProductCard({
         <div className="flex gap-2 mt-auto pt-1">
           <button
             onClick={handleEvaluate}
-            disabled={isEvaluating}
+            disabled={isEvaluating || isRateLimited}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50"
+            title={isRateLimited ? 'CJ pidio una pausa temporal. Reintenta en cerca de 1 minuto.' : undefined}
           >
             {isEvaluating ? (
               <Loader2 className="w-3 h-3 animate-spin" />
@@ -349,9 +399,15 @@ function ProductCard({
 
           <button
             onClick={handleCreateDraft}
-            disabled={isDrafting || isDrafted || isRejected}
+            disabled={isDrafting || isDrafted || isRejected || isRateLimited}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-colors disabled:opacity-50"
-            title={isRejected ? 'Producto rechazado por pricing. Ajusta configuración o elige otro producto.' : undefined}
+            title={
+              isRateLimited
+                ? 'CJ pidio una pausa temporal. Reintenta en cerca de 1 minuto.'
+                : isRejected
+                ? 'Producto rechazado por pricing. Ajusta configuración o elige otro producto.'
+                : undefined
+            }
           >
             {isDrafting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
             {isDrafted ? '✓ Draft creado' : isDrafting ? 'Creando…' : 'Crear Draft'}
@@ -399,7 +455,19 @@ export default function CjShopifyUsaDiscoverPage() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiMeta, setAiMeta] = useState<{ totalAnalyzed: number; generatedAt: string } | null>(null);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [cjRateLimitUntil, setCjRateLimitUntil] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!cjRateLimitUntil) return;
+    const delayMs = Math.max(0, cjRateLimitUntil - Date.now());
+    const timeout = window.setTimeout(() => setCjRateLimitUntil(null), delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [cjRateLimitUntil]);
+
+  function handleCjRateLimit(retryAfterSeconds = 60) {
+    setCjRateLimitUntil(Date.now() + Math.max(15, retryAfterSeconds) * 1000);
+  }
 
   async function doSearch(kw: string, page: number) {
     const trimmed = kw.trim();
@@ -702,6 +770,17 @@ export default function CjShopifyUsaDiscoverPage() {
 
       {searchState.kind === 'results' && (
         <div className="space-y-4">
+          {cjRateLimitUntil && cjRateLimitUntil > Date.now() && (
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">CJ pidio una pausa temporal</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                  Se bloquearon nuevas evaluaciones por cerca de 1 minuto para evitar mas rate limits. Puedes seguir revisando resultados y volver a intentar en breve.
+                </p>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {searchState.items.length} resultados para "{searchState.keyword}"
@@ -711,7 +790,13 @@ export default function CjShopifyUsaDiscoverPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {searchState.items.map((product) => (
-              <ProductCard key={product.cjProductId} product={product} onDrafted={handleDrafted} />
+              <ProductCard
+                key={product.cjProductId}
+                product={product}
+                onDrafted={handleDrafted}
+                rateLimitUntil={cjRateLimitUntil}
+                onRateLimited={handleCjRateLimit}
+              />
             ))}
           </div>
 
