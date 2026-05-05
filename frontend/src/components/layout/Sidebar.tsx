@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useInventoryBadges } from '@/hooks/useInventoryBadges';
@@ -31,6 +32,7 @@ import {
   ScrollText,
   SlidersHorizontal,
   Zap,
+  ChevronDown,
 } from 'lucide-react';
 import { isCjEbayModuleEnabled, isCjMlChileModuleEnabled, isCjShopifyUsaModuleEnabled, isTopDawgShopifyUsaModuleEnabled } from '@/config/feature-flags';
 
@@ -159,6 +161,7 @@ const navGroups: NavGroup[] = [
 export default function Sidebar() {
   const { user } = useAuthStore();
   const { isOpen, close } = useSidebar();
+  const location = useLocation();
   const userRole = user?.role?.toUpperCase() || 'USER';
   const { pendingPurchasesCount, productsPending } = useInventoryBadges();
 
@@ -170,56 +173,108 @@ export default function Sidebar() {
     ...navGroups,
   ];
 
-  const visibleGroups = allNavGroups.filter((group) => {
+  const visibleGroups = useMemo(() => allNavGroups.filter((group) => {
     if (group.roles && !group.roles.includes(userRole)) return false;
     const visibleItems = group.items.filter((item) => {
       if (!item.roles) return true;
       return item.roles.includes(userRole);
     });
     return visibleItems.length > 0;
-  });
+  }), [allNavGroups, userRole]);
+
+  const activeGroupTitle = visibleGroups.find((group) =>
+    group.items.some((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)),
+  )?.title;
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setExpandedGroups((current) => {
+      if (!activeGroupTitle || current.has(activeGroupTitle)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.add(activeGroupTitle);
+      return next;
+    });
+  }, [activeGroupTitle]);
+
+  const toggleGroup = (title: string) => {
+    setExpandedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  };
 
   const navContent = (
     <nav className="py-3 px-2.5 space-y-5 scrollbar-thin">
       {visibleGroups.map((group) => (
         <div key={group.title}>
-          <p className="px-3 mb-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.08em]">
-            {group.title}
-          </p>
-          <div className="space-y-0.5">
-            {group.items
-              .filter((item) => !item.roles || item.roles.includes(userRole))
-              .map((item) => {
-                const badgeCount =
-                  item.path === '/pending-purchases'
-                    ? pendingPurchasesCount
-                    : item.path === '/products'
-                      ? productsPending
-                      : 0;
-                return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  onClick={close}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2.5 px-3 py-[7px] rounded-lg transition-colors text-[13px] ${
-                      isActive
-                        ? 'bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
-                    }`
-                  }
+          {(() => {
+            const visibleItems = group.items.filter((item) => !item.roles || item.roles.includes(userRole));
+            const isExpanded = expandedGroups.has(group.title);
+            const hasActiveItem = group.title === activeGroupTitle;
+            return (
+              <>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.title)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
+                    hasActiveItem
+                      ? 'bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100'
+                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                  aria-expanded={isExpanded}
                 >
-                  <item.icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                  {badgeCount > 0 && (
-                    <span className="ml-auto min-w-[1.125rem] h-[18px] px-1 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-semibold leading-none">
-                      {badgeCount > 99 ? '99+' : badgeCount}
-                    </span>
-                  )}
-                </NavLink>
-              );
-              })}
-          </div>
+                  <span className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-[0.08em] truncate">
+                    {group.title}
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {isExpanded && (
+                  <div className="mt-1 space-y-0.5">
+                    {visibleItems.map((item) => {
+                      const badgeCount =
+                        item.path === '/pending-purchases'
+                          ? pendingPurchasesCount
+                          : item.path === '/products'
+                            ? productsPending
+                            : 0;
+                      return (
+                        <NavLink
+                          key={item.path}
+                          to={item.path}
+                          onClick={close}
+                          className={({ isActive }) =>
+                            `flex items-center gap-2.5 pl-5 pr-3 py-[7px] rounded-lg transition-colors text-[13px] ${
+                              isActive
+                                ? 'bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium'
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
+                            }`
+                          }
+                        >
+                          <item.icon className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{item.label}</span>
+                          {badgeCount > 0 && (
+                            <span className="ml-auto min-w-[1.125rem] h-[18px] px-1 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-semibold leading-none">
+                              {badgeCount > 99 ? '99+' : badgeCount}
+                            </span>
+                          )}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       ))}
     </nav>
