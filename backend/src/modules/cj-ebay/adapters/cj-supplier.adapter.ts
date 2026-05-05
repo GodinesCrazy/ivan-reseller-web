@@ -47,6 +47,9 @@ import type {
 
 /** CJ documents QPS ≈ 1; stay slightly above 1s between calls. */
 const CJ_MIN_INTERVAL_MS = 1100;
+let cjGlobalLastCallAt = 0;
+let cjGlobalCooldownUntil = 0;
+let cjGlobalThrottleTail: Promise<void> = Promise.resolve();
 
 /** Nombres en inglés para `shippingCountry` cuando el origen es ISO2 (doc requiere país + código). */
 const ISO2_COUNTRY_NAME: Record<string, string> = {
@@ -370,7 +373,6 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
 
   private readonly client = new CjSupplierHttpClient();
   private readonly cacheKey: string;
-  private lastCallAt = 0;
 
   constructor(
     private readonly userId: number,
@@ -380,12 +382,20 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
   }
 
   private async throttle(): Promise<void> {
-    const now = Date.now();
-    const wait = CJ_MIN_INTERVAL_MS - (now - this.lastCallAt);
-    if (this.lastCallAt > 0 && wait > 0) {
-      await new Promise((r) => setTimeout(r, wait));
-    }
-    this.lastCallAt = Date.now();
+    const run = async () => {
+      const now = Date.now();
+      const intervalWait = cjGlobalLastCallAt > 0 ? CJ_MIN_INTERVAL_MS - (now - cjGlobalLastCallAt) : 0;
+      const cooldownWait = cjGlobalCooldownUntil > now ? cjGlobalCooldownUntil - now : 0;
+      const wait = Math.max(intervalWait, cooldownWait, 0);
+      if (wait > 0) {
+        await new Promise((r) => setTimeout(r, wait));
+      }
+      cjGlobalLastCallAt = Date.now();
+    };
+
+    const next = cjGlobalThrottleTail.then(run, run);
+    cjGlobalThrottleTail = next.catch(() => {});
+    await next;
   }
 
   private async ensureAccessToken(): Promise<string> {
@@ -485,6 +495,7 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
           attempt < maxRetries
         ) {
           const delayMs = baseMs * 2 ** attempt;
+          cjGlobalCooldownUntil = Math.max(cjGlobalCooldownUntil, Date.now() + delayMs);
           logger.warn('[cj-supplier.adapter] rate limited (429), backing off', {
             label,
             attempt,
