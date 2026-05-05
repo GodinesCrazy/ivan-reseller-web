@@ -34,15 +34,15 @@
 
   html.dark {
     --ir-text-primary: 241 245 249;
-    --ir-text-secondary: 203 213 225;
-    --ir-text-muted: 148 163 184;
+    --ir-text-secondary: 214 226 241;
+    --ir-text-muted: 166 180 199;
 
-    --ir-surface: 2 6 23;
-    --ir-surface-elevated: 15 23 42;
-    --ir-surface-sunken: 2 6 23;
+    --ir-surface: 3 7 18;
+    --ir-surface-elevated: 17 26 46;
+    --ir-surface-sunken: 8 13 30;
 
-    --ir-border: 51 65 85;
-    --ir-border-subtle: 30 41 59;
+    --ir-border: 71 85 110;
+    --ir-border-subtle: 42 55 79;
     --ir-focus-ring: 96 165 250;
 
     --ir-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.15);
@@ -62,7 +62,7 @@
     color: rgb(var(--ir-text-primary));
     font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
     line-height: 1.5;
-    letter-spacing: -0.011em;
+    letter-spacing: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

@@ -47,10 +47,12 @@ interface NavGroup {
   title: string;
   items: NavItem[];
   roles?: string[];
+  theme?: 'cjEbay' | 'cjMl' | 'cjShopify' | 'topdawg' | 'main' | 'catalog' | 'finance' | 'admin' | 'settings';
 }
 
 const cjEbayNavGroup: NavGroup = {
   title: 'CJ → eBay USA',
+  theme: 'cjEbay',
   items: [
     { path: '/cj-ebay/overview', label: 'Resumen', icon: LayoutDashboard },
     { path: '/cj-ebay/products', label: 'Productos CJ', icon: Package },
@@ -64,6 +66,7 @@ const cjEbayNavGroup: NavGroup = {
 
 const cjMlChileNavGroup: NavGroup = {
   title: 'CJ → ML Chile',
+  theme: 'cjMl',
   items: [
     { path: '/cj-ml-chile/overview', label: 'Resumen', icon: LayoutDashboard },
     { path: '/cj-ml-chile/products', label: 'Productos CJ', icon: Package },
@@ -77,6 +80,7 @@ const cjMlChileNavGroup: NavGroup = {
 
 const topDawgShopifyUsaNavGroup: NavGroup = {
   title: 'TopDawg → Shopify USA',
+  theme: 'topdawg',
   items: [
     { path: '/topdawg-shopify-usa/overview',   label: 'Resumen',        icon: LayoutDashboard },
     { path: '/topdawg-shopify-usa/discover',   label: 'Descubrir',      icon: Search },
@@ -92,6 +96,7 @@ const topDawgShopifyUsaNavGroup: NavGroup = {
 
 const cjShopifyUsaNavGroup: NavGroup = {
   title: 'CJ → Shopify USA',
+  theme: 'cjShopify',
   items: [
     { path: '/cj-shopify-usa/overview', label: 'Resumen', icon: LayoutDashboard },
     { path: '/cj-shopify-usa/products', label: 'Productos CJ', icon: Package },
@@ -108,6 +113,7 @@ const cjShopifyUsaNavGroup: NavGroup = {
 const navGroups: NavGroup[] = [
   {
     title: 'Flujo principal',
+    theme: 'main',
     items: [
       { path: '/dashboard', label: 'Panel', icon: LayoutDashboard },
       { path: '/control-center', label: 'Control Center', icon: Activity },
@@ -120,6 +126,7 @@ const navGroups: NavGroup[] = [
   },
   {
     title: 'Catálogo y ventas',
+    theme: 'catalog',
     items: [
       { path: '/products', label: 'Productos', icon: Package },
       { path: '/product-research', label: 'Investigación', icon: Briefcase },
@@ -130,6 +137,7 @@ const navGroups: NavGroup[] = [
   },
   {
     title: 'Finanzas',
+    theme: 'finance',
     items: [
       { path: '/finance', label: 'Finanzas', icon: Wallet },
       { path: '/commissions', label: 'Comisiones', icon: Receipt },
@@ -138,6 +146,7 @@ const navGroups: NavGroup[] = [
   },
   {
     title: 'Administración',
+    theme: 'admin',
     items: [
       { path: '/users', label: 'Usuarios', icon: Users, roles: ['ADMIN'] },
       { path: '/admin', label: 'Panel Admin', icon: Server, roles: ['ADMIN'] },
@@ -147,6 +156,7 @@ const navGroups: NavGroup[] = [
   },
   {
     title: 'Configuración',
+    theme: 'settings',
     items: [
       { path: '/api-settings', label: 'API & Credenciales', icon: Key },
       { path: '/workflow-config', label: 'Workflows', icon: Repeat2 },
@@ -157,6 +167,108 @@ const navGroups: NavGroup[] = [
     ],
   },
 ];
+
+const sidebarThemes: Record<NonNullable<NavGroup['theme']>, {
+  rail: string;
+  groupActive: string;
+  groupIdle: string;
+  itemActive: string;
+  itemIdle: string;
+  iconActive: string;
+  iconIdle: string;
+  badge: string;
+}> = {
+  cjEbay: {
+    rail: 'bg-sky-400 shadow-[0_0_18px_rgba(56,189,248,0.45)]',
+    groupActive: 'bg-sky-500/15 text-sky-100 border-sky-400/40',
+    groupIdle: 'text-sky-200/80 hover:bg-sky-500/10 hover:text-sky-100 border-transparent',
+    itemActive: 'bg-sky-500/18 text-sky-50 ring-1 ring-sky-400/30',
+    itemIdle: 'text-slate-300 hover:bg-sky-500/10 hover:text-sky-100',
+    iconActive: 'text-sky-300',
+    iconIdle: 'text-sky-400/75',
+    badge: 'bg-sky-500 text-white',
+  },
+  cjMl: {
+    rail: 'bg-amber-400 shadow-[0_0_18px_rgba(251,191,36,0.42)]',
+    groupActive: 'bg-amber-500/16 text-amber-100 border-amber-400/40',
+    groupIdle: 'text-amber-200/80 hover:bg-amber-500/10 hover:text-amber-100 border-transparent',
+    itemActive: 'bg-amber-500/18 text-amber-50 ring-1 ring-amber-400/30',
+    itemIdle: 'text-slate-300 hover:bg-amber-500/10 hover:text-amber-100',
+    iconActive: 'text-amber-300',
+    iconIdle: 'text-amber-400/75',
+    badge: 'bg-amber-500 text-slate-950',
+  },
+  cjShopify: {
+    rail: 'bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.42)]',
+    groupActive: 'bg-emerald-500/16 text-emerald-100 border-emerald-400/40',
+    groupIdle: 'text-emerald-200/80 hover:bg-emerald-500/10 hover:text-emerald-100 border-transparent',
+    itemActive: 'bg-emerald-500/18 text-emerald-50 ring-1 ring-emerald-400/30',
+    itemIdle: 'text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-100',
+    iconActive: 'text-emerald-300',
+    iconIdle: 'text-emerald-400/75',
+    badge: 'bg-emerald-500 text-slate-950',
+  },
+  topdawg: {
+    rail: 'bg-orange-400 shadow-[0_0_18px_rgba(251,146,60,0.42)]',
+    groupActive: 'bg-orange-500/16 text-orange-100 border-orange-400/40',
+    groupIdle: 'text-orange-200/80 hover:bg-orange-500/10 hover:text-orange-100 border-transparent',
+    itemActive: 'bg-orange-500/18 text-orange-50 ring-1 ring-orange-400/30',
+    itemIdle: 'text-slate-300 hover:bg-orange-500/10 hover:text-orange-100',
+    iconActive: 'text-orange-300',
+    iconIdle: 'text-orange-400/75',
+    badge: 'bg-orange-500 text-slate-950',
+  },
+  main: {
+    rail: 'bg-blue-400 shadow-[0_0_18px_rgba(96,165,250,0.42)]',
+    groupActive: 'bg-blue-500/15 text-blue-100 border-blue-400/40',
+    groupIdle: 'text-blue-200/75 hover:bg-blue-500/10 hover:text-blue-100 border-transparent',
+    itemActive: 'bg-blue-500/18 text-blue-50 ring-1 ring-blue-400/30',
+    itemIdle: 'text-slate-300 hover:bg-blue-500/10 hover:text-blue-100',
+    iconActive: 'text-blue-300',
+    iconIdle: 'text-blue-400/75',
+    badge: 'bg-blue-500 text-white',
+  },
+  catalog: {
+    rail: 'bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.4)]',
+    groupActive: 'bg-cyan-500/15 text-cyan-100 border-cyan-400/40',
+    groupIdle: 'text-cyan-200/75 hover:bg-cyan-500/10 hover:text-cyan-100 border-transparent',
+    itemActive: 'bg-cyan-500/18 text-cyan-50 ring-1 ring-cyan-400/30',
+    itemIdle: 'text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-100',
+    iconActive: 'text-cyan-300',
+    iconIdle: 'text-cyan-400/75',
+    badge: 'bg-cyan-500 text-slate-950',
+  },
+  finance: {
+    rail: 'bg-lime-400 shadow-[0_0_18px_rgba(163,230,53,0.38)]',
+    groupActive: 'bg-lime-500/14 text-lime-100 border-lime-400/40',
+    groupIdle: 'text-lime-200/75 hover:bg-lime-500/10 hover:text-lime-100 border-transparent',
+    itemActive: 'bg-lime-500/16 text-lime-50 ring-1 ring-lime-400/30',
+    itemIdle: 'text-slate-300 hover:bg-lime-500/10 hover:text-lime-100',
+    iconActive: 'text-lime-300',
+    iconIdle: 'text-lime-400/75',
+    badge: 'bg-lime-500 text-slate-950',
+  },
+  admin: {
+    rail: 'bg-rose-400 shadow-[0_0_18px_rgba(251,113,133,0.38)]',
+    groupActive: 'bg-rose-500/15 text-rose-100 border-rose-400/40',
+    groupIdle: 'text-rose-200/75 hover:bg-rose-500/10 hover:text-rose-100 border-transparent',
+    itemActive: 'bg-rose-500/18 text-rose-50 ring-1 ring-rose-400/30',
+    itemIdle: 'text-slate-300 hover:bg-rose-500/10 hover:text-rose-100',
+    iconActive: 'text-rose-300',
+    iconIdle: 'text-rose-400/75',
+    badge: 'bg-rose-500 text-white',
+  },
+  settings: {
+    rail: 'bg-violet-400 shadow-[0_0_18px_rgba(167,139,250,0.42)]',
+    groupActive: 'bg-violet-500/15 text-violet-100 border-violet-400/40',
+    groupIdle: 'text-violet-200/75 hover:bg-violet-500/10 hover:text-violet-100 border-transparent',
+    itemActive: 'bg-violet-500/18 text-violet-50 ring-1 ring-violet-400/30',
+    itemIdle: 'text-slate-300 hover:bg-violet-500/10 hover:text-violet-100',
+    iconActive: 'text-violet-300',
+    iconIdle: 'text-violet-400/75',
+    badge: 'bg-violet-500 text-white',
+  },
+};
 
 export default function Sidebar() {
   const { user } = useAuthStore();
@@ -212,34 +324,41 @@ export default function Sidebar() {
   };
 
   const navContent = (
-    <nav className="py-3 px-2.5 space-y-5 scrollbar-thin">
+    <nav className="py-3 px-2.5 space-y-3 scrollbar-thin">
       {visibleGroups.map((group) => (
         <div key={group.title}>
           {(() => {
             const visibleItems = group.items.filter((item) => !item.roles || item.roles.includes(userRole));
             const isExpanded = expandedGroups.has(group.title);
             const hasActiveItem = group.title === activeGroupTitle;
+            const theme = sidebarThemes[group.theme ?? 'main'];
             return (
-              <>
+              <div className={`relative rounded-xl border transition-colors ${
+                hasActiveItem
+                  ? 'border-white/10 bg-white/[0.035]'
+                  : 'border-transparent hover:border-white/[0.06]'
+              }`}>
+                <span className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full transition-opacity ${theme.rail} ${
+                  hasActiveItem ? 'opacity-100' : 'opacity-35'
+                }`} />
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.title)}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
-                    hasActiveItem
-                      ? 'bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100'
-                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
+                  className={`w-full flex items-center gap-2 pl-4 pr-3 py-2 rounded-xl text-left border transition-colors ${
+                    hasActiveItem ? theme.groupActive : theme.groupIdle
                   }`}
                   aria-expanded={isExpanded}
                 >
-                  <span className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-[0.08em] truncate">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${theme.rail}`} />
+                  <span className="min-w-0 flex-1 text-[11px] font-bold uppercase tracking-normal truncate">
                     {group.title}
                   </span>
                   <ChevronDown
-                    className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    className={`w-3.5 h-3.5 flex-shrink-0 opacity-80 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                   />
                 </button>
                 {isExpanded && (
-                  <div className="mt-1 space-y-0.5">
+                  <div className="mt-1 px-1.5 pb-2 space-y-1">
                     {visibleItems.map((item) => {
                       const badgeCount =
                         item.path === '/pending-purchases'
@@ -253,26 +372,30 @@ export default function Sidebar() {
                           to={item.path}
                           onClick={close}
                           className={({ isActive }) =>
-                            `flex items-center gap-2.5 pl-5 pr-3 py-[7px] rounded-lg transition-colors text-[13px] ${
-                              isActive
-                                ? 'bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 font-medium'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200'
+                            `group flex items-center gap-2.5 pl-4 pr-2.5 py-[7px] rounded-lg transition-colors text-[13px] ${
+                              isActive ? `${theme.itemActive} font-semibold` : theme.itemIdle
                             }`
                           }
                         >
-                          <item.icon className="w-4 h-4 flex-shrink-0" />
+                          {({ isActive }) => (
+                            <>
+                              <item.icon className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                                isActive ? theme.iconActive : theme.iconIdle
+                              }`} />
                           <span className="truncate">{item.label}</span>
                           {badgeCount > 0 && (
-                            <span className="ml-auto min-w-[1.125rem] h-[18px] px-1 flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-semibold leading-none">
+                                <span className={`ml-auto min-w-[1.125rem] h-[18px] px-1 flex items-center justify-center rounded-full text-[10px] font-bold leading-none ${theme.badge}`}>
                               {badgeCount > 99 ? '99+' : badgeCount}
                             </span>
+                          )}
+                            </>
                           )}
                         </NavLink>
                       );
                     })}
                   </div>
                 )}
-              </>
+              </div>
             );
           })()}
         </div>
@@ -294,7 +417,8 @@ export default function Sidebar() {
           fixed lg:static left-0 z-50
           top-[var(--navbar-height)] h-[calc(100vh-var(--navbar-height))] lg:top-0 lg:min-h-[calc(100vh-var(--navbar-height))] lg:h-auto
           w-[var(--sidebar-width)]
-          bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800
+          bg-white dark:bg-[#050816] border-r border-slate-200 dark:border-slate-700/70
+          dark:shadow-[inset_-1px_0_0_rgba(148,163,184,0.08)]
           overflow-y-auto overflow-x-hidden transition-transform duration-200 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
