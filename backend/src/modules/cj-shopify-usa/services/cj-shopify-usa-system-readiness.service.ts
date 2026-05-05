@@ -67,6 +67,27 @@ export class CjShopifyUsaSystemReadinessService {
     }
 
     const settings = await cjShopifyUsaConfigService.getOrCreateSettings(userId);
+    let hasPaypalCheckoutCredentials = Boolean(
+      String(env.PAYPAL_CLIENT_ID || '').trim() &&
+        String(env.PAYPAL_CLIENT_SECRET || '').trim(),
+    );
+    if (!hasPaypalCheckoutCredentials) {
+      const paypalEntry = await CredentialsManager.getCredentialEntry(userId, 'paypal', 'production').catch(() => null);
+      hasPaypalCheckoutCredentials = Boolean(
+        String(
+          paypalEntry?.credentials?.clientId ||
+            paypalEntry?.credentials?.PAYPAL_PRODUCTION_CLIENT_ID ||
+            paypalEntry?.credentials?.PAYPAL_CLIENT_ID ||
+            '',
+        ).trim() &&
+          String(
+            paypalEntry?.credentials?.clientSecret ||
+              paypalEntry?.credentials?.PAYPAL_PRODUCTION_CLIENT_SECRET ||
+              paypalEntry?.credentials?.PAYPAL_CLIENT_SECRET ||
+              '',
+          ).trim(),
+      );
+    }
     pushCheck(checks, {
       id: 'account_settings',
       name: 'Pricing Settings',
@@ -201,11 +222,17 @@ export class CjShopifyUsaSystemReadinessService {
       pushCheck(checks, {
         id: 'shopify.payments_reality',
         name: 'Checkout / Payments Reality',
-        status: shopifyTest.shopData!.country === 'CL' ? 'WARNING' : 'PASS',
+        status: shopifyTest.shopData!.country === 'CL' && !hasPaypalCheckoutCredentials ? 'WARNING' : 'PASS',
         message:
+          shopifyTest.shopData!.country === 'CL' && hasPaypalCheckoutCredentials
+            ? 'Chile-based operator detected; PayPal checkout credentials are configured, so Shopify Payments is not assumed.'
+            : shopifyTest.shopData!.country === 'CL'
+              ? 'Chile-based operator detected. Configure PayPal or another third-party checkout gateway; do not assume Shopify Payments.'
+              : 'Verify payout / gateway availability for your operator geography.',
+        hint:
           shopifyTest.shopData!.country === 'CL'
-            ? 'Chile-based operator detected. Use a third-party checkout gateway; do not assume Shopify Payments.'
-            : 'Verify payout / gateway availability for your operator geography.',
+            ? 'Confirm PayPal is active in Shopify Admin > Settings > Payments. Shopify does not expose payment-gateway activation through CLI/Admin API.'
+            : undefined,
       });
     }
 

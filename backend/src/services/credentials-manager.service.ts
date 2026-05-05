@@ -94,8 +94,20 @@ function normalizeCredentialShape(
   }
 
   if (n === 'paypal') {
-    out.clientId = out.clientId || out.PAYPAL_CLIENT_ID;
-    out.clientSecret = out.clientSecret || out.PAYPAL_CLIENT_SECRET;
+    out.clientId =
+      out.clientId ||
+      (environment === 'production' ? out.PAYPAL_PRODUCTION_CLIENT_ID : undefined) ||
+      out.PAYPAL_CLIENT_ID;
+    out.clientSecret =
+      out.clientSecret ||
+      (environment === 'production' ? out.PAYPAL_PRODUCTION_CLIENT_SECRET : undefined) ||
+      out.PAYPAL_CLIENT_SECRET;
+    out.webhookId = out.webhookId || out.PAYPAL_WEBHOOK_ID;
+    out.environment =
+      out.environment ||
+      out.PAYPAL_ENVIRONMENT ||
+      out.PAYPAL_MODE ||
+      (environment === 'production' ? 'live' : 'sandbox');
   }
 
   if (n === 'cj-dropshipping') {
@@ -390,6 +402,7 @@ function loadFromEnv(
       clientId: clientId.trim(),
       clientSecret: clientSecret.trim(),
       environment: environment === 'sandbox' ? 'sandbox' : 'live',
+      webhookId: (process.env.PAYPAL_WEBHOOK_ID || '').trim() || undefined,
     };
   }
 

@@ -445,6 +445,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
 router.get('/listings', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
+    const limit = Math.max(1, Math.min(1000, Number(req.query.limit ?? 500)));
     const [listings, total, activeOrPendingShopifyProducts] = await Promise.all([
       prisma.cjShopifyUsaListing.findMany({
         where: { userId },
@@ -467,7 +468,7 @@ router.get('/listings', async (req: Request, res: Response, next: NextFunction) 
           },
         },
         orderBy: { updatedAt: 'desc' },
-        take: 100,
+        take: limit,
       }),
       prisma.cjShopifyUsaListing.count({ where: { userId } }),
       prisma.cjShopifyUsaListing.findMany({
@@ -485,7 +486,9 @@ router.get('/listings', async (req: Request, res: Response, next: NextFunction) 
         select: { shopifyProductId: true },
       }),
     ]);
-    const listingsWithStorefront = await cjShopifyUsaReconciliationService.reconcileListings(userId, listings);
+    const listingsWithStorefront = listings.map((listing) =>
+      cjShopifyUsaReconciliationService.buildCachedTruth(listing),
+    );
     res.json({
       ok: true,
       listings: listingsWithStorefront,
@@ -494,6 +497,37 @@ router.get('/listings', async (req: Request, res: Response, next: NextFunction) 
         returned: listingsWithStorefront.length,
         shopifyProductsInSoftware: activeOrPendingShopifyProducts.length,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/listings/reconcile', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const importResult = await cjShopifyUsaReconciliationService.importLiveShopifyProducts(userId);
+    const listings = await prisma.cjShopifyUsaListing.findMany({
+      where: { userId },
+      include: {
+        variant: {
+          select: {
+            id: true,
+            productId: true,
+            cjSku: true,
+            cjVid: true,
+            stockLastKnown: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 100,
+    });
+    const reconciled = await cjShopifyUsaReconciliationService.reconcileListings(userId, listings);
+    res.json({
+      ok: true,
+      importedFromShopify: importResult,
+      reconciled: reconciled.length,
     });
   } catch (error) {
     next(error);
@@ -750,6 +784,7 @@ router.post('/discover/ai-suggestions', async (req: Request, res: Response, next
 router.get('/products', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
+    const limit = Math.max(1, Math.min(1000, Number(req.query.limit ?? 500)));
     const products = await prisma.cjShopifyUsaProduct.findMany({
       where: { userId },
       include: {
@@ -780,7 +815,7 @@ router.get('/products', async (req: Request, res: Response, next: NextFunction) 
         },
       },
       orderBy: { updatedAt: 'desc' },
-      take: 100,
+      take: limit,
     });
     const allListings = products.flatMap((product) =>
       product.listings.map((listing) => ({
@@ -788,7 +823,9 @@ router.get('/products', async (req: Request, res: Response, next: NextFunction) 
         userId,
       })),
     );
-    const reconciledListings = await cjShopifyUsaReconciliationService.reconcileListings(userId, allListings);
+    const reconciledListings = allListings.map((listing) =>
+      cjShopifyUsaReconciliationService.buildCachedTruth(listing),
+    );
     const reconciledById = new Map(reconciledListings.map((listing) => [listing.id, listing]));
     const productsWithStorefront = products.map((product) => ({
       ...product,

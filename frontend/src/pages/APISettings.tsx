@@ -290,14 +290,17 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
   },
   paypal: {
     name: 'paypal',
-    displayName: 'PayPal Payouts',
-    description: 'Pagar comisiones automáticamente',
+    displayName: 'PayPal Checkout / Payouts',
+    description: 'Cobros Shopify con PayPal y pagos automáticos de comisiones',
     icon: '💳',
     docsUrl: 'https://developer.paypal.com/docs/payouts/',
     fields: [
-      { key: 'PAYPAL_CLIENT_ID', label: 'Client ID', required: true, type: 'text', placeholder: 'AYSq3RDGsmBLJE...' },
-      { key: 'PAYPAL_CLIENT_SECRET', label: 'Client Secret', required: true, type: 'password', placeholder: 'EGnHDxD_qRPOmeKm...' },
-      { key: 'PAYPAL_MODE', label: 'Mode', required: true, type: 'text', placeholder: 'sandbox o live' },
+      { key: 'PAYPAL_CLIENT_ID', label: 'PAYPAL_CLIENT_ID', required: true, type: 'text', placeholder: 'AYSq3RDGsmBLJE...' },
+      { key: 'PAYPAL_CLIENT_SECRET', label: 'PAYPAL_CLIENT_SECRET', required: true, type: 'password', placeholder: 'EGnHDxD_qRPOmeKm...' },
+      { key: 'PAYPAL_PRODUCTION_CLIENT_ID', label: 'PAYPAL_PRODUCTION_CLIENT_ID', required: false, type: 'text', placeholder: 'Opcional: Live Client ID específico' },
+      { key: 'PAYPAL_PRODUCTION_CLIENT_SECRET', label: 'PAYPAL_PRODUCTION_CLIENT_SECRET', required: false, type: 'password', placeholder: 'Opcional: Live Secret específico' },
+      { key: 'PAYPAL_ENVIRONMENT', label: 'PAYPAL_ENVIRONMENT', required: true, type: 'text', placeholder: 'production' },
+      { key: 'PAYPAL_WEBHOOK_ID', label: 'PAYPAL_WEBHOOK_ID', required: false, type: 'password', placeholder: 'Webhook ID de PayPal' },
     ],
   },
   aliexpress: {
@@ -1075,8 +1078,8 @@ export default function APISettings() {
     try {
       const scopeKey = makeEnvKey(apiName, environment);
       
-      // APIs de marketplaces y PayPal deben ser únicamente personales
-      const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+      // APIs de marketplaces deben ser personales; PayPal puede ser global porque checkout público no siempre tiene sesión.
+      const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre'];
       const isPersonalOnly = PERSONAL_ONLY_APIS.includes(apiName);
       
       // Para APIs personales, siempre usar scope 'user' y no incluir globales
@@ -1606,7 +1609,7 @@ export default function APISettings() {
       const scopeKey = makeEnvKey(apiName, currentEnvironment);
       
       // APIs de marketplaces y PayPal deben ser únicamente personales
-      const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+      const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre'];
       const isPersonalOnly = PERSONAL_ONLY_APIS.includes(apiName);
       
       // Para usuarios no admin, siempre usar 'user' si han seleccionado explícitamente 'user'
@@ -1670,7 +1673,11 @@ export default function APISettings() {
         'SERP_API_KEY': 'apiKey', // ✅ Google Trends
         'PAYPAL_CLIENT_ID': 'clientId',
         'PAYPAL_CLIENT_SECRET': 'clientSecret',
+        'PAYPAL_PRODUCTION_CLIENT_ID': 'PAYPAL_PRODUCTION_CLIENT_ID',
+        'PAYPAL_PRODUCTION_CLIENT_SECRET': 'PAYPAL_PRODUCTION_CLIENT_SECRET',
+        'PAYPAL_ENVIRONMENT': 'environment',
         'PAYPAL_MODE': 'environment',
+        'PAYPAL_WEBHOOK_ID': 'webhookId',
         // Stripe API
         'STRIPE_PUBLIC_KEY': 'publicKey',
         'STRIPE_PUBLISHABLE_KEY': 'publicKey',
@@ -1988,7 +1995,7 @@ export default function APISettings() {
         credentials.sandbox = currentEnvironment === 'sandbox';
       } else if (apiName === 'paypal') {
         // PayPal usa 'environment' en lugar de 'sandbox'
-        if (credentials.environment === 'sandbox') {
+        if (credentials.environment === 'sandbox' || currentEnvironment === 'sandbox') {
           credentials.environment = 'sandbox';
         } else {
           credentials.environment = 'live';
@@ -2408,6 +2415,11 @@ export default function APISettings() {
           'CAPTCHA_API_KEY': 'apiKey',
           'PAYPAL_CLIENT_ID': 'clientId',
           'PAYPAL_CLIENT_SECRET': 'clientSecret',
+          'PAYPAL_PRODUCTION_CLIENT_ID': 'PAYPAL_PRODUCTION_CLIENT_ID',
+          'PAYPAL_PRODUCTION_CLIENT_SECRET': 'PAYPAL_PRODUCTION_CLIENT_SECRET',
+          'PAYPAL_ENVIRONMENT': 'environment',
+          'PAYPAL_MODE': 'environment',
+          'PAYPAL_WEBHOOK_ID': 'webhookId',
           'email': 'email',
           'password': 'password',
           'twoFactorEnabled': 'twoFactorEnabled',
@@ -4044,8 +4056,8 @@ export default function APISettings() {
           const formKey = makeFormKey(apiDef.name, currentEnvironment);
           const scopeKey = makeEnvKey(apiDef.name, currentEnvironment);
           
-          // APIs de marketplaces y PayPal deben ser únicamente personales
-          const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+          // APIs de marketplaces deben ser personales; PayPal puede ser global para checkout público.
+          const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre'];
           const isPersonalOnly = PERSONAL_ONLY_APIS.includes(apiDef.name);
           
           // Si el usuario ha seleccionado explícitamente 'user', usar eso; de lo contrario, usar la credencial existente o 'user' por defecto
@@ -4620,8 +4632,8 @@ export default function APISettings() {
                     )}
 
                     {isAdmin && (() => {
-                      // APIs de marketplaces y PayPal deben ser únicamente personales
-                      const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+                      // APIs de marketplaces deben ser personales; PayPal puede ser global para checkout público.
+                      const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre'];
                       const isPersonalOnly = PERSONAL_ONLY_APIS.includes(apiDef.name);
                       
                       // Solo mostrar selector de scope si la API puede ser global

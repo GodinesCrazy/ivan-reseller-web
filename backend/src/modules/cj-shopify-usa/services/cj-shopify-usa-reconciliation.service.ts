@@ -180,6 +180,171 @@ async function recordTrace(userId: number, step: string, message: string, meta?:
 }
 
 export class CjShopifyUsaReconciliationService {
+  buildCachedTruth<T extends ListingLike>(listing: T): ReconciliationResult<T> {
+    const hasShopify = Boolean(listing.shopifyProductId);
+    const status = trim(listing.status).toUpperCase();
+    const activeLike = status === CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE;
+    const storefrontUrl = listing.shopifyHandle
+      ? buildStorefrontUrl('ivanreseller-2.myshopify.com', listing.shopifyHandle)
+      : null;
+
+    return {
+      ...listing,
+      storefrontUrl,
+      publishTruth: {
+        reconciledAt: new Date().toISOString(),
+        source: hasShopify ? 'SHOPIFY_ADMIN_LIVE' : 'LOCAL_DRAFT_ONLY',
+        localStatusBefore: listing.status,
+        localStatusAfter: listing.status,
+        shopifyIdentifiersPresent: Boolean(listing.shopifyProductId && listing.shopifyVariantId && listing.shopifyHandle),
+        buyerFacingVerified: activeLike,
+        readyForStorefront: activeLike,
+        reasons: hasShopify
+          ? ['Cached local state. Use Re-sync Shopify to refresh live Admin/storefront truth.']
+          : ['No Shopify product id is stored for this listing yet.'],
+        shopify: {
+          exists: hasShopify ? true : null,
+          productId: listing.shopifyProductId ?? null,
+          variantId: listing.shopifyVariantId ?? null,
+          handle: listing.shopifyHandle ?? null,
+          adminStatus: hasShopify ? (activeLike ? 'ACTIVE' : status) : null,
+          publishedOnPublication: activeLike ? true : null,
+          publicationId: null,
+          publicationName: null,
+          inventoryQuantity: listing.quantity ?? null,
+          inventoryItemId: null,
+          mediaCount: null,
+        },
+        storefront: {
+          url: storefrontUrl,
+          status: null,
+          finalUrl: null,
+          passwordGate: null,
+          hasAddToCart: null,
+          hasPrice: null,
+          error: null,
+        },
+      },
+    };
+  }
+
+  async importLiveShopifyProducts(userId: number): Promise<{ scanned: number; created: number; updated: number; skippedExisting: number }> {
+    const liveProducts = await cjShopifyUsaAdminService.listProducts({ userId, first: 250, maxPages: 8 });
+    let created = 0;
+    let updated = 0;
+    let skippedExisting = 0;
+
+    for (const live of liveProducts) {
+      const existingListing = await prisma.cjShopifyUsaListing.findFirst({
+        where: { userId, shopifyProductId: live.id },
+        select: { id: true },
+      });
+
+      if (existingListing) {
+        const primaryVariant = live.variants?.nodes?.[0] ?? null;
+        await prisma.cjShopifyUsaListing.update({
+          where: { id: existingListing.id },
+          data: {
+            status: trim(live.status).toUpperCase() === 'ACTIVE'
+              ? CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE
+              : trim(live.status).toUpperCase() === 'ARCHIVED'
+                ? CJ_SHOPIFY_USA_LISTING_STATUS.ARCHIVED
+                : CJ_SHOPIFY_USA_LISTING_STATUS.PAUSED,
+            shopifyVariantId: primaryVariant?.id ?? undefined,
+            shopifyHandle: live.handle,
+            shopifySku: primaryVariant?.sku ?? undefined,
+            listedPriceUsd: primaryVariant?.price ? Number(primaryVariant.price) : undefined,
+            quantity: primaryVariant?.inventoryQuantity ?? undefined,
+            lastSyncedAt: new Date(),
+            lastError: null,
+          },
+        });
+        skippedExisting++;
+        continue;
+      }
+
+      const primaryVariant = live.variants?.nodes?.[0] ?? null;
+      const syntheticProduct = await prisma.cjShopifyUsaProduct.upsert({
+        where: { userId_cjProductId: { userId, cjProductId: `shopify:${live.id}` } },
+        create: {
+          userId,
+          cjProductId: `shopify:${live.id}`,
+          title: live.title,
+          description: null,
+          images: [],
+          snapshotStatus: 'SHOPIFY_LIVE',
+          lastSyncedAt: new Date(),
+        },
+        update: {
+          title: live.title,
+          snapshotStatus: 'SHOPIFY_LIVE',
+          lastSyncedAt: new Date(),
+        },
+      });
+
+      const syntheticVariant = await prisma.cjShopifyUsaProductVariant.upsert({
+        where: {
+          productId_cjSku: {
+            productId: syntheticProduct.id,
+            cjSku: primaryVariant?.sku || `shopify-variant:${primaryVariant?.id ?? live.id}`,
+          },
+        },
+        create: {
+          productId: syntheticProduct.id,
+          cjSku: primaryVariant?.sku || `shopify-variant:${primaryVariant?.id ?? live.id}`,
+          cjVid: primaryVariant?.id ?? null,
+          attributes: { source: 'SHOPIFY_ADMIN_LIVE' } as Prisma.InputJsonValue,
+          unitCostUsd: null,
+          stockLastKnown: primaryVariant?.inventoryQuantity ?? null,
+          stockCheckedAt: new Date(),
+        },
+        update: {
+          cjVid: primaryVariant?.id ?? null,
+          stockLastKnown: primaryVariant?.inventoryQuantity ?? null,
+          stockCheckedAt: new Date(),
+        },
+      });
+
+      await prisma.cjShopifyUsaListing.create({
+        data: {
+          userId,
+          productId: syntheticProduct.id,
+          variantId: syntheticVariant.id,
+          shopifyProductId: live.id,
+          shopifyVariantId: primaryVariant?.id ?? null,
+          shopifyHandle: live.handle,
+          shopifySku: primaryVariant?.sku ?? null,
+          status: trim(live.status).toUpperCase() === 'ACTIVE'
+            ? CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE
+            : trim(live.status).toUpperCase() === 'ARCHIVED'
+              ? CJ_SHOPIFY_USA_LISTING_STATUS.ARCHIVED
+              : CJ_SHOPIFY_USA_LISTING_STATUS.PAUSED,
+          listedPriceUsd: primaryVariant?.price ? Number(primaryVariant.price) : null,
+          quantity: primaryVariant?.inventoryQuantity ?? null,
+          lastSyncedAt: new Date(),
+          publishedAt: trim(live.status).toUpperCase() === 'ACTIVE' ? new Date() : null,
+          draftPayload: {
+            source: 'SHOPIFY_ADMIN_LIVE_IMPORT',
+            title: live.title,
+            handle: live.handle,
+            shopifyProductId: live.id,
+            tags: live.tags ?? [],
+          } as Prisma.InputJsonValue,
+        },
+      });
+      created++;
+    }
+
+    updated = skippedExisting;
+    await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_RECONCILE_SUCCESS, 'shopify.live_products.imported', {
+      scanned: liveProducts.length,
+      created,
+      updated,
+    } as Prisma.InputJsonValue);
+
+    return { scanned: liveProducts.length, created, updated, skippedExisting };
+  }
+
   private async verifyStorefrontProductPage(input: {
     userId: number;
     productHandle: string;

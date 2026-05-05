@@ -7,6 +7,7 @@
 import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import logger from '../config/logger';
+import { CredentialsManager } from './credentials-manager.service';
 
 const PLACEHOLDERS = ['PUT_YOUR_APP_KEY_HERE', 'PUT_YOUR_APP_SECRET_HERE'];
 
@@ -81,6 +82,54 @@ export class PayPalCheckoutService {
     });
   }
 
+  static async fromConfigured(userId = 1, environment: 'sandbox' | 'production' = 'production'): Promise<PayPalCheckoutService | null> {
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'paypal', environment).catch((error) => {
+      logger.warn('[PAYPAL] Could not load checkout credentials from database', {
+        userId,
+        environment,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    });
+
+    const credentials = entry?.credentials;
+    const clientId = String(
+      credentials?.clientId ||
+        (environment === 'production' ? credentials?.PAYPAL_PRODUCTION_CLIENT_ID : '') ||
+        credentials?.PAYPAL_CLIENT_ID ||
+        '',
+    ).trim();
+    const clientSecret = String(
+      credentials?.clientSecret ||
+        (environment === 'production' ? credentials?.PAYPAL_PRODUCTION_CLIENT_SECRET : '') ||
+        credentials?.PAYPAL_CLIENT_SECRET ||
+        '',
+    ).trim();
+    const paypalEnvironment = String(
+      credentials?.environment ||
+        credentials?.PAYPAL_ENVIRONMENT ||
+        credentials?.PAYPAL_MODE ||
+        (environment === 'production' ? 'live' : 'sandbox'),
+    ).trim();
+    const webhookId = String(credentials?.webhookId || credentials?.PAYPAL_WEBHOOK_ID || '').trim();
+
+    if (clientId && clientSecret) {
+      logger.info('[PAYPAL] Checkout service created from configured credentials', {
+        source: entry?.scope || 'database',
+        environment: paypalEnvironment,
+        hasWebhookId: Boolean(webhookId),
+      });
+      return new PayPalCheckoutService({
+        clientId,
+        clientSecret,
+        webhookId: webhookId || undefined,
+        environment: paypalEnvironment === 'production' || paypalEnvironment === 'live' ? 'production' : 'sandbox',
+      });
+    }
+
+    return this.fromEnv();
+  }
+
   private async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiresAt - 60000) {
       return this.accessToken;
@@ -102,7 +151,7 @@ export class PayPalCheckoutService {
   }
 
   getApproveUrl(paypalOrderId: string): string {
-    const isProd = ENV === 'production' || ENV === 'live';
+    const isProd = this.credentials.environment === 'production' || this.credentials.environment === 'live';
     const base = isProd ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
     return `${base}/checkoutnow?token=${paypalOrderId}`;
   }

@@ -12,9 +12,13 @@ import { checkDailyLimits } from '../../services/daily-limits.service';
 import { checkProfitGuard } from '../../services/profit-guard.service';
 
 const router = Router();
-const service = PayPalCheckoutService.fromEnv();
+
+async function getPaypalService(userId?: number): Promise<PayPalCheckoutService | null> {
+  return PayPalCheckoutService.fromConfigured(userId || 1, 'production');
+}
 
 router.post('/create-order', async (req: Request, res: Response) => {
+  const service = await getPaypalService();
   if (!service) {
     return res.status(503).json({ success: false, error: 'PayPal not configured' });
   }
@@ -44,6 +48,7 @@ router.post('/create-order', async (req: Request, res: Response) => {
 });
 
 router.post('/capture-order', authenticate, async (req: Request, res: Response) => {
+  const service = await getPaypalService(req.user?.userId);
   if (!service) {
     return res.status(503).json({ success: false, error: 'PayPal not configured' });
   }
@@ -127,6 +132,7 @@ router.post('/capture-order', authenticate, async (req: Request, res: Response) 
 });
 
 router.post('/webhook', async (req: Request, res: Response) => {
+  const service = await getPaypalService();
   if (!service) {
     return res.status(503).json({ success: false, error: 'PayPal not configured' });
   }

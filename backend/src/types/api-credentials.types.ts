@@ -199,6 +199,15 @@ export interface PayPalCredentials {
   
   /** PayPal Client Secret */
   clientSecret: string;
+
+  /** Optional Live Client ID alias used by Railway/env-style configuration */
+  PAYPAL_PRODUCTION_CLIENT_ID?: string;
+
+  /** Optional Live Client Secret alias used by Railway/env-style configuration */
+  PAYPAL_PRODUCTION_CLIENT_SECRET?: string;
+
+  /** Optional webhook id used to verify PayPal webhook signatures */
+  webhookId?: string;
   
   /** Ambiente: 'sandbox' o 'live' */
   environment: 'sandbox' | 'live';

@@ -112,6 +112,20 @@ const SHOPIFY_USA_AI_DISCOVERY_KEYWORDS = [
   'cat scratching post',
 ];
 
+async function withSoftTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function clamp(num: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, num));
 }
@@ -437,24 +451,28 @@ export const cjShopifyUsaDiscoverService = {
     const keywordPool = (input?.keywords && input.keywords.length > 0
       ? input.keywords
       : SHOPIFY_USA_AI_DISCOVERY_KEYWORDS
-    ).slice(0, 3); // Reduced from 5 to 3 to prevent 502 timeouts (sequential CJ API calls)
+    ).slice(0, 2);
 
     const ranked: DiscoverAiSuggestionItem[] = [];
     let analyzed = 0;
 
     for (const keyword of keywordPool) {
-      const searchResults = await adapter.searchProducts({
-        keyword,
-        page: 1,
-        pageSize: 8,
-      });
+      let searchResults: CjProductSummary[] = [];
+      try {
+        searchResults = await withSoftTimeout(
+          adapter.searchProducts({ keyword, page: 1, pageSize: 6 }),
+          7000,
+        );
+      } catch {
+        continue;
+      }
 
-      for (const summary of searchResults.slice(0, 2)) {
+      for (const summary of searchResults.slice(0, 1)) {
         if (ranked.length >= maxItems + 3) break;
         analyzed += 1;
 
         try {
-          const detail = await adapter.getProductById(summary.cjProductId);
+          const detail = await withSoftTimeout(adapter.getProductById(summary.cjProductId), 7000);
           if (!isCjShopifyUsaPetProduct({ title: detail.title, description: detail.description })) continue;
           const variant =
             (detail.variants.find((v) => hasMinimumStock(v.stock, minStock)) as CjVariantDetail | undefined) ||
@@ -465,13 +483,16 @@ export const cjShopifyUsaDiscoverService = {
           let fulfillmentOrigin: 'US' | 'CN' | 'UNKNOWN' = 'UNKNOWN';
           let estimatedDays: number | null = null;
           try {
-            const shipping = await adapter.quoteShippingToUsWarehouseAware({
-              variantId: variant.cjVid,
-              productId: detail.cjProductId,
-              quantity: 1,
-              destPostalCode: input?.destPostalCode,
-              destCountryCode: 'US',
-            });
+            const shipping = await withSoftTimeout(
+              adapter.quoteShippingToUsWarehouseAware({
+                variantId: variant.cjVid,
+                productId: detail.cjProductId,
+                quantity: 1,
+                destPostalCode: input?.destPostalCode,
+                destCountryCode: 'US',
+              }),
+              7000,
+            );
             shippingUsd = shipping.quote.cost;
             fulfillmentOrigin = shipping.fulfillmentOrigin;
             estimatedDays = shipping.quote.estimatedDays;

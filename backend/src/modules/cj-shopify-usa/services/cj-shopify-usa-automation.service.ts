@@ -8,6 +8,7 @@
  *   5. Logs cycle results and updates state
  */
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database.js';
 import { env } from '../../../config/env.js';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service.js';
@@ -691,7 +692,7 @@ class CjShopifyUsaAutomationService {
       if (this.abortSignal) { cycle.status = 'ABORTED'; return; }
 
       // ── Step 2: Filter — pet products only + no active/duplicate listing ──
-      const BUSY_STATUSES = ['ACTIVE', 'DRAFT', 'PUBLISHING', 'RECONCILE_PENDING'];
+      const BUSY_STATUSES = ['ACTIVE', 'PUBLISHING', 'RECONCILE_PENDING'];
 
       const exclusionStats = {
         nonPet: 0,
@@ -749,7 +750,7 @@ class CjShopifyUsaAutomationService {
           where: {
             userId,
             status: 'DRAFT',
-            draftPayload: { not: {} },
+            draftPayload: { not: Prisma.JsonNull },
             product: {
               listings: {
                 none: {
@@ -789,7 +790,7 @@ class CjShopifyUsaAutomationService {
         log('warn', `Backlog publish step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
 
-      if (uniqueCandidates.length === 0) {
+      if (uniqueCandidates.length === 0 && cycle.published === 0) {
         log(
           'warn',
           'No new candidates after discovery/backlog. Remaining catalog rows need fresh evaluation, fail the pet policy, or already have active/draft/pending listings.',
@@ -1210,8 +1211,7 @@ class CjShopifyUsaAutomationService {
 
         for (const item of items) {
           if (stats.productsUpserted >= DISCOVERY_MAX_ENRICH_PER_CYCLE) break;
-          if (!item.cjProductId || !isCjShopifyUsaPetProduct({ title: item.title })) continue;
-          stats.petMatches++;
+          if (!item.cjProductId) continue;
 
           try {
             const existing = await prisma.cjShopifyUsaProduct.findUnique({
@@ -1236,6 +1236,7 @@ class CjShopifyUsaAutomationService {
               `CJ detail "${item.cjProductId}"`,
             );
             if (!isCjShopifyUsaPetProduct({ title: detail.title, description: detail.description })) continue;
+            stats.petMatches++;
 
             const probeKeys = detail.variants
               .map((variant) => String(variant.cjVid || '').trim())

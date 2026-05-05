@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, ExternalLink, Eye, FileText, Send, ShieldAlert, Trash2 } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Eye, FileText, RefreshCw, Send, ShieldAlert, Trash2 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -263,6 +263,10 @@ export default function CjShopifyUsaProductsPage() {
         </div>
       )}
 
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-400">
+        Flujo correcto: <strong>Recalcular</strong> actualiza costo, stock, envio y margen; <strong>Preparar</strong> crea un draft local si esta aprobado; <strong>Publicar</strong> envia ese draft a Shopify. Si ya existe en Shopify, gestionalo desde <strong>Store Products</strong>.
+      </div>
+
       {filtered.length === 0 ? (
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-6 py-10 text-center">
           <p className="text-slate-500 dark:text-slate-400 text-sm">
@@ -343,7 +347,7 @@ export default function CjShopifyUsaProductsPage() {
                             onClick={() => void createDraft(row)}
                           >
                             <FileText className="h-3.5 w-3.5" aria-hidden="true" />
-                            {busyId === row.id ? '…' : 'Crear draft'}
+                            {busyId === row.id ? '...' : 'Preparar'}
                           </button>
                         )}
                         {draftListing && (
@@ -354,7 +358,7 @@ export default function CjShopifyUsaProductsPage() {
                             onClick={() => void publishDraft(draftListing.id, row.id)}
                           >
                             <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                            {busyId === row.id ? '…' : 'Publicar draft'}
+                            {busyId === row.id ? '...' : 'Publicar'}
                           </button>
                         )}
                         {draftListing && (
@@ -363,7 +367,7 @@ export default function CjShopifyUsaProductsPage() {
                             className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                           >
                             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                            Store Products
+                            Ver en tienda
                           </Link>
                         )}
                         {verifiedActiveListing && (
@@ -395,11 +399,12 @@ export default function CjShopifyUsaProductsPage() {
                         <button
                           type="button"
                           disabled={busyId === row.id}
-                          title="Re-evaluar márgenes con precios actuales de CJ"
+                          title="Volver a calcular stock, costo, envío y margen con datos actuales de CJ"
                           className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-40 dark:border-blue-800/70 dark:bg-blue-950/30 dark:text-blue-300"
                           onClick={() => void reEvaluateProduct(row)}
                         >
-                          🔄 {busyId === row.id ? '…' : 'Re-evaluar'}
+                          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                          {busyId === row.id ? '...' : 'Recalcular'}
                         </button>
                         <button
                           type="button"
@@ -409,7 +414,7 @@ export default function CjShopifyUsaProductsPage() {
                           onClick={() => void deleteProduct(row)}
                         >
                           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          {busyId === row.id ? '…' : 'Eliminar'}
+                          {busyId === row.id ? '...' : 'Eliminar local'}
                         </button>
                         </div>
                       </td>

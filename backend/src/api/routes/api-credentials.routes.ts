@@ -50,7 +50,8 @@ function resolveTargetUserId(req: Request, provided: any): number {
 }
 
 // APIs que deben ser únicamente personales (no pueden ser globales)
-const PERSONAL_ONLY_APIS: ApiName[] = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+// PayPal can be configured globally by an admin because platform checkout may run without a user session.
+const PERSONAL_ONLY_APIS: ApiName[] = ['ebay', 'amazon', 'mercadolibre'];
 
 const normalizeScope = (value: any, actorRole: string, apiName?: string): CredentialScope => {
   const normalized = typeof value === 'string' ? value.toLowerCase() : value;

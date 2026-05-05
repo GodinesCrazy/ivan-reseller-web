@@ -792,6 +792,95 @@ export class CjShopifyUsaAdminService {
     ) ?? null;
   }
 
+  async listProducts(input: {
+    userId: number;
+    first?: number;
+    maxPages?: number;
+  }): Promise<Array<{
+    id: string;
+    title: string;
+    handle: string;
+    status: string;
+    tags: string[];
+    publishedOnCurrentPublication?: boolean | null;
+    variants?: {
+      nodes?: Array<{
+        id: string;
+        sku?: string | null;
+        price?: string | null;
+        inventoryQuantity?: number | null;
+      }>;
+    } | null;
+    media?: { nodes?: Array<{ id: string }> | null } | null;
+  }>> {
+    const first = Math.max(1, Math.min(250, Number(input.first ?? 250)));
+    const maxPages = Math.max(1, Math.min(20, Number(input.maxPages ?? 10)));
+    const products: Array<{
+      id: string;
+      title: string;
+      handle: string;
+      status: string;
+      tags: string[];
+      publishedOnCurrentPublication?: boolean | null;
+      variants?: {
+        nodes?: Array<{
+          id: string;
+          sku?: string | null;
+          price?: string | null;
+          inventoryQuantity?: number | null;
+        }>;
+      } | null;
+      media?: { nodes?: Array<{ id: string }> | null } | null;
+    }> = [];
+
+    let after: string | null = null;
+    for (let page = 0; page < maxPages; page++) {
+      const data = await this.graphql<{
+        products?: {
+          nodes?: typeof products;
+          pageInfo?: { hasNextPage: boolean; endCursor?: string | null };
+        } | null;
+      }>({
+        userId: input.userId,
+        query: `
+          query CjShopifyUsaListProducts($first: Int!, $after: String) {
+            products(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
+              nodes {
+                id
+                title
+                handle
+                status
+                tags
+                publishedOnCurrentPublication
+                media(first: 1) { nodes { id } }
+                variants(first: 20) {
+                  nodes {
+                    id
+                    sku
+                    price
+                    inventoryQuantity
+                  }
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+          }
+        `,
+        variables: { first, after },
+      });
+
+      products.push(...(data.products?.nodes ?? []));
+      if (!data.products?.pageInfo?.hasNextPage) break;
+      after = data.products.pageInfo.endCursor ?? null;
+      if (!after) break;
+    }
+
+    return products;
+  }
+
   async setInventoryQuantity(input: {
     userId: number;
     inventoryItemId: string;

@@ -173,17 +173,21 @@ router.get('/apis', authenticate, async (req, res) => {
         supportsEnvironments: true,
         environments: {
           sandbox: createEnvironmentDef('paypal', 'sandbox', [
-            { key: 'clientId', label: 'Client ID', required: true, type: 'text', placeholder: 'AYxxxxxxxxxxxxx' },
-            { key: 'clientSecret', label: 'Client Secret', required: true, type: 'password' },
-            { key: 'environment', label: 'Environment', required: true, type: 'text', value: 'sandbox', disabled: true }
+            { key: 'PAYPAL_CLIENT_ID', label: 'PAYPAL_CLIENT_ID', required: true, type: 'text', placeholder: 'AYxxxxxxxxxxxxx' },
+            { key: 'PAYPAL_CLIENT_SECRET', label: 'PAYPAL_CLIENT_SECRET', required: true, type: 'password' },
+            { key: 'PAYPAL_WEBHOOK_ID', label: 'PAYPAL_WEBHOOK_ID', required: false, type: 'password', placeholder: 'Webhook ID de PayPal' },
+            { key: 'PAYPAL_ENVIRONMENT', label: 'PAYPAL_ENVIRONMENT', required: true, type: 'text', value: 'sandbox', disabled: true }
           ]),
           production: createEnvironmentDef('paypal', 'production', [
-            { key: 'clientId', label: 'Client ID', required: true, type: 'text', placeholder: 'AYxxxxxxxxxxxxx' },
-            { key: 'clientSecret', label: 'Client Secret', required: true, type: 'password' },
-            { key: 'environment', label: 'Environment', required: true, type: 'text', value: 'live', disabled: true }
+            { key: 'PAYPAL_CLIENT_ID', label: 'PAYPAL_CLIENT_ID', required: true, type: 'text', placeholder: 'AYxxxxxxxxxxxxx' },
+            { key: 'PAYPAL_CLIENT_SECRET', label: 'PAYPAL_CLIENT_SECRET', required: true, type: 'password' },
+            { key: 'PAYPAL_PRODUCTION_CLIENT_ID', label: 'PAYPAL_PRODUCTION_CLIENT_ID', required: false, type: 'text', placeholder: 'Opcional; si se deja vacío usa PAYPAL_CLIENT_ID' },
+            { key: 'PAYPAL_PRODUCTION_CLIENT_SECRET', label: 'PAYPAL_PRODUCTION_CLIENT_SECRET', required: false, type: 'password', placeholder: 'Opcional; si se deja vacío usa PAYPAL_CLIENT_SECRET' },
+            { key: 'PAYPAL_WEBHOOK_ID', label: 'PAYPAL_WEBHOOK_ID', required: false, type: 'password', placeholder: 'Webhook ID de PayPal Live' },
+            { key: 'PAYPAL_ENVIRONMENT', label: 'PAYPAL_ENVIRONMENT', required: true, type: 'text', value: 'production', disabled: true }
           ])
         },
-        description: 'PayPal Payouts API for automatic commission payments. Cost: $0.25 per payout.',
+        description: 'PayPal Checkout/Payouts for Shopify payments and automatic commission payments.',
         documentation: 'https://developer.paypal.com/api/rest/'
       },
 
