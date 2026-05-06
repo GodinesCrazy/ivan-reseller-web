@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, ExternalLink, Eye, FileText, RefreshCw, Send, ShieldAlert, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, Eye, FileText, RefreshCw, Send, ShieldAlert, Trash2 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +47,7 @@ type ProductRow = {
   id: number;
   cjProductId: string;
   title: string;
+  imageCount?: number;
   snapshotStatus: string;
   lastSyncedAt: string | null;
   updatedAt: string;
@@ -104,6 +105,156 @@ function listingTruthLabel(listing: ListingRef): string {
   const pubText = pub == null ? 'pub —' : pub ? 'pub OK' : 'pub NO';
   const stockText = stock == null ? 'stock —' : `stock ${stock}`;
   return `${admin} / ${pubText} / ${stockText}`;
+}
+
+function normalizeTitleKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(cj[a-z0-9]+|\d{8,}[a-z0-9]*)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function titleQualityIssues(title: string): string[] {
+  const key = normalizeTitleKey(title);
+  const words = key.split(/\s+/).filter(Boolean);
+  const uniqueWords = new Set(words);
+  const genericTitles = new Set([
+    'pet',
+    'pet supplies',
+    'pet product',
+    'pet grooming brush',
+    'pet feeding bowl',
+    'pet water fountain',
+    'pet travel carrier',
+    'pet nail grooming tool',
+    'adjustable pet collar',
+    'adjustable dog leash',
+    'dog harness',
+    'cat enrichment toy',
+    'dog enrichment toy',
+    'pet enrichment toy',
+    'dog comfort bed',
+    'cat comfort bed',
+  ]);
+  const issues: string[] = [];
+  if (!title.trim() || title.trim().length < 14) issues.push('titulo muy corto');
+  if (words.length < 3) issues.push('titulo poco especifico');
+  if (genericTitles.has(key)) issues.push('titulo generico');
+  if (/\bcj[a-z0-9]{6,}\b/i.test(title) || /\b\d{10,}\b/.test(title)) issues.push('contiene codigo proveedor');
+  if (uniqueWords.size > 0 && uniqueWords.size <= Math.ceil(words.length / 2) && words.length >= 6) {
+    issues.push('repite palabras');
+  }
+  if (/\b(slave|bondage|bdsm|fetish|erotic|adult toys?|sex(y)?|lingerie|corset|mannequin)\b/i.test(title)) {
+    issues.push('terminos no confiables');
+  }
+  return issues;
+}
+
+type ManualReadiness = {
+  state: 'active' | 'draft' | 'ready' | 'review' | 'blocked';
+  label: string;
+  nextAction: string;
+  reasons: string[];
+  className: string;
+};
+
+function buildManualReadiness(row: ProductRow, duplicateTitleCount: number): ManualReadiness {
+  const ev = row.evaluations[0] ?? null;
+  const activeListing = row.listings.find((l) => l.status === 'ACTIVE');
+  const verifiedActiveListing = row.listings.find((l) => l.status === 'ACTIVE' && l.publishTruth?.buyerFacingVerified);
+  const draftListing = row.listings.find((l) => l.status === 'DRAFT');
+  const linkedListing = row.listings.find((l) => Boolean(l.shopifyProductId));
+  const reasons: string[] = [];
+
+  if ((row.imageCount ?? 0) <= 0) reasons.push('sin imagenes');
+  if (row.policy?.isPetProduct === false) reasons.push('no cumple politica pet');
+  if (row.variants.length === 0) reasons.push('sin variantes');
+  if (row.variants.length > 0 && row.variants.every((v) => Number(v.stockLastKnown ?? 0) <= 0)) reasons.push('sin stock vendible');
+  if (duplicateTitleCount > 1) reasons.push('posible titulo duplicado');
+  reasons.push(...titleQualityIssues(row.title));
+
+  if (verifiedActiveListing) {
+    return {
+      state: 'active',
+      label: 'Publicado OK',
+      nextAction: 'Monitorear stock y margen',
+      reasons: [],
+      className: 'border-emerald-700/60 bg-emerald-950/35 text-emerald-200',
+    };
+  }
+
+  if (activeListing || linkedListing) {
+    return {
+      state: 'review',
+      label: 'Revisar Shopify',
+      nextAction: 'Abrir Store Products',
+      reasons: reasons.length ? reasons : ['listing vinculado sin verificacion buyer-ready'],
+      className: 'border-amber-700/60 bg-amber-950/35 text-amber-200',
+    };
+  }
+
+  if (draftListing) {
+    return {
+      state: reasons.length ? 'review' : 'draft',
+      label: reasons.length ? 'Draft con alertas' : 'Draft listo',
+      nextAction: reasons.length ? 'Corregir antes de publicar' : 'Publicar draft',
+      reasons,
+      className: reasons.length
+        ? 'border-amber-700/60 bg-amber-950/35 text-amber-200'
+        : 'border-sky-700/60 bg-sky-950/35 text-sky-200',
+    };
+  }
+
+  if (reasons.length) {
+    return {
+      state: 'blocked',
+      label: 'Bloqueado',
+      nextAction: 'Corregir o eliminar',
+      reasons,
+      className: 'border-rose-700/60 bg-rose-950/35 text-rose-200',
+    };
+  }
+
+  if (!ev) {
+    return {
+      state: 'review',
+      label: 'Sin evaluar',
+      nextAction: 'Recalcular',
+      reasons: ['falta costo, envio y margen actual'],
+      className: 'border-slate-700 bg-slate-900 text-slate-300',
+    };
+  }
+
+  if (ev.decision === 'REJECTED') {
+    return {
+      state: 'blocked',
+      label: 'No rentable',
+      nextAction: 'Ver razones o eliminar',
+      reasons: ['evaluacion rechazada'],
+      className: 'border-rose-700/60 bg-rose-950/35 text-rose-200',
+    };
+  }
+
+  if (ev.decision === 'PENDING') {
+    return {
+      state: 'review',
+      label: 'Pendiente',
+      nextAction: 'Recalcular',
+      reasons: ['evaluacion incompleta'],
+      className: 'border-amber-700/60 bg-amber-950/35 text-amber-200',
+    };
+  }
+
+  return {
+    state: 'ready',
+    label: 'Listo para draft',
+    nextAction: 'Preparar draft',
+    reasons: [],
+    className: 'border-emerald-700/60 bg-emerald-950/35 text-emerald-200',
+  };
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -226,6 +377,21 @@ export default function CjShopifyUsaProductsPage() {
     pending: products.filter((p) => p.evaluations[0]?.decision === 'PENDING').length,
     noEval: products.filter((p) => p.evaluations.length === 0).length,
   };
+  const duplicateTitleCounts = products.reduce((map, product) => {
+    const key = normalizeTitleKey(product.title);
+    if (key) map.set(key, (map.get(key) ?? 0) + 1);
+    return map;
+  }, new Map<string, number>());
+  const readinessRows = products.map((product) =>
+    buildManualReadiness(product, duplicateTitleCounts.get(normalizeTitleKey(product.title)) ?? 0),
+  );
+  const readinessTotals = {
+    ready: readinessRows.filter((row) => row.state === 'ready').length,
+    draft: readinessRows.filter((row) => row.state === 'draft').length,
+    review: readinessRows.filter((row) => row.state === 'review').length,
+    blocked: readinessRows.filter((row) => row.state === 'blocked').length,
+    active: readinessRows.filter((row) => row.state === 'active').length,
+  };
 
   if (loading) return <p className="text-sm text-slate-500">Cargando productos CJ…</p>;
 
@@ -263,8 +429,23 @@ export default function CjShopifyUsaProductsPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-400">
-        Flujo correcto: <strong>Recalcular</strong> actualiza costo, stock, envio y margen; <strong>Preparar</strong> crea un draft local si esta aprobado; <strong>Publicar</strong> envia ese draft a Shopify. Si ya existe en Shopify, gestionalo desde <strong>Store Products</strong>.
+      <div className="grid gap-3 md:grid-cols-5">
+        {[
+          { label: 'Listos para draft', val: readinessTotals.ready, cls: 'border-emerald-700/60 bg-emerald-950/30 text-emerald-200' },
+          { label: 'Draft listo', val: readinessTotals.draft, cls: 'border-sky-700/60 bg-sky-950/30 text-sky-200' },
+          { label: 'Requieren revisar', val: readinessTotals.review, cls: 'border-amber-700/60 bg-amber-950/30 text-amber-200' },
+          { label: 'Bloqueados', val: readinessTotals.blocked, cls: 'border-rose-700/60 bg-rose-950/30 text-rose-200' },
+          { label: 'Publicados OK', val: readinessTotals.active, cls: 'border-teal-700/60 bg-teal-950/30 text-teal-200' },
+        ].map((item) => (
+          <div key={item.label} className={`rounded-lg border px-3 py-2 ${item.cls}`}>
+            <p className="text-[11px] uppercase tracking-wide opacity-80">{item.label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{item.val}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-sky-800/70 bg-sky-950/25 px-4 py-3 text-xs text-sky-100">
+        Ciclo manual recomendado: <strong>1. Recalcular</strong> confirma costo, stock, envio y margen; <strong>2. Preparar draft</strong> solo si pasa calidad comercial; <strong>3. Publicar draft</strong> envia a Shopify y canales; <strong>4. Store Products</strong> confirma buyer-ready. Los bloqueos de calidad son intencionales para evitar productos duplicados, sin imagenes, no-pet o con titulos que generen desconfianza.
       </div>
 
       {filtered.length === 0 ? (
@@ -282,6 +463,7 @@ export default function CjShopifyUsaProductsPage() {
               <tr>
                 <th className="px-3 py-2">ID</th>
                 <th className="px-3 py-2">Producto CJ</th>
+                <th className="px-3 py-2">Calidad manual</th>
                 <th className="px-3 py-2">Variantes</th>
                 <th className="px-3 py-2">Evaluación</th>
                 <th className="px-3 py-2">Margen</th>
@@ -301,6 +483,7 @@ export default function CjShopifyUsaProductsPage() {
                 const hasBlockingListing = Boolean(activeListing) || hasShopifyLinkedListing;
                 const policyBlocked = row.policy?.isPetProduct === false;
                 const canDraft = ev?.decision === 'APPROVED' && !policyBlocked && !hasDraft && !activeListing && !hasShopifyLinkedListing;
+                const readiness = buildManualReadiness(row, duplicateTitleCounts.get(normalizeTitleKey(row.title)) ?? 0);
 
                 return (
                   <>
@@ -311,6 +494,26 @@ export default function CjShopifyUsaProductsPage() {
                           {row.title}
                         </p>
                         <p className="text-xs text-slate-400 font-mono">{row.cjProductId}</p>
+                      </td>
+                      <td className="px-3 py-2 min-w-[180px]">
+                        <div className={`rounded-md border px-2.5 py-2 text-xs ${readiness.className}`}>
+                          <div className="flex items-center gap-1.5 font-semibold">
+                            {readiness.state === 'blocked' ? (
+                              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                            ) : readiness.state === 'active' || readiness.state === 'ready' || readiness.state === 'draft' ? (
+                              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            ) : (
+                              <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                            )}
+                            {readiness.label}
+                          </div>
+                          <p className="mt-1 opacity-80">{readiness.nextAction}</p>
+                          {readiness.reasons.length > 0 && (
+                            <p className="mt-1 line-clamp-2 opacity-90" title={readiness.reasons.join(' · ')}>
+                              {readiness.reasons.slice(0, 2).join(' · ')}
+                            </p>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 tabular-nums">{row.variants.length}</td>
                       <td className="px-3 py-2">
@@ -421,7 +624,7 @@ export default function CjShopifyUsaProductsPage() {
                     </tr>
                     {expandedId === row.id && (
                       <tr className="bg-slate-50/90 dark:bg-slate-950/50">
-                        <td colSpan={8} className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 space-y-2">
+                        <td colSpan={9} className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 space-y-2">
                           {ev && (
                             <div>
                               <p className="font-medium text-slate-800 dark:text-slate-200 mb-1">Última evaluación</p>
@@ -436,6 +639,27 @@ export default function CjShopifyUsaProductsPage() {
                               )}
                             </div>
                           )}
+                          <div>
+                            <p className="font-medium text-slate-800 dark:text-slate-200 mb-1">Checklist manual</p>
+                            <div className="grid gap-2 md:grid-cols-3">
+                              {[
+                                { label: 'Imagenes', ok: (row.imageCount ?? 0) > 0, detail: `${row.imageCount ?? 0}` },
+                                { label: 'Politica pet', ok: row.policy?.isPetProduct !== false, detail: row.policy?.isPetProduct === false ? 'bloqueado' : 'OK' },
+                                { label: 'Titulo comercial', ok: titleQualityIssues(row.title).length === 0, detail: titleQualityIssues(row.title).join(', ') || 'OK' },
+                                { label: 'Stock', ok: row.variants.some((v) => Number(v.stockLastKnown ?? 0) > 0), detail: `${row.variants.reduce((sum, v) => sum + Number(v.stockLastKnown ?? 0), 0)}` },
+                                { label: 'Duplicados', ok: (duplicateTitleCounts.get(normalizeTitleKey(row.title)) ?? 0) <= 1, detail: `${duplicateTitleCounts.get(normalizeTitleKey(row.title)) ?? 0}` },
+                                { label: 'Margen', ok: ev?.decision === 'APPROVED', detail: ev ? `${ev.decision} / ${pct(ev.estimatedMarginPct)}` : 'sin evaluar' },
+                              ].map((item) => (
+                                <div
+                                  key={item.label}
+                                  className={`rounded-md border px-3 py-2 ${item.ok ? 'border-emerald-800/60 bg-emerald-950/20 text-emerald-200' : 'border-rose-800/60 bg-rose-950/20 text-rose-200'}`}
+                                >
+                                  <p className="font-semibold">{item.ok ? 'OK' : 'Revisar'} · {item.label}</p>
+                                  <p className="mt-0.5 text-[11px] opacity-80">{item.detail}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                           {row.variants.length > 0 && (
                             <div>
                               <p className="font-medium text-slate-800 dark:text-slate-200 mb-1">Variantes ({row.variants.length})</p>

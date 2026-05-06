@@ -1093,11 +1093,27 @@ router.get('/products', async (req: Request, res: Response, next: NextFunction) 
       cjShopifyUsaReconciliationService.buildCachedTruth(listing),
     );
     const reconciledById = new Map(reconciledListings.map((listing) => [listing.id, listing]));
+    const imageCount = (images: unknown): number => {
+      if (!Array.isArray(images)) return 0;
+      return images.filter((image) => {
+        if (typeof image === 'string') return /^https?:\/\//i.test(image.trim());
+        if (image && typeof image === 'object') {
+          const record = image as Record<string, unknown>;
+          const url = String(record.src ?? record.url ?? '').trim();
+          return /^https?:\/\//i.test(url);
+        }
+        return false;
+      }).length;
+    };
     const productsWithStorefront = products.map((product) => ({
       ...product,
       policy: {
-        isPetProduct: isCjShopifyUsaPetProduct({ title: product.title }),
+        isPetProduct: isCjShopifyUsaPetProduct({
+          title: product.title,
+          description: product.description,
+        }),
       },
+      imageCount: imageCount(product.images),
       listings: product.listings.map((listing) => {
         return reconciledById.get(listing.id) ?? listing;
       }),
