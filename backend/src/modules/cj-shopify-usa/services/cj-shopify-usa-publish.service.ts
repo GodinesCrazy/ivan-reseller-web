@@ -244,6 +244,60 @@ function trimTitleToFit(input: string, maxLength = 58): string {
   return kept.length > 0 ? kept.join(' ') : input.slice(0, maxLength).trim();
 }
 
+function attributeValue(input: Record<string, unknown> | null | undefined, patterns: RegExp[]): string | null {
+  if (!input || typeof input !== 'object') return null;
+  for (const [key, value] of Object.entries(input)) {
+    const normalizedKey = normalizeWhitespace(key).toLowerCase();
+    if (!patterns.some((pattern) => pattern.test(normalizedKey))) continue;
+    const normalizedValue = normalizeWhitespace(String(value ?? ''));
+    if (!normalizedValue || /^default$/i.test(normalizedValue) || normalizedValue.length > 32) continue;
+    return normalizedValue;
+  }
+  return null;
+}
+
+function titleDetail(input: {
+  rawTitle: string;
+  lower: string;
+  variantAttributes?: Record<string, unknown> | null;
+}): string | null {
+  const material = attributeValue(input.variantAttributes, [/material/, /texture/, /fabric/]);
+  const color = attributeValue(input.variantAttributes, [/color/, /colour/]);
+  const size = attributeValue(input.variantAttributes, [/size/, /capacity/, /spec/, /style/, /type/]);
+
+  if (/ceramic|porcelain/.test(input.lower)) return 'Ceramic';
+  if (/stainless|steel|metal/.test(input.lower)) return 'Stainless Steel';
+  if (/silicone/.test(input.lower)) return 'Silicone';
+  if (/bamboo/.test(input.lower)) return 'Bamboo';
+  if (/plush|fleece|velvet/.test(input.lower)) return 'Plush';
+  if (/waterproof/.test(input.lower)) return 'Waterproof';
+  if (/rechargeable|usb|electric|automatic/.test(input.lower)) return 'Rechargeable';
+  if (/slow/.test(input.lower)) return 'Slow Feeder';
+  if (/foldable|collapsible/.test(input.lower)) return 'Foldable';
+  if (material) return toTitleCase(material);
+  if (size && !/^\d+$/.test(size)) return toTitleCase(size);
+  if (color && input.rawTitle.split(/\s+/).length < 5) return toTitleCase(color);
+  return null;
+}
+
+function specificTitle(base: string, detail: string | null, maxLength = 58): string {
+  if (!detail) return base;
+  if (base.toLowerCase().includes(detail.toLowerCase())) return trimTitleToFit(base, maxLength);
+  return trimTitleToFit(`${detail} ${base}`, maxLength);
+}
+
+function hasUsableImages(images: unknown): boolean {
+  return Array.isArray(images)
+    && images.some((image) => {
+      const url = typeof image === 'string'
+        ? image
+        : image && typeof image === 'object'
+          ? String((image as Record<string, unknown>).src ?? (image as Record<string, unknown>).url ?? '')
+          : '';
+      return /^https?:\/\//i.test(url.trim());
+    });
+}
+
 function buildProfessionalTitle(input: {
   title: string;
   variantAttributes?: Record<string, unknown> | null;
@@ -259,38 +313,43 @@ function buildProfessionalTitle(input: {
   if (/slave|bondage|bdsm|fetish|erotic|adult toy|lingerie|corset|training bundled sheath|bundled sheath/.test(lower)) {
     return trimTitleToFit(toTitleCase(rawTitle));
   }
-  if (/airtag|tracker/.test(lower) && /\b(dog|pet|cat|collar)\b/.test(lower)) return 'AirTag Pet Collar';
+  const detail = titleDetail({ rawTitle, lower, variantAttributes: input.variantAttributes });
+  if (/airtag|tracker/.test(lower) && /\b(dog|pet|cat|collar)\b/.test(lower)) return specificTitle('AirTag Pet Collar', detail);
   if (/missing food ball|food ball|treat ball/.test(lower)) return 'Dog Treat Puzzle Ball';
-  if (/food storage|storage bucket|storage container|kibble/.test(lower)) return 'Pet Food Storage Container';
-  if (/tent|teepee/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Foldable Warm Pet Tent';
-  if (/fence|gate|partition/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Retractable Pet Safety Gate';
+  if (/food storage|storage bucket|storage container|kibble/.test(lower)) return specificTitle('Pet Food Storage Container', detail);
+  if (/tent|teepee/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Warm Pet Tent Bed', detail);
+  if (/fence|gate|partition/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Retractable Pet Safety Gate', detail);
   if (/chest strap/.test(lower) && /led|illuminated|light/.test(lower) && /\b(dog|pet)\b/.test(lower)) return 'LED Dog Harness';
   if (/terrarium|breeding box|climbing box/.test(lower)) return 'Small Pet Terrarium Box';
-  if (/shampoo|dispenser/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Bath Brush with Shampoo Dispenser';
-  if (/foaming|foam/.test(lower) && /brush/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Foaming Pet Bath Brush';
+  if (/shampoo|dispenser/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Pet Bath Brush with Shampoo Dispenser', detail);
+  if (/foaming|foam/.test(lower) && /brush/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Foaming Pet Bath Brush', detail);
   if (/shampoo|bath|groom|brush|comb|nail|lint|hair|fur|massage/.test(lower) && /\b(pet|dog|cat|puppy|kitten)\b/.test(lower)) {
-    return 'Pet Grooming Brush';
+    if (/nail|clipper|trimmer|grinder/.test(lower)) return specificTitle('Pet Nail Grooming Tool', detail);
+    if (/scissor|shear/.test(lower)) return specificTitle('Pet Grooming Scissors', detail);
+    if (/glove/.test(lower)) return specificTitle('Pet Grooming Glove', detail);
+    if (/comb/.test(lower)) return specificTitle('Pet Grooming Comb', detail);
+    return specificTitle('Pet Grooming Brush', detail);
   }
-  if (/stair|steps|ladder|ramp|slope/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Stairs for Beds and Sofas';
-  if (/fountain|water/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Water Fountain';
+  if (/stair|steps|ladder|ramp|slope/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Pet Stairs for Beds and Sofas', detail);
+  if (/fountain|water/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Pet Water Fountain', detail);
   if (/slow/.test(lower) && /feeder|bowl/.test(lower)) return 'Slow Feeder Pet Bowl';
-  if (/bowl|feeder|feeding|food/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Feeding Bowl';
+  if (/bowl|feeder|feeding|food/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Pet Feeding Bowl', detail);
   if (/\b(bed|cushion|mat|blanket|sofa|pillow|house|nest)\b/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) {
-    if (/\bcat|kitten\b/.test(lower)) return 'Cat Comfort Bed';
-    if (/\bdog|puppy\b/.test(lower)) return 'Dog Comfort Bed';
-    return 'Pet Comfort Bed';
+    if (/\bcat|kitten\b/.test(lower)) return specificTitle('Cat Comfort Bed', detail);
+    if (/\bdog|puppy\b/.test(lower)) return specificTitle('Dog Comfort Bed', detail);
+    return specificTitle('Pet Comfort Bed', detail);
   }
-  if (/scratch/.test(lower) && /\bcat|kitten\b/.test(lower)) return 'Cat Scratcher Toy';
+  if (/scratch/.test(lower) && /\bcat|kitten\b/.test(lower)) return specificTitle('Cat Scratcher Toy', detail);
   if (/toy|chew|squeak|puzzle|ball|teaser|tunnel/.test(lower) && /\b(pet|dog|cat|puppy|kitten)\b/.test(lower)) {
-    if (/\bdog|puppy\b/.test(lower)) return 'Dog Enrichment Toy';
-    if (/\bcat|kitten\b/.test(lower)) return 'Cat Enrichment Toy';
-    return 'Pet Enrichment Toy';
+    if (/\bdog|puppy\b/.test(lower)) return specificTitle('Dog Enrichment Toy', detail);
+    if (/\bcat|kitten\b/.test(lower)) return specificTitle('Cat Enrichment Toy', detail);
+    return specificTitle('Pet Enrichment Toy', detail);
   }
   if (/seat belt|safety belt/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Seat Belt';
-  if (/carrier|sling|bag|backpack/.test(lower) && /\b(pet|dog|cat|hamster)\b/.test(lower)) return 'Pet Travel Carrier';
-  if (/leash/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return 'Adjustable Dog Leash';
-  if (/harness/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return 'Dog Harness';
-  if (/collar/.test(lower) && /\b(dog|cat|pet|puppy|kitten)\b/.test(lower)) return 'Adjustable Pet Collar';
+  if (/carrier|sling|bag|backpack/.test(lower) && /\b(pet|dog|cat|hamster)\b/.test(lower)) return specificTitle('Pet Travel Carrier', detail);
+  if (/leash/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return specificTitle('Adjustable Dog Leash', detail);
+  if (/harness/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return specificTitle('Dog Harness', detail);
+  if (/collar/.test(lower) && /\b(dog|cat|pet|puppy|kitten)\b/.test(lower)) return specificTitle('Adjustable Pet Collar', detail);
   if (/keyboard.*mouse.*wrist rest/i.test(rawTitle)) return 'Keyboard and Mouse Wrist Rest Set';
   if (/lipstick|lip gloss|chapstick|mascara/i.test(rawTitle) && /(organizer|holder)/i.test(rawTitle)) return 'Lipstick Organizer';
   if (/car seat gap/i.test(rawTitle) && /(organizer|filler|console)/i.test(rawTitle)) return 'Car Seat Gap Organizer';
@@ -678,6 +737,14 @@ export const cjShopifyUsaPublishService = {
       );
     }
 
+    if (!hasUsableImages(product.images)) {
+      throw new AppError(
+        'Product has no usable product images. Add or sync images before creating a Shopify draft.',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
     // ── Duplicate guard: reject if THIS VARIANT already has an active/draft listing ──
     // Allows multiple drafts for different variants of the same product (multi-variant publishing).
     const BUSY = ['ACTIVE', 'PUBLISHING', 'RECONCILE_PENDING'];
@@ -1038,6 +1105,14 @@ export const cjShopifyUsaPublishService = {
     })) {
       throw new AppError(
         'Only pet-related products can be published to the CJ → Shopify USA pet store.',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    if (!hasUsableImages(draft.images) && !hasUsableImages(listing.product.images)) {
+      throw new AppError(
+        'Listing has no usable product images. Add or sync images before publishing to Shopify.',
         400,
         ErrorCode.VALIDATION_ERROR,
       );
