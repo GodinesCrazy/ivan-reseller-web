@@ -95,6 +95,17 @@ type SocialAutopilot = {
   candidates: Array<{ listingId: number; title: string; priceUsd: number; url: string | null; caption: string }>;
 };
 
+type ShippingEnrichment = {
+  ok: boolean;
+  dryRun: boolean;
+  scanned: number;
+  enriched: number;
+  skipped: number;
+  failed: number;
+  rateLimited: boolean;
+  errors: Array<{ listingId: number; title: string; reason: string }>;
+};
+
 function axiosMsg(e: unknown, fallback: string): string {
   if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
     const d = e.response.data as { message?: string; error?: string };
@@ -112,6 +123,7 @@ export default function CjShopifyUsaAnalyticsPage() {
   const [readiness, setReadiness] = useState<CheckoutReadiness | null>(null);
   const [profitGuard, setProfitGuard] = useState<ProfitGuard | null>(null);
   const [social, setSocial] = useState<SocialAutopilot | null>(null);
+  const [shippingEnrichment, setShippingEnrichment] = useState<ShippingEnrichment | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [guardRunning, setGuardRunning] = useState(false);
@@ -183,6 +195,24 @@ export default function CjShopifyUsaAnalyticsPage() {
       setProfitGuard(res.data);
     } catch (e) {
       setError(axiosMsg(e, 'No se pudo ejecutar Profit Guard.'));
+    } finally {
+      setGuardRunning(false);
+    }
+  };
+
+  const enrichShipping = async (apply: boolean) => {
+    setGuardRunning(true);
+    setError(null);
+    try {
+      const res = await api.post<ShippingEnrichment>('/api/cj-shopify-usa/analytics/profit-guard/enrich-shipping', {
+        dryRun: !apply,
+        limit: 25,
+      });
+      setShippingEnrichment(res.data);
+      const refreshed = await api.get<ProfitGuard>('/api/cj-shopify-usa/analytics/profit-guard');
+      setProfitGuard(refreshed.data);
+    } catch (e) {
+      setError(axiosMsg(e, 'No se pudo enriquecer el shipping CJ.'));
     } finally {
       setGuardRunning(false);
     }
@@ -345,6 +375,22 @@ export default function CjShopifyUsaAnalyticsPage() {
             <div className="flex gap-2">
               <button
                 type="button"
+                onClick={() => void enrichShipping(false)}
+                disabled={guardRunning}
+                className="rounded-md border border-sky-600 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-sky-400 disabled:opacity-60"
+              >
+                Probar shipping
+              </button>
+              <button
+                type="button"
+                onClick={() => void enrichShipping(true)}
+                disabled={guardRunning}
+                className="rounded-md border border-amber-500 px-3 py-2 text-xs font-semibold text-amber-100 hover:border-amber-300 disabled:opacity-60"
+              >
+                Enriquecer 25
+              </button>
+              <button
+                type="button"
                 onClick={() => void runProfitGuard(false)}
                 disabled={guardRunning}
                 className="rounded-md border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-emerald-400 disabled:opacity-60"
@@ -361,6 +407,13 @@ export default function CjShopifyUsaAnalyticsPage() {
               </button>
             </div>
           </div>
+          {shippingEnrichment && (
+            <div className="mb-3 rounded-md border border-sky-500/20 bg-sky-950/20 p-3 text-xs text-slate-300">
+              Shipping CJ: {shippingEnrichment.enriched}/{shippingEnrichment.scanned} enriquecidos
+              {shippingEnrichment.failed > 0 ? `, ${shippingEnrichment.failed} fallidos` : ''}
+              {shippingEnrichment.rateLimited ? '. CJ pidió esperar por rate limit.' : ''}
+            </div>
+          )}
           <div className="grid gap-3 md:grid-cols-4">
             <div className="rounded-md bg-slate-950/70 p-3">
               <p className="text-xs text-slate-400">Escaneados</p>

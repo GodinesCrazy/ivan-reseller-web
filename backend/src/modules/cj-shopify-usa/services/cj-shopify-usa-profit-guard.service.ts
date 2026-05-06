@@ -46,6 +46,29 @@ export interface ProfitGuardResult {
   issues: ProfitGuardIssue[];
 }
 
+export interface ProfitGuardShippingEnrichmentResult {
+  ok: true;
+  dryRun: boolean;
+  scanned: number;
+  enriched: number;
+  skipped: number;
+  failed: number;
+  rateLimited: boolean;
+  errors: Array<{
+    listingId: number;
+    title: string;
+    reason: string;
+  }>;
+}
+
+type ListingWithProfitGuardRelations = Prisma.CjShopifyUsaListingGetPayload<{
+  include: {
+    product: true;
+    variant: true;
+    shippingQuote: true;
+  };
+}>;
+
 function num(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
@@ -229,7 +252,176 @@ function withPricingSnapshot(payload: unknown, breakdown: PricingBreakdown): Pri
   return draft as Prisma.InputJsonValue;
 }
 
+function withShippingSnapshot(payload: unknown, input: {
+  amountUsd: number;
+  serviceName?: string | null;
+  carrier?: string | null;
+  estimatedMaxDays?: number | null;
+  originCountryCode?: string | null;
+  confidence?: string | null;
+}): Prisma.InputJsonValue {
+  const draft = (payload && typeof payload === 'object' && !Array.isArray(payload))
+    ? { ...(payload as Record<string, unknown>) }
+    : {};
+
+  draft.shippingSnapshot = {
+    ...(draft.shippingSnapshot && typeof draft.shippingSnapshot === 'object' && !Array.isArray(draft.shippingSnapshot)
+      ? draft.shippingSnapshot as Record<string, unknown>
+      : {}),
+    amountUsd: roundMoney(input.amountUsd),
+    serviceName: input.serviceName ?? null,
+    carrier: input.carrier ?? null,
+    estimatedMaxDays: input.estimatedMaxDays ?? null,
+    originCountryCode: input.originCountryCode ?? null,
+    confidence: input.confidence ?? 'known',
+    lastProfitGuardFreightAt: new Date().toISOString(),
+  };
+
+  return draft as Prisma.InputJsonValue;
+}
+
 export class CjShopifyUsaProfitGuardService {
+  async enrichMissingShipping(userId: number, options?: {
+    dryRun?: boolean;
+    limit?: number;
+  }): Promise<ProfitGuardShippingEnrichmentResult> {
+    const dryRun = options?.dryRun !== false;
+    const limit = Math.max(1, Math.min(100, Number(options?.limit ?? 25)));
+    const missing: ListingWithProfitGuardRelations[] = [];
+    const pageSize = 200;
+    const maxInspected = 5000;
+    let inspected = 0;
+
+    while (missing.length < limit && inspected < maxInspected) {
+      const page = await prisma.cjShopifyUsaListing.findMany({
+        where: {
+          userId,
+          status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+        },
+        include: {
+          product: true,
+          variant: true,
+          shippingQuote: true,
+        },
+        orderBy: [
+          { updatedAt: 'desc' },
+          { id: 'desc' },
+        ],
+        skip: inspected,
+        take: Math.min(pageSize, maxInspected - inspected),
+      });
+
+      if (page.length === 0) break;
+      inspected += page.length;
+
+      for (const listing of page) {
+        const draft = (listing.draftPayload || {}) as Record<string, any>;
+        const pricing = (draft.pricingSnapshot || {}) as Record<string, any>;
+        const shippingSnapshot = (draft.shippingSnapshot || {}) as Record<string, any>;
+        if (num(listing.shippingQuote?.amountUsd ?? pricing.shippingCostUsd ?? shippingSnapshot.amountUsd) === null) {
+          missing.push(listing);
+          if (missing.length >= limit) break;
+        }
+      }
+    }
+
+    const errors: ProfitGuardShippingEnrichmentResult['errors'] = [];
+    let enriched = 0;
+    let skipped = 0;
+    let failed = 0;
+    let rateLimited = false;
+
+    const { createCjSupplierAdapter } = await import('./../../cj-ebay/adapters/cj-supplier.adapter.js');
+    const { CjSupplierError } = await import('./../../cj-ebay/adapters/cj-supplier.errors.js');
+    const adapter = createCjSupplierAdapter(userId);
+
+    for (const listing of missing) {
+      const title = String(((listing.draftPayload || {}) as Record<string, any>).title || listing.product.title || listing.shopifySku || `Listing ${listing.id}`);
+      if (!listing.variant?.cjVid && !listing.product.cjProductId) {
+        skipped++;
+        errors.push({ listingId: listing.id, title, reason: 'Missing CJ product/variant id for freight quote.' });
+        continue;
+      }
+
+      try {
+        const waResult = await adapter.quoteShippingToUsWarehouseAware({
+          variantId: listing.variant?.cjVid ?? undefined,
+          productId: listing.product.cjProductId,
+          quantity: 1,
+          destCountryCode: 'US',
+        });
+
+        if (!dryRun) {
+          const quote = await prisma.cjShopifyUsaShippingQuote.create({
+            data: {
+              userId,
+              productId: listing.productId,
+              variantId: listing.variantId,
+              quantity: 1,
+              amountUsd: waResult.quote.cost,
+              currency: 'USD',
+              serviceName: waResult.quote.method ?? null,
+              estimatedMaxDays: waResult.quote.estimatedDays ?? null,
+              confidence: waResult.quote.warehouseEvidence === 'assumed' ? 'unknown' : 'known',
+              originCountryCode: waResult.fulfillmentOrigin,
+            },
+          });
+          await prisma.cjShopifyUsaListing.update({
+            where: { id: listing.id },
+            data: {
+              shippingQuoteId: quote.id,
+              draftPayload: withShippingSnapshot(listing.draftPayload, {
+                amountUsd: waResult.quote.cost,
+                serviceName: waResult.quote.method ?? null,
+                estimatedMaxDays: waResult.quote.estimatedDays ?? null,
+                originCountryCode: waResult.fulfillmentOrigin,
+                confidence: waResult.quote.warehouseEvidence === 'assumed' ? 'unknown' : 'known',
+              }),
+            },
+          });
+        }
+        enriched++;
+      } catch (err) {
+        failed++;
+        const reason = err instanceof Error ? err.message : String(err);
+        errors.push({ listingId: listing.id, title, reason: reason.slice(0, 180) });
+        if (err instanceof CjSupplierError && err.code === 'CJ_RATE_LIMIT') {
+          rateLimited = true;
+          break;
+        }
+      }
+    }
+
+    await prisma.cjShopifyUsaExecutionTrace.create({
+      data: {
+        userId,
+        step: 'pricing.profit_guard.shipping_enrichment',
+        message: dryRun ? 'pricing.profit_guard.shipping_enrichment.preview' : 'pricing.profit_guard.shipping_enrichment.applied',
+        meta: ({
+          dryRun,
+          scanned: missing.length,
+          inspected,
+          enriched,
+          skipped,
+          failed,
+          rateLimited,
+          sampleErrors: errors.slice(0, 20),
+        } as unknown) as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      ok: true,
+      dryRun,
+      scanned: missing.length,
+      enriched,
+      skipped,
+      failed,
+      rateLimited,
+      errors: errors.slice(0, 50),
+    };
+  }
+
   async run(userId: number, options?: {
     dryRun?: boolean;
     limit?: number;

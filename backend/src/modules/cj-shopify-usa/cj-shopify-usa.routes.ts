@@ -985,6 +985,19 @@ router.post('/analytics/profit-guard/run', async (req: Request, res: Response, n
   }
 });
 
+router.post('/analytics/profit-guard/enrich-shipping', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaProfitGuardService.enrichMissingShipping(userId, {
+      dryRun: req.body?.dryRun !== false,
+      limit: Number(req.body?.limit ?? 25),
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/analytics/social-autopilot', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
