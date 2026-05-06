@@ -658,6 +658,9 @@ export default function CjShopifyUsaDiscoverPage() {
                   Analizados: {aiMeta.totalAnalyzed} · actualizado {new Date(aiMeta.generatedAt).toLocaleTimeString()}
                 </p>
               )}
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Filtra activos/drafts existentes, exige imagen, stock, politica pet y margen aprobado.
+              </p>
             </div>
           </div>
 

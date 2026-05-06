@@ -105,14 +105,28 @@ export interface DiscoverAiSuggestionsResult {
 }
 
 const SHOPIFY_USA_AI_DISCOVERY_KEYWORDS = [
-  'pet grooming',
-  'dog leash',
-  'cat toy',
-  'pet bowl',
-  'pet carrier',
-  'cat scratching post',
+  'dog grooming brush',
+  'cat enrichment toy',
+  'dog slow feeder',
+  'pet travel water bottle',
+  'cat litter mat',
+  'dog cooling mat',
+  'pet seat belt',
+  'small pet carrier',
+  'aquarium cleaning tool',
+  'dog reflective collar',
 ];
 const CJ_RATE_LIMIT_RETRY_AFTER_SECONDS = 60;
+
+function normalizeSuggestionTitleKey(value: unknown): string {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(cj[a-z0-9]+|\d{8,}[a-z0-9]*)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function isCjRateLimitError(err: unknown): err is CjSupplierError {
   return err instanceof CjSupplierError && err.code === 'CJ_RATE_LIMIT';
@@ -485,7 +499,30 @@ export const cjShopifyUsaDiscoverService = {
     const keywordPool = (input?.keywords && input.keywords.length > 0
       ? input.keywords
       : SHOPIFY_USA_AI_DISCOVERY_KEYWORDS
-    ).slice(0, 2);
+    ).slice(0, 4);
+    const existingRows = await prisma.cjShopifyUsaProduct.findMany({
+      where: { userId },
+      select: {
+        cjProductId: true,
+        title: true,
+        listings: {
+          select: { status: true },
+          take: 1,
+        },
+      },
+      take: 1500,
+    });
+    const existingCjProductIds = new Set(existingRows.map((row) => String(row.cjProductId)));
+    const existingActiveOrDraftTitleKeys = new Set(
+      existingRows
+        .filter((row) =>
+          row.listings.some((listing) =>
+            ['DRAFT', 'PUBLISHING', 'RECONCILE_PENDING', 'ACTIVE'].includes(String(listing.status)),
+          ),
+        )
+        .map((row) => normalizeSuggestionTitleKey(row.title))
+        .filter(Boolean),
+    );
 
     const ranked: DiscoverAiSuggestionItem[] = [];
     let analyzed = 0;
@@ -494,20 +531,23 @@ export const cjShopifyUsaDiscoverService = {
       let searchResults: CjProductSummary[] = [];
       try {
         searchResults = await withSoftTimeout(
-          adapter.searchProducts({ keyword, page: 1, pageSize: 6 }),
+          adapter.searchProducts({ keyword, page: 1, pageSize: 8 }),
           7000,
         );
       } catch {
         continue;
       }
 
-      for (const summary of searchResults.slice(0, 1)) {
+      for (const summary of searchResults.slice(0, 2)) {
         if (ranked.length >= maxItems + 3) break;
+        if (existingCjProductIds.has(summary.cjProductId)) continue;
         analyzed += 1;
 
         try {
           const detail = await withSoftTimeout(adapter.getProductById(summary.cjProductId), 7000);
+          if (existingActiveOrDraftTitleKeys.has(normalizeSuggestionTitleKey(detail.title))) continue;
           if (!isCjShopifyUsaPetProduct({ title: detail.title, description: detail.description })) continue;
+          if (!detail.imageUrls?.some((url) => /^https?:\/\//i.test(String(url)))) continue;
           const variant =
             (detail.variants.find((v) => hasMinimumStock(v.stock, minStock)) as CjVariantDetail | undefined) ||
             (detail.variants[0] as CjVariantDetail | undefined);
@@ -542,10 +582,10 @@ export const cjShopifyUsaDiscoverService = {
             shippingUsd,
           );
           const hasStock = hasMinimumStock(variant.stock, minStock);
-          if (!hasStock && qualification.decision !== 'APPROVED') continue;
+          if (!hasStock) continue;
+          if (qualification.decision !== 'APPROVED') continue;
 
           const marginPct = qualification.breakdown.netMarginPct;
-          const approvalBoost = qualification.decision === 'APPROVED' ? 12 : -8;
           const baseScore =
             45 +
             Math.min(20, marginPct) +
@@ -553,23 +593,15 @@ export const cjShopifyUsaDiscoverService = {
             Math.max(0, 12 - shippingUsd) +
             Math.min(8, (variant.stock ?? 0) / 25) +
             (estimatedDays != null ? Math.max(0, 4 - Math.floor(estimatedDays / 5)) : 0) +
-            approvalBoost;
+            12;
 
           const score = clamp(Math.round(baseScore), 1, 99);
-          const reasonText =
-            qualification.decision === 'APPROVED'
-              ? buildSuggestionReason({
-                  fulfillmentOrigin,
-                  shippingUsd,
-                  marginPct,
-                  stock: Number(variant.stock ?? 0),
-                })
-              : `${qualification.reasons[0] || 'Ajustar pricing/operación'} · ${buildSuggestionReason({
-                  fulfillmentOrigin,
-                  shippingUsd,
-                  marginPct,
-                  stock: Number(variant.stock ?? 0),
-                })}`;
+          const reasonText = buildSuggestionReason({
+            fulfillmentOrigin,
+            shippingUsd,
+            marginPct,
+            stock: Number(variant.stock ?? 0),
+          });
 
           ranked.push({
             cjProductId: detail.cjProductId,
