@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Activity, AlertTriangle, CheckCircle2, CreditCard, Save, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, CreditCard, Megaphone, Save, ShieldCheck, TrendingUp } from 'lucide-react';
 import { api } from '@/services/api';
 
 type FunnelStage = {
@@ -61,6 +61,40 @@ type CheckoutReadiness = {
   recommendations: string[];
 };
 
+type ProfitGuard = {
+  ok: boolean;
+  dryRun: boolean;
+  scanned: number;
+  okCount: number;
+  priceIncreases: number;
+  pausedUnsafe: number;
+  reviewRequired: number;
+  settings: {
+    minMarginPct: number;
+    minProfitUsd: number;
+    maxShippingUsd: number;
+    maxSellPriceUsd: number;
+  };
+  issues: Array<{
+    listingId: number;
+    title: string;
+    action: string;
+    reason: string;
+    currentPriceUsd: number | null;
+    recommendedPriceUsd: number | null;
+    projectedNetProfitUsd: number | null;
+    projectedNetMarginPct: number | null;
+    applied: boolean;
+  }>;
+};
+
+type SocialAutopilot = {
+  ok: boolean;
+  status: string;
+  platforms: Record<string, { required: string[]; canAutoPublishNow: boolean }>;
+  candidates: Array<{ listingId: number; title: string; priceUsd: number; url: string | null; caption: string }>;
+};
+
 function axiosMsg(e: unknown, fallback: string): string {
   if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
     const d = e.response.data as { message?: string; error?: string };
@@ -76,8 +110,11 @@ function pct(value: number): string {
 export default function CjShopifyUsaAnalyticsPage() {
   const [funnel, setFunnel] = useState<FunnelResponse | null>(null);
   const [readiness, setReadiness] = useState<CheckoutReadiness | null>(null);
+  const [profitGuard, setProfitGuard] = useState<ProfitGuard | null>(null);
+  const [social, setSocial] = useState<SocialAutopilot | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [guardRunning, setGuardRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     visitors: 600,
@@ -91,12 +128,16 @@ export default function CjShopifyUsaAnalyticsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [funnelRes, readinessRes] = await Promise.all([
+      const [funnelRes, readinessRes, profitRes, socialRes] = await Promise.all([
         api.get<FunnelResponse>('/api/cj-shopify-usa/analytics/funnel'),
         api.get<CheckoutReadiness>('/api/cj-shopify-usa/analytics/checkout-readiness'),
+        api.get<ProfitGuard>('/api/cj-shopify-usa/analytics/profit-guard'),
+        api.get<SocialAutopilot>('/api/cj-shopify-usa/analytics/social-autopilot'),
       ]);
       setFunnel(funnelRes.data);
       setReadiness(readinessRes.data);
+      setProfitGuard(profitRes.data);
+      setSocial(socialRes.data);
       if (funnelRes.data.snapshot) {
         setForm((current) => ({
           ...current,
@@ -126,6 +167,24 @@ export default function CjShopifyUsaAnalyticsPage() {
       setError(axiosMsg(e, 'No se pudo guardar el snapshot.'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const runProfitGuard = async (apply: boolean) => {
+    setGuardRunning(true);
+    setError(null);
+    try {
+      const res = await api.post<ProfitGuard>('/api/cj-shopify-usa/analytics/profit-guard/run', {
+        dryRun: !apply,
+        pauseUnsafe: apply,
+        limit: 500,
+        minIncreaseUsd: 0.5,
+      });
+      setProfitGuard(res.data);
+    } catch (e) {
+      setError(axiosMsg(e, 'No se pudo ejecutar Profit Guard.'));
+    } finally {
+      setGuardRunning(false);
     }
   };
 
@@ -273,6 +332,84 @@ export default function CjShopifyUsaAnalyticsPage() {
             <ShieldCheck className="mt-0.5 h-4 w-4 text-sky-300" />
             <p className="text-sm text-slate-300">{readiness?.paypalApiVisibility.reason}</p>
           </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-lg border border-emerald-500/25 bg-slate-900/70 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-emerald-300" />
+              <h3 className="text-sm font-semibold text-slate-100">Profit Guard automático</h3>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void runProfitGuard(false)}
+                disabled={guardRunning}
+                className="rounded-md border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-emerald-400 disabled:opacity-60"
+              >
+                Simular
+              </button>
+              <button
+                type="button"
+                onClick={() => void runProfitGuard(true)}
+                disabled={guardRunning}
+                className="rounded-md bg-emerald-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+              >
+                Aplicar seguro
+              </button>
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-md bg-slate-950/70 p-3">
+              <p className="text-xs text-slate-400">Escaneados</p>
+              <p className="text-2xl font-semibold text-white">{profitGuard?.scanned ?? 0}</p>
+            </div>
+            <div className="rounded-md bg-emerald-950/30 p-3">
+              <p className="text-xs text-slate-400">OK</p>
+              <p className="text-2xl font-semibold text-emerald-300">{profitGuard?.okCount ?? 0}</p>
+            </div>
+            <div className="rounded-md bg-sky-950/30 p-3">
+              <p className="text-xs text-slate-400">Subir precio</p>
+              <p className="text-2xl font-semibold text-sky-300">{profitGuard?.priceIncreases ?? 0}</p>
+            </div>
+            <div className="rounded-md bg-amber-950/30 p-3">
+              <p className="text-xs text-slate-400">Revisar/Pausar</p>
+              <p className="text-2xl font-semibold text-amber-300">{(profitGuard?.reviewRequired ?? 0) + (profitGuard?.pausedUnsafe ?? 0)}</p>
+            </div>
+          </div>
+          <div className="mt-3 max-h-64 overflow-auto rounded-md border border-slate-800">
+            {(profitGuard?.issues || []).slice(0, 12).map((issue) => (
+              <div key={issue.listingId} className="grid gap-2 border-b border-slate-800 px-3 py-2 text-xs text-slate-300 last:border-b-0 md:grid-cols-[1fr_120px_120px_120px]">
+                <span className="font-medium text-slate-100">{issue.title}</span>
+                <span>{issue.action}</span>
+                <span>{issue.currentPriceUsd != null ? `$${issue.currentPriceUsd.toFixed(2)}` : '-'}</span>
+                <span>{issue.recommendedPriceUsd != null ? `$${issue.recommendedPriceUsd.toFixed(2)}` : '-'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-sky-500/25 bg-slate-900/70 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Megaphone className="h-5 w-5 text-sky-300" />
+            <h3 className="text-sm font-semibold text-slate-100">Promoción IA PawVault</h3>
+          </div>
+          <p className="text-sm text-slate-300">
+            El sistema ya puede seleccionar productos activos y preparar captions. Para publicar solo falta conectar OAuth oficial de Instagram/TikTok.
+          </p>
+          <div className="mt-3 space-y-2">
+            {Object.entries(social?.platforms || {}).map(([platform, state]) => (
+              <div key={platform} className="rounded-md border border-slate-800 bg-slate-950/60 p-3">
+                <p className="text-xs font-semibold uppercase text-slate-300">{platform}</p>
+                <p className={state.canAutoPublishNow ? 'text-xs text-emerald-300' : 'text-xs text-amber-300'}>
+                  {state.canAutoPublishNow ? 'Listo para autopublicar' : 'Pendiente de credenciales/OAuth'}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-400">{social?.candidates.length ?? 0} candidatos de producto listos para campañas.</p>
         </div>
       </section>
     </div>

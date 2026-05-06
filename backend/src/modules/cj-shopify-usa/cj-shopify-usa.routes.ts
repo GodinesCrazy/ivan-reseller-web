@@ -14,6 +14,7 @@ import { cjShopifyUsaReconciliationService } from './services/cj-shopify-usa-rec
 import { cjShopifyUsaOrderIngestService } from './services/cj-shopify-usa-order-ingest.service';
 import { cjShopifyUsaTrackingService } from './services/cj-shopify-usa-tracking.service';
 import { automationService } from './services/cj-shopify-usa-automation.service';
+import { cjShopifyUsaProfitGuardService } from './services/cj-shopify-usa-profit-guard.service';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './services/cj-shopify-usa-policy.service';
 import {
   cjShopifyUsaListingDraftBodySchema,
@@ -950,6 +951,81 @@ router.get('/analytics/checkout-readiness', async (req: Request, res: Response, 
         'Run a live low-value test order with PayPal after switching to a PayPal Business account.',
         'Keep a second card-capable provider active if available for Chile-based operations.',
       ],
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/analytics/profit-guard', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaProfitGuardService.run(userId, {
+      dryRun: true,
+      limit: Number(req.query.limit ?? 500),
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/analytics/profit-guard/run', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaProfitGuardService.run(userId, {
+      dryRun: req.body?.dryRun !== false,
+      limit: Number(req.body?.limit ?? 500),
+      pauseUnsafe: req.body?.pauseUnsafe === true,
+      minIncreaseUsd: Number(req.body?.minIncreaseUsd ?? 0.5),
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/analytics/social-autopilot', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const products = await prisma.cjShopifyUsaListing.findMany({
+      where: {
+        userId,
+        status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+        shopifyHandle: { not: null },
+      },
+      include: { product: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 12,
+    });
+
+    const candidates = products.map((listing) => ({
+      listingId: listing.id,
+      title: listing.product.title,
+      handle: listing.shopifyHandle,
+      priceUsd: Number(listing.listedPriceUsd ?? 0),
+      url: listing.shopifyHandle ? `https://shop.ivanreseller.com/products/${listing.shopifyHandle}` : null,
+      caption: [
+        `PawVault pick: ${listing.product.title}`,
+        'Built for practical pet-parent routines.',
+        '#PawVault #PetSupplies #DogProducts #CatProducts #PetParents',
+      ].join('\n'),
+    }));
+
+    res.json({
+      ok: true,
+      status: 'READY_FOR_OAUTH',
+      platforms: {
+        instagram: {
+          required: ['Instagram Business or Creator account', 'Meta app with instagram_content_publish', 'OAuth token for @PawVault'],
+          canAutoPublishNow: false,
+        },
+        tiktok: {
+          required: ['TikTok developer app', 'Content Posting API approval', 'video.publish scope', 'OAuth token for @PawVault'],
+          canAutoPublishNow: false,
+        },
+      },
+      candidates,
     });
   } catch (error) {
     next(error);

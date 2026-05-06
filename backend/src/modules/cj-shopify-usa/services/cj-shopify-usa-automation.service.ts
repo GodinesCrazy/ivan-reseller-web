@@ -16,6 +16,7 @@ import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service.js'
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service.js';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service.js';
 import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service.js';
+import { cjShopifyUsaProfitGuardService } from './cj-shopify-usa-profit-guard.service.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -596,6 +597,18 @@ class CjShopifyUsaAutomationService {
       log('info', 'Step 0.8: Syncing prices for active listings...');
       try {
         await this.syncActiveListingPrices(userId, log);
+        const guard = await cjShopifyUsaProfitGuardService.run(userId, {
+          dryRun: false,
+          limit: 500,
+          pauseUnsafe: false,
+          minIncreaseUsd: 0.5,
+        });
+        if (guard.priceIncreases > 0) {
+          log('success', `Profit Guard increased ${guard.priceIncreases} Shopify prices to protect margin.`);
+        }
+        if (guard.reviewRequired > 0) {
+          log('warn', `Profit Guard flagged ${guard.reviewRequired} active listings for pricing review; missing cost/shipping data is not auto-paused.`);
+        }
       } catch (err) {
         log('warn', `Price sync step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
