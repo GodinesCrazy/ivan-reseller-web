@@ -92,6 +92,7 @@ const CjShopifyUsaOrdersPage = lazy(() => import('@pages/cj-shopify-usa/CjShopif
 const CjShopifyUsaOrderDetailPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaOrderDetailPage'));
 const CjShopifyUsaAlertsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaAlertsPage'));
 const CjShopifyUsaProfitPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaProfitPage'));
+const CjShopifyUsaAnalyticsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaAnalyticsPage'));
 const CjShopifyUsaLogsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaLogsPage'));
 const CjShopifyUsaDiscoverPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaDiscoverPage'));
 const CjShopifyUsaSettingsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaSettingsPage'));
@@ -360,6 +361,7 @@ function AppContent() {
             <Route path="orders/:orderId" element={<CjShopifyUsaOrderDetailPage />} />
             <Route path="alerts" element={<CjShopifyUsaAlertsPage />} />
             <Route path="profit" element={<CjShopifyUsaProfitPage />} />
+            <Route path="analytics" element={<CjShopifyUsaAnalyticsPage />} />
             <Route path="logs" element={<CjShopifyUsaLogsPage />} />
             <Route path="discover" element={<CjShopifyUsaDiscoverPage />} />
             <Route path="automation" element={<CjShopifyUsaAutomationPage />} />

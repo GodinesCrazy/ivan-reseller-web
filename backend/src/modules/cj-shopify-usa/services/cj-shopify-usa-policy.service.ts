@@ -34,6 +34,36 @@ const PET_PATTERNS = [
   /\bpet supplies\b/i,
 ];
 
+const HARD_NON_PET_BLOCK_PATTERNS = [
+  /\b(slave|bondage|bdsm|fetish|erotic|adult toys?|chast(e|ity)|sex(y)?|lingerie|corset)\b/i,
+  /\b(neck corset|training bundled sheath|bundled sheath)\b/i,
+];
+
+const HUMAN_CONTEXT_PATTERNS = [
+  /\b(human|women|woman|men|man|lady|girl|boy|mannequin)\b/i,
+];
+
+const STRONG_PET_PATTERNS = [
+  /\bpet(s)?\b/i,
+  /\bdog(s)?\b/i,
+  /\bcat(s)?\b/i,
+  /\bpuppy\b/i,
+  /\bkitten\b/i,
+  /\bhamster(s)?\b/i,
+  /\brabbit(s)?\b/i,
+  /\bbunny\b/i,
+  /\baquarium(s)?\b/i,
+  /\bfish\b/i,
+  /\breptile(s)?\b/i,
+  /\bbird(s)?\b/i,
+];
+
+const AMBIGUOUS_ACCESSORY_ONLY_PATTERNS = [
+  /\bcollar(s)?\b/i,
+  /\bharness(es)?\b/i,
+  /\bleash(es)?\b/i,
+];
+
 function stripHtml(input: unknown): string {
   return String(input || '')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -57,6 +87,23 @@ export function isCjShopifyUsaPetProduct(input: {
     input.tags,
     input.attributes ? JSON.stringify(input.attributes) : '',
   ].join(' ');
+
+  if (HARD_NON_PET_BLOCK_PATTERNS.some((pattern) => pattern.test(haystack))) {
+    return false;
+  }
+
+  const hasStrongPetSignal = STRONG_PET_PATTERNS.some((pattern) => pattern.test(haystack));
+  if (!hasStrongPetSignal && HUMAN_CONTEXT_PATTERNS.some((pattern) => pattern.test(haystack))) {
+    return false;
+  }
+
+  const hasOnlyAmbiguousAccessorySignal =
+    !hasStrongPetSignal &&
+    AMBIGUOUS_ACCESSORY_ONLY_PATTERNS.some((pattern) => pattern.test(haystack));
+
+  if (hasOnlyAmbiguousAccessorySignal) {
+    return false;
+  }
 
   return PET_PATTERNS.some((pattern) => pattern.test(haystack));
 }

@@ -104,6 +104,7 @@ const cjShopifyUsaNavGroup: NavGroup = {
     { path: '/cj-shopify-usa/orders', label: 'Órdenes', icon: Truck },
     { path: '/cj-shopify-usa/alerts', label: 'Alertas', icon: Bell },
     { path: '/cj-shopify-usa/profit', label: 'Profit', icon: LineChart },
+    { path: '/cj-shopify-usa/analytics', label: 'Analítica', icon: Activity },
     { path: '/cj-shopify-usa/automation', label: 'Automatización', icon: Zap },
     { path: '/cj-shopify-usa/settings', label: 'Configuración', icon: SlidersHorizontal },
     { path: '/cj-shopify-usa/logs', label: 'Logs', icon: ScrollText },

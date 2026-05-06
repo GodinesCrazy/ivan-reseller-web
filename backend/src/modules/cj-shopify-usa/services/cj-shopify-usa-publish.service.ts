@@ -255,6 +255,42 @@ function buildProfessionalTitle(input: {
       .replace(/\s*,\s*/g, ', ')
       .replace(/\s+-\s+/g, ' '),
   );
+  const lower = rawTitle.toLowerCase();
+  if (/slave|bondage|bdsm|fetish|erotic|adult toy|lingerie|corset|training bundled sheath|bundled sheath/.test(lower)) {
+    return trimTitleToFit(toTitleCase(rawTitle));
+  }
+  if (/airtag|tracker/.test(lower) && /\b(dog|pet|cat|collar)\b/.test(lower)) return 'AirTag Pet Collar';
+  if (/missing food ball|food ball|treat ball/.test(lower)) return 'Dog Treat Puzzle Ball';
+  if (/food storage|storage bucket|storage container|kibble/.test(lower)) return 'Pet Food Storage Container';
+  if (/tent|teepee/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Foldable Warm Pet Tent';
+  if (/fence|gate|partition/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Retractable Pet Safety Gate';
+  if (/chest strap/.test(lower) && /led|illuminated|light/.test(lower) && /\b(dog|pet)\b/.test(lower)) return 'LED Dog Harness';
+  if (/terrarium|breeding box|climbing box/.test(lower)) return 'Small Pet Terrarium Box';
+  if (/shampoo|dispenser/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Bath Brush with Shampoo Dispenser';
+  if (/foaming|foam/.test(lower) && /brush/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Foaming Pet Bath Brush';
+  if (/shampoo|bath|groom|brush|comb|nail|lint|hair|fur|massage/.test(lower) && /\b(pet|dog|cat|puppy|kitten)\b/.test(lower)) {
+    return 'Pet Grooming Brush';
+  }
+  if (/stair|steps|ladder|ramp|slope/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Stairs for Beds and Sofas';
+  if (/fountain|water/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Water Fountain';
+  if (/slow/.test(lower) && /feeder|bowl/.test(lower)) return 'Slow Feeder Pet Bowl';
+  if (/bowl|feeder|feeding|food/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Feeding Bowl';
+  if (/\b(bed|cushion|mat|blanket|sofa|pillow|house|nest)\b/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) {
+    if (/\bcat|kitten\b/.test(lower)) return 'Cat Comfort Bed';
+    if (/\bdog|puppy\b/.test(lower)) return 'Dog Comfort Bed';
+    return 'Pet Comfort Bed';
+  }
+  if (/scratch/.test(lower) && /\bcat|kitten\b/.test(lower)) return 'Cat Scratcher Toy';
+  if (/toy|chew|squeak|puzzle|ball|teaser|tunnel/.test(lower) && /\b(pet|dog|cat|puppy|kitten)\b/.test(lower)) {
+    if (/\bdog|puppy\b/.test(lower)) return 'Dog Enrichment Toy';
+    if (/\bcat|kitten\b/.test(lower)) return 'Cat Enrichment Toy';
+    return 'Pet Enrichment Toy';
+  }
+  if (/seat belt|safety belt/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Seat Belt';
+  if (/carrier|sling|bag|backpack/.test(lower) && /\b(pet|dog|cat|hamster)\b/.test(lower)) return 'Pet Travel Carrier';
+  if (/leash/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return 'Adjustable Dog Leash';
+  if (/harness/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return 'Dog Harness';
+  if (/collar/.test(lower) && /\b(dog|cat|pet|puppy|kitten)\b/.test(lower)) return 'Adjustable Pet Collar';
   if (/keyboard.*mouse.*wrist rest/i.test(rawTitle)) return 'Keyboard and Mouse Wrist Rest Set';
   if (/lipstick|lip gloss|chapstick|mascara/i.test(rawTitle) && /(organizer|holder)/i.test(rawTitle)) return 'Lipstick Organizer';
   if (/car seat gap/i.test(rawTitle) && /(organizer|filler|console)/i.test(rawTitle)) return 'Car Seat Gap Organizer';
@@ -959,6 +995,41 @@ export const cjShopifyUsaPublishService = {
       );
     }
 
+    const minMarginPct = Number(settings.minMarginPct ?? 12);
+    const minProfitUsd = Number(settings.minProfitUsd ?? 1.5);
+    const maxShippingUsd = Number(settings.maxShippingUsd ?? 15);
+    const pricingSnapshot = (draft.pricingSnapshot || {}) as Record<string, any>;
+    const shippingSnapshot = (draft.shippingSnapshot || {}) as Record<string, any>;
+    const snapshotMarginPct = Number(pricingSnapshot.netMarginPct ?? NaN);
+    const snapshotProfitUsd = Number(pricingSnapshot.netProfitUsd ?? NaN);
+    const snapshotShippingUsd = Number(
+      pricingSnapshot.shippingCostUsd ?? shippingSnapshot.amountUsd ?? NaN,
+    );
+
+    if (!Number.isFinite(snapshotMarginPct) || snapshotMarginPct < minMarginPct) {
+      throw new AppError(
+        `Listing margin snapshot is not safe to publish: ${Number.isFinite(snapshotMarginPct) ? snapshotMarginPct.toFixed(1) : 'missing'}% < ${minMarginPct.toFixed(1)}% minimum. Re-evaluate product before publishing.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    if (!Number.isFinite(snapshotProfitUsd) || snapshotProfitUsd < minProfitUsd) {
+      throw new AppError(
+        `Listing profit snapshot is not safe to publish: ${Number.isFinite(snapshotProfitUsd) ? `$${snapshotProfitUsd.toFixed(2)}` : 'missing'} < $${minProfitUsd.toFixed(2)} minimum. Re-evaluate product before publishing.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    if (Number.isFinite(snapshotShippingUsd) && snapshotShippingUsd > maxShippingUsd) {
+      throw new AppError(
+        `Listing shipping snapshot $${snapshotShippingUsd.toFixed(2)} exceeds configured maximum $${maxShippingUsd.toFixed(2)}. Re-evaluate product before publishing.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
     if (!isCjShopifyUsaPetProduct({
       title: draft.title || listing.product.title,
       description: draft.descriptionHtml || listing.product.description,
@@ -1056,6 +1127,8 @@ export const cjShopifyUsaPublishService = {
             attrs: l.variant?.attributes ?? lDraft.variantAttributes ?? null,
             price: Number(l.listedPriceUsd ?? lDraft.pricingSnapshot?.suggestedSellPriceUsd ?? 0),
             quantity: toSafeInt(l.quantity ?? lDraft.quantity ?? 0),
+            netMarginPct: Number(lDraft.pricingSnapshot?.netMarginPct ?? NaN),
+            netProfitUsd: Number(lDraft.pricingSnapshot?.netProfitUsd ?? NaN),
           };
         });
 
@@ -1064,6 +1137,28 @@ export const cjShopifyUsaPublishService = {
           throw new AppError(
             `One or more variants exceed configured maximum sell price $${maxSellPriceUsd.toFixed(2)}: ${overpricedRows
               .map((row) => `listing #${row.listingId} $${row.price.toFixed(2)}`)
+              .join(', ')}`,
+            400,
+            ErrorCode.VALIDATION_ERROR,
+          );
+        }
+
+        const unsafeMarginRows = rows.filter((row) => !Number.isFinite(row.netMarginPct) || row.netMarginPct < minMarginPct);
+        if (unsafeMarginRows.length > 0) {
+          throw new AppError(
+            `One or more variants have unsafe margin snapshots. Re-evaluate before publishing: ${unsafeMarginRows
+              .map((row) => `listing #${row.listingId}`)
+              .join(', ')}`,
+            400,
+            ErrorCode.VALIDATION_ERROR,
+          );
+        }
+
+        const unsafeProfitRows = rows.filter((row) => !Number.isFinite(row.netProfitUsd) || row.netProfitUsd < minProfitUsd);
+        if (unsafeProfitRows.length > 0) {
+          throw new AppError(
+            `One or more variants have unsafe profit snapshots. Re-evaluate before publishing: ${unsafeProfitRows
+              .map((row) => `listing #${row.listingId}`)
               .join(', ')}`,
             400,
             ErrorCode.VALIDATION_ERROR,

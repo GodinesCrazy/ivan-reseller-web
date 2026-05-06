@@ -59,6 +59,16 @@ async function recordTrace(userId: number, step: string, message: string, meta?:
   });
 }
 
+function pctFromCounts(numerator: number, denominator: number): number {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return 0;
+  return Math.round((numerator / denominator) * 10_000) / 100;
+}
+
+function safeRate(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.min(100, n) : 0;
+}
+
 router.post(
   '/webhooks/orders-create',
   moduleGate,
@@ -774,6 +784,173 @@ router.post('/discover/ai-suggestions', async (req: Request, res: Response, next
       keywords: body.keywords,
     });
     res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/analytics/funnel', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const latest = await prisma.cjShopifyUsaExecutionTrace.findFirst({
+      where: {
+        userId,
+        step: 'analytics.checkout_funnel',
+        message: 'analytics.checkout_funnel.snapshot',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const meta = (latest?.meta || {}) as Record<string, any>;
+    const visitors = Math.max(0, Number(meta.visitors ?? 0));
+    const addedToCart = Math.max(0, Number(meta.addedToCart ?? 0));
+    const reachedCheckout = Math.max(0, Number(meta.reachedCheckout ?? 0));
+    const purchases = Math.max(0, Number(meta.purchases ?? 0));
+    const localOrders = await prisma.cjShopifyUsaOrder.count({ where: { userId } });
+    const stages = [
+      { key: 'add_to_cart', label: 'Visitantes que agregaron al carrito', ratePct: safeRate(meta.addToCartRatePct ?? pctFromCounts(addedToCart, visitors)), count: addedToCart },
+      { key: 'checkout', label: 'Visitantes que llegaron al checkout', ratePct: safeRate(meta.checkoutRatePct ?? pctFromCounts(reachedCheckout, visitors)), count: reachedCheckout },
+      { key: 'purchase', label: 'Visitantes que compraron', ratePct: safeRate(meta.purchaseRatePct ?? pctFromCounts(purchases, visitors)), count: purchases },
+    ];
+    res.json({
+      ok: true,
+      snapshot: latest ? {
+        id: latest.id,
+        createdAt: latest.createdAt,
+        visitors,
+        addedToCart,
+        reachedCheckout,
+        purchases,
+        source: meta.source ?? 'manual',
+        notes: meta.notes ?? null,
+      } : null,
+      stages,
+      localOrders,
+      interpretation: {
+        checkoutDropRisk: stages[0].ratePct > 0 && stages[1].ratePct / Math.max(stages[0].ratePct, 0.01) < 0.35,
+        paymentRisk: stages[1].ratePct > 0 && stages[2].ratePct === 0,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/analytics/funnel', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const visitors = Math.max(0, Number(req.body?.visitors ?? 0));
+    const addToCartRatePct = safeRate(req.body?.addToCartRatePct);
+    const checkoutRatePct = safeRate(req.body?.checkoutRatePct);
+    const purchaseRatePct = safeRate(req.body?.purchaseRatePct);
+    const trace = await prisma.cjShopifyUsaExecutionTrace.create({
+      data: {
+        userId,
+        step: 'analytics.checkout_funnel',
+        message: 'analytics.checkout_funnel.snapshot',
+        meta: {
+          visitors,
+          addToCartRatePct,
+          checkoutRatePct,
+          purchaseRatePct,
+          addedToCart: Math.round(visitors * (addToCartRatePct / 100)),
+          reachedCheckout: Math.round(visitors * (checkoutRatePct / 100)),
+          purchases: Math.round(visitors * (purchaseRatePct / 100)),
+          source: String(req.body?.source || 'manual').slice(0, 80),
+          notes: String(req.body?.notes || '').slice(0, 1000),
+        },
+      },
+    });
+    res.json({ ok: true, snapshotId: trace.id });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/analytics/checkout-readiness', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const data = await cjShopifyUsaAdminService.graphql<{
+      shop: {
+        name: string;
+        currencyCode: string;
+        billingAddress?: { countryCodeV2?: string | null } | null;
+        primaryDomain?: { url?: string | null } | null;
+        paymentSettings?: { supportedDigitalWallets?: string[] | null } | null;
+      };
+      orders: { nodes: Array<{ id: string; name: string; createdAt: string; displayFinancialStatus: string | null; paymentGatewayNames: string[] }> };
+      products: { nodes: Array<{ handle: string; variants: { nodes: Array<{ legacyResourceId: string; availableForSale: boolean }> } }> };
+    }>({
+      userId,
+      query: `query CjShopifyUsaCheckoutReadiness {
+        shop {
+          name
+          currencyCode
+          billingAddress { countryCodeV2 }
+          primaryDomain { url }
+          paymentSettings { supportedDigitalWallets }
+        }
+        orders(first: 10, sortKey: CREATED_AT, reverse: true) {
+          nodes { id name createdAt displayFinancialStatus paymentGatewayNames }
+        }
+        products(first: 10, query: "status:active tag:cj-shopify-usa") {
+          nodes { handle variants(first: 5) { nodes { legacyResourceId availableForSale } } }
+        }
+      }`,
+    });
+
+    let checkoutProbe: Record<string, unknown> = { ok: false, reason: 'NO_PRODUCT_VARIANT' };
+    const storefront = data.shop.primaryDomain?.url?.replace(/\/$/, '');
+    const firstVariant = data.products.nodes
+      .flatMap((product) => product.variants.nodes)
+      .find((variant) => variant.availableForSale && variant.legacyResourceId);
+
+    if (storefront && firstVariant) {
+      try {
+        const addRes = await fetch(`${storefront}/cart/add.js`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: Number(firstVariant.legacyResourceId), quantity: 1 }),
+          redirect: 'manual',
+        });
+        const cookie = addRes.headers.get('set-cookie')?.split(';')[0];
+        const checkoutRes = await fetch(`${storefront}/checkout`, {
+          headers: cookie ? { cookie } : undefined,
+          redirect: 'manual',
+        });
+        checkoutProbe = {
+          ok: addRes.ok && checkoutRes.status >= 300 && checkoutRes.status < 400,
+          addToCartStatus: addRes.status,
+          checkoutStatus: checkoutRes.status,
+          checkoutLocation: checkoutRes.headers.get('location'),
+        };
+      } catch (error) {
+        checkoutProbe = { ok: false, reason: error instanceof Error ? error.message : String(error) };
+      }
+    }
+
+    const recentGateways = Array.from(new Set(data.orders.nodes.flatMap((order) => order.paymentGatewayNames || [])));
+    res.json({
+      ok: true,
+      shop: {
+        name: data.shop.name,
+        country: data.shop.billingAddress?.countryCodeV2 ?? null,
+        currencyCode: data.shop.currencyCode,
+        primaryDomain: data.shop.primaryDomain?.url ?? null,
+        supportedDigitalWallets: data.shop.paymentSettings?.supportedDigitalWallets ?? [],
+      },
+      recentOrders: data.orders.nodes,
+      recentGateways,
+      checkoutProbe,
+      paypalApiVisibility: {
+        canConfirmConfiguredGatewayByApi: false,
+        reason: 'Shopify Admin API exposes supported wallets and historical order gateway names, but not the complete enabled gateway list for a new store.',
+      },
+      recommendations: [
+        'Verify PayPal Express Checkout in Shopify Admin > Settings > Payments > Additional payment methods.',
+        'Run a live low-value test order with PayPal after switching to a PayPal Business account.',
+        'Keep a second card-capable provider active if available for Chile-based operations.',
+      ],
+    });
   } catch (error) {
     next(error);
   }
