@@ -55,6 +55,8 @@ type SalesAgentDashboard = {
     autoSpendAds: boolean;
     autoPublishSocial: boolean;
     autoChangePrices: boolean;
+    canPublishWithGuards: boolean;
+    canUnpublishUnsafeWithGuards: boolean;
   };
   kpis: {
     activeListings: number;
@@ -77,6 +79,22 @@ type SalesAgentDashboard = {
     catalogTrustRisk: boolean;
     trafficOpportunity: boolean;
   };
+  shopifyTruth: {
+    ok: boolean;
+    error: string | null;
+    activeProducts: number;
+    localActiveListings: number;
+    localUniqueActiveShopifyProducts: number;
+    activeDelta: number;
+    noMedia: number;
+    duplicateExactGroups: number;
+    missingLocalActiveInShopify: number;
+    samples: {
+      noMedia: Array<{ id: string; title: string; handle: string }>;
+      duplicates: Array<{ key: string; count: number; titles: string[] }>;
+      missingLocalActiveInShopify: Array<{ listingId: number; title: string; shopifyProductId: string | null; status: string }>;
+    };
+  };
   learning: {
     lastCycle: null | {
       id: string;
@@ -91,6 +109,15 @@ type SalesAgentDashboard = {
     summary: string[];
   };
   promotionCandidates: PromotionCandidate[];
+  publishableDrafts: Array<{ listingId: number; title: string; priceUsd: number; marginPct: number }>;
+  unsafeUnpublishCandidates: Array<{
+    listingId: number;
+    title: string;
+    reason: string;
+    currentPriceUsd: number | null;
+    projectedNetProfitUsd: number | null;
+    projectedNetMarginPct: number | null;
+  }>;
   actions: SalesAction[];
   profitGuard: {
     scanned: number;
@@ -134,6 +161,12 @@ function riskLabel(risk: SalesAction['risk']): string {
   if (risk === 'safe') return 'Seguro';
   if (risk === 'approval_required') return 'Requiere aprobacion';
   return 'Manual';
+}
+
+function statusTone(ok: boolean): string {
+  return ok
+    ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-100'
+    : 'border-red-500/40 bg-red-950/25 text-red-100';
 }
 
 export default function CjShopifyUsaSalesAgentPage() {
@@ -252,6 +285,60 @@ export default function CjShopifyUsaSalesAgentPage() {
             </div>
           </section>
 
+          <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr_1fr]">
+            <div className={`rounded-lg border p-4 ${statusTone(data.shopifyTruth.ok)}`}>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 text-sm font-bold">
+                  <ShieldCheck className="h-4 w-4" />
+                  Verdad Shopify
+                </h3>
+                <span className="rounded-full bg-black/25 px-2 py-1 text-[11px] font-bold">
+                  {data.shopifyTruth.ok ? 'API OK' : 'API ERROR'}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <span className="rounded bg-black/20 p-2">Activos Shopify: <b>{data.shopifyTruth.activeProducts}</b></span>
+                <span className="rounded bg-black/20 p-2">Productos locales: <b>{data.shopifyTruth.localUniqueActiveShopifyProducts}</b></span>
+                <span className="rounded bg-black/20 p-2">Sin media: <b>{data.shopifyTruth.noMedia}</b></span>
+                <span className="rounded bg-black/20 p-2">Duplicados exactos: <b>{data.shopifyTruth.duplicateExactGroups}</b></span>
+              </div>
+              <p className="mt-2 text-[11px] opacity-80">
+                Listings activos locales: {data.shopifyTruth.localActiveListings}; se separan porque un producto puede tener varias variantes.
+              </p>
+              {data.shopifyTruth.activeDelta !== 0 && (
+                <p className="mt-3 text-xs">
+                  Brecha detectada: {data.shopifyTruth.activeDelta > 0 ? '+' : ''}{data.shopifyTruth.activeDelta} listings locales vs Shopify.
+                </p>
+              )}
+              {data.shopifyTruth.error && <p className="mt-2 text-xs">{data.shopifyTruth.error}</p>}
+            </div>
+
+            <div className="rounded-lg border border-violet-500/30 bg-violet-950/20 p-4 text-violet-100">
+              <h3 className="flex items-center gap-2 text-sm font-bold">
+                <Brain className="h-4 w-4" />
+                Mejora continua
+              </h3>
+              <div className="mt-3 space-y-2 text-xs">
+                <p className="rounded bg-black/20 p-2">Aprende de trazas: {data.learning.recentActions.length} acciones recientes.</p>
+                <p className="rounded bg-black/20 p-2">Usa embudo: carrito {pct(data.kpis.addToCartRatePct)}, checkout {pct(data.kpis.checkoutRatePct)}, compra {pct(data.kpis.purchaseRatePct)}.</p>
+                <p className="rounded bg-black/20 p-2">Prioriza por margen, calidad, riesgo y oportunidad de trafico.</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-4 text-cyan-100">
+              <h3 className="flex items-center gap-2 text-sm font-bold">
+                <Sparkles className="h-4 w-4" />
+                Capacidades activas
+              </h3>
+              <div className="mt-3 grid grid-cols-1 gap-2 text-xs">
+                <span className="rounded bg-black/20 p-2">Publicar con guardrails: <b>{data.constraints.canPublishWithGuards ? 'ON' : 'OFF'}</b></span>
+                <span className="rounded bg-black/20 p-2">Despublicar riesgo perdida: <b>{data.constraints.canUnpublishUnsafeWithGuards ? 'ON' : 'OFF'}</b></span>
+                <span className="rounded bg-black/20 p-2">Promocion organica Pinterest: <b>{data.constraints.autoPublishSocial ? 'ON' : 'OFF'}</b></span>
+                <span className="rounded bg-black/20 p-2">Gasto ads automatico: <b>{data.constraints.autoSpendAds ? 'ON' : 'OFF'}</b></span>
+              </div>
+            </div>
+          </section>
+
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
             <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -321,7 +408,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                   <ShieldCheck className="h-4 w-4" />
                   Reglas duras
                 </h3>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <span className="rounded bg-black/20 p-2">Margen min: {pct(data.constraints.minMarginPct)}</span>
                   <span className="rounded bg-black/20 p-2">Profit min: {money(data.constraints.minProfitUsd)}</span>
                   <span className="rounded bg-black/20 p-2">Shipping max: {money(data.constraints.maxShippingUsd)}</span>
@@ -364,7 +451,7 @@ export default function CjShopifyUsaSalesAgentPage() {
             </aside>
           </section>
 
-          <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
               <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
                 <TrendingUp className="h-4 w-4 text-cyan-300" />
@@ -386,6 +473,27 @@ export default function CjShopifyUsaSalesAgentPage() {
                 ))}
                 {data.promotionCandidates.length === 0 && (
                   <p className="text-sm text-slate-500">No hay candidatos seguros para promocion organica ahora.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-red-500/30 bg-red-950/15 p-4">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-red-100">
+                <AlertTriangle className="h-4 w-4" />
+                Despublicar para proteger margen
+              </h3>
+              <div className="mt-3 space-y-2">
+                {data.unsafeUnpublishCandidates.slice(0, 6).map((item) => (
+                  <div key={item.listingId} className="rounded-lg border border-red-500/20 bg-black/20 p-3">
+                    <p className="line-clamp-2 text-sm font-semibold text-red-50">{item.title}</p>
+                    <p className="mt-1 text-xs text-red-200">{item.reason}</p>
+                    <p className="mt-1 text-[11px] text-red-300">
+                      Profit {item.projectedNetProfitUsd == null ? 'N/D' : money(item.projectedNetProfitUsd)} · margen {item.projectedNetMarginPct == null ? 'N/D' : pct(item.projectedNetMarginPct)}
+                    </p>
+                  </div>
+                ))}
+                {data.unsafeUnpublishCandidates.length === 0 && (
+                  <p className="text-sm text-slate-500">No hay candidatos PAUSE_UNSAFE ahora.</p>
                 )}
               </div>
             </div>

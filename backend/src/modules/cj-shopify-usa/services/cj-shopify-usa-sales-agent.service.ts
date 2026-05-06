@@ -7,6 +7,8 @@ import {
 } from '../cj-shopify-usa.constants';
 import { cjShopifyUsaProfitGuardService } from './cj-shopify-usa-profit-guard.service';
 import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service';
+import { cjShopifyUsaAdminService } from './cj-shopify-usa-admin.service';
+import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
 
 type SalesAgentPriority = 'critical' | 'high' | 'medium' | 'low';
 type SalesAgentActionType =
@@ -16,7 +18,8 @@ type SalesAgentActionType =
   | 'CURATE_SIMILAR_PRODUCTS'
   | 'IMPROVE_PRODUCT_COPY'
   | 'DISCOVER_NEW_PRODUCTS'
-  | 'PUBLISH_APPROVED_BACKLOG';
+  | 'PUBLISH_APPROVED_BACKLOG'
+  | 'UNPUBLISH_UNSAFE_LISTINGS';
 
 type SalesAgentAction = {
   id: string;
@@ -114,6 +117,7 @@ export const cjShopifyUsaSalesAgentService = {
       latestFunnel,
       recentAgentTraces,
       latestCycle,
+      shopifyActiveProductsResult,
     ] = await Promise.all([
       prisma.cjShopifyUsaAccountSettings.findUnique({ where: { userId } }),
       prisma.cjShopifyUsaListing.findMany({
@@ -156,6 +160,14 @@ export const cjShopifyUsaSalesAgentService = {
         where: { userId },
         orderBy: { startedAt: 'desc' },
       }),
+      cjShopifyUsaAdminService
+        .listProducts({ userId, first: 250, maxPages: 20, status: 'ACTIVE' })
+        .then((products) => ({ ok: true as const, products }))
+        .catch((error) => ({
+          ok: false as const,
+          products: [],
+          error: error instanceof Error ? error.message : String(error),
+        })),
     ]);
 
     const activeListings = listings.filter((listing) => listing.status === CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE);
@@ -177,6 +189,33 @@ export const cjShopifyUsaSalesAgentService = {
     const duplicateExactGroups = Array.from(titleGroups.entries())
       .filter(([, rows]) => rows.length > 1)
       .map(([key, rows]) => ({ key, count: rows.length, titles: rows.map((row) => row.product.title).slice(0, 5) }));
+
+    const shopifyActiveProducts = shopifyActiveProductsResult.products;
+    const shopifyTitleGroups = new Map<string, typeof shopifyActiveProducts>();
+    for (const product of shopifyActiveProducts) {
+      const key = normalizeTitle(product.title);
+      if (!key) continue;
+      shopifyTitleGroups.set(key, [...(shopifyTitleGroups.get(key) ?? []), product]);
+    }
+    const shopifyDuplicateExactGroups = Array.from(shopifyTitleGroups.entries())
+      .filter(([, rows]) => rows.length > 1)
+      .map(([key, rows]) => ({ key, count: rows.length, titles: rows.map((row) => row.title).slice(0, 5) }));
+    const shopifyNoMedia = shopifyActiveProducts.filter((product) => (product.media?.nodes?.length ?? 0) === 0);
+    const shopifyProductIds = new Set(shopifyActiveProducts.map((product) => String(product.id)));
+    const localUniqueActiveShopifyProductIds = new Set(
+      activeListings
+        .map((listing) => String(listing.shopifyProductId ?? '').trim())
+        .filter(Boolean),
+    );
+    const activeListingsMissingInShopify = activeListings
+      .filter((listing) => listing.shopifyProductId && !shopifyProductIds.has(String(listing.shopifyProductId)))
+      .slice(0, 20)
+      .map((listing) => ({
+        listingId: listing.id,
+        title: listing.product.title,
+        shopifyProductId: listing.shopifyProductId,
+        status: listing.status,
+      }));
 
     const similarFamilies = new Map<string, number>();
     for (const listing of activeListings) {
@@ -206,6 +245,31 @@ export const cjShopifyUsaSalesAgentService = {
       dryRun: true,
       limit: 350,
     });
+
+    const profitGuardIssueByListing = new Map(profitGuard.issues.map((issue) => [issue.listingId, issue]));
+    const publishableDrafts = draftListings
+      .filter((listing) => listing.evaluation?.decision === 'APPROVED')
+      .filter((listing) => extractImageCount(listing.draftPayload) > 0)
+      .filter((listing) => !profitGuardIssueByListing.has(listing.id))
+      .slice(0, 12)
+      .map((listing) => ({
+        listingId: listing.id,
+        title: listing.product.title,
+        priceUsd: n(listing.listedPriceUsd),
+        marginPct: n(listing.evaluation?.estimatedMarginPct),
+      }));
+
+    const unsafeUnpublishCandidates = profitGuard.issues
+      .filter((issue) => issue.action === 'PAUSE_UNSAFE')
+      .slice(0, 12)
+      .map((issue) => ({
+        listingId: issue.listingId,
+        title: issue.title,
+        reason: issue.reason,
+        currentPriceUsd: issue.currentPriceUsd,
+        projectedNetProfitUsd: issue.projectedNetProfitUsd,
+        projectedNetMarginPct: issue.projectedNetMarginPct,
+      }));
 
     const socialCounts = Object.fromEntries(
       socialStats.map((row) => [row.status, row._count._all]),
@@ -284,6 +348,21 @@ export const cjShopifyUsaSalesAgentService = {
       });
     }
 
+    if (unsafeUnpublishCandidates.length > 0) {
+      actions.push({
+        id: 'unpublish-unsafe-listings',
+        type: 'UNPUBLISH_UNSAFE_LISTINGS',
+        priority: 'critical',
+        title: 'Despublicar listings con riesgo de perdida',
+        rationale: `${unsafeUnpublishCandidates.length} listings tienen senal PAUSE_UNSAFE segun Profit Guard.`,
+        expectedImpact: 'Evita ventas no rentables mientras se corrige shipping, precio o costo.',
+        risk: 'approval_required',
+        canExecute: true,
+        guardrails: ['Solo PAUSE_UNSAFE', 'Archiva en Shopify', 'Registra trazabilidad', 'No elimina datos locales'],
+        payload: { limit: Math.min(5, unsafeUnpublishCandidates.length), candidates: unsafeUnpublishCandidates.slice(0, 5) },
+      });
+    }
+
     if (promotionCandidates.length > 0) {
       actions.push({
         id: 'promote-top-products',
@@ -333,14 +412,14 @@ export const cjShopifyUsaSalesAgentService = {
       actions.push({
         id: 'publish-approved-backlog',
         type: 'PUBLISH_APPROVED_BACKLOG',
-        priority: 'medium',
+        priority: publishableDrafts.length > 0 ? 'high' : 'medium',
         title: 'Revisar backlog de drafts',
-        rationale: `${draftListings.length} drafts existen en el flujo; publicar solo si pasan margen, imagen y politica pet.`,
+        rationale: `${draftListings.length} drafts existen en el flujo; ${publishableDrafts.length} parecen publicables con evaluacion aprobada.`,
         expectedImpact: 'Aumentar catalogo util sin bajar calidad.',
-        risk: 'approval_required',
-        canExecute: false,
+        risk: publishableDrafts.length > 0 ? 'safe' : 'approval_required',
+        canExecute: publishableDrafts.length > 0,
         guardrails: ['Validar shipping y stock antes de publicar', 'Evitar duplicados', 'No publicar sin imagen'],
-        payload: { draftCount: draftListings.length },
+        payload: { draftCount: draftListings.length, publishableDrafts: publishableDrafts.slice(0, 5) },
       });
     }
 
@@ -376,6 +455,8 @@ export const cjShopifyUsaSalesAgentService = {
         autoSpendAds: false,
         autoPublishSocial: true,
         autoChangePrices: false,
+        canPublishWithGuards: true,
+        canUnpublishUnsafeWithGuards: true,
       },
       kpis: {
         activeListings: activeListings.length,
@@ -408,6 +489,22 @@ export const cjShopifyUsaSalesAgentService = {
         catalogTrustRisk: copyIssues.length > 0 || duplicateExactGroups.length > 0,
         trafficOpportunity: promotionCandidates.length > 0,
       },
+      shopifyTruth: {
+        ok: shopifyActiveProductsResult.ok,
+        error: 'error' in shopifyActiveProductsResult ? shopifyActiveProductsResult.error : null,
+        activeProducts: shopifyActiveProducts.length,
+        localActiveListings: activeListings.length,
+        localUniqueActiveShopifyProducts: localUniqueActiveShopifyProductIds.size,
+        activeDelta: localUniqueActiveShopifyProductIds.size - shopifyActiveProducts.length,
+        noMedia: shopifyNoMedia.length,
+        duplicateExactGroups: shopifyDuplicateExactGroups.length,
+        missingLocalActiveInShopify: activeListingsMissingInShopify.length,
+        samples: {
+          noMedia: shopifyNoMedia.slice(0, 8).map((product) => ({ id: product.id, title: product.title, handle: product.handle })),
+          duplicates: shopifyDuplicateExactGroups.slice(0, 5),
+          missingLocalActiveInShopify: activeListingsMissingInShopify,
+        },
+      },
       learning: {
         lastCycle: latestCycle
           ? {
@@ -436,6 +533,8 @@ export const cjShopifyUsaSalesAgentService = {
         ],
       },
       promotionCandidates,
+      publishableDrafts,
+      unsafeUnpublishCandidates,
       actions: sortedActions,
       profitGuard: {
         scanned: profitGuard.scanned,
@@ -454,7 +553,7 @@ export const cjShopifyUsaSalesAgentService = {
   },
 
   async executeAction(userId: number, input: { actionType: SalesAgentActionType; limit?: number }) {
-    if (input.actionType !== 'PROMOTE_TOP_PRODUCTS') {
+    if (!['PROMOTE_TOP_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS'].includes(input.actionType)) {
       await recordSalesAgentTrace(userId, 'sales_agent.action.blocked', {
         actionType: input.actionType,
         reason: 'This action requires explicit per-item approval in the current controlled mode.',
@@ -469,6 +568,69 @@ export const cjShopifyUsaSalesAgentService = {
 
     const dashboard = await this.dashboard(userId);
     const limit = Math.max(1, Math.min(10, Number(input.limit ?? 5)));
+
+    if (input.actionType === 'PUBLISH_APPROVED_BACKLOG') {
+      const selected = dashboard.publishableDrafts.slice(0, limit);
+      const results: Array<{ listingId: number; title: string; ok: boolean; error?: string }> = [];
+      for (const candidate of selected) {
+        try {
+          await cjShopifyUsaPublishService.publishListing({ userId, listingId: candidate.listingId });
+          results.push({ listingId: candidate.listingId, title: candidate.title, ok: true });
+        } catch (error) {
+          results.push({
+            listingId: candidate.listingId,
+            title: candidate.title,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      await recordSalesAgentTrace(userId, 'sales_agent.action.publish_approved_backlog', {
+        requested: selected.length,
+        results,
+      } as Prisma.InputJsonValue);
+      return {
+        ok: true,
+        executed: true,
+        actionType: input.actionType,
+        published: results.filter((result) => result.ok).length,
+        failed: results.filter((result) => !result.ok).length,
+        results,
+        message: `Publicacion controlada: ${results.filter((result) => result.ok).length} OK, ${results.filter((result) => !result.ok).length} fallidos.`,
+      };
+    }
+
+    if (input.actionType === 'UNPUBLISH_UNSAFE_LISTINGS') {
+      const selected = dashboard.unsafeUnpublishCandidates.slice(0, limit);
+      const results: Array<{ listingId: number; title: string; ok: boolean; error?: string }> = [];
+      for (const candidate of selected) {
+        try {
+          await cjShopifyUsaPublishService.unpublishListing({ userId, listingId: candidate.listingId });
+          results.push({ listingId: candidate.listingId, title: candidate.title, ok: true });
+        } catch (error) {
+          results.push({
+            listingId: candidate.listingId,
+            title: candidate.title,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      await recordSalesAgentTrace(userId, 'sales_agent.action.unpublish_unsafe_listings', {
+        requested: selected.length,
+        results,
+      } as Prisma.InputJsonValue);
+      return {
+        ok: true,
+        executed: true,
+        actionType: input.actionType,
+        unpublished: results.filter((result) => result.ok).length,
+        failed: results.filter((result) => !result.ok).length,
+        results,
+        message: `Despublicacion controlada: ${results.filter((result) => result.ok).length} OK, ${results.filter((result) => !result.ok).length} fallidos.`,
+      };
+    }
+
     const selected = dashboard.promotionCandidates.slice(0, limit);
 
     for (const candidate of selected) {
