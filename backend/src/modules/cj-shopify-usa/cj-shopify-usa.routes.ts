@@ -15,6 +15,7 @@ import { cjShopifyUsaOrderIngestService } from './services/cj-shopify-usa-order-
 import { cjShopifyUsaTrackingService } from './services/cj-shopify-usa-tracking.service';
 import { automationService } from './services/cj-shopify-usa-automation.service';
 import { cjShopifyUsaProfitGuardService } from './services/cj-shopify-usa-profit-guard.service';
+import { cjShopifyUsaSalesAgentService } from './services/cj-shopify-usa-sales-agent.service';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './services/cj-shopify-usa-policy.service';
 import {
   cjShopifyUsaListingDraftBodySchema,
@@ -1040,6 +1041,30 @@ router.get('/analytics/social-autopilot', async (req: Request, res: Response, ne
       },
       candidates,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/sales-agent', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesAgentService.dashboard(userId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/sales-agent/actions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const actionType = String(req.body?.actionType || '').trim() as any;
+    const result = await cjShopifyUsaSalesAgentService.executeAction(userId, {
+      actionType,
+      limit: Number(req.body?.limit ?? 5),
+    });
+    res.status(result.ok ? 200 : 409).json(result);
   } catch (error) {
     next(error);
   }

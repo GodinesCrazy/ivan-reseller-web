@@ -91,6 +91,7 @@ export const CJ_SHOPIFY_USA_TRACE_STEP = {
   SOCIAL_POST_SUCCESS: 'social.post.success',
   SOCIAL_POST_ERROR: 'social.post.error',
   SOCIAL_POST_RETRY: 'social.post.retry',
+  SALES_AGENT_ACTION: 'sales.agent.action',
 } as const;
 
 export const CJ_SHOPIFY_USA_POST_CREATE_CHECKOUT_MODE = {

@@ -9,6 +9,7 @@ const links = [
   { to: '/cj-shopify-usa/alerts',      label: 'Alertas' },
   { to: '/cj-shopify-usa/profit',      label: 'Profit' },
   { to: '/cj-shopify-usa/analytics',   label: 'Analítica' },
+  { to: '/cj-shopify-usa/sales-agent', label: 'Agente Vendedor' },
   { to: '/cj-shopify-usa/automation',  label: '⚡ Automatización' },
   { to: '/cj-shopify-usa/settings',    label: '⚙ Config' },
   { to: '/cj-shopify-usa/logs',        label: 'Logs' },
