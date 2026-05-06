@@ -104,6 +104,7 @@
     "generate:payoneer-cert": "tsx scripts/generate-payoneer-cert-pem.ts",
     "verify:paypal-balance": "tsx scripts/verify-paypal-balance.ts",
     "verify:paypal": "tsx scripts/paypal-verification-report.ts",
+    "optimize:pawvault-storefront": "tsx scripts/optimize-pawvault-storefront.ts",
     "check:first-real-profit-readiness": "tsx scripts/check-first-real-profit-readiness.ts",
     "check:ml-chile-auth-runtime": "tsx scripts/check-ml-chile-auth-runtime.ts",
     "check:ml-chile-controlled-operation": "tsx scripts/check-ml-chile-controlled-operation-readiness.ts",
