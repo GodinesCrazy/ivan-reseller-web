@@ -229,7 +229,7 @@ export class CjShopifyUsaReconciliationService {
   }
 
   async importLiveShopifyProducts(userId: number): Promise<{ scanned: number; created: number; updated: number; skippedExisting: number }> {
-    const liveProducts = await cjShopifyUsaAdminService.listProducts({ userId, first: 250, maxPages: 8 });
+    const liveProducts = await cjShopifyUsaAdminService.listProducts({ userId, first: 250, maxPages: 20, status: 'ACTIVE' });
     let created = 0;
     let updated = 0;
     let skippedExisting = 0;

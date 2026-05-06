@@ -1,11 +1,13 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../src/config/database';
 import { cjShopifyUsaAdminService } from '../src/modules/cj-shopify-usa/services/cj-shopify-usa-admin.service';
+import { isCjShopifyUsaPetProduct } from '../src/modules/cj-shopify-usa/services/cj-shopify-usa-policy.service';
 
 const USER_ID = Number(process.argv.find((arg) => arg.startsWith('--user='))?.split('=')[1] || 1);
 const EXECUTE = process.argv.includes('--execute');
 const LIMIT = Number(process.argv.find((arg) => arg.startsWith('--limit='))?.split('=')[1] || 500);
 const ARCHIVE_DUPLICATES = process.argv.includes('--archive-duplicates');
+const ARCHIVE_GENERIC = process.argv.includes('--archive-generic');
 
 const GENERIC_TITLES = new Set([
   'pet',
@@ -125,6 +127,7 @@ function isClearlyUnsafeOrNonPet(product: ShopifyProduct): boolean {
   const haystack = normalizeTitle([product.title, product.handle, product.productType ?? ''].join(' '));
   if (/\b(women|womens|men|mens|adult|erotic|sex|lingerie|fetish|bdsm|slave|bondage)\b/.test(haystack)) return true;
   if (/\bchildren|kids|baby\b/.test(haystack) && !/\bpet|dog|cat|bird|hamster|rabbit|aquarium|fish\b/.test(haystack)) return true;
+  if (!isCjShopifyUsaPetProduct({ title: product.title, productType: product.productType })) return true;
   return false;
 }
 
@@ -260,7 +263,8 @@ async function main() {
   const archiveTargets = products.filter((product) => {
     const noImage = !product.featuredMedia?.preview?.image?.url;
     const noInventory = Number(product.totalInventory ?? 0) <= 0;
-    return noImage || noInventory || isClearlyUnsafeOrNonPet(product);
+    const genericWithoutBetterTitle = ARCHIVE_GENERIC && isGenericTitle(product.title) && !chooseBetterTitle(product);
+    return noImage || noInventory || isClearlyUnsafeOrNonPet(product) || genericWithoutBetterTitle;
   });
   const duplicateTargets = duplicateArchiveTargets(
     products.filter((product) => !archiveTargets.some((target) => target.id === product.id)),
@@ -278,12 +282,14 @@ async function main() {
     mode: EXECUTE ? 'execute' : 'dry-run',
     scannedActiveProducts: products.length,
     duplicateArchiveEnabled: ARCHIVE_DUPLICATES,
+    genericArchiveEnabled: ARCHIVE_GENERIC,
     archiveTargets: allArchiveTargets.map((product) => ({
       title: product.title,
       handle: product.handle,
       noImage: !product.featuredMedia?.preview?.image?.url,
       totalInventory: product.totalInventory,
       duplicateTitle: duplicateTargets.some((target) => target.id === product.id),
+      genericTitle: isGenericTitle(product.title),
     })),
     renameTargetCount: renameTargets.length,
     renameSamples: renameTargets.slice(0, 30).map(({ product, newTitle }) => ({
@@ -312,7 +318,9 @@ async function main() {
           lastSyncedAt: new Date(),
           lastError: duplicateTargets.some((target) => target.id === product.id)
             ? 'Archived by PawVault quality repair: duplicate active Shopify title.'
-            : 'Archived by PawVault quality repair: missing featured image, sellable inventory, or pet-policy fit.',
+            : isGenericTitle(product.title)
+              ? 'Archived by PawVault quality repair: buyer-facing title is too generic to inspire trust.'
+              : 'Archived by PawVault quality repair: missing featured image, sellable inventory, or pet-policy fit.',
         },
       });
       archived++;

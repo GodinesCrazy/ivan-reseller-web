@@ -796,13 +796,13 @@ export class CjShopifyUsaAdminService {
     userId: number;
     first?: number;
     maxPages?: number;
+    status?: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
   }): Promise<Array<{
     id: string;
     title: string;
     handle: string;
     status: string;
     tags: string[];
-    publishedOnCurrentPublication?: boolean | null;
     variants?: {
       nodes?: Array<{
         id: string;
@@ -815,13 +815,13 @@ export class CjShopifyUsaAdminService {
   }>> {
     const first = Math.max(1, Math.min(250, Number(input.first ?? 250)));
     const maxPages = Math.max(1, Math.min(20, Number(input.maxPages ?? 10)));
+    const statusQuery = input.status ? `status:${input.status.toLowerCase()}` : null;
     const products: Array<{
       id: string;
       title: string;
       handle: string;
       status: string;
       tags: string[];
-      publishedOnCurrentPublication?: boolean | null;
       variants?: {
         nodes?: Array<{
           id: string;
@@ -843,15 +843,14 @@ export class CjShopifyUsaAdminService {
       }>({
         userId: input.userId,
         query: `
-          query CjShopifyUsaListProducts($first: Int!, $after: String) {
-            products(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
+          query CjShopifyUsaListProducts($first: Int!, $after: String, $query: String) {
+            products(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: true) {
               nodes {
                 id
                 title
                 handle
                 status
                 tags
-                publishedOnCurrentPublication
                 media(first: 1) { nodes { id } }
                 variants(first: 20) {
                   nodes {
@@ -869,7 +868,7 @@ export class CjShopifyUsaAdminService {
             }
           }
         `,
-        variables: { first, after },
+        variables: { first, after, query: statusQuery },
       });
 
       products.push(...(data.products?.nodes ?? []));

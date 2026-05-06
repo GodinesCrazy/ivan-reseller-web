@@ -298,6 +298,228 @@ function hasUsableImages(images: unknown): boolean {
     });
 }
 
+function usableImageUrls(images: unknown): string[] {
+  if (!Array.isArray(images)) return [];
+  const urls = images
+    .map((image) => {
+      if (typeof image === 'string') return image;
+      if (image && typeof image === 'object') {
+        const record = image as Record<string, unknown>;
+        return String(record.src ?? record.url ?? '');
+      }
+      return '';
+    })
+    .map((url) => url.trim())
+    .filter((url) => /^https?:\/\//i.test(url));
+  return uniqueItems(urls);
+}
+
+function normalizedTitleKey(value: unknown): string {
+  return normalizeWhitespace(String(value ?? ''))
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(cj[a-z0-9]+|\d{8,}[a-z0-9]*)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function titleQualityIssues(title: unknown): string[] {
+  const raw = normalizeWhitespace(String(title ?? ''));
+  const key = normalizedTitleKey(raw);
+  const words = key.split(/\s+/).filter(Boolean);
+  const uniqueWords = new Set(words);
+  const issues: string[] = [];
+  const genericTitles = new Set([
+    'pet',
+    'pet supplies',
+    'pet product',
+    'pet grooming brush',
+    'pet feeding bowl',
+    'pet water fountain',
+    'pet travel carrier',
+    'pet nail grooming tool',
+    'adjustable pet collar',
+    'adjustable dog leash',
+    'dog harness',
+    'cat enrichment toy',
+    'dog enrichment toy',
+    'pet enrichment toy',
+    'dog comfort bed',
+    'cat comfort bed',
+  ]);
+
+  if (!raw || raw.length < 14) issues.push('title_too_short');
+  if (words.length < 3) issues.push('title_too_few_words');
+  if (genericTitles.has(key)) issues.push('title_too_generic');
+  if (/\bcj[a-z0-9]{6,}\b/i.test(raw) || /\b\d{10,}\b/.test(raw)) issues.push('title_contains_supplier_code');
+  if (uniqueWords.size > 0 && uniqueWords.size <= Math.ceil(words.length / 2) && words.length >= 6) {
+    issues.push('title_repeats_words');
+  }
+  if (/\b(slave|bondage|bdsm|fetish|erotic|adult toys?|sex(y)?|lingerie|corset|mannequin)\b/i.test(raw)) {
+    issues.push('title_unsafe_or_non_pet');
+  }
+
+  return issues;
+}
+
+async function assertNoLocalTitleDuplicate(input: {
+  userId: number;
+  title: string;
+  productId: number;
+  listingId?: number | null;
+}) {
+  const titleKey = normalizedTitleKey(input.title);
+  if (!titleKey) return;
+
+  const rows = await prisma.cjShopifyUsaListing.findMany({
+    where: {
+      userId: input.userId,
+      id: input.listingId ? { not: input.listingId } : undefined,
+      status: {
+        in: [
+          CJ_SHOPIFY_USA_LISTING_STATUS.DRAFT,
+          CJ_SHOPIFY_USA_LISTING_STATUS.PUBLISHING,
+          CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
+          CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+        ],
+      },
+    },
+    select: {
+      id: true,
+      productId: true,
+      status: true,
+      draftPayload: true,
+      product: { select: { title: true } },
+    },
+    take: 500,
+  });
+
+  const duplicate = rows.find((row) => {
+    if (row.productId === input.productId) return false;
+    const draft = (row.draftPayload && typeof row.draftPayload === 'object' && !Array.isArray(row.draftPayload))
+      ? row.draftPayload as Record<string, unknown>
+      : {};
+    return normalizedTitleKey(draft.title ?? row.product.title) === titleKey;
+  });
+
+  if (duplicate) {
+    throw new AppError(
+      `A Shopify USA listing with the same buyer-facing title already exists (#${duplicate.id}, ${duplicate.status}). Use a more specific title or merge variants before publishing.`,
+      409,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+}
+
+async function assertNoLiveShopifyTitleDuplicate(input: {
+  userId: number;
+  title: string;
+  currentShopifyProductId?: string | null;
+  expectedSkus?: Set<string>;
+  expectedCjProductId?: string | null;
+}) {
+  const titleKey = normalizedTitleKey(input.title);
+  if (!titleKey) return;
+
+  const activeProducts = await cjShopifyUsaAdminService.listProducts({
+    userId: input.userId,
+    first: 250,
+    maxPages: 20,
+    status: 'ACTIVE',
+  });
+
+  const currentId = String(input.currentShopifyProductId ?? '').trim();
+  const expectedSkus = input.expectedSkus ?? new Set<string>();
+  const expectedTag = input.expectedCjProductId ? normalizeToken(`cj-product:${input.expectedCjProductId}`) : '';
+
+  const duplicate = activeProducts.find((product) => {
+    if (normalizeToken(product.status) !== 'active') return false;
+    if (currentId && product.id === currentId) return false;
+    if (normalizedTitleKey(product.title) !== titleKey) return false;
+
+    const productTags = new Set((product.tags ?? []).map(normalizeToken));
+    const productSkus = new Set(
+      (product.variants?.nodes ?? [])
+        .map((variant) => normalizeToken(variant.sku))
+        .filter(Boolean),
+    );
+    const sameCjProduct = expectedTag && productTags.has(expectedTag);
+    const sameSku = [...expectedSkus].some((sku) => productSkus.has(sku));
+    return !sameCjProduct && !sameSku;
+  });
+
+  if (duplicate) {
+    throw new AppError(
+      `Shopify already has an ACTIVE product with the same buyer-facing title: "${duplicate.title}" (${duplicate.id}). Publish blocked to avoid duplicate/confusing products.`,
+      409,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+}
+
+async function assertCommercialQuality(input: {
+  userId: number;
+  title: string;
+  images: unknown;
+  productId: number;
+  cjProductId: string;
+  listingId?: number | null;
+  description?: unknown;
+  productType?: unknown;
+  attributes?: unknown;
+  currentShopifyProductId?: string | null;
+  expectedSkus?: Set<string>;
+  checkLiveShopify?: boolean;
+}) {
+  const issues = titleQualityIssues(input.title);
+  if (issues.length > 0) {
+    throw new AppError(
+      `Listing title is not buyer-ready (${issues.join(', ')}): "${input.title}". Rebuild the draft with a more specific title before publishing.`,
+      400,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  if (!hasUsableImages(input.images)) {
+    throw new AppError(
+      'Listing has no usable product images. Add or sync images before publishing to Shopify.',
+      400,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  if (!isCjShopifyUsaPetProduct({
+    title: input.title,
+    description: input.description,
+    productType: input.productType,
+    attributes: input.attributes,
+  })) {
+    throw new AppError(
+      'Only clearly pet-related, buyer-safe products can be published to PawVault.',
+      400,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  await assertNoLocalTitleDuplicate({
+    userId: input.userId,
+    title: input.title,
+    productId: input.productId,
+    listingId: input.listingId,
+  });
+
+  if (input.checkLiveShopify) {
+    await assertNoLiveShopifyTitleDuplicate({
+      userId: input.userId,
+      title: input.title,
+      currentShopifyProductId: input.currentShopifyProductId,
+      expectedSkus: input.expectedSkus,
+      expectedCjProductId: input.cjProductId,
+    });
+  }
+}
+
 function buildProfessionalTitle(input: {
   title: string;
   variantAttributes?: Record<string, unknown> | null;
@@ -694,12 +916,57 @@ async function resolveShopifyPublishTargets(userId: number) {
   const publication =
     probe.publications.find((candidate) => candidate.name.toLowerCase().includes('online store')) ||
     probe.publications[0];
+  const additionalPublications = probe.publications.filter((candidate) => {
+    if (!publication || candidate.id === publication.id) return false;
+    const name = candidate.name.toLowerCase();
+    return name.includes('pinterest');
+  });
 
   return {
     settings,
     probe,
     location,
     publication,
+    additionalPublications,
+  };
+}
+
+async function publishProductToTargetPublications(input: {
+  userId: number;
+  productId: string;
+  primaryPublication: { id: string; name: string };
+  additionalPublications?: Array<{ id: string; name: string }>;
+}) {
+  await cjShopifyUsaAdminService.publishProductToPublication({
+    userId: input.userId,
+    productId: input.productId,
+    publicationId: input.primaryPublication.id,
+  });
+
+  const publishedAdditional: Array<{ id: string; name: string }> = [];
+  const failedAdditional: Array<{ id: string; name: string; error: string }> = [];
+
+  for (const publication of input.additionalPublications ?? []) {
+    try {
+      await cjShopifyUsaAdminService.publishProductToPublication({
+        userId: input.userId,
+        productId: input.productId,
+        publicationId: publication.id,
+      });
+      publishedAdditional.push({ id: publication.id, name: publication.name });
+    } catch (error) {
+      failedAdditional.push({
+        id: publication.id,
+        name: publication.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return {
+    primaryPublication: input.primaryPublication,
+    publishedAdditional,
+    failedAdditional,
   };
 }
 
@@ -880,6 +1147,17 @@ export const cjShopifyUsaPublishService = {
       title: product.title,
       variantAttributes: (variant.attributes ?? null) as Record<string, unknown> | null,
     });
+    await assertCommercialQuality({
+      userId: input.userId,
+      title: draftTitle,
+      images: product.images,
+      productId: product.id,
+      cjProductId: product.cjProductId,
+      description: product.description,
+      productType: cjShopifyUsaCategorizationService.inferProductType(draftTitle),
+      attributes: variant.attributes,
+    });
+
     const handle = sanitizeHandle(`${draftTitle}-${variant.cjSku}`);
     const descriptionHtml = buildDraftDescription({
       title: draftTitle,
@@ -1016,7 +1294,7 @@ export const cjShopifyUsaPublishService = {
       throw new AppError('Listing draft payload is missing. Create a draft first.', 400, ErrorCode.VALIDATION_ERROR);
     }
 
-    const { settings, probe, location, publication } = await resolveShopifyPublishTargets(input.userId);
+    const { settings, probe, location, publication, additionalPublications } = await resolveShopifyPublishTargets(input.userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
     const maxSellPriceUsd = resolveMaxSellPriceUsd(settings.maxSellPriceUsd);
     const availableStock = listing.variant
@@ -1159,13 +1437,16 @@ export const cjShopifyUsaPublishService = {
     let publishAttemptListingIds = [listing.id];
 
     try {
-      const mediaPayload = (Array.isArray(draft.images) ? draft.images : [])
+      const draftImageUrls = usableImageUrls(draft.images);
+      const productImageUrls = usableImageUrls(listing.product.images);
+      const publishingImageUrls = draftImageUrls.length > 0 ? draftImageUrls : productImageUrls;
+      const mediaPayload = publishingImageUrls
         .map((src: string) => String(src).trim())
         .filter(Boolean)
         .map((src: string) => ({
           originalSource: src,
           mediaContentType: 'IMAGE' as const,
-          alt: src, // Link original URL for variant image mapping
+          alt: productTitle,
         }));
 
       const siblingDraftRows = await prisma.cjShopifyUsaListing.findMany({
@@ -1273,6 +1554,21 @@ export const cjShopifyUsaPublishService = {
           .filter(Boolean),
       );
       const primarySkuForUpsert = resolvePrimarySku(listing, draft);
+      await assertCommercialQuality({
+        userId: input.userId,
+        title: productTitle,
+        images: publishingImageUrls,
+        productId: listing.productId,
+        cjProductId: listing.product.cjProductId,
+        listingId: listing.id,
+        description: draft.descriptionHtml || listing.product.description,
+        productType: draft.productType,
+        attributes: draft.variantAttributes ?? listing.variant?.attributes,
+        currentShopifyProductId: listing.shopifyProductId,
+        expectedSkus,
+        checkLiveShopify: true,
+      });
+
       let identifierIdForUpsert = listing.shopifyProductId;
 
       if (!identifierIdForUpsert && requestedHandle) {
@@ -1313,10 +1609,11 @@ export const cjShopifyUsaPublishService = {
                 idempotencyKey: `adopt-${listing.id}-${primarySkuForUpsert}-${desiredQuantity}`,
               });
 
-              await cjShopifyUsaAdminService.publishProductToPublication({
+              const publicationResult = await publishProductToTargetPublications({
                 userId: input.userId,
                 productId: existingProduct.id,
-                publicationId: publication.id,
+                primaryPublication: publication,
+                additionalPublications,
               });
 
               await cjShopifyUsaAdminService.setProductMetafields({
@@ -1401,6 +1698,7 @@ export const cjShopifyUsaPublishService = {
                 shopifyVariantId: primaryExistingVariant.id,
                 shopifyHandle: existingProduct.handle,
                 storefrontVerification,
+                publicationResult,
                 siblingCount: siblingDrafts.length,
               } as Prisma.InputJsonValue);
 
@@ -1519,10 +1817,11 @@ export const cjShopifyUsaPublishService = {
         console.warn(`[ShopifyPublish] Failed to map variant images:`, err);
       }
 
-      await cjShopifyUsaAdminService.publishProductToPublication({
+      const publicationResult = await publishProductToTargetPublications({
         userId: input.userId,
         productId: upserted.productId,
-        publicationId: publication.id,
+        primaryPublication: publication,
+        additionalPublications,
       });
 
       await assignPetCollectionsBestEffort({
@@ -1680,6 +1979,7 @@ export const cjShopifyUsaPublishService = {
         shopifyVariantId: resolvedVariantId,
         shopifyHandle: upserted.handle,
         publicationId: publication.id,
+        publicationResult,
         locationId: location.id,
         attachedMediaCount,
         storefrontVerification,
