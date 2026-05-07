@@ -63,6 +63,29 @@ type PromotionCandidate = {
   caption: string;
 };
 
+type CommercialScore = {
+  listingId: number;
+  title: string;
+  handle: string | null;
+  score: number;
+  grade: 'A' | 'B' | 'C' | 'D';
+  priceUsd: number;
+  marginPct: number;
+  imageCount: number;
+  shippingKnown: boolean;
+  duplicateRisk: boolean;
+  profitRisk: boolean;
+  titleQualityScore: number;
+  conversionSignals: {
+    promoted: boolean;
+    socialPosts: number;
+    hasSalesSignal: boolean;
+  };
+  issues: string[];
+  opportunities: string[];
+  recommendedAction: 'PROMOTE' | 'FIX' | 'PROFIT_GUARD' | 'CURATE_DUPLICATE' | 'WATCH';
+};
+
 type SalesAgentScheduler = {
   state: 'IDLE' | 'RUNNING' | 'PAUSED' | 'ERROR';
   config: {
@@ -158,8 +181,41 @@ type SalesAgentDashboard = {
       startedAt: string;
     };
     recentActions: Array<{ id: string; createdAt: string; message: string; meta: unknown }>;
+    memory: {
+      windowDays: number;
+      confidence: string;
+      observations: string[];
+      actionOutcomes: Array<{ createdAt: string; action: string; impact: string }>;
+      bestSignals: string[];
+      weakSignals: string[];
+    };
     summary: string[];
   };
+  commercialScores: {
+    distribution: { excellent: number; good: number; watch: number; risk: number };
+    top: CommercialScore[];
+    needsWork: CommercialScore[];
+  };
+  campaign: {
+    generatedAt: string;
+    theme: string;
+    objective: string;
+    budgetMode: 'organic_only';
+    channels: string[];
+    promote: Array<{ listingId: number; title: string; handle: string | null; score: number; marginPct: number }>;
+    fixBeforeTraffic: Array<{ listingId: number; title: string; score: number; issues: string[] }>;
+    protectMargin: Array<{ listingId: number; title: string; score: number; issues: string[] }>;
+    pauseOrMerge: Array<{ listingId: number; title: string; score: number; issues: string[] }>;
+    nextReviewAt: string;
+  };
+  decisionTimeline: Array<{
+    id: string;
+    ts: string;
+    stage: string;
+    title: string;
+    detail: string;
+    status: 'done' | 'watch' | 'needs_review';
+  }>;
   promotionCandidates: PromotionCandidate[];
   publishableDrafts: Array<{ listingId: number; title: string; priceUsd: number; marginPct: number }>;
   unsafeUnpublishCandidates: Array<{
@@ -220,6 +276,21 @@ function statusTone(ok: boolean): string {
   return ok
     ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-100'
     : 'border-red-500/40 bg-red-950/25 text-red-100';
+}
+
+function gradeClass(grade: CommercialScore['grade']): string {
+  if (grade === 'A') return 'bg-emerald-500/20 text-emerald-100 border-emerald-400/40';
+  if (grade === 'B') return 'bg-cyan-500/20 text-cyan-100 border-cyan-400/40';
+  if (grade === 'C') return 'bg-amber-500/20 text-amber-100 border-amber-400/40';
+  return 'bg-red-500/20 text-red-100 border-red-400/40';
+}
+
+function actionLabel(action: CommercialScore['recommendedAction']): string {
+  if (action === 'PROMOTE') return 'Promover';
+  if (action === 'FIX') return 'Corregir ficha';
+  if (action === 'PROFIT_GUARD') return 'Profit Guard';
+  if (action === 'CURATE_DUPLICATE') return 'Curar duplicado';
+  return 'Observar';
 }
 
 function dateTime(value: string | null | undefined): string {
@@ -601,6 +672,146 @@ export default function CjShopifyUsaSalesAgentPage() {
                 <span className="rounded bg-black/20 p-2">Corregir fichas debiles: <b>{data.constraints.canFixCatalogQuality ? 'ON' : 'OFF'}</b></span>
                 <span className="rounded bg-black/20 p-2">Promocion organica Pinterest: <b>{data.constraints.autoPublishSocial ? 'ON' : 'OFF'}</b></span>
                 <span className="rounded bg-black/20 p-2">Gasto ads automatico: <b>{data.constraints.autoSpendAds ? 'ON' : 'OFF'}</b></span>
+              </div>
+            </div>
+          </section>
+
+          <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-lg border border-cyan-500/25 bg-slate-950 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                    <CircleDollarSign className="h-4 w-4 text-cyan-300" />
+                    Score comercial por producto
+                  </h3>
+                  <p className="text-xs text-slate-500">Combina margen, shipping, imagenes, calidad, duplicados y senales sociales.</p>
+                </div>
+                <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                  <span className="rounded bg-emerald-500/10 px-2 py-1 text-emerald-200">A {data.commercialScores.distribution.excellent}</span>
+                  <span className="rounded bg-cyan-500/10 px-2 py-1 text-cyan-200">B {data.commercialScores.distribution.good}</span>
+                  <span className="rounded bg-amber-500/10 px-2 py-1 text-amber-200">C {data.commercialScores.distribution.watch}</span>
+                  <span className="rounded bg-red-500/10 px-2 py-1 text-red-200">D {data.commercialScores.distribution.risk}</span>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase text-slate-500">Mejores para empujar</p>
+                  <div className="space-y-2">
+                    {data.commercialScores.top.slice(0, 5).map((item) => (
+                      <div key={item.listingId} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="line-clamp-2 text-sm font-semibold text-slate-100">{item.title}</p>
+                          <span className={`rounded-full border px-2 py-1 text-xs font-bold ${gradeClass(item.grade)}`}>{item.grade} {item.score}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {money(item.priceUsd)} · margen {pct(item.marginPct)} · {item.imageCount} img · {actionLabel(item.recommendedAction)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase text-slate-500">Riesgo o trabajo pendiente</p>
+                  <div className="space-y-2">
+                    {data.commercialScores.needsWork.slice(0, 5).map((item) => (
+                      <div key={item.listingId} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="line-clamp-2 text-sm font-semibold text-slate-100">{item.title}</p>
+                          <span className={`rounded-full border px-2 py-1 text-xs font-bold ${gradeClass(item.grade)}`}>{item.grade} {item.score}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-amber-200">{item.issues.slice(0, 2).join(' · ') || actionLabel(item.recommendedAction)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-emerald-500/25 bg-emerald-950/10 p-4">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-emerald-100">
+                <Megaphone className="h-4 w-4" />
+                Modo campana semanal
+              </h3>
+              <p className="mt-1 text-sm text-slate-300">{data.campaign.objective}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {data.campaign.channels.map((channel) => (
+                  <span key={channel} className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200">{channel}</span>
+                ))}
+                <span className="rounded-full bg-black/25 px-2 py-1 text-xs text-slate-300">sin ads pagados</span>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <span className="rounded bg-black/20 p-2">Promover: <b>{data.campaign.promote.length}</b></span>
+                <span className="rounded bg-black/20 p-2">Corregir: <b>{data.campaign.fixBeforeTraffic.length}</b></span>
+                <span className="rounded bg-black/20 p-2">Proteger margen: <b>{data.campaign.protectMargin.length}</b></span>
+                <span className="rounded bg-black/20 p-2">Pausar/fusionar: <b>{data.campaign.pauseOrMerge.length}</b></span>
+              </div>
+              <div className="mt-4 space-y-2">
+                {data.campaign.promote.slice(0, 4).map((item) => (
+                  <div key={item.listingId} className="rounded border border-emerald-500/20 bg-black/20 px-3 py-2">
+                    <p className="line-clamp-1 text-xs font-semibold text-emerald-50">{item.title}</p>
+                    <p className="text-[11px] text-emerald-200/80">score {item.score} · margen {pct(item.marginPct)}</p>
+                  </div>
+                ))}
+                {data.campaign.promote.length === 0 && (
+                  <p className="rounded border border-amber-500/25 bg-amber-950/20 px-3 py-2 text-xs text-amber-100">
+                    Primero resolver margen/catalogo; el agente no empujara productos dudosos.
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div className="rounded-lg border border-violet-500/25 bg-violet-950/10 p-4">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-violet-100">
+                <Brain className="h-4 w-4" />
+                Memoria de aprendizaje real
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">Confianza {data.learning.memory.confidence} · ventana {data.learning.memory.windowDays} dias.</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                {data.learning.memory.observations.map((item) => (
+                  <p key={item} className="rounded bg-black/20 p-2 text-xs text-slate-300">{item}</p>
+                ))}
+              </div>
+              <div className="mt-3 space-y-2">
+                {data.learning.memory.actionOutcomes.slice(0, 4).map((item) => (
+                  <div key={`${item.createdAt}-${item.action}`} className="rounded border border-violet-500/20 bg-black/20 px-3 py-2 text-xs">
+                    <p className="font-semibold text-violet-100">{item.action}</p>
+                    <p className="text-slate-400">{item.impact}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                <Target className="h-4 w-4 text-cyan-300" />
+                Linea de decisiones
+              </h3>
+              <div className="mt-3 space-y-2">
+                {data.decisionTimeline.slice(0, 7).map((item) => (
+                  <div key={item.id} className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-100">{item.stage}</p>
+                        <p className="text-xs text-slate-400">{item.title}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] ${
+                        item.status === 'done'
+                          ? 'bg-emerald-500/15 text-emerald-200'
+                          : item.status === 'watch'
+                            ? 'bg-amber-500/15 text-amber-200'
+                            : 'bg-red-500/15 text-red-200'
+                      }`}>
+                        {item.status === 'done' ? 'hecho' : item.status === 'watch' ? 'vigilar' : 'revisar'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-500">{item.detail}</p>
+                  </div>
+                ))}
+                {data.decisionTimeline.length === 0 && (
+                  <p className="text-sm text-slate-500">Aun no hay decisiones registradas por el agente.</p>
+                )}
               </div>
             </div>
           </section>

@@ -20,7 +20,8 @@ type SalesAgentActionType =
   | 'DISCOVER_NEW_PRODUCTS'
   | 'PUBLISH_APPROVED_BACKLOG'
   | 'UNPUBLISH_UNSAFE_LISTINGS'
-  | 'FIX_CATALOG_QUALITY';
+  | 'FIX_CATALOG_QUALITY'
+  | 'BUILD_SALES_CAMPAIGN';
 
 type SalesAgentAction = {
   id: string;
@@ -72,6 +73,42 @@ type SalesAgentCycleResult = {
   recommendations: number;
   errors: number;
   events: SalesAgentCycleEvent[];
+};
+
+type CommercialScore = {
+  listingId: number;
+  title: string;
+  handle: string | null;
+  score: number;
+  grade: 'A' | 'B' | 'C' | 'D';
+  priceUsd: number;
+  marginPct: number;
+  imageCount: number;
+  shippingKnown: boolean;
+  duplicateRisk: boolean;
+  profitRisk: boolean;
+  titleQualityScore: number;
+  conversionSignals: {
+    promoted: boolean;
+    socialPosts: number;
+    hasSalesSignal: boolean;
+  };
+  issues: string[];
+  opportunities: string[];
+  recommendedAction: 'PROMOTE' | 'FIX' | 'PROFIT_GUARD' | 'CURATE_DUPLICATE' | 'WATCH';
+};
+
+type SalesCampaignPlan = {
+  generatedAt: string;
+  theme: string;
+  objective: string;
+  budgetMode: 'organic_only';
+  channels: string[];
+  promote: Array<Pick<CommercialScore, 'listingId' | 'title' | 'handle' | 'score' | 'marginPct'>>;
+  fixBeforeTraffic: Array<Pick<CommercialScore, 'listingId' | 'title' | 'score' | 'issues'>>;
+  protectMargin: Array<Pick<CommercialScore, 'listingId' | 'title' | 'score' | 'issues'>>;
+  pauseOrMerge: Array<Pick<CommercialScore, 'listingId' | 'title' | 'score' | 'issues'>>;
+  nextReviewAt: string;
 };
 
 const DEFAULT_SALES_AGENT_CONFIG: SalesAgentSchedulerConfig = {
@@ -217,6 +254,230 @@ function titleQuality(title: string): { score: number; issues: string[] } {
   }
 
   return { score: Math.max(0, score), issues };
+}
+
+function buildBuyerReadyDescription(title: string): string {
+  const cleanTitle = trimTitle(titleCase(title), 80);
+  return [
+    `<p><strong>${cleanTitle}</strong> is a practical PawVault pick for everyday pet care routines.</p>`,
+    '<ul>',
+    '<li>Selected for pet parents looking for useful, easy-to-understand accessories.</li>',
+    '<li>Review the product photos and available options before checkout.</li>',
+    '<li>Ships to the USA through the supplier network when stock is available.</li>',
+    '</ul>',
+    '<p>Questions before ordering? Contact PawVault support and we will help you confirm fit, use case, and availability.</p>',
+  ].join('');
+}
+
+function scoreGrade(score: number): CommercialScore['grade'] {
+  if (score >= 85) return 'A';
+  if (score >= 72) return 'B';
+  if (score >= 58) return 'C';
+  return 'D';
+}
+
+function buildCommercialScore(input: {
+  listing: any;
+  duplicateCount: number;
+  profitIssue?: { action?: string; reason?: string } | null;
+}): CommercialScore {
+  const title = buyerTitle(input.listing);
+  const quality = titleQuality(title);
+  const imageCount = extractImageCount(input.listing.draftPayload);
+  const marginPct = n(input.listing.evaluation?.estimatedMarginPct);
+  const priceUsd = n(input.listing.listedPriceUsd);
+  const shippingKnown = Boolean(input.listing.shippingQuote);
+  const duplicateRisk = input.duplicateCount > 1;
+  const profitRisk = Boolean(input.profitIssue);
+  const socialPosts = Array.isArray(input.listing.socialPosts) ? input.listing.socialPosts.length : 0;
+  const promoted = Boolean(
+    input.listing.socialPosts?.some((post: any) => post.status === CJ_SHOPIFY_USA_SOCIAL_POST_STATUS.SUCCESS),
+  );
+  const issues: string[] = [];
+  const opportunities: string[] = [];
+  let score = 45;
+
+  score += Math.min(22, Math.max(-12, marginPct));
+  score += Math.min(16, Math.max(0, quality.score / 6));
+  score += Math.min(12, imageCount * 2);
+  score += shippingKnown ? 8 : -10;
+  score += priceUsd > 0 && priceUsd <= 35 ? 5 : priceUsd > 45 ? -4 : 0;
+  score += promoted ? 3 : 0;
+  score -= duplicateRisk ? 14 : 0;
+  score -= profitRisk ? 22 : 0;
+
+  if (marginPct < 10) issues.push('margen bajo o no demostrado');
+  if (!shippingKnown) issues.push('shipping CJ no confirmado');
+  if (imageCount === 0) issues.push('sin imagen local registrada');
+  if (quality.score < 80) issues.push(...quality.issues);
+  if (duplicateRisk) issues.push('posible duplicado activo');
+  if (input.profitIssue?.reason) issues.push(input.profitIssue.reason);
+
+  if (marginPct >= 15) opportunities.push('margen promocionable');
+  if (imageCount >= 4) opportunities.push('buena base visual');
+  if (!promoted && !profitRisk && !duplicateRisk && quality.score >= 80 && imageCount > 0) {
+    opportunities.push('candidato a trafico organico');
+  }
+  if (quality.score < 80) opportunities.push('mejorar titulo/descripcion SEO');
+  if (!shippingKnown) opportunities.push('enriquecer shipping antes de escalar');
+
+  const roundedScore = Math.max(0, Math.min(100, Math.round(score)));
+  let recommendedAction: CommercialScore['recommendedAction'] = 'WATCH';
+  if (profitRisk || marginPct < 10 || !shippingKnown) recommendedAction = 'PROFIT_GUARD';
+  else if (duplicateRisk) recommendedAction = 'CURATE_DUPLICATE';
+  else if (quality.score < 80 || imageCount === 0) recommendedAction = 'FIX';
+  else if (!promoted && roundedScore >= 72) recommendedAction = 'PROMOTE';
+
+  return {
+    listingId: input.listing.id,
+    title,
+    handle: input.listing.shopifyHandle,
+    score: roundedScore,
+    grade: scoreGrade(roundedScore),
+    priceUsd,
+    marginPct,
+    imageCount,
+    shippingKnown,
+    duplicateRisk,
+    profitRisk,
+    titleQualityScore: quality.score,
+    conversionSignals: {
+      promoted,
+      socialPosts,
+      hasSalesSignal: false,
+    },
+    issues: Array.from(new Set(issues)).slice(0, 5),
+    opportunities: Array.from(new Set(opportunities)).slice(0, 5),
+    recommendedAction,
+  };
+}
+
+function buildLearningMemory(input: {
+  traces: Array<{ message: string; meta: unknown; createdAt: Date }>;
+  visitors: number;
+  addToCartRatePct: number;
+  checkoutRatePct: number;
+  purchaseRatePct: number;
+  socialCounts: Record<string, number>;
+}) {
+  const actionOutcomes = input.traces
+    .filter((trace) => trace.message.startsWith('sales_agent.action.'))
+    .slice(0, 10)
+    .map((trace) => {
+      const meta = safeMeta(trace.meta);
+      const fixed = n(meta.results && Array.isArray(meta.results) ? meta.results.filter((row: any) => row.ok).length : meta.fixed);
+      return {
+        createdAt: trace.createdAt,
+        action: trace.message.replace('sales_agent.action.', ''),
+        impact: [
+          n(meta.queued) ? `${n(meta.queued)} promociones encoladas` : null,
+          n(meta.published) ? `${n(meta.published)} publicados` : null,
+          n(meta.unpublished) ? `${n(meta.unpublished)} despublicados` : null,
+          n(meta.priceIncreases) ? `${n(meta.priceIncreases)} precios protegidos` : null,
+          fixed ? `${fixed} fichas corregidas` : null,
+        ].filter(Boolean).join(' · ') || 'accion registrada',
+      };
+    });
+
+  const observations = [
+    input.purchaseRatePct === 0 && input.checkoutRatePct > 0
+      ? 'Hay visitas con intencion, pero aun no hay compra registrada; checkout y confianza siguen siendo prioridad.'
+      : 'El embudo no muestra bloqueo critico de pago en la ultima muestra.',
+    input.socialCounts[CJ_SHOPIFY_USA_SOCIAL_POST_STATUS.SUCCESS]
+      ? 'Ya existe historial de publicaciones organicas; conviene comparar productos promocionados contra carrito/checkout.'
+      : 'No hay suficientes promociones exitosas para aprender canal ganador; empezar con lotes pequenos.',
+    input.visitors >= 100 && input.addToCartRatePct < 3
+      ? 'El trafico no esta agregando al carrito con fuerza; mejorar ficha, precio percibido y confianza.'
+      : 'La senal de carrito permite seguir probando productos top.',
+  ];
+
+  return {
+    windowDays: 30,
+    confidence: input.purchaseRatePct > 0 ? 'media' : 'temprana',
+    observations,
+    actionOutcomes,
+    bestSignals: [
+      input.addToCartRatePct > 5 ? 'carrito saludable' : null,
+      input.checkoutRatePct > 1 ? 'checkout con intencion' : null,
+      input.socialCounts[CJ_SHOPIFY_USA_SOCIAL_POST_STATUS.SUCCESS] ? 'publicaciones organicas activas' : null,
+    ].filter(Boolean),
+    weakSignals: [
+      input.purchaseRatePct === 0 ? 'sin compras cerradas' : null,
+      input.checkoutRatePct > 0 && input.purchaseRatePct === 0 ? 'posible friccion en pago/confianza' : null,
+    ].filter(Boolean),
+  };
+}
+
+function buildDecisionTimeline(input: {
+  traces: Array<{ id: string | number; message: string; meta: unknown; createdAt: Date }>;
+  currentCycle: SalesAgentCycleResult | null;
+}) {
+  const traceItems = input.traces.slice(0, 12).map((trace) => {
+    const meta = safeMeta(trace.meta);
+    const status = trace.message.includes('failed') || n(meta.failed) > 0 ? 'needs_review' : 'done';
+    return {
+      id: `trace-${trace.id}`,
+      ts: trace.createdAt,
+      stage: trace.message.includes('profit') ? 'proteger margen' : trace.message.includes('promote') ? 'promocionar' : trace.message.includes('fix') ? 'corregir catalogo' : 'aprender',
+      title: trace.message.replace(/^sales_agent\./, '').replace(/_/g, ' '),
+      detail: [
+        n(meta.queued) ? `${n(meta.queued)} promociones` : null,
+        n(meta.published) ? `${n(meta.published)} publicados` : null,
+        n(meta.unpublished) ? `${n(meta.unpublished)} despublicados` : null,
+        n(meta.priceIncreases) ? `${n(meta.priceIncreases)} precios protegidos` : null,
+        n(meta.failed) ? `${n(meta.failed)} fallidos` : null,
+      ].filter(Boolean).join(' · ') || 'decision registrada',
+      status,
+    };
+  });
+  const cycleItems = (input.currentCycle?.events ?? []).slice(-8).map((event, index) => ({
+    id: `cycle-${input.currentCycle?.cycleId}-${index}`,
+    ts: new Date(event.ts),
+    stage: event.stage,
+    title: event.message,
+    detail: event.meta ? JSON.stringify(event.meta).slice(0, 120) : 'ciclo activo',
+    status: event.level === 'error' ? 'needs_review' : event.level === 'warn' ? 'watch' : 'done',
+  }));
+  return [...cycleItems, ...traceItems]
+    .sort((a, b) => Number(new Date(b.ts)) - Number(new Date(a.ts)))
+    .slice(0, 14);
+}
+
+function buildSalesCampaignPlan(input: {
+  scores: CommercialScore[];
+  publishableDrafts: Array<{ listingId: number; title: string; priceUsd: number; marginPct: number }>;
+}): SalesCampaignPlan {
+  const promote = input.scores
+    .filter((item) => item.recommendedAction === 'PROMOTE')
+    .slice(0, 6)
+    .map((item) => ({ listingId: item.listingId, title: item.title, handle: item.handle, score: item.score, marginPct: item.marginPct }));
+  const fixBeforeTraffic = input.scores
+    .filter((item) => item.recommendedAction === 'FIX')
+    .slice(0, 6)
+    .map((item) => ({ listingId: item.listingId, title: item.title, score: item.score, issues: item.issues }));
+  const protectMargin = input.scores
+    .filter((item) => item.recommendedAction === 'PROFIT_GUARD')
+    .slice(0, 6)
+    .map((item) => ({ listingId: item.listingId, title: item.title, score: item.score, issues: item.issues }));
+  const pauseOrMerge = input.scores
+    .filter((item) => item.recommendedAction === 'CURATE_DUPLICATE')
+    .slice(0, 6)
+    .map((item) => ({ listingId: item.listingId, title: item.title, score: item.score, issues: item.issues }));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    theme: promote[0]?.title ? `PawVault weekly push: ${promote[0].title}` : 'PawVault trust and catalog cleanup sprint',
+    objective: promote.length > 0
+      ? 'Llevar trafico organico solo a productos con margen, imagen y ficha confiable.'
+      : 'Primero limpiar margen/catalogo; luego activar promocion organica.',
+    budgetMode: 'organic_only',
+    channels: ['Pinterest', 'Instagram draft', 'TikTok script'],
+    promote,
+    fixBeforeTraffic,
+    protectMargin,
+    pauseOrMerge,
+    nextReviewAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  };
 }
 
 function safeMeta(meta: unknown): Record<string, any> {
@@ -370,7 +631,7 @@ export const cjShopifyUsaSalesAgentService = {
       prisma.cjShopifyUsaExecutionTrace.findMany({
         where: { userId, step: CJ_SHOPIFY_USA_TRACE_STEP.SALES_AGENT_ACTION },
         orderBy: { createdAt: 'desc' },
-        take: 12,
+        take: 30,
       }),
       prisma.cjShopifyUsaAutomationCycle.findFirst({
         where: { userId },
@@ -446,16 +707,26 @@ export const cjShopifyUsaSalesAgentService = {
       .map(([family, count]) => ({ family, count }));
 
     const copyIssues = activeListings
-      .map((listing) => ({
-        listingId: listing.id,
-        title: buyerTitle(listing),
-        suggestedTitle: buildBuyerReadyTitle(buyerTitle(listing)),
-        handle: listing.shopifyHandle,
-        shopifyProductId: listing.shopifyProductId,
-        imageCount: extractImageCount(listing.draftPayload),
-        ...titleQuality(buyerTitle(listing)),
-      }))
-      .filter((row) => row.score < 80 || row.imageCount === 0)
+      .map((listing) => {
+        const draft = draftRecord(listing.draftPayload);
+        const description = String(draft.descriptionHtml || draft.description || listing.product.description || '').replace(/<[^>]+>/g, ' ').trim();
+        const quality = titleQuality(buyerTitle(listing));
+        const issues = [...quality.issues];
+        if (description.length < 120) issues.push('descripcion demasiado debil');
+        return {
+          listingId: listing.id,
+          title: buyerTitle(listing),
+          suggestedTitle: buildBuyerReadyTitle(buyerTitle(listing)),
+          suggestedDescriptionHtml: buildBuyerReadyDescription(buildBuyerReadyTitle(buyerTitle(listing))),
+          handle: listing.shopifyHandle,
+          shopifyProductId: listing.shopifyProductId,
+          imageCount: extractImageCount(listing.draftPayload),
+          descriptionLength: description.length,
+          score: description.length < 120 ? Math.max(0, quality.score - 12) : quality.score,
+          issues,
+        };
+      })
+      .filter((row) => row.score < 80 || row.imageCount === 0 || row.descriptionLength < 120)
       .sort((a, b) => a.score - b.score)
       .slice(0, 12);
 
@@ -471,6 +742,21 @@ export const cjShopifyUsaSalesAgentService = {
     });
 
     const profitGuardIssueByListing = new Map(profitGuard.issues.map((issue) => [issue.listingId, issue]));
+    const commercialScores = activeListings
+      .map((listing) =>
+        buildCommercialScore({
+          listing,
+          duplicateCount: titleGroups.get(normalizeTitle(buyerTitle(listing)))?.length ?? 0,
+          profitIssue: profitGuardIssueByListing.get(listing.id) ?? null,
+        }),
+      )
+      .sort((a, b) => b.score - a.score);
+    const scoreDistribution = {
+      excellent: commercialScores.filter((item) => item.grade === 'A').length,
+      good: commercialScores.filter((item) => item.grade === 'B').length,
+      watch: commercialScores.filter((item) => item.grade === 'C').length,
+      risk: commercialScores.filter((item) => item.grade === 'D').length,
+    };
     const publishableDrafts = draftListings
       .filter((listing) => listing.evaluation?.decision === 'APPROVED')
       .filter((listing) => extractImageCount(listing.draftPayload) > 0)
@@ -540,6 +826,15 @@ export const cjShopifyUsaSalesAgentService = {
     const paidOrders30 = orders30.filter((order) =>
       ['CJ_ORDER_CREATED', 'CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING', 'CJ_SHIPPED', 'TRACKING_ON_SHOPIFY', 'COMPLETED'].includes(order.status),
     ).length;
+    const learningMemory = buildLearningMemory({
+      traces: recentAgentTraces,
+      visitors,
+      addToCartRatePct,
+      checkoutRatePct,
+      purchaseRatePct,
+      socialCounts,
+    });
+    const campaign = buildSalesCampaignPlan({ scores: commercialScores, publishableDrafts });
 
     const actions: SalesAgentAction[] = [];
 
@@ -599,6 +894,26 @@ export const cjShopifyUsaSalesAgentService = {
         canExecute: true,
         guardrails: ['Solo productos activos', 'Sin post exitoso previo', 'Sin gasto publicitario', 'No modifica precio ni inventario'],
         payload: { limit: Math.min(5, promotionCandidates.length), candidates: promotionCandidates.slice(0, 5) },
+      });
+    }
+
+    if (
+      campaign.promote.length > 0 ||
+      campaign.fixBeforeTraffic.length > 0 ||
+      campaign.protectMargin.length > 0 ||
+      campaign.pauseOrMerge.length > 0
+    ) {
+      actions.push({
+        id: 'build-sales-campaign',
+        type: 'BUILD_SALES_CAMPAIGN',
+        priority: campaign.protectMargin.length > 0 ? 'high' : 'medium',
+        title: 'Construir campana semanal con aprendizaje',
+        rationale: `${campaign.promote.length} productos para empujar, ${campaign.fixBeforeTraffic.length} fichas a corregir y ${campaign.protectMargin.length} riesgos de margen antes de escalar.`,
+        expectedImpact: 'Convertir diagnostico en una agenda semanal medible: corregir, promover, revisar y aprender.',
+        risk: 'safe',
+        canExecute: true,
+        guardrails: ['Organico sin gasto', 'No toca pagos', 'Usa score comercial', 'Registra plan y siguiente revision'],
+        payload: { campaign },
       });
     }
 
@@ -680,6 +995,16 @@ export const cjShopifyUsaSalesAgentService = {
       const weight: Record<SalesAgentPriority, number> = { critical: 4, high: 3, medium: 2, low: 1 };
       return weight[b.priority] - weight[a.priority];
     });
+    const schedulerStatus = await this.getSchedulerStatus(userId, false);
+    const decisionTimeline = buildDecisionTimeline({
+      traces: recentAgentTraces.map((trace) => ({
+        id: trace.id,
+        message: trace.message,
+        meta: trace.meta,
+        createdAt: trace.createdAt,
+      })),
+      currentCycle: schedulerStatus.currentCycle,
+    });
 
     return {
       ok: true,
@@ -746,7 +1071,7 @@ export const cjShopifyUsaSalesAgentService = {
         },
       },
       learning: {
-        scheduler: await this.getSchedulerStatus(userId, false),
+        scheduler: schedulerStatus,
         lastCycle: latestCycle
           ? {
               id: latestCycle.id,
@@ -764,6 +1089,7 @@ export const cjShopifyUsaSalesAgentService = {
           message: trace.message,
           meta: trace.meta,
         })),
+        memory: learningMemory,
         summary: [
           purchaseRatePct === 0
             ? 'No hay aprendizaje de ventas cerradas aun; priorizar checkout y trafico medible.'
@@ -773,6 +1099,16 @@ export const cjShopifyUsaSalesAgentService = {
             : 'Aun no hay publicaciones sociales exitosas registradas; empezar con lote pequeno controlado.',
         ],
       },
+      commercialScores: {
+        distribution: scoreDistribution,
+        top: commercialScores.slice(0, 10),
+        needsWork: [...commercialScores]
+          .filter((item) => item.score < 72 || item.recommendedAction !== 'WATCH')
+          .sort((a, b) => a.score - b.score)
+          .slice(0, 12),
+      },
+      campaign,
+      decisionTimeline,
       promotionCandidates,
       publishableDrafts,
       unsafeUnpublishCandidates,
@@ -795,7 +1131,7 @@ export const cjShopifyUsaSalesAgentService = {
   },
 
   async executeAction(userId: number, input: { actionType: SalesAgentActionType; limit?: number }) {
-    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'CURATE_SIMILAR_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY'].includes(input.actionType)) {
+    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'CURATE_SIMILAR_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY', 'BUILD_SALES_CAMPAIGN'].includes(input.actionType)) {
       await recordSalesAgentTrace(userId, 'sales_agent.action.blocked', {
         actionType: input.actionType,
         reason: 'This action requires explicit per-item approval in the current controlled mode.',
@@ -810,6 +1146,24 @@ export const cjShopifyUsaSalesAgentService = {
 
     const dashboard = await this.dashboard(userId);
     const limit = Math.max(1, Math.min(10, Number(input.limit ?? 5)));
+
+    if (input.actionType === 'BUILD_SALES_CAMPAIGN') {
+      await recordSalesAgentTrace(userId, 'sales_agent.action.build_sales_campaign', {
+        campaign: dashboard.campaign,
+        commercialScoreDistribution: dashboard.commercialScores.distribution,
+        learningConfidence: dashboard.learning.memory.confidence,
+      } as unknown as Prisma.InputJsonValue);
+      return {
+        ok: true,
+        executed: true,
+        actionType: input.actionType,
+        queued: dashboard.campaign.promote.length,
+        fixed: dashboard.campaign.fixBeforeTraffic.length,
+        reviewRequired: dashboard.campaign.protectMargin.length + dashboard.campaign.pauseOrMerge.length,
+        campaign: dashboard.campaign,
+        message: `Campana semanal registrada: ${dashboard.campaign.promote.length} para promover, ${dashboard.campaign.fixBeforeTraffic.length} a corregir y ${dashboard.campaign.protectMargin.length + dashboard.campaign.pauseOrMerge.length} riesgos a resolver.`,
+      };
+    }
 
     if (input.actionType === 'RUN_PROFIT_GUARD') {
       const shipping = await cjShopifyUsaProfitGuardService.enrichMissingShipping(userId, {
@@ -905,7 +1259,7 @@ export const cjShopifyUsaSalesAgentService = {
 
     if (input.actionType === 'FIX_CATALOG_QUALITY') {
       const selected = dashboard.catalog.fixableCopyIssues.slice(0, limit);
-      const results: Array<{ listingId: number; ok: boolean; beforeTitle: string; afterTitle: string; error?: string }> = [];
+      const results: Array<{ listingId: number; ok: boolean; beforeTitle: string; afterTitle: string; descriptionUpdated?: boolean; error?: string }> = [];
       for (const candidate of selected) {
         try {
           const listing = await prisma.cjShopifyUsaListing.findFirst({
@@ -917,31 +1271,37 @@ export const cjShopifyUsaSalesAgentService = {
           }
           const beforeTitle = buyerTitle(listing);
           const afterTitle = buildBuyerReadyTitle(beforeTitle);
-          if (!afterTitle || normalizeTitle(beforeTitle) === normalizeTitle(afterTitle)) {
-            results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle: beforeTitle });
+          const draft = draftRecord(listing.draftPayload);
+          const description = String(draft.descriptionHtml || draft.description || listing.product.description || '').replace(/<[^>]+>/g, ' ').trim();
+          const descriptionHtml = description.length < 120 ? buildBuyerReadyDescription(afterTitle || beforeTitle) : undefined;
+          const titleChanged = Boolean(afterTitle) && normalizeTitle(beforeTitle) !== normalizeTitle(afterTitle);
+          if (!titleChanged && !descriptionHtml) {
+            results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle: beforeTitle, descriptionUpdated: false });
             continue;
           }
           await cjShopifyUsaAdminService.updateProductDetails({
             userId,
             productId: listing.shopifyProductId,
-            title: afterTitle,
+            title: titleChanged ? afterTitle : undefined,
+            descriptionHtml,
           });
-          const draft = draftRecord(listing.draftPayload);
           await prisma.cjShopifyUsaListing.update({
             where: { id: listing.id },
             data: {
               draftPayload: {
                 ...draft,
-                title: afterTitle,
+                title: titleChanged ? afterTitle : beforeTitle,
+                descriptionHtml: descriptionHtml ?? draft.descriptionHtml,
                 salesAgentQualityFix: {
                   fixedAt: new Date().toISOString(),
                   beforeTitle,
                   afterTitle,
+                  descriptionUpdated: Boolean(descriptionHtml),
                 },
               } as Prisma.InputJsonValue,
             },
           });
-          results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle });
+          results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle, descriptionUpdated: Boolean(descriptionHtml) });
         } catch (error) {
           results.push({
             listingId: candidate.listingId,
