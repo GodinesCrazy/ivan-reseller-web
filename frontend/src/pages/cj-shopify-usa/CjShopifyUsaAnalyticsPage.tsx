@@ -118,6 +118,42 @@ function pct(value: number): string {
   return `${Number(value || 0).toFixed(2)}%`;
 }
 
+function FunnelJourney({ stages }: { stages: FunnelStage[] }) {
+  const maxCount = Math.max(1, ...stages.map((stage) => stage.count || 0));
+  const palette = ['from-cyan-400 to-sky-500', 'from-emerald-400 to-teal-500', 'from-amber-400 to-orange-500', 'from-rose-400 to-pink-500'];
+  return (
+    <div className="rounded-xl border border-cyan-500/30 bg-slate-950/70 p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+        {stages.map((stage, index) => {
+          const width = Math.max(7, ((stage.count || 0) / maxCount) * 100);
+          return (
+            <div key={stage.key} className="min-w-0 flex-1">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="truncate text-xs font-bold uppercase tracking-wide text-slate-300">{stage.label}</p>
+                <p className="font-mono text-xs text-slate-400">{stage.count}</p>
+              </div>
+              <div className="h-24 rounded-lg border border-slate-800 bg-slate-900/80 p-2">
+                <div className="flex h-full items-end">
+                  <div
+                    className={`rounded-md bg-gradient-to-t ${palette[index % palette.length]} shadow-lg shadow-cyan-950/30 transition-all duration-700`}
+                    style={{ height: `${Math.max(12, stage.ratePct)}%`, width: `${width}%` }}
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-2xl font-black text-white">{pct(stage.ratePct)}</p>
+              {index < stages.length - 1 && (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Siguiente: {stages[index + 1]?.label}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function CjShopifyUsaAnalyticsPage() {
   const [funnel, setFunnel] = useState<FunnelResponse | null>(null);
   const [readiness, setReadiness] = useState<CheckoutReadiness | null>(null);
@@ -260,6 +296,7 @@ export default function CjShopifyUsaAnalyticsPage() {
           <Activity className="h-5 w-5 text-emerald-300" />
           <h2 className="text-lg font-semibold text-slate-100">Analítica de conversión Shopify</h2>
         </div>
+        <FunnelJourney stages={funnel?.stages || []} />
         <div className="grid gap-3 md:grid-cols-3">
           {(funnel?.stages || []).map((stage) => (
             <div key={stage.key} className="rounded-lg border border-slate-700 bg-slate-900/70 p-4">

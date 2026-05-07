@@ -1493,8 +1493,19 @@ router.post('/sales-agent/actions', async (req: Request, res: Response, next: Ne
       actionType,
       limit: Number(req.body?.limit ?? 5),
     });
-    res.status(result.ok ? 200 : 409).json(result);
+    res.status(200).json(result);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('Catalog mutation lock is busy')) {
+      res.status(200).json({
+        ok: false,
+        executed: false,
+        actionType: String(req.body?.actionType || '').trim(),
+        blockedByLock: true,
+        message: 'El agente o la automatización ya está modificando el catálogo. Espera a que termine el ciclo activo y vuelve a ejecutar.',
+      });
+      return;
+    }
     next(error);
   }
 });

@@ -1964,7 +1964,7 @@ export const cjShopifyUsaSalesAgentService = {
     await recordSalesAgentTrace(userId, 'sales_agent.cycle.started', safeCycleMeta(cycle));
 
     try {
-      const dashboard = await this.dashboard(userId);
+      let dashboard = await this.dashboard(userId);
       cycle.diagnosisScore = dashboard.health.score;
       cycle.recommendations = dashboard.actions.length;
       log('diagnostic', 'info', 'Diagnostico comercial completado', {
@@ -1988,6 +1988,22 @@ export const cjShopifyUsaSalesAgentService = {
           maxUnpublishPerCycle: schedulerConfig.maxUnpublishPerCycle,
           maxPromotionsPerCycle: schedulerConfig.maxPromotionsPerCycle,
         });
+      }
+
+      if (dashboard.health.marginRisk || dashboard.profitGuard.reviewRequired > 0) {
+        const result = await this.executeAction(userId, { actionType: 'RUN_PROFIT_GUARD', limit: 5 });
+        cycle.errors += n((result as any).failed);
+        log((result as any).ok ? 'optimization' : 'safe_mode', (result as any).ok ? 'success' : 'warn', 'Profit Guard ejecutado antes de publicar o promocionar', {
+          ok: Boolean((result as any).ok),
+          priceIncreases: n((result as any).priceIncreases),
+          pausedUnsafe: n((result as any).pausedUnsafe),
+          reviewRequired: n((result as any).reviewRequired),
+          shippingEnriched: n((result as any).shippingEnriched),
+          message: String((result as any).message || ''),
+        });
+        dashboard = await this.dashboard(userId);
+      } else {
+        log('optimization', 'info', 'Profit Guard sin riesgos urgentes antes de publicar/promocionar');
       }
 
       if (schedulerConfig.autoUnpublishUnsafeListings && dashboard.unsafeUnpublishCandidates.length > 0) {

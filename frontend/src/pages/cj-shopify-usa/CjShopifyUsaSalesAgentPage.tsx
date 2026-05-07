@@ -499,7 +499,12 @@ export default function CjShopifyUsaSalesAgentPage() {
       });
       const result = (res.data ?? {}) as ActionExecutionResult;
       setActionResults((prev) => ({ ...prev, [action.id]: result }));
-      setMessage(String(result.message || 'Accion ejecutada.'));
+      if (result.ok === false) {
+        setError(null);
+        setMessage(String(result.message || 'La accion no se aplico porque requiere esperar o revisar guardrails.'));
+      } else {
+        setMessage(String(result.message || 'Accion ejecutada.'));
+      }
       await load();
     } catch (e) {
       setError(axiosMsg(e, 'No se pudo ejecutar la accion del agente.'));

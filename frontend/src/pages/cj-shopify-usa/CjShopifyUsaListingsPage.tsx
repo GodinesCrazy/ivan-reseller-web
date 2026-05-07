@@ -319,6 +319,68 @@ function primaryIssue(row: ListingRow): string {
   return statusLabel(row);
 }
 
+type LifecycleStep = {
+  key: string;
+  label: string;
+  state: 'done' | 'active' | 'blocked' | 'pending';
+};
+
+function lifecycleSteps(row: ListingRow): LifecycleStep[] {
+  const pricing = row.draftPayload?.pricingSnapshot;
+  const margin = Number(pricing?.netMarginPct ?? 0);
+  const profit = Number(pricing?.netProfitUsd ?? 0);
+  const hasDraft = Boolean(row.draftPayload);
+  const linked = Boolean(row.shopifyProductId);
+  const buyerReady = isBuyerReady(row);
+  const blocked = needsReview(row) || Boolean(row.lastError);
+  const profitOk = Number.isFinite(margin) && Number.isFinite(profit) && margin >= 10 && profit > 0;
+
+  return [
+    { key: 'draft', label: 'Draft', state: hasDraft ? 'done' : row.status === 'FAILED' ? 'blocked' : 'pending' },
+    { key: 'guardrails', label: 'Margen', state: profitOk ? 'done' : pricing ? 'blocked' : 'pending' },
+    { key: 'shopify', label: 'Shopify', state: linked ? (blocked && !buyerReady ? 'active' : 'done') : row.status === 'PUBLISHING' ? 'active' : 'pending' },
+    { key: 'storefront', label: 'Venta', state: buyerReady ? 'done' : blocked ? 'blocked' : linked ? 'active' : 'pending' },
+  ];
+}
+
+function stepClass(state: LifecycleStep['state']): string {
+  if (state === 'done') return 'border-emerald-500 bg-emerald-500 text-slate-950';
+  if (state === 'active') return 'border-cyan-400 bg-cyan-400 text-slate-950 animate-pulse';
+  if (state === 'blocked') return 'border-rose-400 bg-rose-500 text-white';
+  return 'border-slate-600 bg-slate-900 text-slate-500';
+}
+
+function ListingLifecycle({ row }: { row: ListingRow }) {
+  const steps = lifecycleSteps(row);
+  return (
+    <div className="mt-2 min-w-[210px]">
+      <div className="flex items-center">
+        {steps.map((step, index) => (
+          <Fragment key={step.key}>
+            <div className="flex flex-col items-center" title={`${step.label}: ${step.state}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-black ${stepClass(step.state)}`}>
+                {step.state === 'done' ? '✓' : index + 1}
+              </span>
+              <span className="mt-1 max-w-12 truncate text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                {step.label}
+              </span>
+            </div>
+            {index < steps.length - 1 && (
+              <span className={`mb-5 h-0.5 w-7 ${
+                steps[index].state === 'done' && steps[index + 1].state !== 'blocked'
+                  ? 'bg-emerald-500'
+                  : steps[index + 1].state === 'blocked'
+                    ? 'bg-rose-500/70'
+                    : 'bg-slate-700'
+              }`} />
+            )}
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('es-CL', {
@@ -888,6 +950,7 @@ export default function CjShopifyUsaListingsPage() {
                       <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusBadge(row)}`}>
                         {statusLabel(row)}
                       </span>
+                      <ListingLifecycle row={row} />
                     </td>
                     <td className="px-3 py-2 max-w-[180px]">
                       <p className="truncate font-medium text-slate-900 dark:text-slate-100 text-xs" title={row.product?.title}>
