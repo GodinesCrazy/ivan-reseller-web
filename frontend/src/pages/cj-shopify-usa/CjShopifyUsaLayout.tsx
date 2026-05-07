@@ -6,6 +6,7 @@ const links = [
   { to: '/cj-shopify-usa/products',    label: 'Productos CJ' },
   { to: '/cj-shopify-usa/listings',    label: 'Store Products' },
   { to: '/cj-shopify-usa/orders',      label: 'Órdenes' },
+  { to: '/cj-shopify-usa/post-sale',   label: 'Post Venta' },
   { to: '/cj-shopify-usa/alerts',      label: 'Alertas' },
   { to: '/cj-shopify-usa/profit',      label: 'Profit' },
   { to: '/cj-shopify-usa/analytics',   label: 'Analítica' },
