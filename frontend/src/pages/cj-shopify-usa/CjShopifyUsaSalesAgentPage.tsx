@@ -33,6 +33,24 @@ type SalesAction = {
   payload?: Record<string, unknown>;
 };
 
+type ActionExecutionResult = {
+  ok?: boolean;
+  executed?: boolean;
+  actionType?: string;
+  message?: string;
+  fixed?: number;
+  failed?: number;
+  published?: number;
+  unpublished?: number;
+  queued?: number;
+  priceIncreases?: number;
+  pausedUnsafe?: number;
+  reviewRequired?: number;
+  shippingEnriched?: number;
+  shippingFailed?: number;
+  rateLimited?: boolean;
+};
+
 type PromotionCandidate = {
   listingId: number;
   title: string;
@@ -209,12 +227,21 @@ function dateTime(value: string | null | undefined): string {
   return new Date(value).toLocaleString();
 }
 
+function actionResolved(result: ActionExecutionResult | undefined): boolean {
+  if (!result?.ok) return false;
+  return Number(result.failed ?? 0) === 0
+    && Number(result.shippingFailed ?? 0) === 0
+    && Number(result.reviewRequired ?? 0) === 0
+    && result.rateLimited !== true;
+}
+
 export default function CjShopifyUsaSalesAgentPage() {
   const [data, setData] = useState<SalesAgentDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [actionResults, setActionResults] = useState<Record<string, ActionExecutionResult>>({});
   const scheduler = data?.learning.scheduler;
 
   const load = useCallback(async () => {
@@ -232,6 +259,14 @@ export default function CjShopifyUsaSalesAgentPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    if (!running && scheduler?.state !== 'RUNNING' && scheduler?.currentCycle?.status !== 'RUNNING') return undefined;
+    const timer = window.setInterval(() => {
+      void load();
+    }, 6000);
+    return () => window.clearInterval(timer);
+  }, [load, running, scheduler?.currentCycle?.status, scheduler?.state]);
+
   const primaryAction = useMemo(
     () => data?.actions.find((action) => action.canExecute) ?? null,
     [data],
@@ -246,7 +281,9 @@ export default function CjShopifyUsaSalesAgentPage() {
         actionType: action.type,
         limit: 5,
       });
-      setMessage(String(res.data?.message || 'Accion ejecutada.'));
+      const result = (res.data ?? {}) as ActionExecutionResult;
+      setActionResults((prev) => ({ ...prev, [action.id]: result }));
+      setMessage(String(result.message || 'Accion ejecutada.'));
       await load();
     } catch (e) {
       setError(axiosMsg(e, 'No se pudo ejecutar la accion del agente.'));
@@ -260,7 +297,17 @@ export default function CjShopifyUsaSalesAgentPage() {
     setError(null);
     setMessage(null);
     try {
-      await api.post(`/api/cj-shopify-usa/sales-agent/scheduler/${command}`);
+      const res = await api.post(`/api/cj-shopify-usa/sales-agent/scheduler/${command}`);
+      if (command === 'run-now') {
+        setActionResults((prev) => ({
+          ...prev,
+          scheduler: {
+            ok: true,
+            executed: true,
+            message: String(res.data?.message || 'Ciclo manual del agente ejecutado.'),
+          },
+        }));
+      }
       setMessage(command === 'run-now' ? 'Ciclo del agente vendedor ejecutado.' : 'Estado del agente vendedor actualizado.');
       await load();
     } catch (e) {
@@ -324,6 +371,12 @@ export default function CjShopifyUsaSalesAgentPage() {
       {message && (
         <div className="rounded-lg border border-emerald-500/40 bg-emerald-950/25 px-4 py-3 text-sm text-emerald-100">
           {message}
+        </div>
+      )}
+      {running && (
+        <div className="flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-950/30 px-4 py-3 text-sm text-cyan-100">
+          <RefreshCw className="h-4 w-4 animate-spin" />
+          Procesando {running.startsWith('scheduler') ? 'ciclo del agente' : 'accion del agente'}... se actualizara automaticamente.
         </div>
       )}
 
@@ -429,7 +482,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                     className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/60 bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50"
                   >
                     <RefreshCw className="h-4 w-4" />
-                    Ejecutar ahora
+                    {running === 'scheduler-run-now' ? 'Ejecutando...' : 'Ejecutar ahora'}
                   </button>
                 </div>
               </div>
@@ -569,15 +622,22 @@ export default function CjShopifyUsaSalesAgentPage() {
                     onClick={() => void execute(primaryAction)}
                     className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
                   >
-                    <Megaphone className="h-4 w-4" />
-                    Ejecutar segura
+                    {running === primaryAction.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
+                    {running === primaryAction.id ? 'Ejecutando...' : 'Ejecutar con guardrails'}
                   </button>
                 )}
               </div>
 
               <div className="space-y-3">
                 {data.actions.map((action) => (
-                  <article key={action.id} className={`rounded-lg border p-4 ${priorityClass(action.priority)}`}>
+                  <article
+                    key={action.id}
+                    className={`rounded-lg border p-4 ${
+                      actionResolved(actionResults[action.id])
+                        ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-50'
+                        : priorityClass(action.priority)
+                    }`}
+                  >
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -587,10 +647,38 @@ export default function CjShopifyUsaSalesAgentPage() {
                           <span className="rounded-full border border-white/15 px-2 py-0.5 text-[11px]">
                             {riskLabel(action.risk)}
                           </span>
+                          {actionResults[action.id] && (
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                              actionResolved(actionResults[action.id])
+                                ? 'bg-emerald-500/20 text-emerald-100'
+                                : 'bg-amber-500/20 text-amber-100'
+                            }`}>
+                              {actionResolved(actionResults[action.id]) ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                              {actionResolved(actionResults[action.id]) ? 'Solucionado' : 'Ejecutado con pendientes'}
+                            </span>
+                          )}
                         </div>
                         <h4 className="mt-2 text-sm font-bold text-white">{action.title}</h4>
                         <p className="mt-1 text-sm text-slate-300">{action.rationale}</p>
                         <p className="mt-1 text-xs text-slate-400">{action.expectedImpact}</p>
+                        {actionResults[action.id] && (
+                          <div className="mt-3 rounded border border-emerald-500/30 bg-black/25 px-3 py-2 text-xs text-emerald-100">
+                            <p className="font-semibold">{actionResults[action.id].message || 'Accion ejecutada.'}</p>
+                            <p className="mt-1 text-emerald-200/80">
+                              {[
+                                actionResults[action.id].fixed !== undefined ? `corregidos ${actionResults[action.id].fixed}` : null,
+                                actionResults[action.id].published !== undefined ? `publicados ${actionResults[action.id].published}` : null,
+                                actionResults[action.id].unpublished !== undefined ? `despublicados ${actionResults[action.id].unpublished}` : null,
+                                actionResults[action.id].queued !== undefined ? `promociones ${actionResults[action.id].queued}` : null,
+                                actionResults[action.id].priceIncreases !== undefined ? `precios subidos ${actionResults[action.id].priceIncreases}` : null,
+                                actionResults[action.id].pausedUnsafe !== undefined ? `pausados ${actionResults[action.id].pausedUnsafe}` : null,
+                                actionResults[action.id].shippingEnriched !== undefined ? `shipping enriquecidos ${actionResults[action.id].shippingEnriched}` : null,
+                                actionResults[action.id].failed !== undefined ? `fallidos ${actionResults[action.id].failed}` : null,
+                                actionResults[action.id].reviewRequired !== undefined ? `revision ${actionResults[action.id].reviewRequired}` : null,
+                              ].filter(Boolean).join(' · ')}
+                            </p>
+                          </div>
+                        )}
                       </div>
                       {action.canExecute && (
                         <button
@@ -599,7 +687,10 @@ export default function CjShopifyUsaSalesAgentPage() {
                           onClick={() => void execute(action)}
                           className="shrink-0 rounded-lg border border-cyan-400/50 bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50"
                         >
-                          {running === action.id ? 'Ejecutando...' : 'Ejecutar'}
+                          <span className="inline-flex items-center gap-2">
+                            {running === action.id && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                            {running === action.id ? 'Ejecutando...' : actionResults[action.id]?.ok ? 'Ejecutar otra vez' : 'Ejecutar'}
+                          </span>
                         </button>
                       )}
                     </div>

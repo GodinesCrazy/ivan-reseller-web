@@ -566,8 +566,8 @@ export const cjShopifyUsaSalesAgentService = {
         rationale: `${profitGuard.reviewRequired + profitGuard.priceIncreases + profitGuard.pausedUnsafe} listings requieren revision de margen/precio.`,
         expectedImpact: 'Evita ventas con perdida y protege el margen minimo configurado.',
         risk: 'approval_required',
-        canExecute: false,
-        guardrails: ['Usar shipping real CJ cuando exista', 'Pausar si no se demuestra margen', 'No bajar precios bajo margen minimo'],
+        canExecute: true,
+        guardrails: ['Usar shipping real CJ cuando exista', 'Subir precio si falta margen', 'Pausar si no se demuestra margen', 'No bajar precios bajo margen minimo'],
         payload: { issues: profitGuard.issues.slice(0, 8) },
       });
     }
@@ -795,7 +795,7 @@ export const cjShopifyUsaSalesAgentService = {
   },
 
   async executeAction(userId: number, input: { actionType: SalesAgentActionType; limit?: number }) {
-    if (!['PROMOTE_TOP_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY'].includes(input.actionType)) {
+    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY'].includes(input.actionType)) {
       await recordSalesAgentTrace(userId, 'sales_agent.action.blocked', {
         actionType: input.actionType,
         reason: 'This action requires explicit per-item approval in the current controlled mode.',
@@ -810,6 +810,40 @@ export const cjShopifyUsaSalesAgentService = {
 
     const dashboard = await this.dashboard(userId);
     const limit = Math.max(1, Math.min(10, Number(input.limit ?? 5)));
+
+    if (input.actionType === 'RUN_PROFIT_GUARD') {
+      const shipping = await cjShopifyUsaProfitGuardService.enrichMissingShipping(userId, {
+        dryRun: false,
+        limit: 25,
+      });
+      const result = await cjShopifyUsaProfitGuardService.run(userId, {
+        dryRun: false,
+        pauseUnsafe: true,
+        limit: 500,
+      });
+      await recordSalesAgentTrace(userId, 'sales_agent.action.run_profit_guard', {
+        shipping,
+        scanned: result.scanned,
+        okCount: result.okCount,
+        priceIncreases: result.priceIncreases,
+        pausedUnsafe: result.pausedUnsafe,
+        reviewRequired: result.reviewRequired,
+        appliedIssues: result.issues.filter((issue) => issue.applied).slice(0, 20),
+      } as unknown as Prisma.InputJsonValue);
+      return {
+        ok: true,
+        executed: true,
+        actionType: input.actionType,
+        shippingEnriched: shipping.enriched,
+        shippingFailed: shipping.failed,
+        rateLimited: shipping.rateLimited,
+        scanned: result.scanned,
+        priceIncreases: result.priceIncreases,
+        pausedUnsafe: result.pausedUnsafe,
+        reviewRequired: result.reviewRequired,
+        message: `Profit Guard aplicado: ${result.priceIncreases} precios subidos, ${result.pausedUnsafe} pausados, ${shipping.enriched} shipping enriquecidos, ${result.reviewRequired} en revision.`,
+      };
+    }
 
     if (input.actionType === 'FIX_CATALOG_QUALITY') {
       const selected = dashboard.catalog.fixableCopyIssues.slice(0, limit);

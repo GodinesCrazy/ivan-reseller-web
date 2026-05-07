@@ -286,6 +286,85 @@ function specificTitle(base: string, detail: string | null, maxLength = 58): str
   return trimTitleToFit(`${detail} ${base}`, maxLength);
 }
 
+function isGenericBuyerTitle(title: unknown): boolean {
+  return titleQualityIssues(title).includes('title_too_generic');
+}
+
+function extractDistinctiveTitleDetail(input: {
+  rawTitle: string;
+  baseTitle: string;
+  variantAttributes?: Record<string, unknown> | null;
+}): string | null {
+  const variantDetail = titleDetail({
+    rawTitle: input.rawTitle,
+    lower: input.rawTitle.toLowerCase(),
+    variantAttributes: input.variantAttributes,
+  });
+  if (variantDetail) return variantDetail;
+
+  const baseWords = new Set(normalizedTitleKey(input.baseTitle).split(/\s+/).filter(Boolean));
+  const stopwords = new Set([
+    'pet',
+    'pets',
+    'dog',
+    'dogs',
+    'cat',
+    'cats',
+    'puppy',
+    'kitten',
+    'supplies',
+    'supply',
+    'accessory',
+    'accessories',
+    'product',
+    'products',
+    'new',
+    'for',
+    'with',
+    'and',
+    'the',
+    'a',
+    'an',
+    'of',
+    'to',
+  ]);
+  const words = dedupeWords(
+    normalizeWhitespace(input.rawTitle)
+      .replace(/&/g, ' and ')
+      .replace(/\b(cj[a-z0-9]+|\d{8,}[a-z0-9]*)\b/gi, ' ')
+      .replace(/[^a-zA-Z0-9]+/g, ' ')
+      .split(/\s+/)
+      .filter((word) => {
+        const key = word.toLowerCase();
+        return key.length >= 3 && !stopwords.has(key) && !baseWords.has(key);
+      }),
+  );
+
+  const preferred = words.filter((word) =>
+    /^(reflective|nylon|silicone|ceramic|waterproof|retractable|foldable|portable|automatic|interactive|slow|led|light|chest|harness|rope|filter|bamboo|stainless|steel|plush|braided|safety|training)$/i.test(word),
+  );
+  const selected = (preferred.length > 0 ? preferred : words).slice(0, 3);
+  return selected.length > 0 ? toTitleCase(selected.join(' ')) : null;
+}
+
+function specificBuyerReadyTitle(input: {
+  base: string;
+  rawTitle: string;
+  detail: string | null;
+  variantAttributes?: Record<string, unknown> | null;
+  maxLength?: number;
+}): string {
+  const maxLength = input.maxLength ?? 58;
+  const detail = input.detail || extractDistinctiveTitleDetail({
+    rawTitle: input.rawTitle,
+    baseTitle: input.base,
+    variantAttributes: input.variantAttributes,
+  });
+  const titled = specificTitle(input.base, detail, maxLength);
+  if (!isGenericBuyerTitle(titled)) return titled;
+  return trimTitleToFit(`Everyday ${input.base}`, maxLength);
+}
+
 function hasUsableImages(images: unknown): boolean {
   return Array.isArray(images)
     && images.some((image) => {
@@ -536,42 +615,49 @@ function buildProfessionalTitle(input: {
     return trimTitleToFit(toTitleCase(rawTitle));
   }
   const detail = titleDetail({ rawTitle, lower, variantAttributes: input.variantAttributes });
-  if (/airtag|tracker/.test(lower) && /\b(dog|pet|cat|collar)\b/.test(lower)) return specificTitle('AirTag Pet Collar', detail);
+  const buyerSpecific = (base: string) => specificBuyerReadyTitle({
+    base,
+    rawTitle,
+    detail,
+    variantAttributes: input.variantAttributes,
+  });
+
+  if (/airtag|tracker/.test(lower) && /\b(dog|pet|cat|collar)\b/.test(lower)) return buyerSpecific('AirTag Pet Collar');
   if (/missing food ball|food ball|treat ball/.test(lower)) return 'Dog Treat Puzzle Ball';
-  if (/food storage|storage bucket|storage container|kibble/.test(lower)) return specificTitle('Pet Food Storage Container', detail);
-  if (/tent|teepee/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Warm Pet Tent Bed', detail);
-  if (/fence|gate|partition/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Retractable Pet Safety Gate', detail);
+  if (/food storage|storage bucket|storage container|kibble/.test(lower)) return buyerSpecific('Pet Food Storage Container');
+  if (/tent|teepee/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return buyerSpecific('Warm Pet Tent Bed');
+  if (/fence|gate|partition/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return buyerSpecific('Retractable Pet Safety Gate');
   if (/chest strap/.test(lower) && /led|illuminated|light/.test(lower) && /\b(dog|pet)\b/.test(lower)) return 'LED Dog Harness';
   if (/terrarium|breeding box|climbing box/.test(lower)) return 'Small Pet Terrarium Box';
-  if (/shampoo|dispenser/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Pet Bath Brush with Shampoo Dispenser', detail);
-  if (/foaming|foam/.test(lower) && /brush/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Foaming Pet Bath Brush', detail);
+  if (/shampoo|dispenser/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return buyerSpecific('Pet Bath Brush with Shampoo Dispenser');
+  if (/foaming|foam/.test(lower) && /brush/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return buyerSpecific('Foaming Pet Bath Brush');
   if (/shampoo|bath|groom|brush|comb|nail|lint|hair|fur|massage/.test(lower) && /\b(pet|dog|cat|puppy|kitten)\b/.test(lower)) {
-    if (/nail|clipper|trimmer|grinder/.test(lower)) return specificTitle('Pet Nail Grooming Tool', detail);
-    if (/scissor|shear/.test(lower)) return specificTitle('Pet Grooming Scissors', detail);
-    if (/glove/.test(lower)) return specificTitle('Pet Grooming Glove', detail);
-    if (/comb/.test(lower)) return specificTitle('Pet Grooming Comb', detail);
-    return specificTitle('Pet Grooming Brush', detail);
+    if (/nail|clipper|trimmer|grinder/.test(lower)) return buyerSpecific('Pet Nail Grooming Tool');
+    if (/scissor|shear/.test(lower)) return buyerSpecific('Pet Grooming Scissors');
+    if (/glove/.test(lower)) return buyerSpecific('Pet Grooming Glove');
+    if (/comb/.test(lower)) return buyerSpecific('Pet Grooming Comb');
+    return buyerSpecific('Pet Grooming Brush');
   }
-  if (/stair|steps|ladder|ramp|slope/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Pet Stairs for Beds and Sofas', detail);
-  if (/fountain|water/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Pet Water Fountain', detail);
+  if (/stair|steps|ladder|ramp|slope/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return buyerSpecific('Pet Stairs for Beds and Sofas');
+  if (/fountain|water/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return buyerSpecific('Pet Water Fountain');
   if (/slow/.test(lower) && /feeder|bowl/.test(lower)) return 'Slow Feeder Pet Bowl';
-  if (/bowl|feeder|feeding|food/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return specificTitle('Pet Feeding Bowl', detail);
+  if (/bowl|feeder|feeding|food/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return buyerSpecific('Pet Feeding Bowl');
   if (/\b(bed|cushion|mat|blanket|sofa|pillow|house|nest)\b/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) {
-    if (/\bcat|kitten\b/.test(lower)) return specificTitle('Cat Comfort Bed', detail);
-    if (/\bdog|puppy\b/.test(lower)) return specificTitle('Dog Comfort Bed', detail);
-    return specificTitle('Pet Comfort Bed', detail);
+    if (/\bcat|kitten\b/.test(lower)) return buyerSpecific('Cat Comfort Bed');
+    if (/\bdog|puppy\b/.test(lower)) return buyerSpecific('Dog Comfort Bed');
+    return buyerSpecific('Pet Comfort Bed');
   }
-  if (/scratch/.test(lower) && /\bcat|kitten\b/.test(lower)) return specificTitle('Cat Scratcher Toy', detail);
+  if (/scratch/.test(lower) && /\bcat|kitten\b/.test(lower)) return buyerSpecific('Cat Scratcher Toy');
   if (/toy|chew|squeak|puzzle|ball|teaser|tunnel/.test(lower) && /\b(pet|dog|cat|puppy|kitten)\b/.test(lower)) {
-    if (/\bdog|puppy\b/.test(lower)) return specificTitle('Dog Enrichment Toy', detail);
-    if (/\bcat|kitten\b/.test(lower)) return specificTitle('Cat Enrichment Toy', detail);
-    return specificTitle('Pet Enrichment Toy', detail);
+    if (/\bdog|puppy\b/.test(lower)) return buyerSpecific('Dog Enrichment Toy');
+    if (/\bcat|kitten\b/.test(lower)) return buyerSpecific('Cat Enrichment Toy');
+    return buyerSpecific('Pet Enrichment Toy');
   }
   if (/seat belt|safety belt/.test(lower) && /\b(pet|dog|cat)\b/.test(lower)) return 'Pet Seat Belt';
-  if (/carrier|sling|bag|backpack/.test(lower) && /\b(pet|dog|cat|hamster)\b/.test(lower)) return specificTitle('Pet Travel Carrier', detail);
-  if (/leash/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return specificTitle('Adjustable Dog Leash', detail);
-  if (/harness/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return specificTitle('Dog Harness', detail);
-  if (/collar/.test(lower) && /\b(dog|cat|pet|puppy|kitten)\b/.test(lower)) return specificTitle('Adjustable Pet Collar', detail);
+  if (/carrier|sling|bag|backpack/.test(lower) && /\b(pet|dog|cat|hamster)\b/.test(lower)) return buyerSpecific('Pet Travel Carrier');
+  if (/leash/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return buyerSpecific('Adjustable Dog Leash');
+  if (/harness/.test(lower) && /\b(dog|puppy)\b/.test(lower)) return buyerSpecific('Dog Harness');
+  if (/collar/.test(lower) && /\b(dog|cat|pet|puppy|kitten)\b/.test(lower)) return buyerSpecific('Adjustable Pet Collar');
   if (/keyboard.*mouse.*wrist rest/i.test(rawTitle)) return 'Keyboard and Mouse Wrist Rest Set';
   if (/lipstick|lip gloss|chapstick|mascara/i.test(rawTitle) && /(organizer|holder)/i.test(rawTitle)) return 'Lipstick Organizer';
   if (/car seat gap/i.test(rawTitle) && /(organizer|filler|console)/i.test(rawTitle)) return 'Car Seat Gap Organizer';
@@ -1294,6 +1380,34 @@ export const cjShopifyUsaPublishService = {
       throw new AppError('Listing draft payload is missing. Create a draft first.', 400, ErrorCode.VALIDATION_ERROR);
     }
 
+    let productTitle = String(draft.title || listing.product.title || 'Pet Product').trim();
+    const rebuiltTitle = buildDraftTitle({
+      title: listing.product.title,
+      variantAttributes: (listing.variant?.attributes ?? draft.variantAttributes ?? null) as Record<string, unknown> | null,
+    });
+    if (titleQualityIssues(productTitle).length > 0 && rebuiltTitle && normalizedTitleKey(rebuiltTitle) !== normalizedTitleKey(productTitle)) {
+      const previousTitle = productTitle;
+      productTitle = rebuiltTitle;
+      draft.title = rebuiltTitle;
+      draft.productType = cjShopifyUsaCategorizationService.inferProductType(rebuiltTitle);
+      draft.salesAgentQualityFix = {
+        ...(draft.salesAgentQualityFix && typeof draft.salesAgentQualityFix === 'object' ? draft.salesAgentQualityFix : {}),
+        fixedAt: new Date().toISOString(),
+        beforeTitle: previousTitle,
+        afterTitle: rebuiltTitle,
+        source: 'publish_preflight',
+      };
+      await prisma.cjShopifyUsaListing.update({
+        where: { id: listing.id },
+        data: { draftPayload: draft as Prisma.InputJsonValue },
+      });
+      await recordTrace(input.userId, CJ_SHOPIFY_USA_TRACE_STEP.LISTING_PUBLISH_START, 'listing.title.rebuilt_before_publish', {
+        listingId: listing.id,
+        beforeTitle: previousTitle,
+        afterTitle: rebuiltTitle,
+      } as Prisma.InputJsonValue);
+    }
+
     const { settings, probe, location, publication, additionalPublications } = await resolveShopifyPublishTargets(input.userId);
     const minStock = Math.max(0, Number(settings.minStock ?? 1));
     const maxSellPriceUsd = resolveMaxSellPriceUsd(settings.maxSellPriceUsd);
@@ -1376,7 +1490,7 @@ export const cjShopifyUsaPublishService = {
     }
 
     if (!isCjShopifyUsaPetProduct({
-      title: draft.title || listing.product.title,
+      title: productTitle,
       description: draft.descriptionHtml || listing.product.description,
       productType: draft.productType,
       attributes: draft.variantAttributes ?? listing.variant?.attributes,
@@ -1467,7 +1581,6 @@ export const cjShopifyUsaPublishService = {
       const allToPublish = [listing, ...siblingDrafts];
       publishAttemptListingIds = allToPublish.map((candidate) => candidate.id);
       const isMultiVariant = allToPublish.length > 1;
-      const productTitle = String(draft.title || listing.product.title || 'Pet Product');
 
       // Build variant options when there are multiple variants
       let productOptions: Parameters<typeof cjShopifyUsaAdminService.upsertProduct>[0]['productOptions'];
