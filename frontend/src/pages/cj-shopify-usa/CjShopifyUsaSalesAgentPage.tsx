@@ -7,9 +7,12 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Megaphone,
+  Pause,
+  Play,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Square,
   Target,
   TrendingUp,
 } from 'lucide-react';
@@ -40,6 +43,35 @@ type PromotionCandidate = {
   score: number;
   url: string;
   caption: string;
+};
+
+type SalesAgentScheduler = {
+  state: 'IDLE' | 'RUNNING' | 'PAUSED' | 'ERROR';
+  config: {
+    enabled: boolean;
+    intervalHours: number;
+    safeMode: boolean;
+    autoPublishApprovedDrafts: boolean;
+    autoUnpublishUnsafeListings: boolean;
+    autoPromoteOrganic: boolean;
+    maxPublishPerCycle: number;
+    maxUnpublishPerCycle: number;
+    maxPromotionsPerCycle: number;
+  };
+  currentCycle: null | {
+    cycleId: string;
+    startedAt: string;
+    status: string;
+    diagnosisScore: number;
+    published: number;
+    unpublished: number;
+    promoted: number;
+    errors: number;
+    events: Array<{ ts: string; stage: string; level: string; message: string; meta?: Record<string, unknown> }>;
+  };
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  cycleHistory: Array<Record<string, unknown>>;
 };
 
 type SalesAgentDashboard = {
@@ -96,6 +128,7 @@ type SalesAgentDashboard = {
     };
   };
   learning: {
+    scheduler: SalesAgentScheduler;
     lastCycle: null | {
       id: string;
       status: string;
@@ -169,12 +202,18 @@ function statusTone(ok: boolean): string {
     : 'border-red-500/40 bg-red-950/25 text-red-100';
 }
 
+function dateTime(value: string | null | undefined): string {
+  if (!value) return 'N/D';
+  return new Date(value).toLocaleString();
+}
+
 export default function CjShopifyUsaSalesAgentPage() {
   const [data, setData] = useState<SalesAgentDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const scheduler = data?.learning.scheduler;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -209,6 +248,36 @@ export default function CjShopifyUsaSalesAgentPage() {
       await load();
     } catch (e) {
       setError(axiosMsg(e, 'No se pudo ejecutar la accion del agente.'));
+    } finally {
+      setRunning(null);
+    }
+  };
+
+  const schedulerCommand = async (command: 'start' | 'pause' | 'stop' | 'run-now') => {
+    setRunning(`scheduler-${command}`);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.post(`/api/cj-shopify-usa/sales-agent/scheduler/${command}`);
+      setMessage(command === 'run-now' ? 'Ciclo del agente vendedor ejecutado.' : 'Estado del agente vendedor actualizado.');
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, 'No se pudo controlar el ciclo del agente vendedor.'));
+    } finally {
+      setRunning(null);
+    }
+  };
+
+  const updateSchedulerConfig = async (patch: Partial<SalesAgentScheduler['config']>) => {
+    setRunning('scheduler-config');
+    setError(null);
+    setMessage(null);
+    try {
+      await api.patch('/api/cj-shopify-usa/sales-agent/scheduler/config', patch);
+      setMessage('Configuracion del ciclo vendedor guardada.');
+      await load();
+    } catch (e) {
+      setError(axiosMsg(e, 'No se pudo guardar la configuracion del agente vendedor.'));
     } finally {
       setRunning(null);
     }
@@ -284,6 +353,147 @@ export default function CjShopifyUsaSalesAgentPage() {
               <p className="text-xs text-slate-500">Compra {pct(data.kpis.purchaseRatePct)} · {data.kpis.visitors} visitantes</p>
             </div>
           </section>
+
+          {scheduler && (
+            <section className="rounded-lg border border-cyan-500/25 bg-slate-950 p-4">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                      <Bot className="h-4 w-4 text-cyan-300" />
+                      Ciclo autonomo vendedor
+                    </h3>
+                    <span className={`rounded-full px-2 py-1 text-xs font-bold ${
+                      scheduler.state === 'RUNNING'
+                        ? 'bg-emerald-500/15 text-emerald-200'
+                        : scheduler.state === 'ERROR'
+                          ? 'bg-red-500/15 text-red-200'
+                          : 'bg-slate-800 text-slate-300'
+                    }`}>
+                      {scheduler.state}
+                    </span>
+                    <span className="rounded-full bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200">
+                      cada {scheduler.config.intervalHours}h
+                    </span>
+                    {scheduler.config.safeMode && (
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200">
+                        modo seguro
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 max-w-3xl text-sm text-slate-400">
+                    Diagnostica tienda, optimiza catalogo con limites, publica/despublica solo bajo guardrails,
+                    encola marketing organico y aprende de conversiones, trazas y resultados sociales.
+                  </p>
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-300 md:grid-cols-3">
+                    <span className="rounded bg-slate-900 p-2">Ultimo ciclo: <b>{dateTime(scheduler.lastRunAt)}</b></span>
+                    <span className="rounded bg-slate-900 p-2">Proximo ciclo: <b>{dateTime(scheduler.nextRunAt)}</b></span>
+                    <span className="rounded bg-slate-900 p-2">Historial: <b>{scheduler.cycleHistory.length}</b> ciclos</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={running === 'scheduler-start'}
+                    onClick={() => void schedulerCommand('start')}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                  >
+                    <Play className="h-4 w-4" />
+                    Iniciar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={running === 'scheduler-pause'}
+                    onClick={() => void schedulerCommand('pause')}
+                    className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+                  >
+                    <Pause className="h-4 w-4" />
+                    Pausar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={running === 'scheduler-stop'}
+                    onClick={() => void schedulerCommand('stop')}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-100 hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    <Square className="h-4 w-4" />
+                    Detener
+                  </button>
+                  <button
+                    type="button"
+                    disabled={running === 'scheduler-run-now'}
+                    onClick={() => void schedulerCommand('run-now')}
+                    className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/60 bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Ejecutar ahora
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_1fr]">
+                <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                  <p className="text-xs font-bold uppercase text-slate-500">Limites seguros por ciclo</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {[
+                      ['Publicar', 'maxPublishPerCycle'],
+                      ['Despublicar', 'maxUnpublishPerCycle'],
+                      ['Promover', 'maxPromotionsPerCycle'],
+                    ].map(([label, key]) => (
+                      <label key={key} className="text-[11px] text-slate-400">
+                        {label}
+                        <input
+                          type="number"
+                          min="0"
+                          max={key === 'maxPromotionsPerCycle' ? 20 : 10}
+                          value={Number(scheduler.config[key as keyof SalesAgentScheduler['config']])}
+                          onChange={(event) => void updateSchedulerConfig({ [key]: Number(event.target.value) })}
+                          className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                  <p className="text-xs font-bold uppercase text-slate-500">Automatizaciones permitidas</p>
+                  <div className="mt-3 grid gap-2 text-xs text-slate-300">
+                    {[
+                      ['autoPublishApprovedDrafts', 'Publicar drafts aprobados'],
+                      ['autoUnpublishUnsafeListings', 'Despublicar PAUSE_UNSAFE'],
+                      ['autoPromoteOrganic', 'Marketing organico'],
+                      ['safeMode', 'Modo seguro'],
+                    ].map(([key, label]) => (
+                      <label key={key} className="flex items-center justify-between gap-3 rounded bg-black/20 px-3 py-2">
+                        {label}
+                        <input
+                          type="checkbox"
+                          checked={Boolean(scheduler.config[key as keyof SalesAgentScheduler['config']])}
+                          onChange={(event) => void updateSchedulerConfig({ [key]: event.target.checked })}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                  <p className="text-xs font-bold uppercase text-slate-500">Ultima ejecucion</p>
+                  <div className="mt-3 space-y-2">
+                    {(scheduler.currentCycle?.events ?? []).slice(-4).map((event) => (
+                      <div key={`${event.ts}-${event.message}`} className="rounded bg-black/20 px-3 py-2 text-xs">
+                        <p className="font-semibold text-slate-200">{event.stage} · {event.level}</p>
+                        <p className="text-slate-400">{event.message}</p>
+                      </div>
+                    ))}
+                    {!scheduler.currentCycle?.events?.length && (
+                      <p className="text-xs text-slate-500">Sin ciclo en ejecucion ahora.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
 
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr_1fr]">
             <div className={`rounded-lg border p-4 ${statusTone(data.shopifyTruth.ok)}`}>

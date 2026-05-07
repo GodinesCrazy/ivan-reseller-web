@@ -34,6 +34,65 @@ type SalesAgentAction = {
   payload?: Record<string, unknown>;
 };
 
+type SalesAgentSchedulerState = 'IDLE' | 'RUNNING' | 'PAUSED' | 'ERROR';
+
+type SalesAgentCycleStage = 'diagnostic' | 'optimization' | 'marketing' | 'learning' | 'safe_mode';
+
+type SalesAgentSchedulerConfig = {
+  enabled: boolean;
+  intervalHours: number;
+  safeMode: boolean;
+  autoPublishApprovedDrafts: boolean;
+  autoUnpublishUnsafeListings: boolean;
+  autoPromoteOrganic: boolean;
+  maxPublishPerCycle: number;
+  maxUnpublishPerCycle: number;
+  maxPromotionsPerCycle: number;
+};
+
+type SalesAgentCycleEvent = {
+  ts: string;
+  stage: SalesAgentCycleStage;
+  level: 'info' | 'success' | 'warn' | 'error';
+  message: string;
+  meta?: Record<string, unknown>;
+};
+
+type SalesAgentCycleResult = {
+  cycleId: string;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'ABORTED';
+  diagnosisScore: number;
+  published: number;
+  unpublished: number;
+  promoted: number;
+  recommendations: number;
+  errors: number;
+  events: SalesAgentCycleEvent[];
+};
+
+const DEFAULT_SALES_AGENT_CONFIG: SalesAgentSchedulerConfig = {
+  enabled: false,
+  intervalHours: 24,
+  safeMode: true,
+  autoPublishApprovedDrafts: true,
+  autoUnpublishUnsafeListings: true,
+  autoPromoteOrganic: true,
+  maxPublishPerCycle: 2,
+  maxUnpublishPerCycle: 3,
+  maxPromotionsPerCycle: 5,
+};
+
+let schedulerState: SalesAgentSchedulerState = 'IDLE';
+let schedulerConfig: SalesAgentSchedulerConfig = { ...DEFAULT_SALES_AGENT_CONFIG };
+let schedulerTimer: ReturnType<typeof setInterval> | null = null;
+let currentSalesCycle: SalesAgentCycleResult | null = null;
+let salesCycleHistory: SalesAgentCycleResult[] = [];
+let schedulerLastRunAt: Date | null = null;
+let schedulerNextRunAt: Date | null = null;
+
 function n(value: unknown): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -104,6 +163,94 @@ async function recordSalesAgentTrace(userId: number, message: string, meta?: Pri
       meta,
     },
   });
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(parsed)));
+}
+
+function clampConfig(input: Partial<SalesAgentSchedulerConfig>): SalesAgentSchedulerConfig {
+  return {
+    enabled: typeof input.enabled === 'boolean' ? input.enabled : schedulerConfig.enabled,
+    intervalHours: clampNumber(input.intervalHours, 1, 168, schedulerConfig.intervalHours),
+    safeMode: typeof input.safeMode === 'boolean' ? input.safeMode : schedulerConfig.safeMode,
+    autoPublishApprovedDrafts:
+      typeof input.autoPublishApprovedDrafts === 'boolean'
+        ? input.autoPublishApprovedDrafts
+        : schedulerConfig.autoPublishApprovedDrafts,
+    autoUnpublishUnsafeListings:
+      typeof input.autoUnpublishUnsafeListings === 'boolean'
+        ? input.autoUnpublishUnsafeListings
+        : schedulerConfig.autoUnpublishUnsafeListings,
+    autoPromoteOrganic:
+      typeof input.autoPromoteOrganic === 'boolean'
+        ? input.autoPromoteOrganic
+        : schedulerConfig.autoPromoteOrganic,
+    maxPublishPerCycle: clampNumber(input.maxPublishPerCycle, 0, 5, schedulerConfig.maxPublishPerCycle),
+    maxUnpublishPerCycle: clampNumber(input.maxUnpublishPerCycle, 0, 10, schedulerConfig.maxUnpublishPerCycle),
+    maxPromotionsPerCycle: clampNumber(input.maxPromotionsPerCycle, 0, 20, schedulerConfig.maxPromotionsPerCycle),
+  };
+}
+
+function safeCycleMeta(cycle: SalesAgentCycleResult): Prisma.InputJsonValue {
+  return {
+    cycleId: cycle.cycleId,
+    startedAt: cycle.startedAt,
+    finishedAt: cycle.finishedAt ?? null,
+    durationMs: cycle.durationMs ?? null,
+    status: cycle.status,
+    diagnosisScore: cycle.diagnosisScore,
+    published: cycle.published,
+    unpublished: cycle.unpublished,
+    promoted: cycle.promoted,
+    recommendations: cycle.recommendations,
+    errors: cycle.errors,
+    events: cycle.events,
+  } as Prisma.InputJsonValue;
+}
+
+async function loadSchedulerConfig(userId: number) {
+  const latest = await prisma.cjShopifyUsaExecutionTrace.findFirst({
+    where: {
+      userId,
+      step: CJ_SHOPIFY_USA_TRACE_STEP.SALES_AGENT_ACTION,
+      message: 'sales_agent.scheduler.config',
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  const meta = safeMeta(latest?.meta);
+  schedulerConfig = clampConfig({
+    ...DEFAULT_SALES_AGENT_CONFIG,
+    ...meta,
+  });
+  if (schedulerState !== 'RUNNING' && schedulerState !== 'PAUSED') {
+    schedulerState = schedulerConfig.enabled ? 'RUNNING' : 'IDLE';
+  }
+}
+
+async function persistSchedulerConfig(userId: number) {
+  await recordSalesAgentTrace(userId, 'sales_agent.scheduler.config', schedulerConfig as Prisma.InputJsonValue);
+}
+
+function pushSalesCycleHistory(cycle: SalesAgentCycleResult) {
+  salesCycleHistory.unshift(cycle);
+  salesCycleHistory = salesCycleHistory.slice(0, 12);
+}
+
+function scheduleSalesAgent(userId: number, runCycle: (userId: number) => Promise<SalesAgentCycleResult | null>) {
+  if (schedulerTimer) clearInterval(schedulerTimer);
+  if (schedulerState !== 'RUNNING' || !schedulerConfig.enabled) {
+    schedulerTimer = null;
+    schedulerNextRunAt = null;
+    return;
+  }
+  const ms = schedulerConfig.intervalHours * 60 * 60 * 1000;
+  schedulerTimer = setInterval(() => {
+    runCycle(userId).catch(() => {});
+  }, ms);
+  schedulerNextRunAt = new Date(Date.now() + ms);
 }
 
 export const cjShopifyUsaSalesAgentService = {
@@ -506,6 +653,7 @@ export const cjShopifyUsaSalesAgentService = {
         },
       },
       learning: {
+        scheduler: await this.getSchedulerStatus(userId, false),
         lastCycle: latestCycle
           ? {
               id: latestCycle.id,
@@ -657,5 +805,236 @@ export const cjShopifyUsaSalesAgentService = {
         ? `Se encolaron ${selected.length} publicaciones organicas en Pinterest.`
         : 'No hay productos elegibles para promocion segura en este momento.',
     };
+  },
+
+  async getSchedulerStatus(userId: number, hydrate = true) {
+    if (hydrate) {
+      await loadSchedulerConfig(userId);
+      scheduleSalesAgent(userId, (id) => this.runSalesCycle(id));
+    }
+    const recentCycles = await prisma.cjShopifyUsaExecutionTrace.findMany({
+      where: {
+        userId,
+        step: CJ_SHOPIFY_USA_TRACE_STEP.SALES_AGENT_ACTION,
+        message: { in: ['sales_agent.cycle.completed', 'sales_agent.cycle.failed', 'sales_agent.cycle.aborted'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+    });
+    return {
+      state: schedulerState,
+      config: schedulerConfig,
+      currentCycle: currentSalesCycle,
+      lastRunAt: schedulerLastRunAt?.toISOString() ?? null,
+      nextRunAt: schedulerNextRunAt?.toISOString() ?? null,
+      cycleHistory: salesCycleHistory.length
+        ? salesCycleHistory
+        : recentCycles.map((trace) => safeMeta(trace.meta)),
+    };
+  },
+
+  async updateSchedulerConfig(userId: number, patch: Partial<SalesAgentSchedulerConfig>) {
+    await loadSchedulerConfig(userId);
+    const previousInterval = schedulerConfig.intervalHours;
+    schedulerConfig = clampConfig({
+      ...schedulerConfig,
+      ...patch,
+      enabled: schedulerConfig.enabled,
+    });
+    if (schedulerState === 'RUNNING' && previousInterval !== schedulerConfig.intervalHours) {
+      scheduleSalesAgent(userId, (id) => this.runSalesCycle(id));
+    }
+    await persistSchedulerConfig(userId);
+    return this.getSchedulerStatus(userId);
+  },
+
+  async startScheduler(userId: number) {
+    await loadSchedulerConfig(userId);
+    schedulerConfig.enabled = true;
+    schedulerState = 'RUNNING';
+    await persistSchedulerConfig(userId);
+    scheduleSalesAgent(userId, (id) => this.runSalesCycle(id));
+    void this.runSalesCycle(userId);
+    return this.getSchedulerStatus(userId, false);
+  },
+
+  async pauseScheduler(userId: number) {
+    await loadSchedulerConfig(userId);
+    schedulerState = 'PAUSED';
+    schedulerConfig.enabled = true;
+    if (schedulerTimer) clearInterval(schedulerTimer);
+    schedulerTimer = null;
+    schedulerNextRunAt = null;
+    await persistSchedulerConfig(userId);
+    return this.getSchedulerStatus(userId, false);
+  },
+
+  async stopScheduler(userId: number) {
+    schedulerState = 'IDLE';
+    schedulerConfig.enabled = false;
+    if (schedulerTimer) clearInterval(schedulerTimer);
+    schedulerTimer = null;
+    schedulerNextRunAt = null;
+    if (currentSalesCycle?.status === 'RUNNING') {
+      currentSalesCycle.status = 'ABORTED';
+      currentSalesCycle.finishedAt = new Date().toISOString();
+      currentSalesCycle.durationMs = Date.now() - new Date(currentSalesCycle.startedAt).getTime();
+      pushSalesCycleHistory(currentSalesCycle);
+      await recordSalesAgentTrace(userId, 'sales_agent.cycle.aborted', safeCycleMeta(currentSalesCycle));
+      currentSalesCycle = null;
+    }
+    await persistSchedulerConfig(userId);
+    return this.getSchedulerStatus(userId, false);
+  },
+
+  async startIfEnabled(userId: number) {
+    await loadSchedulerConfig(userId);
+    if (!schedulerConfig.enabled || schedulerState === 'PAUSED') return this.getSchedulerStatus(userId, false);
+    schedulerState = 'RUNNING';
+    scheduleSalesAgent(userId, (id) => this.runSalesCycle(id));
+    return this.getSchedulerStatus(userId, false);
+  },
+
+  async runSalesCycle(userId: number) {
+    if (currentSalesCycle?.status === 'RUNNING') return currentSalesCycle;
+    await loadSchedulerConfig(userId);
+    if (schedulerState !== 'RUNNING') schedulerState = 'RUNNING';
+
+    const cycle: SalesAgentCycleResult = {
+      cycleId: `sales-cycle-${Date.now()}`,
+      startedAt: new Date().toISOString(),
+      status: 'RUNNING',
+      diagnosisScore: 0,
+      published: 0,
+      unpublished: 0,
+      promoted: 0,
+      recommendations: 0,
+      errors: 0,
+      events: [],
+    };
+    currentSalesCycle = cycle;
+    schedulerLastRunAt = new Date();
+
+    const log = (
+      stage: SalesAgentCycleStage,
+      level: SalesAgentCycleEvent['level'],
+      message: string,
+      meta?: Record<string, unknown>,
+    ) => {
+      cycle.events.push({ ts: new Date().toISOString(), stage, level, message, meta });
+    };
+
+    await recordSalesAgentTrace(userId, 'sales_agent.cycle.started', safeCycleMeta(cycle));
+
+    try {
+      const dashboard = await this.dashboard(userId);
+      cycle.diagnosisScore = dashboard.health.score;
+      cycle.recommendations = dashboard.actions.length;
+      log('diagnostic', 'info', 'Diagnostico comercial completado', {
+        healthScore: dashboard.health.score,
+        activeListings: dashboard.kpis.activeListings,
+        shopifyProducts: dashboard.shopifyTruth.activeProducts,
+        purchaseRatePct: dashboard.kpis.purchaseRatePct,
+        marginRisk: dashboard.health.marginRisk,
+        catalogTrustRisk: dashboard.health.catalogTrustRisk,
+      });
+
+      if (schedulerConfig.safeMode) {
+        log('safe_mode', 'info', 'Modo seguro activo: sin pagos, ads, cambios agresivos de precio ni lotes masivos', {
+          maxPublishPerCycle: schedulerConfig.maxPublishPerCycle,
+          maxUnpublishPerCycle: schedulerConfig.maxUnpublishPerCycle,
+          maxPromotionsPerCycle: schedulerConfig.maxPromotionsPerCycle,
+        });
+      }
+
+      if (schedulerConfig.autoUnpublishUnsafeListings && dashboard.unsafeUnpublishCandidates.length > 0) {
+        const limit = schedulerConfig.safeMode
+          ? Math.min(schedulerConfig.maxUnpublishPerCycle, 3)
+          : schedulerConfig.maxUnpublishPerCycle;
+        if (limit > 0) {
+          const result = await this.executeAction(userId, { actionType: 'UNPUBLISH_UNSAFE_LISTINGS', limit });
+          cycle.unpublished = n((result as any).unpublished);
+          cycle.errors += n((result as any).failed);
+          log('optimization', cycle.unpublished > 0 ? 'success' : 'warn', 'Despublicacion segura ejecutada', {
+            requested: Math.min(limit, dashboard.unsafeUnpublishCandidates.length),
+            unpublished: cycle.unpublished,
+            failed: n((result as any).failed),
+          });
+        }
+      } else {
+        log('optimization', 'info', 'Sin candidatos PAUSE_UNSAFE para despublicar');
+      }
+
+      if (schedulerConfig.autoPublishApprovedDrafts && dashboard.publishableDrafts.length > 0) {
+        const limit = schedulerConfig.safeMode
+          ? Math.min(schedulerConfig.maxPublishPerCycle, 2)
+          : schedulerConfig.maxPublishPerCycle;
+        if (limit > 0) {
+          const result = await this.executeAction(userId, { actionType: 'PUBLISH_APPROVED_BACKLOG', limit });
+          cycle.published = n((result as any).published);
+          cycle.errors += n((result as any).failed);
+          log('optimization', cycle.published > 0 ? 'success' : 'warn', 'Publicacion segura de drafts ejecutada', {
+            requested: Math.min(limit, dashboard.publishableDrafts.length),
+            published: cycle.published,
+            failed: n((result as any).failed),
+          });
+        }
+      } else {
+        log('optimization', 'info', 'Sin drafts aprobados y seguros para publicar');
+      }
+
+      if (schedulerConfig.autoPromoteOrganic && dashboard.promotionCandidates.length > 0) {
+        if (dashboard.health.checkoutRisk) {
+          log('marketing', 'warn', 'Promocion organica pausada por riesgo de checkout: hay llegada a checkout sin compras');
+        } else {
+          const limit = schedulerConfig.safeMode
+            ? Math.min(schedulerConfig.maxPromotionsPerCycle, 5)
+            : schedulerConfig.maxPromotionsPerCycle;
+          if (limit > 0) {
+            const result = await this.executeAction(userId, { actionType: 'PROMOTE_TOP_PRODUCTS', limit });
+            cycle.promoted = n((result as any).queued);
+            log('marketing', cycle.promoted > 0 ? 'success' : 'warn', 'Marketing organico encolado', {
+              platform: 'Pinterest',
+              queued: cycle.promoted,
+              instagram: 'manual_until_oauth',
+              tiktok: 'manual_until_oauth',
+            });
+          }
+        }
+      } else {
+        log('marketing', 'info', 'Sin candidatos elegibles para marketing organico');
+      }
+
+      const learningSignals = {
+        salesLearningReady: dashboard.kpis.paidOrders30 > 0,
+        socialLearningReady: dashboard.kpis.socialPublished > 0,
+        funnelLearningReady: dashboard.kpis.visitors > 0,
+        topAction: dashboard.actions[0]?.type ?? null,
+      };
+      log('learning', 'info', 'Aprendizaje actualizado con resultados del ciclo', learningSignals);
+
+      cycle.status = 'COMPLETED';
+      cycle.finishedAt = new Date().toISOString();
+      cycle.durationMs = Date.now() - new Date(cycle.startedAt).getTime();
+      pushSalesCycleHistory(cycle);
+      currentSalesCycle = null;
+      if (!schedulerConfig.enabled) schedulerState = 'IDLE';
+      schedulerNextRunAt = schedulerConfig.enabled
+        ? new Date(Date.now() + schedulerConfig.intervalHours * 60 * 60 * 1000)
+        : null;
+      await recordSalesAgentTrace(userId, 'sales_agent.cycle.completed', safeCycleMeta(cycle));
+      return cycle;
+    } catch (error) {
+      cycle.status = 'FAILED';
+      cycle.finishedAt = new Date().toISOString();
+      cycle.durationMs = Date.now() - new Date(cycle.startedAt).getTime();
+      cycle.errors += 1;
+      log('safe_mode', 'error', error instanceof Error ? error.message : String(error));
+      schedulerState = schedulerConfig.enabled ? 'ERROR' : 'IDLE';
+      pushSalesCycleHistory(cycle);
+      currentSalesCycle = null;
+      await recordSalesAgentTrace(userId, 'sales_agent.cycle.failed', safeCycleMeta(cycle));
+      return cycle;
+    }
   },
 };

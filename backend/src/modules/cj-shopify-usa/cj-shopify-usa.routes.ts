@@ -1070,6 +1070,66 @@ router.post('/sales-agent/actions', async (req: Request, res: Response, next: Ne
   }
 });
 
+router.get('/sales-agent/scheduler', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesAgentService.getSchedulerStatus(userId);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/sales-agent/scheduler/config', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesAgentService.updateSchedulerConfig(userId, req.body ?? {});
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/sales-agent/scheduler/start', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesAgentService.startScheduler(userId);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/sales-agent/scheduler/pause', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesAgentService.pauseScheduler(userId);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/sales-agent/scheduler/stop', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesAgentService.stopScheduler(userId);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/sales-agent/scheduler/run-now', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesAgentService.runSalesCycle(userId);
+    res.json({ ok: true, cycle: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ── GET /products — list CJ product snapshots with evaluations ─────────────────
 
 router.get('/products', async (req: Request, res: Response, next: NextFunction) => {

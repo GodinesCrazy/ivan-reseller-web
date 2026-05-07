@@ -482,6 +482,18 @@ export async function fullBootstrap(startTime: number): Promise<void> {
           console.warn('[BOOT] ⚠️  CJ Shopify USA automation auto-start failed (non-fatal):', err?.message);
         }
       });
+
+      setImmediate(async () => {
+        try {
+          const { cjShopifyUsaSalesAgentService } = await import('../modules/cj-shopify-usa/services/cj-shopify-usa-sales-agent.service');
+          const status = process.env.AUTO_START_CJ_SHOPIFY_SALES_AGENT === 'true'
+            ? await cjShopifyUsaSalesAgentService.startScheduler(1)
+            : await cjShopifyUsaSalesAgentService.startIfEnabled(1);
+          console.log('[BOOT] ✅ CJ Shopify USA sales agent startup check:', status.state, status.config.enabled ? '(enabled)' : '(disabled)');
+        } catch (err: any) {
+          console.warn('[BOOT] ⚠️  CJ Shopify USA sales agent auto-start failed (non-fatal):', err?.message);
+        }
+      });
     }
 
     const totalInitTime = Date.now() - startTime;
