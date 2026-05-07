@@ -17,6 +17,7 @@ import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service.js';
 import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service.js';
 import { cjShopifyUsaProfitGuardService } from './cj-shopify-usa-profit-guard.service.js';
+import { cjShopifyUsaOperationLockService } from './cj-shopify-usa-operation-lock.service.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ export interface CycleEvent {
   ts: string;
   level: 'info' | 'success' | 'warn' | 'error';
   message: string;
+  phase?: string;
 }
 
 export interface CycleResult {
@@ -51,6 +53,9 @@ export interface CycleResult {
   errors: number;
   status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'ABORTED';
   events: CycleEvent[];
+  phase?: string;
+  phaseLabel?: string;
+  phaseProgress?: number;
 }
 
 interface DiscoveryStats {
@@ -496,8 +501,9 @@ class CjShopifyUsaAutomationService {
     const cycleId = `cycle-${Date.now()}`;
     const events: CycleEvent[] = [];
 
+    let activePhase: string | undefined;
     const log = (level: CycleEvent['level'], message: string) => {
-      events.push({ ts: new Date().toISOString(), level, message });
+      events.push({ ts: new Date().toISOString(), level, message, phase: activePhase });
     };
 
     const cycle: CycleResult = {
@@ -514,9 +520,26 @@ class CjShopifyUsaAutomationService {
     };
     this.currentCycle = cycle;
     this.abortSignal = false;
+
+    const setPhase = (phase: string, phaseLabel: string, phaseProgress: number) => {
+      activePhase = phase;
+      cycle.phase = phase;
+      cycle.phaseLabel = phaseLabel;
+      cycle.phaseProgress = Math.max(0, Math.min(100, phaseProgress));
+    };
+
+    const withCatalogLock = async <T>(label: string, fn: () => Promise<T>): Promise<T> => (
+      cjShopifyUsaOperationLockService.withCatalogMutationLock(userId, 'automation', fn, {
+        onBusy: async (active) => {
+          log('warn', `${label} delayed: catalog mutation lock is busy by ${active.owner}.`);
+        },
+      })
+    );
+
     await this.persistCycle(userId, cycle);
 
     try {
+      setPhase('limits', 'Revisando límites diarios', 5);
       log('info', `Cycle ${cycleId} started — checking daily limits`);
 
       // Reset daily counter if new day
@@ -540,6 +563,7 @@ class CjShopifyUsaAutomationService {
       log('info', `Will publish up to ${perCycleLimit} products this cycle (${remainingToday} remaining today)`);
 
       // ── Step 0: CJ Discovery — search for new pet products ──
+      setPhase('discovery', 'Descubriendo productos CJ', 10);
       log('info', 'Step 0: Discovering new CJ pet products...');
       try {
         const discovery = await this.discoverNewPetProducts(userId, log);
@@ -553,6 +577,7 @@ class CjShopifyUsaAutomationService {
       }
 
       // ── Step 0.5: Post-sale queue — paid orders, supplier balance waits, tracking ──
+      setPhase('post_sale', 'Procesando cola post venta', 24);
       log('info', 'Step 0.5: Processing post-sale queue (paid orders, CJ balance waits, tracking)...');
       try {
         const postSaleOrders = await prisma.cjShopifyUsaOrder.findMany({
@@ -600,6 +625,7 @@ class CjShopifyUsaAutomationService {
       }
 
       // ── Step 0.8: Sync active listing prices (Phase 4) ──
+      setPhase('profit_guard', 'Sincronizando precios y margen', 38);
       log('info', 'Step 0.8: Syncing prices for active listings...');
       try {
         await this.syncActiveListingPrices(userId, log);
@@ -620,6 +646,7 @@ class CjShopifyUsaAutomationService {
       }
 
       // ── Step 0.9: Turn eligible catalog backlog into fresh evaluations ──
+      setPhase('backlog_eval', 'Evaluando backlog CJ no listado', 50);
       log('info', 'Step 0.9: Evaluating unlisted catalog backlog...');
       try {
         const backlogEval = await this.evaluatePendingCatalogBacklog(userId, log);
@@ -652,6 +679,7 @@ class CjShopifyUsaAutomationService {
       }
 
       // ── Step 1: Find products with APPROVED evaluation and no active listing ──
+      setPhase('candidate_scan', 'Buscando candidatos publicables', 60);
       log('info', 'Scanning approved CJ products database...');
 
       const settings = await cjShopifyUsaConfigService.getConfigSnapshot(userId);
@@ -763,6 +791,7 @@ class CjShopifyUsaAutomationService {
       log('info', `${uniqueCandidates.length} unique products ready to publish`);
 
       // ── Step 2.5: Publish existing DRAFT listings (backlog) ──
+      setPhase('draft_backlog', 'Publicando drafts aprobados', 70);
       log('info', 'Step 2.5: Publishing existing DRAFT listings backlog...');
       try {
         const draftBacklog = await prisma.cjShopifyUsaListing.findMany({
@@ -790,7 +819,9 @@ class CjShopifyUsaAutomationService {
             if (this.abortSignal) break;
             if (this.dailyPublishCount >= this.config.maxDailyPublish) break;
             try {
-              await cjShopifyUsaPublishService.publishListing({ userId, listingId: draft.id });
+              await withCatalogLock(`Backlog listing ${draft.id}`, () =>
+                cjShopifyUsaPublishService.publishListing({ userId, listingId: draft.id }),
+              );
               backlogPublished++;
               this.dailyPublishCount++;
               cycle.published++;
@@ -826,7 +857,10 @@ class CjShopifyUsaAutomationService {
       log('info', `Processing top ${toProcess.length} new products this cycle`);
 
       // ── Step 4: Create drafts + optionally publish ──
-      for (const ev of toProcess) {
+      setPhase('publishing', 'Creando drafts y publicando', 76);
+      for (let index = 0; index < toProcess.length; index++) {
+        const ev = toProcess[index];
+        cycle.phaseProgress = Math.max(76, Math.min(98, 76 + ((index + 1) / Math.max(1, toProcess.length)) * 22));
         if (this.abortSignal) { log('warn', 'Cycle aborted by user'); break; }
 
         const product = ev.product;
@@ -836,65 +870,67 @@ class CjShopifyUsaAutomationService {
         try {
           log('info', `Creating draft: ${product.title?.slice(0, 50) ?? product.cjProductId}`);
 
-          const listing = await cjShopifyUsaPublishService.buildDraft({
-            userId,
-            productId: product.id,
-            variantId: firstVariant.id,
-            preferredShippingQuoteId: ev.shippingQuoteId ?? null,
-          });
+          await withCatalogLock(`Product ${product.cjProductId}`, async () => {
+            const listing = await cjShopifyUsaPublishService.buildDraft({
+              userId,
+              productId: product.id,
+              variantId: firstVariant.id,
+              preferredShippingQuoteId: ev.shippingQuoteId ?? null,
+            });
 
-          // ── Step 4b: Auto-draft sibling variants for multi-variant publishing ──
-          // Load ALL variants for this product and create sibling drafts
-          const allVariants = await prisma.cjShopifyUsaProductVariant.findMany({
-            where: { productId: product.id },
-            orderBy: { id: 'asc' },
-          });
-          let siblingsDrafted = 0;
-          for (const sibVar of allVariants) {
-            if (sibVar.id === firstVariant.id) continue;
-            if (Number(sibVar.unitCostUsd ?? 0) <= 0) continue;
-            if (Number(sibVar.stockLastKnown ?? 0) < 1) continue;
-            try {
-              await cjShopifyUsaPublishService.buildDraft({
-                userId,
-                productId: product.id,
-                variantId: sibVar.id,
-                quantity: 1,
-              });
-              siblingsDrafted++;
-            } catch {
-              // Sibling draft failure is non-blocking
-            }
-          }
-          if (siblingsDrafted > 0) {
-            log('info', `Auto-drafted ${siblingsDrafted} sibling variants for multi-variant publishing`);
-          }
-
-          cycle.draftsCreated++;
-          log('success', `Draft created: listing #${listing.id}`);
-
-          // ── Step 5: Auto-publish if configured ──
-          if (this.config.autoPublish) {
-            const published = await cjShopifyUsaPublishService.publishListing({ userId, listingId: listing.id });
-            cycle.published++;
-            this.dailyPublishCount++;
-            log('success', `Published: ${product.title?.slice(0, 40) ?? product.cjProductId} — daily total: ${this.dailyPublishCount}`);
-
-            // ── Step 6: Assign to pet collections ──
-            if (published.shopifyProductId) {
-              await this.assignToCollections(userId, published.shopifyProductId, product.title ?? '');
-            }
-
-            // ── Step 7: Expand variants (safety net for products with unpublished variants) ──
-            try {
-              const expandResult = await cjShopifyUsaPublishService.expandProductVariants({ userId, listingId: listing.id });
-              if (expandResult.expanded > 0) {
-                log('success', `Expanded: +${expandResult.expanded} variants for ${product.title?.slice(0, 40)}`);
+            // ── Step 4b: Auto-draft sibling variants for multi-variant publishing ──
+            // Load ALL variants for this product and create sibling drafts
+            const allVariants = await prisma.cjShopifyUsaProductVariant.findMany({
+              where: { productId: product.id },
+              orderBy: { id: 'asc' },
+            });
+            let siblingsDrafted = 0;
+            for (const sibVar of allVariants) {
+              if (sibVar.id === firstVariant.id) continue;
+              if (Number(sibVar.unitCostUsd ?? 0) <= 0) continue;
+              if (Number(sibVar.stockLastKnown ?? 0) < 1) continue;
+              try {
+                await cjShopifyUsaPublishService.buildDraft({
+                  userId,
+                  productId: product.id,
+                  variantId: sibVar.id,
+                  quantity: 1,
+                });
+                siblingsDrafted++;
+              } catch {
+                // Sibling draft failure is non-blocking
               }
-            } catch {
-              // Expand failure is non-blocking — product is already published
             }
-          }
+            if (siblingsDrafted > 0) {
+              log('info', `Auto-drafted ${siblingsDrafted} sibling variants for multi-variant publishing`);
+            }
+
+            cycle.draftsCreated++;
+            log('success', `Draft created: listing #${listing.id}`);
+
+            // ── Step 5: Auto-publish if configured ──
+            if (this.config.autoPublish) {
+              const published = await cjShopifyUsaPublishService.publishListing({ userId, listingId: listing.id });
+              cycle.published++;
+              this.dailyPublishCount++;
+              log('success', `Published: ${product.title?.slice(0, 40) ?? product.cjProductId} — daily total: ${this.dailyPublishCount}`);
+
+              // ── Step 6: Assign to pet collections ──
+              if (published.shopifyProductId) {
+                await this.assignToCollections(userId, published.shopifyProductId, product.title ?? '');
+              }
+
+              // ── Step 7: Expand variants (safety net for products with unpublished variants) ──
+              try {
+                const expandResult = await cjShopifyUsaPublishService.expandProductVariants({ userId, listingId: listing.id });
+                if (expandResult.expanded > 0) {
+                  log('success', `Expanded: +${expandResult.expanded} variants for ${product.title?.slice(0, 40)}`);
+                }
+              } catch {
+                // Expand failure is non-blocking — product is already published
+              }
+            }
+          });
 
           // Small delay to avoid API rate limits
           await new Promise((r) => setTimeout(r, 800));
@@ -907,6 +943,7 @@ class CjShopifyUsaAutomationService {
       }
 
       cycle.status = 'COMPLETED';
+      setPhase('completed', 'Ciclo completado', 100);
       log('success', `Cycle complete — ${cycle.published} published, ${cycle.errors} errors, ${cycle.skipped} skipped`);
 
     } catch (err) {

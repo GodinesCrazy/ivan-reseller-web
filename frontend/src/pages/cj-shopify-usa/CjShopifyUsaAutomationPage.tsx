@@ -18,6 +18,7 @@ interface CycleEvent {
   ts: string;
   level: 'info' | 'success' | 'warn' | 'error';
   message: string;
+  phase?: string;
 }
 
 interface CycleResult {
@@ -33,6 +34,9 @@ interface CycleResult {
   errors: number;
   status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'ABORTED';
   events: CycleEvent[];
+  phase?: string;
+  phaseLabel?: string;
+  phaseProgress?: number;
 }
 
 interface StatusResponse {
@@ -122,6 +126,18 @@ const LOG_COLOR: Record<CycleEvent['level'], string> = {
 
 const LOG_ICON: Record<CycleEvent['level'], string> = {
   info: '·', success: '✓', warn: '⚠', error: '✗',
+};
+
+const PHASE_LABELS: Record<string, string> = {
+  limits: 'Límites',
+  discovery: 'Discovery',
+  post_sale: 'Post venta',
+  profit_guard: 'Profit Guard',
+  backlog_eval: 'Backlog',
+  candidate_scan: 'Candidatos',
+  draft_backlog: 'Drafts',
+  publishing: 'Publicación',
+  completed: 'Completo',
 };
 
 // ── Animated Engine Ring ───────────────────────────────────────────────────
@@ -381,7 +397,9 @@ export default function CjShopifyUsaAutomationPage() {
 
   // Progress: for running cycle estimate based on elapsed vs expected
   let progress = 0;
-  if (cycle?.status === 'RUNNING' && cycle.productsApproved > 0) {
+  if (cycle?.status === 'RUNNING' && typeof cycle.phaseProgress === 'number') {
+    progress = Math.min(99, cycle.phaseProgress);
+  } else if (cycle?.status === 'RUNNING' && cycle.productsApproved > 0) {
     progress = Math.min(99, ((cycle.published + cycle.errors + cycle.skipped) / cycle.productsApproved) * 100);
   } else if (cycle?.status === 'COMPLETED') {
     progress = 100;
@@ -506,6 +524,34 @@ export default function CjShopifyUsaAutomationPage() {
                     </>
                   ) : null}
                 </div>
+
+                {cycle && (
+                  <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="font-semibold uppercase tracking-wide text-cyan-300">
+                        Fase actual
+                      </span>
+                      <span className="font-mono text-slate-300">{Math.round(progress)}%</span>
+                    </div>
+                    <p className="mt-1 text-sm font-semibold text-white">
+                      {cycle.phaseLabel ?? (cycle.phase ? PHASE_LABELS[cycle.phase] : 'Preparando ciclo')}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {Object.entries(PHASE_LABELS).map(([key, label]) => (
+                        <span
+                          key={key}
+                          className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                            key === cycle.phase
+                              ? 'border-cyan-400 bg-cyan-500/15 text-cyan-100'
+                              : 'border-slate-700 bg-slate-900 text-slate-500'
+                          }`}
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -779,19 +779,62 @@ router.post('/listings/:listingId/expand-variants', async (req: Request, res: Re
 router.get('/orders', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const orders = await prisma.cjShopifyUsaOrder.findMany({
-      where: { userId },
-      include: {
-        tracking: true,
-        events: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
+    const page = Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1);
+    const pageSize = Math.max(10, Math.min(100, Number.parseInt(String(req.query.pageSize ?? '25'), 10) || 25));
+    const status = String(req.query.status ?? 'ALL').trim().toUpperCase();
+    const attentionOnly = String(req.query.attention ?? 'false') === 'true';
+    const q = String(req.query.q ?? '').trim();
+    const attentionStatuses = [
+      CJ_SHOPIFY_USA_ORDER_STATUS.FAILED,
+      CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+      CJ_SHOPIFY_USA_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
+    ];
+
+    const where: Prisma.CjShopifyUsaOrderWhereInput = { userId };
+    if (attentionOnly) {
+      where.status = { in: attentionStatuses };
+    } else if (status !== 'ALL') {
+      where.status = status;
+    }
+    if (q) {
+      where.OR = [
+        { shopifyOrderId: { contains: q, mode: 'insensitive' } },
+        { cjOrderId: { contains: q, mode: 'insensitive' } },
+        { shopifySku: { contains: q, mode: 'insensitive' } },
+        { lastError: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [orders, total, groupedStatuses] = await Promise.all([
+      prisma.cjShopifyUsaOrder.findMany({
+        where,
+        include: {
+          tracking: true,
+          events: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          },
         },
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 100,
+        orderBy: { updatedAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.cjShopifyUsaOrder.count({ where }),
+      prisma.cjShopifyUsaOrder.groupBy({
+        by: ['status'],
+        where: { userId },
+        _count: { status: true },
+      }),
+    ]);
+    res.json({
+      ok: true,
+      orders,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      statusCounts: normalizeCountMap(groupedStatuses),
     });
-    res.json({ ok: true, orders });
   } catch (error) {
     next(error);
   }
@@ -976,6 +1019,26 @@ router.get('/post-sale/dashboard', async (req: Request, res: Response, next: Nex
         next: 'Orden cerrada con tracking o fulfillment confirmado.',
       },
     ];
+    const ordersNeedingAttention = sumStatuses(countsByStatus, ['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED']);
+    const activeQueue = sumStatuses(countsByStatus, ['VALIDATED', 'SUPPLIER_PAYMENT_BLOCKED', 'CJ_ORDER_PLACING', 'CJ_ORDER_PLACED', 'CJ_ORDER_CREATED', 'CJ_ORDER_CONFIRMING', 'CJ_ORDER_CONFIRMED', 'CJ_PAYMENT_PENDING', 'CJ_PAYMENT_PROCESSING', 'CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING', 'CJ_SHIPPED']);
+    const queueCanRun = sumStatuses(countsByStatus, ['VALIDATED', 'SUPPLIER_PAYMENT_BLOCKED']) > 0;
+    const recommendedAction = queueCanRun
+      ? {
+          key: 'queue',
+          label: 'Procesar cola post venta',
+          description: 'Compra/reintenta en CJ solo órdenes pagadas y validadas; si falta saldo, quedan esperando.',
+        }
+      : activeQueue > 0
+        ? {
+            key: 'tracking',
+            label: 'Sincronizar tracking CJ',
+            description: 'Busca guías disponibles y actualiza Shopify cuando CJ ya haya enviado.',
+          }
+        : {
+            key: 'sync',
+            label: 'Sincronizar órdenes Shopify',
+            description: 'Importa pagos recientes y detecta nuevas órdenes para iniciar el ciclo post venta.',
+          };
 
     res.json({
       ok: true,
@@ -983,9 +1046,11 @@ router.get('/post-sale/dashboard', async (req: Request, res: Response, next: Nex
       stages,
       totals: {
         orders: Object.values(countsByStatus).reduce((sum, count) => sum + count, 0),
-        activeQueue: sumStatuses(countsByStatus, ['VALIDATED', 'SUPPLIER_PAYMENT_BLOCKED', 'CJ_ORDER_PLACING', 'CJ_ORDER_PLACED', 'CJ_ORDER_CREATED', 'CJ_ORDER_CONFIRMING', 'CJ_ORDER_CONFIRMED', 'CJ_PAYMENT_PENDING', 'CJ_PAYMENT_PROCESSING', 'CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING', 'CJ_SHIPPED']),
+        activeQueue,
         waitingPayment: sumStatuses(countsByStatus, ['WAITING_PAYMENT', 'DETECTED']),
-        needsAttention: sumStatuses(countsByStatus, ['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED']) + openAlerts.length,
+        needsAttention: ordersNeedingAttention,
+        ordersNeedingAttention,
+        openAlerts: openAlerts.length,
         completed: countsByStatus.COMPLETED ?? 0,
         traceSignals72h: recentTraceCount,
       },
@@ -993,8 +1058,9 @@ router.get('/post-sale/dashboard', async (req: Request, res: Response, next: Nex
         lastOrder,
         lastTracking,
         openAlerts: openAlerts.length,
-        queueCanRun: sumStatuses(countsByStatus, ['VALIDATED', 'SUPPLIER_PAYMENT_BLOCKED']) > 0,
+        queueCanRun,
       },
+      recommendedAction,
       recentOrders,
       recentEvents,
       openAlerts,

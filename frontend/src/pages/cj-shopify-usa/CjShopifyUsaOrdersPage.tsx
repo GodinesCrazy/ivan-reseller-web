@@ -40,6 +40,16 @@ type OrderRow = {
   } | null;
 };
 
+type OrdersResponse = {
+  ok: boolean;
+  orders: OrderRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  statusCounts: Record<string, number>;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<string, string> = {
@@ -162,21 +172,39 @@ export default function CjShopifyUsaOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(25);
+  const [meta, setMeta] = useState({ total: 0, totalPages: 1, statusCounts: {} as Record<string, number> });
 
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.get<{ ok: boolean; orders: OrderRow[] }>('/api/cj-shopify-usa/orders');
+      const res = await api.get<OrdersResponse>('/api/cj-shopify-usa/orders', {
+        params: {
+          page,
+          pageSize,
+          status: attentionOnly ? 'ALL' : filterStatus,
+          attention: attentionOnly,
+          q: search || undefined,
+        },
+      });
       if (res.data?.ok && Array.isArray(res.data.orders)) {
         setOrders(res.data.orders);
+        setMeta({
+          total: res.data.total ?? res.data.orders.length,
+          totalPages: res.data.totalPages ?? 1,
+          statusCounts: res.data.statusCounts ?? {},
+        });
       }
     } catch (e) {
       setError(axiosMsg(e, 'No se pudieron cargar las órdenes.'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [attentionOnly, filterStatus, page, pageSize, search]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -254,11 +282,21 @@ export default function CjShopifyUsaOrdersPage() {
     return `https://t.17track.net/en#nums=${trackingNumber}`;
   }
 
-  const filtered = orders.filter((o) => filterStatus === 'ALL' || o.status === filterStatus);
+  function applyStatus(nextStatus: string) {
+    setFilterStatus(nextStatus);
+    setAttentionOnly(false);
+    setPage(1);
+  }
 
-  const attention = orders.filter((o) =>
-    ['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED'].includes(o.status)
-  ).length;
+  function applyAttention() {
+    setFilterStatus('ALL');
+    setAttentionOnly(true);
+    setPage(1);
+  }
+
+  const attention = ['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED']
+    .reduce((sum, status) => sum + (meta.statusCounts[status] ?? 0), 0);
+  const allCount = Object.values(meta.statusCounts).reduce((sum, count) => sum + count, 0);
 
   if (loading) return <p className="text-sm text-slate-500">Cargando órdenes…</p>;
 
@@ -273,47 +311,55 @@ export default function CjShopifyUsaOrdersPage() {
         <div className="flex flex-wrap gap-2 text-xs">
           <button
             type="button"
-            onClick={() => setFilterStatus('ALL')}
-            className={`rounded-full px-3 py-1 font-medium ${filterStatus === 'ALL' ? 'bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
+            onClick={() => applyStatus('ALL')}
+            className={`rounded-full px-3 py-1 font-medium ${filterStatus === 'ALL' && !attentionOnly ? 'bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
           >
-            Todas ({orders.length})
+            Todas ({allCount})
           </button>
           {attention > 0 && (
             <button
               type="button"
-              onClick={() => setFilterStatus('SUPPLIER_PAYMENT_BLOCKED')}
-              className="rounded-full px-3 py-1 font-medium bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+              onClick={applyAttention}
+              className={`rounded-full px-3 py-1 font-medium ${attentionOnly ? 'ring-2 ring-red-300' : ''} bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300`}
             >
               Requieren atención ({attention})
             </button>
           )}
-          {ALL_STATUSES.filter((s) => orders.some((o) => o.status === s)).map((s) => (
+          {ALL_STATUSES.filter((s) => (meta.statusCounts[s] ?? 0) > 0).map((s) => (
             <button
               key={s}
               type="button"
-              onClick={() => setFilterStatus(s)}
-              className={`rounded-full px-2 py-0.5 font-medium ${filterStatus === s ? 'ring-2 ring-slate-400' : ''} ${STATUS_COLORS[s] ?? 'bg-slate-100 text-slate-700'}`}
+              onClick={() => applyStatus(s)}
+              className={`rounded-full px-2 py-0.5 font-medium ${filterStatus === s && !attentionOnly ? 'ring-2 ring-slate-400' : ''} ${STATUS_COLORS[s] ?? 'bg-slate-100 text-slate-700'}`}
             >
-              {STATUS_LABEL[s] ?? s}
+              {STATUS_LABEL[s] ?? s} ({meta.statusCounts[s]})
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          disabled={syncing}
-          onClick={() => void syncRecent()}
-          className="rounded-lg px-3 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40"
-        >
-          {syncing ? 'Sincronizando…' : 'Sincronizar últimas 24h'}
-        </button>
-        <button
-          type="button"
-          disabled={autoSyncing}
-          onClick={() => void autoSyncTracking()}
-          className="rounded-lg px-3 py-1.5 text-xs font-medium bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900/60 disabled:opacity-40"
-        >
-          {autoSyncing ? 'Sincronizando tracking…' : '📦 Auto-sync Tracking'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Buscar orden, SKU, CJ ID o error"
+            className="h-8 w-64 rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={() => void syncRecent()}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40"
+          >
+            {syncing ? 'Sincronizando…' : 'Sincronizar últimas 24h'}
+          </button>
+          <button
+            type="button"
+            disabled={autoSyncing}
+            onClick={() => void autoSyncTracking()}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900/60 disabled:opacity-40"
+          >
+            {autoSyncing ? 'Sincronizando tracking…' : 'Auto-sync Tracking'}
+          </button>
+        </div>
         {orders.some(o => ['FAILED','NEEDS_MANUAL'].includes(o.status)) && (
           <button
             type="button"
@@ -321,7 +367,7 @@ export default function CjShopifyUsaOrdersPage() {
             onClick={() => void bulkRetryFailed()}
             className="rounded-lg px-3 py-1.5 text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60 disabled:opacity-40"
           >
-            {bulkRetrying ? 'Reintentando…' : `🔄 Reintentar todas las fallidas (${orders.filter(o=>['FAILED','NEEDS_MANUAL'].includes(o.status)).length})`}
+            {bulkRetrying ? 'Reintentando…' : `Reintentar fallidas visibles (${orders.filter(o=>['FAILED','NEEDS_MANUAL'].includes(o.status)).length})`}
           </button>
         )}
       </div>
@@ -349,16 +395,14 @@ export default function CjShopifyUsaOrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {orders.length === 0 ? (
               <tr>
                 <td colSpan={10} className="px-3 py-8 text-center text-slate-500 text-sm">
-                  {orders.length === 0
-                    ? 'Sin órdenes. Las órdenes de Shopify aparecen aquí cuando llegan por webhook o se sincronizan manualmente.'
-                    : 'Sin órdenes con ese filtro.'}
+                  Sin órdenes con el filtro actual. Las órdenes de Shopify aparecen aquí por webhook o sincronización manual.
                 </td>
               </tr>
             ) : (
-              filtered.map((row) => (
+              orders.map((row) => (
                 <tr
                   key={row.id}
                   className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40 cursor-pointer"
@@ -457,6 +501,29 @@ export default function CjShopifyUsaOrdersPage() {
             )}
           </tbody>
         </table>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+        <span>
+          Mostrando {orders.length} de {meta.total} órdenes · página {page} de {meta.totalPages}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded-lg border border-slate-300 px-3 py-1 disabled:opacity-40 dark:border-slate-700"
+          >
+            Anterior
+          </button>
+          <button
+            type="button"
+            disabled={page >= meta.totalPages}
+            onClick={() => setPage((p) => Math.min(meta.totalPages, p + 1))}
+            className="rounded-lg border border-slate-300 px-3 py-1 disabled:opacity-40 dark:border-slate-700"
+          >
+            Siguiente
+          </button>
+        </div>
       </div>
     </div>
   );

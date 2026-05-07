@@ -9,6 +9,7 @@ import { cjShopifyUsaProfitGuardService } from './cj-shopify-usa-profit-guard.se
 import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service';
 import { cjShopifyUsaAdminService } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
+import { cjShopifyUsaOperationLockService } from './cj-shopify-usa-operation-lock.service';
 
 type SalesAgentPriority = 'critical' | 'high' | 'medium' | 'low';
 type SalesAgentActionType =
@@ -1535,6 +1536,8 @@ export const cjShopifyUsaSalesAgentService = {
 
     const dashboard = await this.dashboard(userId);
     const limit = Math.max(1, Math.min(10, Number(input.limit ?? 5)));
+    const withCatalogLock = <T>(fn: () => Promise<T>) =>
+      cjShopifyUsaOperationLockService.withCatalogMutationLock(userId, 'sales_agent', fn);
 
     if (input.actionType === 'RUN_SALES_PIPELINE_REVIEW') {
       await recordSalesAgentTrace(userId, 'sales_agent.action.run_sales_pipeline_review', {
@@ -1579,14 +1582,17 @@ export const cjShopifyUsaSalesAgentService = {
     }
 
     if (input.actionType === 'RUN_PROFIT_GUARD') {
-      const shipping = await cjShopifyUsaProfitGuardService.enrichMissingShipping(userId, {
-        dryRun: false,
-        limit: 25,
-      });
-      const result = await cjShopifyUsaProfitGuardService.run(userId, {
-        dryRun: false,
-        pauseUnsafe: true,
-        limit: 500,
+      const { shipping, result } = await withCatalogLock(async () => {
+        const shippingResult = await cjShopifyUsaProfitGuardService.enrichMissingShipping(userId, {
+          dryRun: false,
+          limit: 25,
+        });
+        const guardResult = await cjShopifyUsaProfitGuardService.run(userId, {
+          dryRun: false,
+          pauseUnsafe: true,
+          limit: 500,
+        });
+        return { shipping: shippingResult, result: guardResult };
       });
       await recordSalesAgentTrace(userId, 'sales_agent.action.run_profit_guard', {
         shipping,
@@ -1628,32 +1634,34 @@ export const cjShopifyUsaSalesAgentService = {
       const duplicateGroups = Array.from(groups.values()).filter((rows) => rows.length > 1);
       const results: Array<{ listingId: number; title: string; ok: boolean; keptListingId: number; error?: string }> = [];
       let processedGroups = 0;
-      for (const rows of duplicateGroups) {
-        if (processedGroups >= limit) break;
-        const ranked = [...rows].sort((a, b) => {
-          const aScore = extractImageCount(a.draftPayload) * 5 + n(a.evaluation?.estimatedMarginPct) + n(a.listedPriceUsd) / 10;
-          const bScore = extractImageCount(b.draftPayload) * 5 + n(b.evaluation?.estimatedMarginPct) + n(b.listedPriceUsd) / 10;
-          return bScore - aScore;
-        });
-        const keeper = ranked[0];
-        const losers = ranked.slice(1).slice(0, Math.max(0, limit - results.length));
-        for (const loser of losers) {
-          try {
-            await cjShopifyUsaPublishService.unpublishListing({ userId, listingId: loser.id });
-            results.push({ listingId: loser.id, title: buyerTitle(loser), ok: true, keptListingId: keeper.id });
-          } catch (error) {
-            results.push({
-              listingId: loser.id,
-              title: buyerTitle(loser),
-              ok: false,
-              keptListingId: keeper.id,
-              error: error instanceof Error ? error.message : String(error),
-            });
+      await withCatalogLock(async () => {
+        for (const rows of duplicateGroups) {
+          if (processedGroups >= limit) break;
+          const ranked = [...rows].sort((a, b) => {
+            const aScore = extractImageCount(a.draftPayload) * 5 + n(a.evaluation?.estimatedMarginPct) + n(a.listedPriceUsd) / 10;
+            const bScore = extractImageCount(b.draftPayload) * 5 + n(b.evaluation?.estimatedMarginPct) + n(b.listedPriceUsd) / 10;
+            return bScore - aScore;
+          });
+          const keeper = ranked[0];
+          const losers = ranked.slice(1).slice(0, Math.max(0, limit - results.length));
+          for (const loser of losers) {
+            try {
+              await cjShopifyUsaPublishService.unpublishListing({ userId, listingId: loser.id });
+              results.push({ listingId: loser.id, title: buyerTitle(loser), ok: true, keptListingId: keeper.id });
+            } catch (error) {
+              results.push({
+                listingId: loser.id,
+                title: buyerTitle(loser),
+                ok: false,
+                keptListingId: keeper.id,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
           }
+          processedGroups++;
+          if (results.length >= limit) break;
         }
-        processedGroups++;
-        if (results.length >= limit) break;
-      }
+      });
       await recordSalesAgentTrace(userId, 'sales_agent.action.curate_similar_products', {
         processedGroups,
         results,
@@ -1673,58 +1681,60 @@ export const cjShopifyUsaSalesAgentService = {
     if (input.actionType === 'FIX_CATALOG_QUALITY') {
       const selected = dashboard.catalog.fixableCopyIssues.slice(0, limit);
       const results: Array<{ listingId: number; ok: boolean; beforeTitle: string; afterTitle: string; descriptionUpdated?: boolean; error?: string }> = [];
-      for (const candidate of selected) {
-        try {
-          const listing = await prisma.cjShopifyUsaListing.findFirst({
-            where: { userId, id: candidate.listingId },
-            include: { product: true },
-          });
-          if (!listing?.shopifyProductId) {
-            throw new Error('Listing has no Shopify product id.');
+      await withCatalogLock(async () => {
+        for (const candidate of selected) {
+          try {
+            const listing = await prisma.cjShopifyUsaListing.findFirst({
+              where: { userId, id: candidate.listingId },
+              include: { product: true },
+            });
+            if (!listing?.shopifyProductId) {
+              throw new Error('Listing has no Shopify product id.');
+            }
+            const beforeTitle = buyerTitle(listing);
+            const afterTitle = buildBuyerReadyTitle(beforeTitle);
+            const draft = draftRecord(listing.draftPayload);
+            const description = String(draft.descriptionHtml || draft.description || listing.product.description || '').replace(/<[^>]+>/g, ' ').trim();
+            const descriptionHtml = description.length < 120 ? buildBuyerReadyDescription(afterTitle || beforeTitle) : undefined;
+            const titleChanged = Boolean(afterTitle) && normalizeTitle(beforeTitle) !== normalizeTitle(afterTitle);
+            if (!titleChanged && !descriptionHtml) {
+              results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle: beforeTitle, descriptionUpdated: false });
+              continue;
+            }
+            await cjShopifyUsaAdminService.updateProductDetails({
+              userId,
+              productId: listing.shopifyProductId,
+              title: titleChanged ? afterTitle : undefined,
+              descriptionHtml,
+            });
+            await prisma.cjShopifyUsaListing.update({
+              where: { id: listing.id },
+              data: {
+                draftPayload: {
+                  ...draft,
+                  title: titleChanged ? afterTitle : beforeTitle,
+                  descriptionHtml: descriptionHtml ?? draft.descriptionHtml,
+                  salesAgentQualityFix: {
+                    fixedAt: new Date().toISOString(),
+                    beforeTitle,
+                    afterTitle,
+                    descriptionUpdated: Boolean(descriptionHtml),
+                  },
+                } as Prisma.InputJsonValue,
+              },
+            });
+            results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle, descriptionUpdated: Boolean(descriptionHtml) });
+          } catch (error) {
+            results.push({
+              listingId: candidate.listingId,
+              ok: false,
+              beforeTitle: candidate.title,
+              afterTitle: candidate.suggestedTitle,
+              error: error instanceof Error ? error.message : String(error),
+            });
           }
-          const beforeTitle = buyerTitle(listing);
-          const afterTitle = buildBuyerReadyTitle(beforeTitle);
-          const draft = draftRecord(listing.draftPayload);
-          const description = String(draft.descriptionHtml || draft.description || listing.product.description || '').replace(/<[^>]+>/g, ' ').trim();
-          const descriptionHtml = description.length < 120 ? buildBuyerReadyDescription(afterTitle || beforeTitle) : undefined;
-          const titleChanged = Boolean(afterTitle) && normalizeTitle(beforeTitle) !== normalizeTitle(afterTitle);
-          if (!titleChanged && !descriptionHtml) {
-            results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle: beforeTitle, descriptionUpdated: false });
-            continue;
-          }
-          await cjShopifyUsaAdminService.updateProductDetails({
-            userId,
-            productId: listing.shopifyProductId,
-            title: titleChanged ? afterTitle : undefined,
-            descriptionHtml,
-          });
-          await prisma.cjShopifyUsaListing.update({
-            where: { id: listing.id },
-            data: {
-              draftPayload: {
-                ...draft,
-                title: titleChanged ? afterTitle : beforeTitle,
-                descriptionHtml: descriptionHtml ?? draft.descriptionHtml,
-                salesAgentQualityFix: {
-                  fixedAt: new Date().toISOString(),
-                  beforeTitle,
-                  afterTitle,
-                  descriptionUpdated: Boolean(descriptionHtml),
-                },
-              } as Prisma.InputJsonValue,
-            },
-          });
-          results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle, descriptionUpdated: Boolean(descriptionHtml) });
-        } catch (error) {
-          results.push({
-            listingId: candidate.listingId,
-            ok: false,
-            beforeTitle: candidate.title,
-            afterTitle: candidate.suggestedTitle,
-            error: error instanceof Error ? error.message : String(error),
-          });
         }
-      }
+      });
       await recordSalesAgentTrace(userId, 'sales_agent.action.fix_catalog_quality', {
         requested: selected.length,
         results,
@@ -1743,19 +1753,21 @@ export const cjShopifyUsaSalesAgentService = {
     if (input.actionType === 'PUBLISH_APPROVED_BACKLOG') {
       const selected = dashboard.publishableDrafts.slice(0, limit);
       const results: Array<{ listingId: number; title: string; ok: boolean; error?: string }> = [];
-      for (const candidate of selected) {
-        try {
-          await cjShopifyUsaPublishService.publishListing({ userId, listingId: candidate.listingId });
-          results.push({ listingId: candidate.listingId, title: candidate.title, ok: true });
-        } catch (error) {
-          results.push({
-            listingId: candidate.listingId,
-            title: candidate.title,
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          });
+      await withCatalogLock(async () => {
+        for (const candidate of selected) {
+          try {
+            await cjShopifyUsaPublishService.publishListing({ userId, listingId: candidate.listingId });
+            results.push({ listingId: candidate.listingId, title: candidate.title, ok: true });
+          } catch (error) {
+            results.push({
+              listingId: candidate.listingId,
+              title: candidate.title,
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
-      }
+      });
       await recordSalesAgentTrace(userId, 'sales_agent.action.publish_approved_backlog', {
         requested: selected.length,
         results,
@@ -1774,19 +1786,21 @@ export const cjShopifyUsaSalesAgentService = {
     if (input.actionType === 'UNPUBLISH_UNSAFE_LISTINGS') {
       const selected = dashboard.unsafeUnpublishCandidates.slice(0, limit);
       const results: Array<{ listingId: number; title: string; ok: boolean; error?: string }> = [];
-      for (const candidate of selected) {
-        try {
-          await cjShopifyUsaPublishService.unpublishListing({ userId, listingId: candidate.listingId });
-          results.push({ listingId: candidate.listingId, title: candidate.title, ok: true });
-        } catch (error) {
-          results.push({
-            listingId: candidate.listingId,
-            title: candidate.title,
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          });
+      await withCatalogLock(async () => {
+        for (const candidate of selected) {
+          try {
+            await cjShopifyUsaPublishService.unpublishListing({ userId, listingId: candidate.listingId });
+            results.push({ listingId: candidate.listingId, title: candidate.title, ok: true });
+          } catch (error) {
+            results.push({
+              listingId: candidate.listingId,
+              title: candidate.title,
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
-      }
+      });
       await recordSalesAgentTrace(userId, 'sales_agent.action.unpublish_unsafe_listings', {
         requested: selected.length,
         results,

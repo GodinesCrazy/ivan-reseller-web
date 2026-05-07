@@ -90,6 +90,8 @@ type Dashboard = {
     activeQueue: number;
     waitingPayment: number;
     needsAttention: number;
+    ordersNeedingAttention?: number;
+    openAlerts?: number;
     completed: number;
     traceSignals72h: number;
   };
@@ -98,6 +100,11 @@ type Dashboard = {
     lastTracking?: { orderId: string; trackingNumber?: string | null; updatedAt: string; status?: string | null } | null;
     openAlerts: number;
     queueCanRun: boolean;
+  };
+  recommendedAction?: {
+    key: 'sync' | 'queue' | 'tracking';
+    label: string;
+    description: string;
   };
   recentOrders: RecentOrder[];
   recentEvents: RecentEvent[];
@@ -199,6 +206,7 @@ export default function CjShopifyUsaPostSalePage() {
   }, [load]);
 
   const primaryAction = useMemo(() => {
+    if (data?.recommendedAction?.key) return data.recommendedAction.key;
     if (!data) return 'sync';
     if (data.health.queueCanRun) return 'queue';
     if ((data.totals.activeQueue ?? 0) > 0) return 'tracking';
@@ -252,6 +260,11 @@ export default function CjShopifyUsaPostSalePage() {
             <p className="mt-1 max-w-3xl text-sm text-slate-300">
               Controla el ciclo desde el pago Shopify hasta la compra en CJ, espera de saldo, tracking y cierre de la orden.
             </p>
+            {data?.recommendedAction?.description && (
+              <p className="mt-2 max-w-3xl text-xs text-cyan-200">
+                Acción sugerida: {data.recommendedAction.description}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -261,7 +274,7 @@ export default function CjShopifyUsaPostSalePage() {
               className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
             >
               <PackageCheck className={`h-4 w-4 ${running === primaryAction ? 'animate-pulse' : ''}`} />
-              Ejecutar accion prioritaria
+              {data?.recommendedAction?.label ?? 'Ejecutar accion prioritaria'}
             </button>
             <button
               type="button"
@@ -297,6 +310,9 @@ export default function CjShopifyUsaPostSalePage() {
           <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-4">
             <p className="text-xs font-semibold uppercase text-rose-300">Atencion</p>
             <p className="mt-2 text-3xl font-bold">{data?.totals.needsAttention ?? 0}</p>
+            <p className="mt-1 text-xs text-slate-400">
+              {data?.totals.openAlerts ?? data?.health.openAlerts ?? 0} alertas abiertas
+            </p>
           </div>
           <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-4">
             <p className="text-xs font-semibold uppercase text-sky-300">Completadas</p>
