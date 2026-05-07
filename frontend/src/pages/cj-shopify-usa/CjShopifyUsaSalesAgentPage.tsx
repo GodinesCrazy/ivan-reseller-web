@@ -19,6 +19,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { api } from '@/services/api';
+import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
 type Priority = 'critical' | 'high' | 'medium' | 'low';
 
@@ -341,6 +342,48 @@ function actionLabel(action: CommercialScore['recommendedAction']): string {
   if (action === 'PROFIT_GUARD') return 'Profit Guard';
   if (action === 'CURATE_DUPLICATE') return 'Curar duplicado';
   return 'Observar';
+}
+
+function commercialLifecycleSteps(item: CommercialScore): ProductLifecycleStep[] {
+  const qualityBlocked = item.imageCount <= 0 || item.titleQualityScore < 55 || item.duplicateRisk;
+  const marginBlocked = item.profitRisk || !item.shippingKnown || item.marginPct < 10;
+  const actionBlocked = item.recommendedAction === 'FIX' || item.recommendedAction === 'PROFIT_GUARD' || item.recommendedAction === 'CURATE_DUPLICATE';
+
+  return [
+    {
+      key: 'quality',
+      label: 'Ficha',
+      state: qualityBlocked ? 'blocked' : item.titleQualityScore >= 70 ? 'done' : 'active',
+      title: 'Calidad de titulo, imagenes y duplicados',
+    },
+    {
+      key: 'margin',
+      label: 'Margen',
+      state: marginBlocked ? 'blocked' : 'done',
+      title: 'Margen, shipping y profit guard',
+    },
+    {
+      key: 'store',
+      label: 'Store',
+      state: item.handle ? 'done' : 'pending',
+      title: 'Producto activo y trazable en Shopify',
+    },
+    {
+      key: 'action',
+      label: 'Accion',
+      state: actionBlocked ? 'active' : item.recommendedAction === 'PROMOTE' ? 'done' : 'pending',
+      title: actionLabel(item.recommendedAction),
+    },
+  ];
+}
+
+function promotionLifecycleSteps(item: PromotionCandidate): ProductLifecycleStep[] {
+  return [
+    { key: 'active', label: 'Activo', state: item.url ? 'done' : 'pending', title: 'Producto activo en storefront' },
+    { key: 'margin', label: 'Margen', state: item.marginPct >= 10 ? 'done' : 'blocked', title: 'Margen suficiente para trafico organico' },
+    { key: 'media', label: 'Img', state: item.imageCount > 0 ? 'done' : 'blocked', title: 'Imagenes disponibles para promocion' },
+    { key: 'promote', label: 'Promo', state: item.score >= 80 ? 'active' : 'pending', title: 'Candidato para promocion organica' },
+  ];
 }
 
 function pipelineStatusClass(status: SalesPipelineStage['status']): string {
@@ -1005,6 +1048,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                         <p className="mt-1 text-xs text-slate-500">
                           {money(item.priceUsd)} · margen {pct(item.marginPct)} · {item.imageCount} img · {actionLabel(item.recommendedAction)}
                         </p>
+                        <ProductLifecycleLine steps={commercialLifecycleSteps(item)} compact className="mt-2" />
                       </div>
                     ))}
                   </div>
@@ -1019,6 +1063,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                           <span className={`rounded-full border px-2 py-1 text-xs font-bold ${gradeClass(item.grade)}`}>{item.grade} {item.score}</span>
                         </div>
                         <p className="mt-1 text-xs text-amber-200">{item.issues.slice(0, 2).join(' · ') || actionLabel(item.recommendedAction)}</p>
+                        <ProductLifecycleLine steps={commercialLifecycleSteps(item)} compact className="mt-2" />
                       </div>
                     ))}
                   </div>
@@ -1338,6 +1383,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                       <div className="min-w-0">
                         <p className="line-clamp-2 text-sm font-semibold text-slate-100">{item.title}</p>
                         <p className="mt-1 text-xs text-slate-500">{money(item.priceUsd)} · margen {pct(item.marginPct)} · score {item.score}</p>
+                        <ProductLifecycleLine steps={promotionLifecycleSteps(item)} compact className="mt-2" />
                       </div>
                       <span className="rounded-full bg-cyan-500/15 px-2 py-1 text-xs font-bold text-cyan-200">
                         {item.imageCount} img

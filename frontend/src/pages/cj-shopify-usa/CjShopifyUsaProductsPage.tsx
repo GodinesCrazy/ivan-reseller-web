@@ -3,6 +3,7 @@ import axios from 'axios';
 import { api } from '@/services/api';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, ExternalLink, Eye, FileText, RefreshCw, Send, ShieldAlert, Trash2 } from 'lucide-react';
+import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -257,6 +258,41 @@ function buildManualReadiness(row: ProductRow, duplicateTitleCount: number): Man
   };
 }
 
+function productLifecycleSteps(row: ProductRow, readiness: ManualReadiness): ProductLifecycleStep[] {
+  const ev = row.evaluations[0] ?? null;
+  const hasDraft = row.listings.some((l) => l.status === 'DRAFT');
+  const hasShopifyLink = row.listings.some((l) => Boolean(l.shopifyProductId));
+  const buyerReady = row.listings.some((l) => l.status === 'ACTIVE' && l.publishTruth?.buyerFacingVerified);
+  const blocked = readiness.state === 'blocked';
+
+  return [
+    {
+      key: 'catalog',
+      label: 'CJ',
+      state: row.policy?.isPetProduct === false || (row.imageCount ?? 0) <= 0 ? 'blocked' : 'done',
+      title: 'Catalogo CJ: imagenes, politica pet y variantes',
+    },
+    {
+      key: 'evaluation',
+      label: 'Eval',
+      state: ev?.decision === 'APPROVED' ? 'done' : ev?.decision === 'REJECTED' ? 'blocked' : ev ? 'active' : 'pending',
+      title: 'Evaluacion: costo, stock, envio y margen',
+    },
+    {
+      key: 'draft',
+      label: 'Draft',
+      state: hasDraft || hasShopifyLink ? 'done' : ev?.decision === 'APPROVED' && !blocked ? 'active' : blocked ? 'blocked' : 'pending',
+      title: 'Draft local listo para publicacion',
+    },
+    {
+      key: 'storefront',
+      label: 'Venta',
+      state: buyerReady ? 'done' : hasShopifyLink ? 'active' : blocked ? 'blocked' : 'pending',
+      title: 'Producto visible, con stock y comprador listo en Shopify',
+    },
+  ];
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CjShopifyUsaProductsPage() {
@@ -494,6 +530,11 @@ export default function CjShopifyUsaProductsPage() {
                           {row.title}
                         </p>
                         <p className="text-xs text-slate-400 font-mono">{row.cjProductId}</p>
+                        <ProductLifecycleLine
+                          steps={productLifecycleSteps(row, readiness)}
+                          compact
+                          className="mt-2 min-w-[170px]"
+                        />
                       </td>
                       <td className="px-3 py-2 min-w-[180px]">
                         <div className={`rounded-md border px-2.5 py-2 text-xs ${readiness.className}`}>

@@ -15,6 +15,7 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
+import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -319,13 +320,7 @@ function primaryIssue(row: ListingRow): string {
   return statusLabel(row);
 }
 
-type LifecycleStep = {
-  key: string;
-  label: string;
-  state: 'done' | 'active' | 'blocked' | 'pending';
-};
-
-function lifecycleSteps(row: ListingRow): LifecycleStep[] {
+function lifecycleSteps(row: ListingRow): ProductLifecycleStep[] {
   const pricing = row.draftPayload?.pricingSnapshot;
   const margin = Number(pricing?.netMarginPct ?? 0);
   const profit = Number(pricing?.netProfitUsd ?? 0);
@@ -343,42 +338,8 @@ function lifecycleSteps(row: ListingRow): LifecycleStep[] {
   ];
 }
 
-function stepClass(state: LifecycleStep['state']): string {
-  if (state === 'done') return 'border-emerald-500 bg-emerald-500 text-slate-950';
-  if (state === 'active') return 'border-cyan-400 bg-cyan-400 text-slate-950 animate-pulse';
-  if (state === 'blocked') return 'border-rose-400 bg-rose-500 text-white';
-  return 'border-slate-600 bg-slate-900 text-slate-500';
-}
-
 function ListingLifecycle({ row }: { row: ListingRow }) {
-  const steps = lifecycleSteps(row);
-  return (
-    <div className="mt-2 min-w-[210px]">
-      <div className="flex items-center">
-        {steps.map((step, index) => (
-          <Fragment key={step.key}>
-            <div className="flex flex-col items-center" title={`${step.label}: ${step.state}`}>
-              <span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-black ${stepClass(step.state)}`}>
-                {step.state === 'done' ? '✓' : index + 1}
-              </span>
-              <span className="mt-1 max-w-12 truncate text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                {step.label}
-              </span>
-            </div>
-            {index < steps.length - 1 && (
-              <span className={`mb-5 h-0.5 w-7 ${
-                steps[index].state === 'done' && steps[index + 1].state !== 'blocked'
-                  ? 'bg-emerald-500'
-                  : steps[index + 1].state === 'blocked'
-                    ? 'bg-rose-500/70'
-                    : 'bg-slate-700'
-              }`} />
-            )}
-          </Fragment>
-        ))}
-      </div>
-    </div>
-  );
+  return <ProductLifecycleLine steps={lifecycleSteps(row)} className="mt-2 min-w-[210px]" />;
 }
 
 function fmtDate(iso: string | null): string {
@@ -978,86 +939,88 @@ export default function CjShopifyUsaListingsPage() {
                       <p>Pub {fmtDate(row.publishedAt)}</p>
                     </td>
                     <td className="px-3 py-2">
-                      <div className="flex min-w-[360px] flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          disabled={busyId === row.id || Boolean(publishReason)}
-                          title={publishReason ?? 'Publicar en Shopify'}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2.5 text-xs font-medium text-primary-700 transition hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-primary-800/70 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-900/40"
-                          onClick={() => void publish(row.id)}
-                        >
-                          <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                          {busyId === row.id ? '...' : publishLabel}
-                        </button>
+                      <div className="flex min-w-[230px] max-w-[280px] flex-col gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={busyId === row.id || Boolean(publishReason)}
+                            title={publishReason ?? 'Publicar en Shopify'}
+                            className="inline-flex h-8 min-w-[96px] flex-1 items-center justify-center gap-1 rounded-md border border-primary-300 bg-primary-600 px-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-500 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500 dark:border-primary-500/70"
+                            onClick={() => void publish(row.id)}
+                          >
+                            <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                            {busyId === row.id ? '...' : publishLabel}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyId === row.id || Boolean(pauseReason)}
+                            title={pauseReason ?? 'Pausar en Shopify'}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-amber-400/40 bg-amber-500/10 text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-35"
+                            onClick={() => void pauseListing(row.id)}
+                          >
+                            <Pause className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyId === row.id || Boolean(unpublishReason)}
+                            title={unpublishReason ?? 'Despublicar de Shopify'}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-35"
+                            onClick={() => void unpublishListing(row.id)}
+                          >
+                            <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
                         {row.status === 'DRAFT' && exceedsMaxPrice && (
-                          <span className="inline-flex h-7 items-center rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300">
+                          <span className="inline-flex items-center rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] font-medium text-rose-200">
                             Precio &gt; ${maxSellPriceUsd.toFixed(2)}
                           </span>
                         )}
-                        <button
-                          type="button"
-                          disabled={busyId === row.id || Boolean(pauseReason)}
-                          title={pauseReason ?? 'Pausar en Shopify'}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40"
-                          onClick={() => void pauseListing(row.id)}
-                        >
-                          <Pause className="h-3.5 w-3.5" aria-hidden="true" />
-                          {busyId === row.id ? '...' : 'Pausar'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busyId === row.id || Boolean(unpublishReason)}
-                          title={unpublishReason ?? 'Despublicar de Shopify'}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
-                          onClick={() => void unpublishListing(row.id)}
-                        >
-                          <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-                          {busyId === row.id ? '...' : 'Despublicar'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busyId === row.id || Boolean(expandReason)}
-                          title={expandReason ?? 'Agregar variantes CJ al producto Shopify'}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-800/70 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/40"
-                          onClick={() => void expandVariants(row.id)}
-                        >
-                          <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
-                          {busyId === row.id ? '...' : 'Variantes'}
-                        </button>
-                        {row.storefrontUrl && (
-                          <a
-                            href={row.storefrontUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={storefrontReason ?? (row.publishTruth?.buyerFacingVerified ? 'Abrir producto buyer-ready' : 'Abrir storefront para diagnosticar')}
-                            className={`inline-flex h-7 items-center gap-1 rounded-md border px-2.5 text-xs font-medium transition ${
-                              row.publishTruth?.buyerFacingVerified
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-900/40'
-                                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
-                            }`}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={busyId === row.id || Boolean(expandReason)}
+                            title={expandReason ?? 'Agregar variantes CJ al producto Shopify'}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-violet-400/40 bg-violet-500/10 text-violet-200 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-35"
+                            onClick={() => void expandVariants(row.id)}
                           >
-                            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                            {row.publishTruth?.buyerFacingVerified ? 'Ver tienda' : 'Probar tienda'}
-                          </a>
-                        )}
-                        <button
-                          type="button"
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                          onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}
-                        >
-                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                          {expandedId === row.id ? 'Ocultar' : 'Detalle'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busyId === row.id || Boolean(deleteReason)}
-                          title={deleteReason ?? 'Eliminar borrador/fallido local'}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-800/70 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-                          onClick={() => void deleteListing(row)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          Eliminar
-                        </button>
+                            <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          {row.storefrontUrl && (
+                            <a
+                              href={row.storefrontUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={storefrontReason ?? (row.publishTruth?.buyerFacingVerified ? 'Abrir producto buyer-ready' : 'Abrir storefront para diagnosticar')}
+                              className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
+                                row.publishTruth?.buyerFacingVerified
+                                  ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'
+                                  : 'border-slate-600 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                              }`}
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            title={expandedId === row.id ? 'Ocultar detalle' : 'Ver detalle'}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-600 bg-slate-900 text-slate-300 transition hover:bg-slate-800"
+                            onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}
+                          >
+                            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyId === row.id || Boolean(deleteReason)}
+                            title={deleteReason ?? 'Eliminar borrador/fallido local'}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-400/40 bg-red-500/10 text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-35"
+                            onClick={() => void deleteListing(row)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <span className="ml-auto rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-400">
+                            {expandedId === row.id ? 'detalle' : 'ops'}
+                          </span>
+                        </div>
                       </div>
                     </td>
                   </tr>

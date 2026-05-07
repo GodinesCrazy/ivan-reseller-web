@@ -14,6 +14,7 @@ import {
   Brain,
   Tags,
 } from 'lucide-react';
+import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -204,6 +205,35 @@ type CardState =
   | { kind: 'drafted'; result: DraftResult }
   | { kind: 'draft_error'; msg: string };
 
+function discoverLifecycleSteps(cardState: CardState): ProductLifecycleStep[] {
+  const evalData = cardState.kind === 'evaluated' ? cardState.data : null;
+  const rejected = evalData?.qualification?.decision === 'REJECTED';
+  const approved = evalData?.qualification?.decision === 'APPROVED';
+  const evalDone = cardState.kind === 'evaluated' || cardState.kind === 'drafting' || cardState.kind === 'drafted';
+
+  return [
+    { key: 'discover', label: 'CJ', state: 'done', title: 'Producto encontrado en CJ' },
+    {
+      key: 'evaluation',
+      label: 'Eval',
+      state: cardState.kind === 'eval_error' ? 'blocked' : cardState.kind === 'evaluating' ? 'active' : evalDone ? 'done' : 'pending',
+      title: 'Evaluacion de costo, envio, stock y politica',
+    },
+    {
+      key: 'margin',
+      label: 'Margen',
+      state: rejected ? 'blocked' : approved ? 'done' : cardState.kind === 'evaluating' ? 'pending' : evalDone ? 'active' : 'pending',
+      title: 'Guardrail comercial antes de crear draft',
+    },
+    {
+      key: 'draft',
+      label: 'Draft',
+      state: cardState.kind === 'drafted' ? 'done' : cardState.kind === 'drafting' ? 'active' : cardState.kind === 'draft_error' ? 'blocked' : approved ? 'active' : 'pending',
+      title: 'Draft local listo para Store Products',
+    },
+  ];
+}
+
 function ProductCard({
   product,
   onDrafted,
@@ -329,6 +359,12 @@ function ProductCard({
           )}
           {product.inventoryTotal === undefined && <span className="text-slate-400">Stock: —</span>}
         </div>
+
+        <ProductLifecycleLine
+          steps={discoverLifecycleSteps(cardState)}
+          compact
+          className="rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-2 dark:border-slate-800 dark:bg-slate-950/50"
+        />
 
         {/* Evaluation panel */}
         {showEval && (
