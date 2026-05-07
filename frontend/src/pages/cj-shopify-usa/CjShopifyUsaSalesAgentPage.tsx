@@ -89,6 +89,7 @@ type SalesAgentDashboard = {
     autoChangePrices: boolean;
     canPublishWithGuards: boolean;
     canUnpublishUnsafeWithGuards: boolean;
+    canFixCatalogQuality: boolean;
   };
   kpis: {
     activeListings: number;
@@ -163,7 +164,8 @@ type SalesAgentDashboard = {
   catalog: {
     duplicateExactGroups: Array<{ key: string; count: number; titles: string[] }>;
     crowdedFamilies: Array<{ family: string; count: number }>;
-    copyIssues: Array<{ listingId: number; title: string; score: number; issues: string[]; imageCount: number }>;
+    copyIssues: Array<{ listingId: number; title: string; suggestedTitle: string; score: number; issues: string[]; imageCount: number }>;
+    fixableCopyIssues: Array<{ listingId: number; title: string; suggestedTitle: string; score: number; issues: string[]; imageCount: number }>;
   };
 };
 
@@ -543,6 +545,7 @@ export default function CjShopifyUsaSalesAgentPage() {
               <div className="mt-3 grid grid-cols-1 gap-2 text-xs">
                 <span className="rounded bg-black/20 p-2">Publicar con guardrails: <b>{data.constraints.canPublishWithGuards ? 'ON' : 'OFF'}</b></span>
                 <span className="rounded bg-black/20 p-2">Despublicar riesgo perdida: <b>{data.constraints.canUnpublishUnsafeWithGuards ? 'ON' : 'OFF'}</b></span>
+                <span className="rounded bg-black/20 p-2">Corregir fichas debiles: <b>{data.constraints.canFixCatalogQuality ? 'ON' : 'OFF'}</b></span>
                 <span className="rounded bg-black/20 p-2">Promocion organica Pinterest: <b>{data.constraints.autoPublishSocial ? 'ON' : 'OFF'}</b></span>
                 <span className="rounded bg-black/20 p-2">Gasto ads automatico: <b>{data.constraints.autoSpendAds ? 'ON' : 'OFF'}</b></span>
               </div>
@@ -734,6 +737,9 @@ export default function CjShopifyUsaSalesAgentPage() {
                         <div key={issue.listingId} className="rounded border border-slate-800 bg-slate-900 px-3 py-2">
                           <p className="line-clamp-1 text-xs font-semibold text-slate-200">{issue.title}</p>
                           <p className="mt-1 text-[11px] text-slate-500">Score {issue.score} · {issue.issues.join(', ') || 'revisar ficha'}</p>
+                          {issue.suggestedTitle && issue.suggestedTitle !== issue.title && (
+                            <p className="mt-1 text-[11px] text-cyan-300">Sugerido: {issue.suggestedTitle}</p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -755,7 +761,8 @@ export default function CjShopifyUsaSalesAgentPage() {
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
                 <p>
                   El agente esta en modo controlado porque aun hay riesgos comerciales. Puede promocionar organico sin gasto,
-                  pero no cambiara precios, no despublicara ni gastara en ads sin aprobacion granular.
+                  corregir fichas debiles, publicar drafts aprobados y despublicar PAUSE_UNSAFE con limites. No tocara pagos,
+                  no hara ads pagados ni cambios agresivos de precio sin aprobacion granular.
                 </p>
               </div>
             </div>

@@ -1340,6 +1340,71 @@ export class CjShopifyUsaAdminService {
     return product;
   }
 
+  async updateProductDetails(input: {
+    userId: number;
+    productId: string;
+    title?: string;
+    descriptionHtml?: string | null;
+  }) {
+    const productInput: Record<string, unknown> = {
+      id: input.productId,
+    };
+    if (typeof input.title === 'string' && trimOrEmpty(input.title)) {
+      productInput.title = trimOrEmpty(input.title);
+    }
+    if (typeof input.descriptionHtml === 'string') {
+      productInput.descriptionHtml = input.descriptionHtml;
+    }
+
+    if (Object.keys(productInput).length <= 1) {
+      throw new AppError(
+        'No Shopify product fields provided for update.',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    const data = await this.graphql<{
+      productUpdate?: {
+        product?: { id: string; title: string; handle: string; status: string } | null;
+        userErrors?: ShopifyGraphqlUserError[] | null;
+      } | null;
+    }>({
+      userId: input.userId,
+      query: `
+        mutation CjShopifyUsaUpdateProductDetails($product: ProductUpdateInput!) {
+          productUpdate(product: $product) {
+            product {
+              id
+              title
+              handle
+              status
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      variables: {
+        product: productInput,
+      },
+    });
+
+    const errors = data.productUpdate?.userErrors ?? [];
+    const product = data.productUpdate?.product;
+    if (errors.length > 0 || !product) {
+      throw new AppError(
+        `Shopify product update failed: ${errors.map((entry) => entry.message).join('; ') || 'unknown error'}`,
+        400,
+        ErrorCode.EXTERNAL_API_ERROR,
+      );
+    }
+
+    return product;
+  }
+
   async deleteProduct(input: { userId: number; productId: string }) {
     await this.graphql<any>({
       userId: input.userId,

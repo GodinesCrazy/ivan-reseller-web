@@ -19,7 +19,8 @@ type SalesAgentActionType =
   | 'IMPROVE_PRODUCT_COPY'
   | 'DISCOVER_NEW_PRODUCTS'
   | 'PUBLISH_APPROVED_BACKLOG'
-  | 'UNPUBLISH_UNSAFE_LISTINGS';
+  | 'UNPUBLISH_UNSAFE_LISTINGS'
+  | 'FIX_CATALOG_QUALITY';
 
 type SalesAgentAction = {
   id: string;
@@ -118,6 +119,74 @@ function extractImageCount(payload: unknown): number {
   const images = data?.images;
   if (Array.isArray(images)) return images.length;
   return 0;
+}
+
+function draftRecord(payload: unknown): Record<string, any> {
+  return payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? { ...(payload as Record<string, any>) }
+    : {};
+}
+
+function buyerTitle(listing: { draftPayload: unknown; product: { title: string } }): string {
+  const draft = draftRecord(listing.draftPayload);
+  return String(draft.title || listing.product.title || '').trim();
+}
+
+function titleCase(value: string): string {
+  const minorWords = new Set(['and', 'or', 'for', 'the', 'with', 'of', 'a', 'an', 'to', 'in']);
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (index > 0 && minorWords.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(' ');
+}
+
+function trimTitle(value: string, maxLength = 62): string {
+  const clean = value.replace(/\s+/g, ' ').trim();
+  if (clean.length <= maxLength) return clean;
+  const words = clean.split(/\s+/);
+  const kept: string[] = [];
+  for (const word of words) {
+    const candidate = [...kept, word].join(' ');
+    if (candidate.length > maxLength) break;
+    kept.push(word);
+  }
+  return kept.length ? kept.join(' ') : clean.slice(0, maxLength).trim();
+}
+
+function buildBuyerReadyTitle(rawTitle: string): string {
+  const cleaned = String(rawTitle || '')
+    .replace(/&/g, ' and ')
+    .replace(/\b(cj[a-z0-9]+|\d{8,}[a-z0-9]*)\b/gi, ' ')
+    .replace(/\bpet supplies\b/gi, '')
+    .replace(/\bwholesale\b/gi, '')
+    .replace(/\bnew\b/gi, '')
+    .replace(/\b(for dog cat|cat dog)\b/gi, 'for Dogs and Cats')
+    .replace(/\bout door\b/gi, 'Outdoor')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const lower = cleaned.toLowerCase();
+  let family = 'Pet Accessory';
+  if (/water|fountain|feeder|bowl|food|snack|treat/.test(lower)) family = 'Pet Feeding Accessory';
+  if (/groom|brush|comb|scissor|clipper|nail|trimmer|shampoo|bath/.test(lower)) family = 'Pet Grooming Tool';
+  if (/toy|ball|disc|chew|training|interactive|puzzle/.test(lower)) family = 'Pet Training Toy';
+  if (/collar|leash|harness|strap/.test(lower)) family = 'Dog Walking Accessory';
+  if (/carrier|backpack|bag|travel|seat/.test(lower)) family = 'Pet Travel Carrier';
+  if (/litter|mat|tray/.test(lower)) family = 'Cat Litter Accessory';
+  if (/bed|mat|blanket|cushion|house/.test(lower)) family = 'Pet Comfort Bed';
+
+  const detailWords = cleaned
+    .split(/\s+/)
+    .filter((word) => !/^(pet|dog|cat|dogs|cats|supplies|accessories|with|for|and|the|new)$/i.test(word))
+    .slice(0, 4)
+    .join(' ');
+  const candidate = detailWords ? `${detailWords} ${family}` : family;
+  return trimTitle(titleCase(candidate));
 }
 
 function titleQuality(title: string): { score: number; issues: string[] } {
@@ -379,14 +448,22 @@ export const cjShopifyUsaSalesAgentService = {
     const copyIssues = activeListings
       .map((listing) => ({
         listingId: listing.id,
-        title: listing.product.title,
+        title: buyerTitle(listing),
+        suggestedTitle: buildBuyerReadyTitle(buyerTitle(listing)),
         handle: listing.shopifyHandle,
+        shopifyProductId: listing.shopifyProductId,
         imageCount: extractImageCount(listing.draftPayload),
-        ...titleQuality(listing.product.title),
+        ...titleQuality(buyerTitle(listing)),
       }))
       .filter((row) => row.score < 80 || row.imageCount === 0)
       .sort((a, b) => a.score - b.score)
       .slice(0, 12);
+
+    const fixableCopyIssues = copyIssues
+      .filter((issue) => issue.shopifyProductId)
+      .filter((issue) => issue.imageCount > 0)
+      .filter((issue) => normalizeTitle(issue.title) !== normalizeTitle(issue.suggestedTitle))
+      .slice(0, 8);
 
     const profitGuard = await cjShopifyUsaProfitGuardService.run(userId, {
       dryRun: true,
@@ -555,6 +632,21 @@ export const cjShopifyUsaSalesAgentService = {
       });
     }
 
+    if (fixableCopyIssues.length > 0) {
+      actions.push({
+        id: 'fix-catalog-quality',
+        type: 'FIX_CATALOG_QUALITY',
+        priority: 'high',
+        title: 'Corregir fichas debiles automaticamente',
+        rationale: `${fixableCopyIssues.length} fichas activas tienen titulo buyer-ready corregible sin tocar precio, pagos ni inventario.`,
+        expectedImpact: 'Mejorar confianza, SEO y claridad antes de llevar trafico real.',
+        risk: 'safe',
+        canExecute: true,
+        guardrails: ['Solo productos activos con Shopify ID', 'No inventa atributos', 'No toca precio ni stock', 'Registra antes/despues'],
+        payload: { candidates: fixableCopyIssues.slice(0, 5) },
+      });
+    }
+
     if (draftListings.length > 0) {
       actions.push({
         id: 'publish-approved-backlog',
@@ -604,6 +696,7 @@ export const cjShopifyUsaSalesAgentService = {
         autoChangePrices: false,
         canPublishWithGuards: true,
         canUnpublishUnsafeWithGuards: true,
+        canFixCatalogQuality: true,
       },
       kpis: {
         activeListings: activeListings.length,
@@ -696,12 +789,13 @@ export const cjShopifyUsaSalesAgentService = {
         duplicateExactGroups,
         crowdedFamilies,
         copyIssues,
+        fixableCopyIssues,
       },
     };
   },
 
   async executeAction(userId: number, input: { actionType: SalesAgentActionType; limit?: number }) {
-    if (!['PROMOTE_TOP_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS'].includes(input.actionType)) {
+    if (!['PROMOTE_TOP_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY'].includes(input.actionType)) {
       await recordSalesAgentTrace(userId, 'sales_agent.action.blocked', {
         actionType: input.actionType,
         reason: 'This action requires explicit per-item approval in the current controlled mode.',
@@ -716,6 +810,70 @@ export const cjShopifyUsaSalesAgentService = {
 
     const dashboard = await this.dashboard(userId);
     const limit = Math.max(1, Math.min(10, Number(input.limit ?? 5)));
+
+    if (input.actionType === 'FIX_CATALOG_QUALITY') {
+      const selected = dashboard.catalog.fixableCopyIssues.slice(0, limit);
+      const results: Array<{ listingId: number; ok: boolean; beforeTitle: string; afterTitle: string; error?: string }> = [];
+      for (const candidate of selected) {
+        try {
+          const listing = await prisma.cjShopifyUsaListing.findFirst({
+            where: { userId, id: candidate.listingId },
+            include: { product: true },
+          });
+          if (!listing?.shopifyProductId) {
+            throw new Error('Listing has no Shopify product id.');
+          }
+          const beforeTitle = buyerTitle(listing);
+          const afterTitle = buildBuyerReadyTitle(beforeTitle);
+          if (!afterTitle || normalizeTitle(beforeTitle) === normalizeTitle(afterTitle)) {
+            results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle: beforeTitle });
+            continue;
+          }
+          await cjShopifyUsaAdminService.updateProductDetails({
+            userId,
+            productId: listing.shopifyProductId,
+            title: afterTitle,
+          });
+          const draft = draftRecord(listing.draftPayload);
+          await prisma.cjShopifyUsaListing.update({
+            where: { id: listing.id },
+            data: {
+              draftPayload: {
+                ...draft,
+                title: afterTitle,
+                salesAgentQualityFix: {
+                  fixedAt: new Date().toISOString(),
+                  beforeTitle,
+                  afterTitle,
+                },
+              } as Prisma.InputJsonValue,
+            },
+          });
+          results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle });
+        } catch (error) {
+          results.push({
+            listingId: candidate.listingId,
+            ok: false,
+            beforeTitle: candidate.title,
+            afterTitle: candidate.suggestedTitle,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      await recordSalesAgentTrace(userId, 'sales_agent.action.fix_catalog_quality', {
+        requested: selected.length,
+        results,
+      } as Prisma.InputJsonValue);
+      return {
+        ok: true,
+        executed: true,
+        actionType: input.actionType,
+        fixed: results.filter((result) => result.ok).length,
+        failed: results.filter((result) => !result.ok).length,
+        results,
+        message: `Calidad de catalogo: ${results.filter((result) => result.ok).length} fichas corregidas, ${results.filter((result) => !result.ok).length} fallidas.`,
+      };
+    }
 
     if (input.actionType === 'PUBLISH_APPROVED_BACKLOG') {
       const selected = dashboard.publishableDrafts.slice(0, limit);
@@ -963,6 +1121,18 @@ export const cjShopifyUsaSalesAgentService = {
         }
       } else {
         log('optimization', 'info', 'Sin candidatos PAUSE_UNSAFE para despublicar');
+      }
+
+      const fixCatalogAction = dashboard.actions.find((action) => action.type === 'FIX_CATALOG_QUALITY' && action.canExecute);
+      if (fixCatalogAction) {
+        const result = await this.executeAction(userId, { actionType: 'FIX_CATALOG_QUALITY', limit: 5 });
+        log('optimization', n((result as any).fixed) > 0 ? 'success' : 'warn', 'Correccion automatica de calidad ejecutada', {
+          fixed: n((result as any).fixed),
+          failed: n((result as any).failed),
+        });
+        cycle.errors += n((result as any).failed);
+      } else {
+        log('optimization', 'info', 'Sin fichas corregibles automaticamente');
       }
 
       if (schedulerConfig.autoPublishApprovedDrafts && dashboard.publishableDrafts.length > 0) {
