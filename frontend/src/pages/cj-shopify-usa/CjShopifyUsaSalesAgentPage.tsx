@@ -208,6 +208,30 @@ type SalesAgentDashboard = {
     pauseOrMerge: Array<{ listingId: number; title: string; score: number; issues: string[] }>;
     nextReviewAt: string;
   };
+  salesPipeline: {
+    generatedAt: string;
+    distinction: string;
+    overallScore: number;
+    bottleneck: SalesPipelineStage;
+    stages: SalesPipelineStage[];
+    productLifecycle: {
+      scale: CommercialScore[];
+      optimize: CommercialScore[];
+      protect: CommercialScore[];
+      retireOrMerge: CommercialScore[];
+    };
+    strategy: {
+      positioning: string[];
+      credibility: string[];
+      traffic: string[];
+      conversion: string[];
+    };
+    dataSources: {
+      internal: string[];
+      external: string[];
+      missing: string[];
+    };
+  };
   decisionTimeline: Array<{
     id: string;
     ts: string;
@@ -241,6 +265,19 @@ type SalesAgentDashboard = {
     copyIssues: Array<{ listingId: number; title: string; suggestedTitle: string; score: number; issues: string[]; imageCount: number }>;
     fixableCopyIssues: Array<{ listingId: number; title: string; suggestedTitle: string; score: number; issues: string[]; imageCount: number }>;
   };
+};
+
+type SalesPipelineStage = {
+  key: string;
+  label: string;
+  page: string;
+  score: number;
+  status: 'healthy' | 'watch' | 'blocked';
+  objective: string;
+  internalSignals: string[];
+  externalSignals: string[];
+  nextMove: string;
+  automatedActions: string[];
 };
 
 function axiosMsg(e: unknown, fallback: string): string {
@@ -291,6 +328,12 @@ function actionLabel(action: CommercialScore['recommendedAction']): string {
   if (action === 'PROFIT_GUARD') return 'Profit Guard';
   if (action === 'CURATE_DUPLICATE') return 'Curar duplicado';
   return 'Observar';
+}
+
+function pipelineStatusClass(status: SalesPipelineStage['status']): string {
+  if (status === 'healthy') return 'border-emerald-500/35 bg-emerald-950/15 text-emerald-100';
+  if (status === 'watch') return 'border-amber-500/35 bg-amber-950/15 text-amber-100';
+  return 'border-red-500/35 bg-red-950/15 text-red-100';
 }
 
 function dateTime(value: string | null | undefined): string {
@@ -620,6 +663,71 @@ export default function CjShopifyUsaSalesAgentPage() {
               </div>
             </section>
           )}
+
+          <section className="rounded-lg border border-cyan-500/25 bg-slate-950 p-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                  <TrendingUp className="h-4 w-4 text-cyan-300" />
+                  Pipeline comercial de ventas
+                </h3>
+                <p className="mt-1 max-w-4xl text-sm text-slate-400">{data.salesPipeline.distinction}</p>
+              </div>
+              <div className="grid min-w-[260px] grid-cols-2 gap-2 text-xs">
+                <span className="rounded bg-cyan-500/10 p-2 text-cyan-100">Score pipeline <b>{data.salesPipeline.overallScore}/100</b></span>
+                <span className={`rounded p-2 ${pipelineStatusClass(data.salesPipeline.bottleneck.status)}`}>
+                  Cuello: <b>{data.salesPipeline.bottleneck.label}</b>
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-6">
+              {data.salesPipeline.stages.map((stage) => (
+                <article key={stage.key} className={`rounded-lg border p-3 ${pipelineStatusClass(stage.status)}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-bold uppercase leading-tight">{stage.label}</p>
+                    <span className="rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-bold">{stage.score}</span>
+                  </div>
+                  <p className="mt-2 line-clamp-3 text-[11px] text-slate-300">{stage.objective}</p>
+                  <p className="mt-2 text-[11px] font-semibold text-white">Siguiente: {stage.nextMove}</p>
+                  <p className="mt-2 text-[10px] text-slate-500">{stage.page}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr_1fr]">
+              <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                <p className="text-xs font-bold uppercase text-slate-500">Lifecycle de productos</p>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-300">
+                  <span className="rounded bg-black/20 p-2">Escalar: <b>{data.salesPipeline.productLifecycle.scale.length}</b></span>
+                  <span className="rounded bg-black/20 p-2">Optimizar: <b>{data.salesPipeline.productLifecycle.optimize.length}</b></span>
+                  <span className="rounded bg-black/20 p-2">Proteger: <b>{data.salesPipeline.productLifecycle.protect.length}</b></span>
+                  <span className="rounded bg-black/20 p-2">Retirar/fusionar: <b>{data.salesPipeline.productLifecycle.retireOrMerge.length}</b></span>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                <p className="text-xs font-bold uppercase text-slate-500">Datos que usa</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {data.salesPipeline.dataSources.internal.slice(0, 5).map((item) => (
+                    <span key={item} className="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-200">{item}</span>
+                  ))}
+                  {data.salesPipeline.dataSources.external.slice(0, 4).map((item) => (
+                    <span key={item} className="rounded-full bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-200">{item}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                <p className="text-xs font-bold uppercase text-slate-500">Estrategia de exito</p>
+                <div className="mt-3 space-y-2 text-xs text-slate-300">
+                  {[...data.salesPipeline.strategy.positioning, ...data.salesPipeline.strategy.credibility].slice(0, 3).map((item) => (
+                    <p key={item} className="rounded bg-black/20 px-3 py-2">{item}</p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
 
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr_1fr]">
             <div className={`rounded-lg border p-4 ${statusTone(data.shopifyTruth.ok)}`}>

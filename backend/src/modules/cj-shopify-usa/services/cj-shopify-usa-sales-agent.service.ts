@@ -21,7 +21,8 @@ type SalesAgentActionType =
   | 'PUBLISH_APPROVED_BACKLOG'
   | 'UNPUBLISH_UNSAFE_LISTINGS'
   | 'FIX_CATALOG_QUALITY'
-  | 'BUILD_SALES_CAMPAIGN';
+  | 'BUILD_SALES_CAMPAIGN'
+  | 'RUN_SALES_PIPELINE_REVIEW';
 
 type SalesAgentAction = {
   id: string;
@@ -109,6 +110,52 @@ type SalesCampaignPlan = {
   protectMargin: Array<Pick<CommercialScore, 'listingId' | 'title' | 'score' | 'issues'>>;
   pauseOrMerge: Array<Pick<CommercialScore, 'listingId' | 'title' | 'score' | 'issues'>>;
   nextReviewAt: string;
+};
+
+type SalesPipelineStageKey =
+  | 'discover'
+  | 'publish_quality'
+  | 'profit_protection'
+  | 'trust_checkout'
+  | 'traffic'
+  | 'conversion_learning';
+
+type SalesPipelineStage = {
+  key: SalesPipelineStageKey;
+  label: string;
+  page: string;
+  score: number;
+  status: 'healthy' | 'watch' | 'blocked';
+  objective: string;
+  internalSignals: string[];
+  externalSignals: string[];
+  nextMove: string;
+  automatedActions: SalesAgentActionType[];
+};
+
+type SalesPipeline = {
+  generatedAt: string;
+  distinction: string;
+  overallScore: number;
+  bottleneck: SalesPipelineStage;
+  stages: SalesPipelineStage[];
+  productLifecycle: {
+    scale: CommercialScore[];
+    optimize: CommercialScore[];
+    protect: CommercialScore[];
+    retireOrMerge: CommercialScore[];
+  };
+  strategy: {
+    positioning: string[];
+    credibility: string[];
+    traffic: string[];
+    conversion: string[];
+  };
+  dataSources: {
+    internal: string[];
+    external: string[];
+    missing: string[];
+  };
 };
 
 const DEFAULT_SALES_AGENT_CONFIG: SalesAgentSchedulerConfig = {
@@ -480,6 +527,192 @@ function buildSalesCampaignPlan(input: {
   };
 }
 
+function pipelineStatus(score: number): SalesPipelineStage['status'] {
+  if (score >= 75) return 'healthy';
+  if (score >= 55) return 'watch';
+  return 'blocked';
+}
+
+function buildSalesPipeline(input: {
+  healthScore: number;
+  activeListings: number;
+  draftListings: number;
+  publishableDrafts: number;
+  profitGuard: { reviewRequired: number; priceIncreases: number; pausedUnsafe: number };
+  copyIssues: number;
+  duplicateGroups: number;
+  noMedia: number;
+  visitors: number;
+  addToCartRatePct: number;
+  checkoutRatePct: number;
+  purchaseRatePct: number;
+  socialPublished: number;
+  socialFailed: number;
+  promotionCandidates: number;
+  commercialScores: CommercialScore[];
+  campaign: SalesCampaignPlan;
+}): SalesPipeline {
+  const catalogQualityScore = Math.max(
+    0,
+    Math.min(100, 88 - input.copyIssues * 4 - input.duplicateGroups * 8 - input.noMedia * 3),
+  );
+  const profitScore = Math.max(
+    0,
+    Math.min(100, 92 - input.profitGuard.reviewRequired * 2 - input.profitGuard.pausedUnsafe * 8),
+  );
+  const checkoutScore = Math.max(
+    0,
+    Math.min(
+      100,
+      78 +
+        (input.checkoutRatePct > 0 ? 8 : -4) +
+        (input.purchaseRatePct > 0 ? 14 : -12) +
+        (input.addToCartRatePct >= 5 ? 8 : -4),
+    ),
+  );
+  const trafficScore = Math.max(
+    0,
+    Math.min(100, 45 + input.promotionCandidates * 5 + Math.min(20, input.socialPublished * 2) - Math.min(18, input.socialFailed * 2)),
+  );
+  const discoveryScore = Math.max(0, Math.min(100, 55 + Math.min(25, input.publishableDrafts * 4) + Math.min(20, input.draftListings)));
+  const learningScore = Math.max(
+    0,
+    Math.min(100, 45 + (input.visitors > 0 ? 15 : 0) + (input.addToCartRatePct > 0 ? 10 : 0) + (input.purchaseRatePct > 0 ? 25 : 0)),
+  );
+
+  const stages: SalesPipelineStage[] = [
+    {
+      key: 'discover',
+      label: 'Descubrir y validar demanda',
+      page: '/cj-shopify-usa/discover',
+      score: discoveryScore,
+      status: pipelineStatus(discoveryScore),
+      objective: 'Alimentar el catalogo con productos pet vendibles, no duplicados y con potencial comercial.',
+      internalSignals: [`${input.publishableDrafts} drafts publicables`, `${input.draftListings} drafts totales`, `${input.activeListings} activos`],
+      externalSignals: ['Nicho pet evergreen USA', 'Priorizar problemas frecuentes: paseo, grooming, viaje, limpieza y enriquecimiento'],
+      nextMove: input.publishableDrafts > 0 ? 'Publicar solo drafts aprobados con margen e imagenes.' : 'Ejecutar discovery controlado y evaluar backlog.',
+      automatedActions: ['PUBLISH_APPROVED_BACKLOG'],
+    },
+    {
+      key: 'publish_quality',
+      label: 'Publicacion y calidad de ficha',
+      page: '/cj-shopify-usa/listings',
+      score: catalogQualityScore,
+      status: pipelineStatus(catalogQualityScore),
+      objective: 'Evitar productos sin imagen, titulos genericos, duplicados o descripciones debiles.',
+      internalSignals: [`${input.copyIssues} fichas debiles`, `${input.duplicateGroups} grupos duplicados`, `${input.noMedia} productos Shopify sin media`],
+      externalSignals: ['Comprador USA espera titulos naturales en ingles, fotos claras y confianza inmediata'],
+      nextMove: input.copyIssues > 0 || input.duplicateGroups > 0 ? 'Corregir fichas y curar duplicados antes de llevar trafico.' : 'Catalogo listo para empuje moderado.',
+      automatedActions: ['FIX_CATALOG_QUALITY', 'CURATE_SIMILAR_PRODUCTS'],
+    },
+    {
+      key: 'profit_protection',
+      label: 'Margen, shipping y precio seguro',
+      page: '/cj-shopify-usa/profit',
+      score: profitScore,
+      status: pipelineStatus(profitScore),
+      objective: 'Confirmar que cada venta cubre costo CJ, shipping real, fees y margen minimo.',
+      internalSignals: [`${input.profitGuard.reviewRequired} en revision`, `${input.profitGuard.priceIncreases} subidas potenciales`, `${input.profitGuard.pausedUnsafe} PAUSE_UNSAFE`],
+      externalSignals: ['Shipping CJ y fees PayPal/Shopify pueden cambiar; el precio minimo debe ser inviolable'],
+      nextMove: input.profitGuard.reviewRequired > 0 ? 'Ejecutar Profit Guard y pausar lo que no demuestre margen.' : 'Margen suficientemente protegido para promocion organica.',
+      automatedActions: ['RUN_PROFIT_GUARD', 'UNPUBLISH_UNSAFE_LISTINGS'],
+    },
+    {
+      key: 'trust_checkout',
+      label: 'Credibilidad y checkout',
+      page: '/cj-shopify-usa/analytics',
+      score: checkoutScore,
+      status: pipelineStatus(checkoutScore),
+      objective: 'Asegurar que el cliente confia, entiende shipping/pagos y puede comprar sin friccion.',
+      internalSignals: [`carrito ${pct(input.addToCartRatePct)}`, `checkout ${pct(input.checkoutRatePct)}`, `compra ${pct(input.purchaseRatePct)}`],
+      externalSignals: ['PayPal activo ayuda, pero la prueba real es una orden de bajo valor capturada correctamente'],
+      nextMove: input.checkoutRatePct > 0 && input.purchaseRatePct === 0 ? 'No escalar ads; probar checkout real y reforzar politicas/contacto.' : 'Mantener monitoreo del embudo.',
+      automatedActions: ['VERIFY_CHECKOUT'],
+    },
+    {
+      key: 'traffic',
+      label: 'Trafico organico y posicionamiento',
+      page: '/cj-shopify-usa/sales-agent',
+      score: trafficScore,
+      status: pipelineStatus(trafficScore),
+      objective: 'Promover productos con score comercial alto y mensaje consistente PawVault.',
+      internalSignals: [`${input.promotionCandidates} candidatos para promover`, `${input.socialPublished} posts exitosos`, `${input.socialFailed} posts fallidos`],
+      externalSignals: ['Pinterest favorece busqueda visual evergreen; Instagram/TikTok requieren OAuth y formatos nativos'],
+      nextMove: input.promotionCandidates > 0 ? 'Ejecutar campana organica semanal con productos A/B.' : 'Resolver calidad/margen antes de publicar contenido.',
+      automatedActions: ['PROMOTE_TOP_PRODUCTS', 'BUILD_SALES_CAMPAIGN'],
+    },
+    {
+      key: 'conversion_learning',
+      label: 'Conversion, aprendizaje y escalado',
+      page: '/cj-shopify-usa/analytics',
+      score: learningScore,
+      status: pipelineStatus(learningScore),
+      objective: 'Comparar acciones vs visitas, carrito, checkout y venta para escalar ganadores.',
+      internalSignals: [`${input.visitors} visitantes medidos`, `campana: ${input.campaign.promote.length} productos`, `${input.commercialScores.filter((item) => item.grade === 'A').length} productos grado A`],
+      externalSignals: ['Escalar solo despues de evidencia: clicks, carritos o ventas; no solo catalogo publicado'],
+      nextMove: input.purchaseRatePct > 0 ? 'Escalar productos ganadores y retirar perdedores.' : 'Recolectar datos con campanas pequenas y trazables.',
+      automatedActions: ['RUN_SALES_PIPELINE_REVIEW'],
+    },
+  ];
+
+  const bottleneck = [...stages].sort((a, b) => a.score - b.score)[0];
+  const overallScore = Math.round(stages.reduce((sum, stage) => sum + stage.score, 0) / Math.max(1, stages.length));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    distinction: 'Automatizacion de publicacion abastece el catalogo; pipeline comercial gestiona performance: confianza, trafico, conversion, aprendizaje y escalado.',
+    overallScore,
+    bottleneck,
+    stages,
+    productLifecycle: {
+      scale: input.commercialScores.filter((item) => item.recommendedAction === 'PROMOTE').slice(0, 8),
+      optimize: input.commercialScores.filter((item) => item.recommendedAction === 'FIX').slice(0, 8),
+      protect: input.commercialScores.filter((item) => item.recommendedAction === 'PROFIT_GUARD').slice(0, 8),
+      retireOrMerge: input.commercialScores.filter((item) => item.recommendedAction === 'CURATE_DUPLICATE').slice(0, 8),
+    },
+    strategy: {
+      positioning: [
+        'PawVault debe posicionarse como tienda practica y confiable para rutinas reales de pet parents en USA.',
+        'Priorizar titulos especificos por problema/uso, no nombres genericos de proveedor.',
+      ],
+      credibility: [
+        'No promover productos con margen no demostrado, sin imagen o ficha debil.',
+        'Mantener checkout, politicas, contacto y shipping visibles antes de escalar trafico.',
+      ],
+      traffic: [
+        'Pinterest primero para productos evergreen visuales; Instagram/TikTok cuando OAuth y formatos esten listos.',
+        'Publicar lotes pequenos, medir senal y repetir solo lo que mejora carrito o checkout.',
+      ],
+      conversion: [
+        'Usar precio seguro con margen minimo inviolable y ajustar solo con Profit Guard.',
+        'Promocionar productos grado A/B; corregir o pausar C/D antes de exponerlos.',
+      ],
+    },
+    dataSources: {
+      internal: [
+        'Shopify Admin API',
+        'listings locales CJ Shopify USA',
+        'Profit Guard',
+        'checkout funnel',
+        'ordenes 30 dias',
+        'trazas del agente',
+        'posts sociales',
+      ],
+      external: [
+        'senales de plataforma Pinterest/Instagram/TikTok',
+        'reglas comerciales mercado USA',
+        'shipping real CJ cuando existe',
+        'patrones evergreen del nicho pet',
+      ],
+      missing: [
+        input.purchaseRatePct === 0 ? 'ventas reales suficientes para aprendizaje de conversion' : null,
+        input.socialPublished === 0 ? 'historial de posts exitosos por producto/canal' : null,
+        'conectores OAuth directos para Instagram y TikTok',
+      ].filter(Boolean) as string[],
+    },
+  };
+}
+
 function safeMeta(meta: unknown): Record<string, any> {
   return (meta && typeof meta === 'object' ? meta : {}) as Record<string, any>;
 }
@@ -835,6 +1068,29 @@ export const cjShopifyUsaSalesAgentService = {
       socialCounts,
     });
     const campaign = buildSalesCampaignPlan({ scores: commercialScores, publishableDrafts });
+    const salesPipeline = buildSalesPipeline({
+      healthScore: 0,
+      activeListings: activeListings.length,
+      draftListings: draftListings.length,
+      publishableDrafts: publishableDrafts.length,
+      profitGuard: {
+        reviewRequired: profitGuard.reviewRequired,
+        priceIncreases: profitGuard.priceIncreases,
+        pausedUnsafe: profitGuard.pausedUnsafe,
+      },
+      copyIssues: copyIssues.length,
+      duplicateGroups: duplicateExactGroups.length,
+      noMedia: shopifyNoMedia.length,
+      visitors,
+      addToCartRatePct,
+      checkoutRatePct,
+      purchaseRatePct,
+      socialPublished: socialCounts[CJ_SHOPIFY_USA_SOCIAL_POST_STATUS.SUCCESS] ?? 0,
+      socialFailed: socialCounts[CJ_SHOPIFY_USA_SOCIAL_POST_STATUS.FAILED] ?? 0,
+      promotionCandidates: promotionCandidates.length,
+      commercialScores,
+      campaign,
+    });
 
     const actions: SalesAgentAction[] = [];
 
@@ -916,6 +1172,19 @@ export const cjShopifyUsaSalesAgentService = {
         payload: { campaign },
       });
     }
+
+    actions.push({
+      id: 'run-sales-pipeline-review',
+      type: 'RUN_SALES_PIPELINE_REVIEW',
+      priority: salesPipeline.bottleneck.status === 'blocked' ? 'high' : 'medium',
+      title: 'Revisar pipeline comercial completo',
+      rationale: `Cuello de botella actual: ${salesPipeline.bottleneck.label} (${salesPipeline.bottleneck.score}/100).`,
+      expectedImpact: 'Alinear discovery, publicacion, profit, confianza, trafico y aprendizaje para vender, no solo publicar.',
+      risk: 'safe',
+      canExecute: true,
+      guardrails: ['No gasta en ads', 'No toca pagos', 'No cambia precios agresivamente', 'Usa acciones seguras ya integradas'],
+      payload: { bottleneck: salesPipeline.bottleneck, overallScore: salesPipeline.overallScore },
+    });
 
     if (crowdedFamilies.length > 0 || duplicateExactGroups.length > 0) {
       actions.push({
@@ -1108,6 +1377,7 @@ export const cjShopifyUsaSalesAgentService = {
           .slice(0, 12),
       },
       campaign,
+      salesPipeline,
       decisionTimeline,
       promotionCandidates,
       publishableDrafts,
@@ -1131,7 +1401,7 @@ export const cjShopifyUsaSalesAgentService = {
   },
 
   async executeAction(userId: number, input: { actionType: SalesAgentActionType; limit?: number }) {
-    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'CURATE_SIMILAR_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY', 'BUILD_SALES_CAMPAIGN'].includes(input.actionType)) {
+    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'CURATE_SIMILAR_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY', 'BUILD_SALES_CAMPAIGN', 'RUN_SALES_PIPELINE_REVIEW'].includes(input.actionType)) {
       await recordSalesAgentTrace(userId, 'sales_agent.action.blocked', {
         actionType: input.actionType,
         reason: 'This action requires explicit per-item approval in the current controlled mode.',
@@ -1146,6 +1416,30 @@ export const cjShopifyUsaSalesAgentService = {
 
     const dashboard = await this.dashboard(userId);
     const limit = Math.max(1, Math.min(10, Number(input.limit ?? 5)));
+
+    if (input.actionType === 'RUN_SALES_PIPELINE_REVIEW') {
+      await recordSalesAgentTrace(userId, 'sales_agent.action.run_sales_pipeline_review', {
+        overallScore: dashboard.salesPipeline.overallScore,
+        bottleneck: dashboard.salesPipeline.bottleneck,
+        lifecycle: {
+          scale: dashboard.salesPipeline.productLifecycle.scale.length,
+          optimize: dashboard.salesPipeline.productLifecycle.optimize.length,
+          protect: dashboard.salesPipeline.productLifecycle.protect.length,
+          retireOrMerge: dashboard.salesPipeline.productLifecycle.retireOrMerge.length,
+        },
+        dataSources: dashboard.salesPipeline.dataSources,
+      } as unknown as Prisma.InputJsonValue);
+      return {
+        ok: true,
+        executed: true,
+        actionType: input.actionType,
+        reviewRequired: dashboard.salesPipeline.bottleneck.status === 'healthy' ? 0 : 1,
+        fixed: dashboard.salesPipeline.productLifecycle.optimize.length,
+        queued: dashboard.salesPipeline.productLifecycle.scale.length,
+        pipeline: dashboard.salesPipeline,
+        message: `Pipeline revisado: score ${dashboard.salesPipeline.overallScore}/100; cuello de botella: ${dashboard.salesPipeline.bottleneck.label}.`,
+      };
+    }
 
     if (input.actionType === 'BUILD_SALES_CAMPAIGN') {
       await recordSalesAgentTrace(userId, 'sales_agent.action.build_sales_campaign', {
@@ -1548,6 +1842,12 @@ export const cjShopifyUsaSalesAgentService = {
         marginRisk: dashboard.health.marginRisk,
         catalogTrustRisk: dashboard.health.catalogTrustRisk,
       });
+      log('diagnostic', dashboard.salesPipeline.bottleneck.status === 'blocked' ? 'warn' : 'info', 'Pipeline comercial evaluado', {
+        pipelineScore: dashboard.salesPipeline.overallScore,
+        bottleneck: dashboard.salesPipeline.bottleneck.label,
+        bottleneckScore: dashboard.salesPipeline.bottleneck.score,
+        distinction: dashboard.salesPipeline.distinction,
+      });
 
       if (schedulerConfig.safeMode) {
         log('safe_mode', 'info', 'Modo seguro activo: sin pagos, ads, cambios agresivos de precio ni lotes masivos', {
@@ -1632,8 +1932,19 @@ export const cjShopifyUsaSalesAgentService = {
         socialLearningReady: dashboard.kpis.socialPublished > 0,
         funnelLearningReady: dashboard.kpis.visitors > 0,
         topAction: dashboard.actions[0]?.type ?? null,
+        pipelineBottleneck: dashboard.salesPipeline.bottleneck.key,
       };
       log('learning', 'info', 'Aprendizaje actualizado con resultados del ciclo', learningSignals);
+      await recordSalesAgentTrace(userId, 'sales_agent.pipeline.snapshot', {
+        overallScore: dashboard.salesPipeline.overallScore,
+        bottleneck: dashboard.salesPipeline.bottleneck,
+        stages: dashboard.salesPipeline.stages.map((stage) => ({
+          key: stage.key,
+          score: stage.score,
+          status: stage.status,
+          nextMove: stage.nextMove,
+        })),
+      } as unknown as Prisma.InputJsonValue);
 
       cycle.status = 'COMPLETED';
       cycle.finishedAt = new Date().toISOString();
