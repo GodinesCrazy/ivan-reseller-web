@@ -74,6 +74,37 @@ const DECISION_LABEL: Record<string, string> = {
   PENDING:  'Pendiente',
 };
 
+function evaluationReasonTexts(reasons: unknown): string[] {
+  if (Array.isArray(reasons)) {
+    return reasons.map((item) => String(item)).filter(Boolean);
+  }
+  if (typeof reasons === 'string') return [reasons].filter(Boolean);
+  if (reasons && typeof reasons === 'object') {
+    const record = reasons as Record<string, unknown>;
+    if (Array.isArray(record.reasons)) return record.reasons.map((item) => String(item)).filter(Boolean);
+    if (typeof record.reason === 'string') return [record.reason];
+  }
+  return [];
+}
+
+function translateEvaluationReason(reason: string): string {
+  if (/Product cost too low/i.test(reason)) return 'Costo CJ demasiado bajo para operar con margen sano';
+  if (/minimum sell price/i.test(reason)) return 'Precio sugerido queda bajo el minimo comercial';
+  if (/maximum sell price|price cap/i.test(reason)) return 'Precio sugerido supera el maximo configurado';
+  if (/Shipping too expensive/i.test(reason)) return 'Shipping CJ supera el maximo configurado';
+  if (/Net margin too low/i.test(reason)) return 'Margen neto bajo el minimo configurado';
+  if (/Net profit too low/i.test(reason)) return 'Profit neto bajo el minimo configurado';
+  if (/Fee and margin/i.test(reason)) return 'Configuracion de fees y margen invalida';
+  if (/stock/i.test(reason)) return 'Stock o variante insuficiente';
+  return reason;
+}
+
+function evaluationBlockReason(ev: Evaluation | null): string {
+  if (!ev || ev.decision !== 'REJECTED') return '';
+  const translated = evaluationReasonTexts(ev.reasons).map(translateEvaluationReason);
+  return translated[0] ?? 'No cumple una regla comercial de publicacion';
+}
+
 function usd(n: number | null | undefined): string {
   if (n == null) return '—';
   return `$${Number(n).toFixed(2)}`;
@@ -230,11 +261,12 @@ function buildManualReadiness(row: ProductRow, duplicateTitleCount: number): Man
   }
 
   if (ev.decision === 'REJECTED') {
+    const reason = evaluationBlockReason(ev);
     return {
       state: 'blocked',
-      label: 'No rentable',
-      nextAction: 'Ver razones o eliminar',
-      reasons: ['evaluacion rechazada'],
+      label: reason ? 'Regla comercial' : 'No publicable',
+      nextAction: reason || 'Ver razones o eliminar',
+      reasons: reason ? [reason] : ['evaluacion rechazada'],
       className: 'border-rose-700/60 bg-rose-950/35 text-rose-200',
     };
   }
@@ -523,7 +555,7 @@ export default function CjShopifyUsaProductsPage() {
 
                 return (
                   <>
-                    <tr key={row.id} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40">
+                    <tr key={row.id} className="border-t border-slate-100 transition-colors duration-200 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40">
                       <td className="px-3 py-2 font-mono tabular-nums text-xs">{row.id}</td>
                       <td className="px-3 py-2 max-w-[200px]">
                         <p className="truncate font-medium text-slate-900 dark:text-slate-100" title={row.title}>
@@ -537,7 +569,7 @@ export default function CjShopifyUsaProductsPage() {
                         />
                       </td>
                       <td className="px-3 py-2 min-w-[180px]">
-                        <div className={`rounded-md border px-2.5 py-2 text-xs ${readiness.className}`}>
+                        <div className={`rounded-md border px-2.5 py-2 text-xs shadow-sm transition duration-200 motion-safe:hover:-translate-y-0.5 ${readiness.className}`}>
                           <div className="flex items-center gap-1.5 font-semibold">
                             {readiness.state === 'blocked' ? (
                               <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
@@ -647,7 +679,7 @@ export default function CjShopifyUsaProductsPage() {
                           className="inline-flex h-7 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-40 dark:border-blue-800/70 dark:bg-blue-950/30 dark:text-blue-300"
                           onClick={() => void reEvaluateProduct(row)}
                         >
-                          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                          <RefreshCw className={`h-3.5 w-3.5 ${busyId === row.id ? 'animate-spin' : ''}`} aria-hidden="true" />
                           {busyId === row.id ? '...' : 'Recalcular'}
                         </button>
                         <button
@@ -670,12 +702,25 @@ export default function CjShopifyUsaProductsPage() {
                             <div>
                               <p className="font-medium text-slate-800 dark:text-slate-200 mb-1">Última evaluación</p>
                               <p>Decisión: <strong>{ev.decision}</strong> — Margen: {pct(ev.estimatedMarginPct)}</p>
+                              {ev.decision === 'REJECTED' && evaluationBlockReason(ev) && (
+                                <p className="mt-1 rounded-md border border-amber-500/35 bg-amber-950/20 px-3 py-2 text-amber-100">
+                                  Rechazado por regla comercial: {evaluationBlockReason(ev)}. El margen puede verse alto y aun asi bloquearse si el costo, shipping, precio maximo/minimo o profit neto no cumplen.
+                                </p>
+                              )}
                               {ev.reasons != null && (
                                 <details className="mt-1">
                                   <summary className="cursor-pointer text-slate-500">Ver razones</summary>
-                                  <pre className="whitespace-pre-wrap text-xs mt-1 bg-slate-100 dark:bg-slate-900 rounded p-2">
-                                    {JSON.stringify(ev.reasons as Record<string, unknown>, null, 2)}
-                                  </pre>
+                                  <div className="mt-1 rounded bg-slate-100 p-2 text-xs dark:bg-slate-900">
+                                    {evaluationReasonTexts(ev.reasons).length > 0 ? (
+                                      <ul className="space-y-1">
+                                        {evaluationReasonTexts(ev.reasons).map((reason) => (
+                                          <li key={reason}>- {translateEvaluationReason(reason)}</li>
+                                        ))}
+                                      </ul>
+                                    ) : (
+                                      <pre className="whitespace-pre-wrap">{JSON.stringify(ev.reasons as Record<string, unknown>, null, 2)}</pre>
+                                    )}
+                                  </div>
                                 </details>
                               )}
                             </div>
@@ -689,11 +734,11 @@ export default function CjShopifyUsaProductsPage() {
                                 { label: 'Titulo comercial', ok: titleQualityIssues(row.title).length === 0, detail: titleQualityIssues(row.title).join(', ') || 'OK' },
                                 { label: 'Stock', ok: row.variants.some((v) => Number(v.stockLastKnown ?? 0) > 0), detail: `${row.variants.reduce((sum, v) => sum + Number(v.stockLastKnown ?? 0), 0)}` },
                                 { label: 'Duplicados', ok: (duplicateTitleCounts.get(normalizeTitleKey(row.title)) ?? 0) <= 1, detail: `${duplicateTitleCounts.get(normalizeTitleKey(row.title)) ?? 0}` },
-                                { label: 'Margen', ok: ev?.decision === 'APPROVED', detail: ev ? `${ev.decision} / ${pct(ev.estimatedMarginPct)}` : 'sin evaluar' },
+                                { label: 'Regla comercial', ok: ev?.decision === 'APPROVED', detail: ev?.decision === 'REJECTED' ? evaluationBlockReason(ev) || `${ev.decision} / ${pct(ev.estimatedMarginPct)}` : ev ? `${ev.decision} / ${pct(ev.estimatedMarginPct)}` : 'sin evaluar' },
                               ].map((item) => (
                                 <div
                                   key={item.label}
-                                  className={`rounded-md border px-3 py-2 ${item.ok ? 'border-emerald-800/60 bg-emerald-950/20 text-emerald-200' : 'border-rose-800/60 bg-rose-950/20 text-rose-200'}`}
+                                  className={`rounded-md border px-3 py-2 transition duration-200 motion-safe:hover:-translate-y-0.5 ${item.ok ? 'border-emerald-800/60 bg-emerald-950/20 text-emerald-200' : 'border-rose-800/60 bg-rose-950/20 text-rose-200'}`}
                                 >
                                   <p className="font-semibold">{item.ok ? 'OK' : 'Revisar'} · {item.label}</p>
                                   <p className="mt-0.5 text-[11px] opacity-80">{item.detail}</p>

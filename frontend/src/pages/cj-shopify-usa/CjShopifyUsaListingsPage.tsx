@@ -895,7 +895,7 @@ export default function CjShopifyUsaListingsPage() {
 
                 return (
                 <Fragment key={row.id}>
-                  <tr className={`border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40 ${selected ? 'bg-primary-50/60 dark:bg-primary-950/20' : ''}`}>
+                  <tr className={`border-t border-slate-100 transition-colors duration-200 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40 ${selected ? 'bg-primary-50/60 dark:bg-primary-950/20' : ''}`}>
                     <td className="px-3 py-2">
                       <button
                         type="button"
@@ -945,7 +945,7 @@ export default function CjShopifyUsaListingsPage() {
                             type="button"
                             disabled={busyId === row.id || Boolean(publishReason)}
                             title={publishReason ?? 'Publicar en Shopify'}
-                            className="inline-flex h-8 min-w-[96px] flex-1 items-center justify-center gap-1 rounded-md border border-primary-300 bg-primary-600 px-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-500 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500 dark:border-primary-500/70"
+                            className="inline-flex h-8 min-w-[96px] flex-1 items-center justify-center gap-1 rounded-md border border-primary-300 bg-primary-600 px-2.5 text-xs font-bold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-primary-500 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500 disabled:hover:translate-y-0 dark:border-primary-500/70"
                             onClick={() => void publish(row.id)}
                           >
                             <Send className="h-3.5 w-3.5" aria-hidden="true" />
@@ -955,7 +955,7 @@ export default function CjShopifyUsaListingsPage() {
                             type="button"
                             disabled={busyId === row.id || Boolean(pauseReason)}
                             title={pauseReason ?? 'Pausar en Shopify'}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-amber-400/40 bg-amber-500/10 text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-35"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-amber-400/40 bg-amber-500/10 text-amber-200 transition duration-200 hover:-translate-y-0.5 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0"
                             onClick={() => void pauseListing(row.id)}
                           >
                             <Pause className="h-3.5 w-3.5" aria-hidden="true" />
@@ -964,7 +964,7 @@ export default function CjShopifyUsaListingsPage() {
                             type="button"
                             disabled={busyId === row.id || Boolean(unpublishReason)}
                             title={unpublishReason ?? 'Despublicar de Shopify'}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-35"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-400/40 bg-rose-500/10 text-rose-200 transition duration-200 hover:-translate-y-0.5 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0"
                             onClick={() => void unpublishListing(row.id)}
                           >
                             <Archive className="h-3.5 w-3.5" aria-hidden="true" />
@@ -980,7 +980,7 @@ export default function CjShopifyUsaListingsPage() {
                             type="button"
                             disabled={busyId === row.id || Boolean(expandReason)}
                             title={expandReason ?? 'Agregar variantes CJ al producto Shopify'}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-violet-400/40 bg-violet-500/10 text-violet-200 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-35"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-violet-400/40 bg-violet-500/10 text-violet-200 transition duration-200 hover:-translate-y-0.5 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0"
                             onClick={() => void expandVariants(row.id)}
                           >
                             <GitMerge className="h-3.5 w-3.5" aria-hidden="true" />
@@ -991,7 +991,7 @@ export default function CjShopifyUsaListingsPage() {
                               target="_blank"
                               rel="noreferrer"
                               title={storefrontReason ?? (row.publishTruth?.buyerFacingVerified ? 'Abrir producto buyer-ready' : 'Abrir storefront para diagnosticar')}
-                              className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition ${
+                              className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition duration-200 hover:-translate-y-0.5 ${
                                 row.publishTruth?.buyerFacingVerified
                                   ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'
                                   : 'border-slate-600 bg-slate-900 text-slate-300 hover:bg-slate-800'
@@ -1003,7 +1003,7 @@ export default function CjShopifyUsaListingsPage() {
                           <button
                             type="button"
                             title={expandedId === row.id ? 'Ocultar detalle' : 'Ver detalle'}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-600 bg-slate-900 text-slate-300 transition hover:bg-slate-800"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-600 bg-slate-900 text-slate-300 transition duration-200 hover:-translate-y-0.5 hover:bg-slate-800"
                             onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}
                           >
                             <Eye className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1012,7 +1012,7 @@ export default function CjShopifyUsaListingsPage() {
                             type="button"
                             disabled={busyId === row.id || Boolean(deleteReason)}
                             title={deleteReason ?? 'Eliminar borrador/fallido local'}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-400/40 bg-red-500/10 text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-35"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-400/40 bg-red-500/10 text-red-200 transition duration-200 hover:-translate-y-0.5 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0"
                             onClick={() => void deleteListing(row)}
                           >
                             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />

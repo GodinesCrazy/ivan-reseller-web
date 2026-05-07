@@ -40,7 +40,7 @@ export function ProductLifecycleLine({ steps, compact = false, className = '' }:
         {steps.map((step, index) => (
           <div key={step.key} className="flex items-center">
             <div className="flex flex-col items-center" title={step.title ?? `${step.label}: ${step.state}`}>
-              <span className={`flex ${nodeSize} items-center justify-center rounded-full border font-black ${nodeClass(step.state)}`}>
+              <span className={`flex ${nodeSize} items-center justify-center rounded-full border font-black shadow-sm transition duration-200 motion-safe:hover:scale-110 ${nodeClass(step.state)}`}>
                 {step.state === 'done' ? 'OK' : step.state === 'blocked' ? '!' : index + 1}
               </span>
               <span className={`mt-1 truncate font-medium text-slate-500 dark:text-slate-400 ${labelClass}`}>
@@ -48,7 +48,17 @@ export function ProductLifecycleLine({ steps, compact = false, className = '' }:
               </span>
             </div>
             {index < steps.length - 1 && (
-              <span className={`mb-5 h-0.5 ${connectorWidth} ${connectorClass(step, steps[index + 1])}`} />
+              <span className={`mb-5 h-0.5 ${connectorWidth} overflow-hidden rounded-full bg-slate-800`}>
+                <span
+                  className={`block h-full rounded-full transition-all duration-500 ${
+                    step.state === 'active' || steps[index + 1].state === 'active'
+                      ? 'w-2/3 motion-safe:animate-pulse'
+                      : step.state === 'done'
+                        ? 'w-full'
+                        : 'w-1/3'
+                  } ${connectorClass(step, steps[index + 1])}`}
+                />
+              </span>
             )}
           </div>
         ))}

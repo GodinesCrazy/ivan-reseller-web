@@ -324,14 +324,14 @@ function ProductCard({
   const isRateLimited = Boolean(rateLimitUntil && rateLimitUntil > Date.now());
 
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden flex flex-col">
+    <div className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition duration-300 motion-safe:hover:-translate-y-1 motion-safe:hover:shadow-lg dark:border-slate-700 dark:bg-slate-900">
       {/* Image */}
       <div className="h-36 bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
         {product.mainImageUrl ? (
           <img
             src={product.mainImageUrl}
             alt={product.title}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
             }}
@@ -420,7 +420,7 @@ function ProductCard({
           <button
             onClick={handleEvaluate}
             disabled={isEvaluating || isRateLimited}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition duration-200 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
             title={isRateLimited ? 'CJ pidio una pausa temporal. Reintenta en cerca de 1 minuto.' : undefined}
           >
             {isEvaluating ? (
@@ -436,7 +436,7 @@ function ProductCard({
           <button
             onClick={handleCreateDraft}
             disabled={isDrafting || isDrafted || isRejected || isRateLimited}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-colors disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition duration-200 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0"
             title={
               isRateLimited
                 ? 'CJ pidio una pausa temporal. Reintenta en cerca de 1 minuto.'

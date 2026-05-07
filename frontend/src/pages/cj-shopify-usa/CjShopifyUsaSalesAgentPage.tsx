@@ -1040,7 +1040,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                   <p className="mb-2 text-xs font-bold uppercase text-slate-500">Mejores para empujar</p>
                   <div className="space-y-2">
                     {data.commercialScores.top.slice(0, 5).map((item) => (
-                      <div key={item.listingId} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                      <div key={item.listingId} className="rounded-lg border border-slate-800 bg-slate-900 p-3 transition duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:border-cyan-500/35">
                         <div className="flex items-start justify-between gap-3">
                           <p className="line-clamp-2 text-sm font-semibold text-slate-100">{item.title}</p>
                           <span className={`rounded-full border px-2 py-1 text-xs font-bold ${gradeClass(item.grade)}`}>{item.grade} {item.score}</span>
@@ -1057,7 +1057,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                   <p className="mb-2 text-xs font-bold uppercase text-slate-500">Riesgo o trabajo pendiente</p>
                   <div className="space-y-2">
                     {data.commercialScores.needsWork.slice(0, 5).map((item) => (
-                      <div key={item.listingId} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                      <div key={item.listingId} className="rounded-lg border border-slate-800 bg-slate-900 p-3 transition duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:border-amber-500/35">
                         <div className="flex items-start justify-between gap-3">
                           <p className="line-clamp-2 text-sm font-semibold text-slate-100">{item.title}</p>
                           <span className={`rounded-full border px-2 py-1 text-xs font-bold ${gradeClass(item.grade)}`}>{item.grade} {item.score}</span>
@@ -1209,7 +1209,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                   return (
                   <article
                     key={action.id}
-                    className={`rounded-lg border p-4 ${
+                    className={`rounded-lg border p-4 transition duration-200 motion-safe:hover:-translate-y-0.5 ${
                       executionStatus === 'applied'
                         ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-50'
                         : priorityClass(action.priority)
@@ -1378,7 +1378,7 @@ export default function CjShopifyUsaSalesAgentPage() {
               </h3>
               <div className="mt-3 space-y-2">
                 {data.promotionCandidates.slice(0, 6).map((item) => (
-                  <div key={item.listingId} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
+                  <div key={item.listingId} className="rounded-lg border border-slate-800 bg-slate-900 p-3 transition duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:border-cyan-500/35">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="line-clamp-2 text-sm font-semibold text-slate-100">{item.title}</p>
@@ -1404,7 +1404,7 @@ export default function CjShopifyUsaSalesAgentPage() {
               </h3>
               <div className="mt-3 space-y-2">
                 {data.unsafeUnpublishCandidates.slice(0, 6).map((item) => (
-                  <div key={item.listingId} className="rounded-lg border border-red-500/20 bg-black/20 p-3">
+                  <div key={item.listingId} className="rounded-lg border border-red-500/20 bg-black/20 p-3 transition duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:border-red-400/50">
                     <p className="line-clamp-2 text-sm font-semibold text-red-50">{item.title}</p>
                     <p className="mt-1 text-xs text-red-200">{item.reason}</p>
                     <p className="mt-1 text-[11px] text-red-300">
