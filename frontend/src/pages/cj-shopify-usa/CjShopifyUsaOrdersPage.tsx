@@ -33,11 +33,17 @@ type OrderRow = {
   updatedAt: string;
   tracking: TrackingInfo | null;
   buyerPayload?: BuyerPayload | null;
+  rawShopifySummary?: {
+    name?: string | null;
+    displayFinancialStatus?: string | null;
+    displayFulfillmentStatus?: string | null;
+  } | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<string, string> = {
+  WAITING_PAYMENT:         'Esperando pago Shopify',
   DETECTED:                'Detectada',
   VALIDATED:               'Validada',
   CJ_ORDER_PLACING:        'Colocando en CJ',
@@ -58,6 +64,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
+  WAITING_PAYMENT:         'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   DETECTED:                'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
   VALIDATED:               'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   CJ_ORDER_PLACING:        'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
@@ -78,6 +85,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const NEXT_STEP: Record<string, string> = {
+  WAITING_PAYMENT:         'No comprar en CJ hasta pago PAID',
   DETECTED:                'Pendiente de validación',
   VALIDATED:               'Ordenar en CJ',
   CJ_ORDER_PLACING:        'Esperando respuesta CJ',
@@ -125,6 +133,14 @@ function trackingLabel(order: OrderRow): string {
     return 'Pendiente proveedor';
   }
   return '—';
+}
+
+function paymentLabel(order: OrderRow): string {
+  return String(order.rawShopifySummary?.displayFinancialStatus || 'UNKNOWN').toUpperCase();
+}
+
+function orderDisplayName(order: OrderRow): string {
+  return order.rawShopifySummary?.name || order.shopifyOrderId;
 }
 
 function axiosMsg(e: unknown, fb: string): string {
@@ -265,7 +281,7 @@ export default function CjShopifyUsaOrdersPage() {
           {attention > 0 && (
             <button
               type="button"
-              onClick={() => setFilterStatus('FAILED')}
+              onClick={() => setFilterStatus('SUPPLIER_PAYMENT_BLOCKED')}
               className="rounded-full px-3 py-1 font-medium bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
             >
               Requieren atención ({attention})
@@ -321,6 +337,7 @@ export default function CjShopifyUsaOrdersPage() {
           <thead className="bg-slate-50 dark:bg-slate-900/80 text-left text-xs font-medium text-slate-500 uppercase">
             <tr>
               <th className="px-3 py-2">Shopify Order</th>
+              <th className="px-3 py-2">Pago</th>
               <th className="px-3 py-2">Estado</th>
               <th className="px-3 py-2">Próximo paso / Error</th>
               <th className="px-3 py-2">CJ Order</th>
@@ -334,7 +351,7 @@ export default function CjShopifyUsaOrdersPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-500 text-sm">
+                <td colSpan={10} className="px-3 py-8 text-center text-slate-500 text-sm">
                   {orders.length === 0
                     ? 'Sin órdenes. Las órdenes de Shopify aparecen aquí cuando llegan por webhook o se sincronizan manualmente.'
                     : 'Sin órdenes con ese filtro.'}
@@ -347,7 +364,19 @@ export default function CjShopifyUsaOrdersPage() {
                   className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40 cursor-pointer"
                   onClick={() => navigate(`/cj-shopify-usa/orders/${row.id}`)}
                 >
-                  <td className="px-3 py-2 font-mono text-xs">{row.shopifyOrderId}</td>
+                  <td className="px-3 py-2">
+                    <div className="font-semibold text-xs">{orderDisplayName(row)}</div>
+                    <div className="font-mono text-[11px] text-slate-500">{row.shopifyOrderId}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                      paymentLabel(row) === 'PAID'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                    }`}>
+                      {paymentLabel(row)}
+                    </span>
+                  </td>
                   <td className="px-3 py-2">
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[row.status] ?? 'bg-slate-100 text-slate-700'}`}>
                       {STATUS_LABEL[row.status] ?? row.status}
@@ -391,15 +420,15 @@ export default function CjShopifyUsaOrdersPage() {
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       {/* Manual CJ order trigger */}
-                      {['DETECTED', 'VALIDATED', 'NEEDS_MANUAL', 'FAILED'].includes(row.status) && (
+                      {['VALIDATED', 'FAILED', 'SUPPLIER_PAYMENT_BLOCKED'].includes(row.status) && (
                         <button
                           type="button"
                           disabled={actionBusy === row.id + 'process'}
                           onClick={(e) => { e.stopPropagation(); void triggerOrderAction(row.id, 'process', 'Enviar a CJ'); }}
                           className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
-                          title="Enviar orden manualmente a CJ Dropshipping"
+                          title="Procesar con guardrails: pago PAID, USA, margen y shipping demostrados"
                         >
-                          {actionBusy === row.id + 'process' ? '…' : '▶ Enviar CJ'}
+                          {actionBusy === row.id + 'process' ? '…' : row.status === 'SUPPLIER_PAYMENT_BLOCKED' ? '↻ Reintentar saldo CJ' : '▶ Procesar seguro'}
                         </button>
                       )}
                       {/* Sync tracking for shipped orders */}

@@ -225,6 +225,9 @@ function getRequiredWebhookUris() {
   const base = getWebhookBaseUrl();
   return {
     ORDERS_CREATE: `${base}/api/cj-shopify-usa/webhooks/orders-create`,
+    ORDERS_PAID: `${base}/api/cj-shopify-usa/webhooks/orders-paid`,
+    ORDERS_CANCELLED: `${base}/api/cj-shopify-usa/webhooks/orders-cancelled`,
+    REFUNDS_CREATE: `${base}/api/cj-shopify-usa/webhooks/refunds-create`,
     APP_UNINSTALLED: `${base}/api/cj-shopify-usa/webhooks/app-uninstalled`,
   } as const;
 }

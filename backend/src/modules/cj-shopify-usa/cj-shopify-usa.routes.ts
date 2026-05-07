@@ -92,6 +92,66 @@ router.post(
 );
 
 router.post(
+  '/webhooks/orders-paid',
+  moduleGate,
+  createWebhookSignatureValidator('shopify'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = await cjShopifyUsaOrderIngestService.resolveUserIdFromWebhookShop(
+        req.headers['x-shopify-shop-domain'],
+      );
+      const result = await cjShopifyUsaOrderIngestService.handleOrdersPaidWebhook({
+        userId,
+        body: req.body,
+      });
+      res.json({ ok: true, count: result.count, processed: result.processed });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/webhooks/orders-cancelled',
+  moduleGate,
+  createWebhookSignatureValidator('shopify'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = await cjShopifyUsaOrderIngestService.resolveUserIdFromWebhookShop(
+        req.headers['x-shopify-shop-domain'],
+      );
+      const result = await cjShopifyUsaOrderIngestService.handleOrdersCancelledWebhook({
+        userId,
+        body: req.body,
+      });
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/webhooks/refunds-create',
+  moduleGate,
+  createWebhookSignatureValidator('shopify'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = await cjShopifyUsaOrderIngestService.resolveUserIdFromWebhookShop(
+        req.headers['x-shopify-shop-domain'],
+      );
+      const result = await cjShopifyUsaOrderIngestService.handleOrdersCancelledWebhook({
+        userId,
+        body: req.body?.order_id ? { ...req.body, admin_graphql_api_id: null, id: req.body.order_id } : req.body,
+      });
+      res.json({ ok: true, ...result, refundWebhook: true });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
   '/webhooks/app-uninstalled',
   moduleGate,
   createWebhookSignatureValidator('shopify'),

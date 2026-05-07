@@ -7,6 +7,7 @@ import {
   CJ_SHOPIFY_USA_ALERT_TYPE,
   CJ_SHOPIFY_USA_ORDER_STATUS,
 } from '../cj-shopify-usa.constants';
+import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 
 // Non-retryable statuses — processing from these is a no-op (idempotency guard)
 const NON_RETRYABLE_STATUSES = new Set([
@@ -23,6 +24,14 @@ const NON_RETRYABLE_STATUSES = new Set([
   CJ_SHOPIFY_USA_ORDER_STATUS.TRACKING_ON_SHOPIFY,
   CJ_SHOPIFY_USA_ORDER_STATUS.COMPLETED,
 ]);
+
+const PROCESSABLE_STATUSES = new Set([
+  CJ_SHOPIFY_USA_ORDER_STATUS.VALIDATED,
+  CJ_SHOPIFY_USA_ORDER_STATUS.FAILED,
+  CJ_SHOPIFY_USA_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
+]);
+
+const PAID_FINANCIAL_STATUSES = new Set(['PAID']);
 
 async function getCjToken(): Promise<string | null> {
   const apiKey = env.CJ_API_KEY;
@@ -78,6 +87,34 @@ function normalizeShopifyWebhookOrderId(body: any): string | null {
 
   const numeric = String(body?.id || '').trim();
   return numeric ? `gid://shopify/Order/${numeric}` : null;
+}
+
+function shopifyFinancialStatusFromSummary(summary: unknown): string {
+  const obj = (summary || {}) as { displayFinancialStatus?: unknown };
+  return String(obj.displayFinancialStatus || '').trim().toUpperCase();
+}
+
+function shopifyFinancialStatusFromOrder(order: ShopifyOrderNode): string {
+  return String(order.displayFinancialStatus || '').trim().toUpperCase();
+}
+
+function isShopifyPaidStatus(value: unknown): boolean {
+  return PAID_FINANCIAL_STATUSES.has(String(value || '').trim().toUpperCase());
+}
+
+function isBalanceBlockMessage(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('balance') ||
+    lower.includes('insufficient') ||
+    lower.includes('payment') ||
+    lower.includes('pay') ||
+    lower.includes('saldo')
+  );
+}
+
+function isAdvancedOrderStatus(status: string): boolean {
+  return NON_RETRYABLE_STATUSES.has(status as never);
 }
 
 async function mapManagedLineItem(userId: number, order: ShopifyOrderNode) {
@@ -282,6 +319,22 @@ async function upsertOrderFromShopifyNode(userId: number, order: ShopifyOrderNod
   }
 
   const match = mapping.match;
+  const financialStatus = shopifyFinancialStatusFromOrder(order);
+  const mappedStatus = isShopifyPaidStatus(financialStatus)
+    ? CJ_SHOPIFY_USA_ORDER_STATUS.VALIDATED
+    : CJ_SHOPIFY_USA_ORDER_STATUS.WAITING_PAYMENT;
+  const existingOrder = await prisma.cjShopifyUsaOrder.findUnique({
+    where: {
+      userId_shopifyOrderId: {
+        userId,
+        shopifyOrderId: order.id,
+      },
+    },
+    select: { status: true, cjOrderId: true, lastError: true },
+  });
+  const nextStatus = existingOrder && (isAdvancedOrderStatus(existingOrder.status) || existingOrder.status === CJ_SHOPIFY_USA_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED)
+    ? existingOrder.status
+    : mappedStatus;
   const orderRow = await prisma.cjShopifyUsaOrder.upsert({
     where: {
       userId_shopifyOrderId: {
@@ -292,7 +345,7 @@ async function upsertOrderFromShopifyNode(userId: number, order: ShopifyOrderNod
     create: {
       userId,
       shopifyOrderId: order.id,
-      status: CJ_SHOPIFY_USA_ORDER_STATUS.DETECTED,
+      status: mappedStatus,
       lineItemRef: match.lineItem.id,
       productId: match.listing.productId,
       variantId: match.listing.variantId,
@@ -303,10 +356,10 @@ async function upsertOrderFromShopifyNode(userId: number, order: ShopifyOrderNod
       buyerPayload,
       totalUsd: Number.isFinite(totalUsd) ? totalUsd : null,
       currency: totalMoney?.currencyCode || 'USD',
-      lastError: null,
+      lastError: nextStatus === CJ_SHOPIFY_USA_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED ? existingOrder?.lastError ?? null : null,
     },
     update: {
-      status: CJ_SHOPIFY_USA_ORDER_STATUS.DETECTED,
+      status: nextStatus,
       lineItemRef: match.lineItem.id,
       productId: match.listing.productId,
       variantId: match.listing.variantId,
@@ -323,12 +376,15 @@ async function upsertOrderFromShopifyNode(userId: number, order: ShopifyOrderNod
 
   await appendOrderEvent(
     orderRow.id,
-    CJ_SHOPIFY_USA_ORDER_STATUS.DETECTED,
-    'Shopify order ingested and mapped to a managed CJ listing.',
+    orderRow.status,
+    isShopifyPaidStatus(financialStatus)
+      ? 'Shopify order ingested, paid, and validated for supplier guard review.'
+      : 'Shopify order ingested and mapped, waiting for Shopify payment confirmation.',
     {
       listingId: match.listing.id,
       lineItemId: match.lineItem.id,
       sku: match.lineItem.sku || match.lineItem.variant?.sku || null,
+      shopifyFinancialStatus: financialStatus || null,
     } as Prisma.InputJsonValue,
   );
 
@@ -382,16 +438,101 @@ export const cjShopifyUsaOrderIngestService = {
     });
   },
 
+  async handleOrdersPaidWebhook(input: {
+    userId: number;
+    body: any;
+  }) {
+    const shopifyOrderId = normalizeShopifyWebhookOrderId(input.body);
+    if (!shopifyOrderId) {
+      throw new AppError(
+        'Shopify paid webhook payload did not include an order id.',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    const result = await this.syncOrders({
+      userId: input.userId,
+      shopifyOrderId,
+    });
+
+    const processed: Array<{ orderId: string; status: string; cjOrderId?: string | null; skipped?: boolean; reason?: string }> = [];
+    for (const order of result.orders) {
+      if (order.status !== CJ_SHOPIFY_USA_ORDER_STATUS.VALIDATED) {
+        processed.push({ orderId: order.id, status: order.status, skipped: true, reason: order.lastError || 'not_validated' });
+        continue;
+      }
+      try {
+        const out = await this.processOrder({ userId: input.userId, orderId: order.id });
+        processed.push({
+          orderId: order.id,
+          status: String(out.status || order.status),
+          cjOrderId: 'cjOrderId' in out ? out.cjOrderId ?? null : null,
+          skipped: Boolean(out.skipped),
+          reason: 'reason' in out ? String(out.reason || '') : undefined,
+        });
+      } catch (error) {
+        const updated = await prisma.cjShopifyUsaOrder.findUnique({
+          where: { id: order.id },
+          select: { status: true, lastError: true, cjOrderId: true },
+        });
+        processed.push({
+          orderId: order.id,
+          status: updated?.status || CJ_SHOPIFY_USA_ORDER_STATUS.FAILED,
+          cjOrderId: updated?.cjOrderId ?? null,
+          skipped: true,
+          reason: updated?.lastError || (error instanceof Error ? error.message : String(error)),
+        });
+      }
+    }
+
+    return { ...result, processed };
+  },
+
+  async handleOrdersCancelledWebhook(input: {
+    userId: number;
+    body: any;
+  }) {
+    const shopifyOrderId = normalizeShopifyWebhookOrderId(input.body);
+    if (!shopifyOrderId) return { count: 0 };
+    const order = await prisma.cjShopifyUsaOrder.findUnique({
+      where: { userId_shopifyOrderId: { userId: input.userId, shopifyOrderId } },
+      select: { id: true, status: true, cjOrderId: true },
+    });
+    if (!order) return { count: 0 };
+    if (!order.cjOrderId && !isAdvancedOrderStatus(order.status)) {
+      await prisma.cjShopifyUsaOrder.update({
+        where: { id: order.id },
+        data: {
+          status: CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+          lastError: 'Shopify order was cancelled before supplier placement.',
+        },
+      });
+      await appendOrderEvent(order.id, CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL, 'Shopify cancellation received before CJ placement.');
+      return { count: 1, blocked: true };
+    }
+    await appendOrderEvent(order.id, 'SHOPIFY_CANCELLED_AFTER_CJ_REVIEW', 'Shopify cancellation/refund received after CJ processing started; manual supplier review required.');
+    await createAlert(input.userId, CJ_SHOPIFY_USA_ALERT_TYPE.ORDER_NEEDS_MANUAL, {
+      shopifyOrderId,
+      reason: 'shopify_cancelled_after_cj_processing',
+      cjOrderId: order.cjOrderId,
+    } as Prisma.InputJsonValue);
+    return { count: 1, blocked: false };
+  },
+
   // ── Manual order processing (idempotent) ────────────────────────────────
   async processOrder(input: { userId: number; orderId: string }) {
     const order = await prisma.cjShopifyUsaOrder.findFirst({
       where: { id: input.orderId, userId: input.userId },
       include: {
-        variant: { select: { cjSku: true, cjVid: true } },
+        variant: { select: { cjSku: true, cjVid: true, unitCostUsd: true } },
         listing: {
           select: {
+            id: true,
+            status: true,
+            listedPriceUsd: true,
             shippingQuote: {
-              select: { originCountryCode: true },
+              select: { amountUsd: true, confidence: true, originCountryCode: true },
             },
           },
         },
@@ -400,7 +541,7 @@ export const cjShopifyUsaOrderIngestService = {
 
     if (!order) throw new AppError('Order not found', 404, ErrorCode.NOT_FOUND);
 
-    // Idempotency: reject if already past DETECTED/VALIDATED/FAILED/NEEDS_MANUAL
+    // Idempotency: reject if already past supplier placement.
     if (NON_RETRYABLE_STATUSES.has(order.status as never)) {
       return {
         ok: true,
@@ -408,6 +549,38 @@ export const cjShopifyUsaOrderIngestService = {
         reason: `Order already in status ${order.status} — no action taken`,
         status: order.status,
       };
+    }
+
+    if (!PROCESSABLE_STATUSES.has(order.status as never)) {
+      await appendOrderEvent(
+        input.orderId,
+        'ORDER_PROCESS_BLOCKED',
+        `Order is not ready for supplier placement. Current status: ${order.status}.`,
+        { status: order.status } as Prisma.InputJsonValue,
+      );
+      throw new AppError(
+        `Order is not ready for CJ placement. Current status: ${order.status}. Wait for Shopify payment confirmation first.`,
+        409,
+        ErrorCode.RESOURCE_CONFLICT,
+      );
+    }
+
+    const financialStatus = shopifyFinancialStatusFromSummary(order.rawShopifySummary);
+    if (!isShopifyPaidStatus(financialStatus)) {
+      await prisma.cjShopifyUsaOrder.update({
+        where: { id: input.orderId },
+        data: {
+          status: CJ_SHOPIFY_USA_ORDER_STATUS.WAITING_PAYMENT,
+          lastError: `Shopify payment is not confirmed yet (${financialStatus || 'UNKNOWN'}). Supplier purchase is blocked until payment is PAID.`,
+        },
+      });
+      await appendOrderEvent(
+        input.orderId,
+        CJ_SHOPIFY_USA_ORDER_STATUS.WAITING_PAYMENT,
+        'Order blocked before CJ placement: Shopify payment is not confirmed.',
+        { shopifyFinancialStatus: financialStatus || null } as Prisma.InputJsonValue,
+      );
+      throw new AppError('Shopify payment is not confirmed yet. CJ order was not placed.', 409, ErrorCode.RESOURCE_CONFLICT);
     }
 
     const buyer = order.buyerPayload as Record<string, string | null> | null;
@@ -440,13 +613,104 @@ export const cjShopifyUsaOrderIngestService = {
       throw new AppError('Order has no shipping country', 422, ErrorCode.VALIDATION_ERROR);
     }
 
-    const cjSku = order.shopifySku || order.variant?.cjSku;
-    if (!cjSku) {
+    if (shippingCountry !== 'US') {
       await prisma.cjShopifyUsaOrder.update({
         where: { id: input.orderId },
-        data: { status: CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL, lastError: 'Cannot resolve CJ SKU for this order' },
+        data: {
+          status: CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+          lastError: `CJ Shopify USA only accepts US shipping addresses. Received country: ${shippingCountry}.`,
+        },
       });
-      throw new AppError('Cannot resolve CJ SKU', 422, ErrorCode.VALIDATION_ERROR);
+      await appendOrderEvent(
+        input.orderId,
+        CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+        'Order blocked before CJ placement: non-US shipping country.',
+        { shippingCountry } as Prisma.InputJsonValue,
+      );
+      throw new AppError('CJ Shopify USA order has a non-US shipping address.', 422, ErrorCode.VALIDATION_ERROR);
+    }
+
+    const cjVid = String(order.variant?.cjVid || '').trim();
+    const cjSku = String(order.variant?.cjSku || '').trim();
+    if (!cjVid || !cjSku) {
+      await prisma.cjShopifyUsaOrder.update({
+        where: { id: input.orderId },
+        data: { status: CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL, lastError: 'Cannot resolve CJ variant ID/SKU for this order' },
+      });
+      throw new AppError('Cannot resolve CJ variant ID/SKU', 422, ErrorCode.VALIDATION_ERROR);
+    }
+
+    const supplierCostUsd = Number(order.variant?.unitCostUsd ?? 0);
+    const shippingQuote = order.listing?.shippingQuote;
+    const shippingUsd = Number(shippingQuote?.amountUsd ?? NaN);
+    const listedPriceUsd = Number(order.listing?.listedPriceUsd ?? 0);
+    const quoteOrigin = String(shippingQuote?.originCountryCode || '').trim().toUpperCase();
+    const quoteConfidence = String(shippingQuote?.confidence || '').trim().toLowerCase();
+    const quoteIsKnown = quoteConfidence === 'known' || quoteConfidence === 'high' || quoteConfidence === 'confirmed';
+
+    if (
+      !order.listing ||
+      order.listing.status !== 'ACTIVE' ||
+      !Number.isFinite(supplierCostUsd) ||
+      supplierCostUsd <= 0 ||
+      !Number.isFinite(shippingUsd) ||
+      shippingUsd < 0 ||
+      !Number.isFinite(listedPriceUsd) ||
+      listedPriceUsd <= 0 ||
+      quoteOrigin !== 'US' ||
+      !quoteIsKnown
+    ) {
+      const reason = [
+        !order.listing ? 'missing_listing' : null,
+        order.listing && order.listing.status !== 'ACTIVE' ? `listing_not_active:${order.listing.status}` : null,
+        supplierCostUsd <= 0 || !Number.isFinite(supplierCostUsd) ? 'missing_supplier_cost' : null,
+        !Number.isFinite(shippingUsd) || shippingUsd < 0 ? 'missing_shipping_quote' : null,
+        listedPriceUsd <= 0 || !Number.isFinite(listedPriceUsd) ? 'missing_shopify_price' : null,
+        quoteOrigin !== 'US' ? `origin_not_us:${quoteOrigin || 'UNKNOWN'}` : null,
+        !quoteIsKnown ? `shipping_confidence_not_known:${quoteConfidence || 'unknown'}` : null,
+      ].filter(Boolean).join(', ');
+      await prisma.cjShopifyUsaOrder.update({
+        where: { id: input.orderId },
+        data: {
+          status: CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+          lastError: `Supplier placement blocked: margin/shipping is not demonstrated (${reason}).`,
+        },
+      });
+      await appendOrderEvent(
+        input.orderId,
+        CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+        'Order blocked before CJ placement: missing demonstrated USA cost/shipping/margin evidence.',
+        { reason, supplierCostUsd, shippingUsd, listedPriceUsd, quoteOrigin, quoteConfidence } as Prisma.InputJsonValue,
+      );
+      throw new AppError('Order lacks demonstrated USA cost/shipping/margin evidence.', 422, ErrorCode.VALIDATION_ERROR);
+    }
+
+    const economics = await cjShopifyUsaQualificationService.evaluate(input.userId, supplierCostUsd, shippingUsd);
+    const settings = await prisma.cjShopifyUsaAccountSettings.findUnique({ where: { userId: input.userId } });
+    const paymentFeePct = Number(settings?.defaultPaymentFeePct ?? 5.4);
+    const paymentFixedFeeUsd = Number(settings?.defaultPaymentFixedFeeUsd ?? 0.3);
+    const actualPaymentFeeUsd = Math.round(((listedPriceUsd * (paymentFeePct / 100)) + paymentFixedFeeUsd) * 100) / 100;
+    const incidentBufferUsd = economics.breakdown.incidentBufferUsd;
+    const totalCostUsd = supplierCostUsd + shippingUsd + incidentBufferUsd + actualPaymentFeeUsd;
+    const actualProfitUsd = Math.round((listedPriceUsd - totalCostUsd) * 100) / 100;
+    const actualMarginPct = listedPriceUsd > 0 ? Math.round((actualProfitUsd / listedPriceUsd) * 10_000) / 100 : 0;
+    const minMarginPct = Number(settings?.minMarginPct ?? 12);
+    const minProfitUsd = Number(settings?.minProfitUsd ?? 1.5);
+    if (actualProfitUsd < minProfitUsd || actualMarginPct < minMarginPct) {
+      await prisma.cjShopifyUsaOrder.update({
+        where: { id: input.orderId },
+        data: {
+          status: CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+          lastError: `Supplier placement blocked: real listing margin ${actualMarginPct.toFixed(2)}% / profit $${actualProfitUsd.toFixed(2)} is below configured minimum.`,
+        },
+      });
+      await appendOrderEvent(
+        input.orderId,
+        CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
+        'Order blocked before CJ placement: actual listed price does not protect configured margin.',
+        { listedPriceUsd, supplierCostUsd, shippingUsd, actualProfitUsd, actualMarginPct, minMarginPct, minProfitUsd } as Prisma.InputJsonValue,
+      );
+      throw new AppError('Order margin is below configured minimum. CJ order was not placed.', 422, ErrorCode.VALIDATION_ERROR);
     }
 
     // Mark as placing (prevents concurrent duplicate calls)
@@ -471,7 +735,7 @@ export const cjShopifyUsaOrderIngestService = {
         shippingAddress2: buyer.address2 || '',
         shippingCustomerName: buyer.name || 'Customer',
         shippingPhone: buyer.phone || '',
-        products: [{ vid: order.variant?.cjVid || cjSku, quantity: order.lineQuantity ?? 1 }],
+        products: [{ vid: cjVid, quantity: order.lineQuantity ?? 1 }],
         // TODO: payment via CJ balance — operator must ensure balance is funded
         payType: 1, // 1 = CJ balance
       };
@@ -495,15 +759,27 @@ export const cjShopifyUsaOrderIngestService = {
 
       // CJ returned error
       const errMsg = json.message || `CJ API error code ${json.code}`;
-      const isPaymentBlock = errMsg.toLowerCase().includes('balance') || errMsg.toLowerCase().includes('payment');
+      const isPaymentBlock = isBalanceBlockMessage(errMsg);
       const newStatus = isPaymentBlock
         ? CJ_SHOPIFY_USA_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED
         : CJ_SHOPIFY_USA_ORDER_STATUS.FAILED;
       await prisma.cjShopifyUsaOrder.update({
         where: { id: input.orderId },
-        data: { status: newStatus, lastError: errMsg.slice(0, 500) },
+        data: {
+          status: newStatus,
+          lastError: isPaymentBlock
+            ? `Waiting for CJ supplier balance/funds before retrying automatically: ${errMsg.slice(0, 430)}`
+            : errMsg.slice(0, 500),
+          paymentBlockReason: isPaymentBlock ? 'CJ_BALANCE_INSUFFICIENT' : order.paymentBlockReason,
+        },
       });
       await appendOrderEvent(input.orderId, newStatus, `CJ placement failed: ${errMsg}`);
+      await createAlert(input.userId, isPaymentBlock ? CJ_SHOPIFY_USA_ALERT_TYPE.SUPPLIER_PAYMENT_BLOCKED : CJ_SHOPIFY_USA_ALERT_TYPE.ORDER_FAILED, {
+        orderId: input.orderId,
+        shopifyOrderId: order.shopifyOrderId,
+        reason: isPaymentBlock ? 'cj_balance_or_payment_blocked' : 'cj_order_placement_failed',
+        message: errMsg.slice(0, 500),
+      } as Prisma.InputJsonValue);
       throw new AppError(errMsg, 502, ErrorCode.EXTERNAL_API_ERROR);
     } catch (e) {
       if (e instanceof AppError) throw e;

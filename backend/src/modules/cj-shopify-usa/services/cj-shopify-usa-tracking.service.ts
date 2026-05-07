@@ -97,7 +97,44 @@ export const cjShopifyUsaTrackingService = {
       );
     }
 
-    const summary = (order.rawShopifySummary || {}) as {
+    let freshSummary: unknown = order.rawShopifySummary || {};
+    try {
+      const [freshOrder] = await cjShopifyUsaAdminService.listRecentOrders({
+        userId: input.userId,
+        orderId: order.shopifyOrderId,
+        first: 1,
+      });
+      if (freshOrder) {
+        freshSummary = {
+          id: freshOrder.id,
+          name: freshOrder.name,
+          createdAt: freshOrder.createdAt,
+          displayFinancialStatus: freshOrder.displayFinancialStatus,
+          displayFulfillmentStatus: freshOrder.displayFulfillmentStatus,
+          fulfillmentOrders: (freshOrder.fulfillmentOrders?.nodes ?? []).map((fulfillmentOrder) => ({
+            id: fulfillmentOrder.id,
+            status: fulfillmentOrder.status,
+            requestStatus: fulfillmentOrder.requestStatus,
+            assignedLocation: fulfillmentOrder.assignedLocation?.location || null,
+            lineItems: (fulfillmentOrder.lineItems?.nodes ?? []).map((lineItem) => ({
+              id: lineItem.id,
+              remainingQuantity: lineItem.remainingQuantity,
+              totalQuantity: lineItem.totalQuantity,
+              lineItemId: lineItem.lineItem?.id || null,
+              sku: lineItem.lineItem?.sku || null,
+            })),
+          })),
+        } as Prisma.InputJsonValue;
+        await prisma.cjShopifyUsaOrder.update({
+          where: { id: order.id },
+          data: { rawShopifySummary: freshSummary as Prisma.InputJsonValue },
+        });
+      }
+    } catch {
+      // Keep the last stored snapshot; tracking sync will still validate open fulfillment orders below.
+    }
+
+    const summary = (freshSummary || {}) as {
       fulfillmentOrders?: Array<{
         id: string;
         status: string;

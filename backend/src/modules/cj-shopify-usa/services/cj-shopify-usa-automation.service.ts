@@ -552,45 +552,51 @@ class CjShopifyUsaAutomationService {
         log('warn', `Discovery step failed (non-blocking): ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
 
-      // ── Step 0.5: Retry blocked orders (Insufficient Funds) ──
-      log('info', 'Step 0.5: Checking for blocked orders (SUPPLIER_PAYMENT_BLOCKED)...');
+      // ── Step 0.5: Post-sale queue — paid orders, supplier balance waits, tracking ──
+      log('info', 'Step 0.5: Processing post-sale queue (paid orders, CJ balance waits, tracking)...');
       try {
-        const blockedOrders = await prisma.cjShopifyUsaOrder.findMany({
-          where: { userId, status: 'SUPPLIER_PAYMENT_BLOCKED' },
+        const postSaleOrders = await prisma.cjShopifyUsaOrder.findMany({
+          where: { userId, status: { in: ['VALIDATED', 'SUPPLIER_PAYMENT_BLOCKED'] } },
           orderBy: { createdAt: 'asc' },
           take: 10,
         });
 
-        if (blockedOrders.length > 0) {
-          log('info', `Found ${blockedOrders.length} blocked orders. Attempting to re-process...`);
+        if (postSaleOrders.length > 0) {
+          log('info', `Found ${postSaleOrders.length} post-sale orders ready for safe supplier processing/retry.`);
           const { cjShopifyUsaOrderIngestService } = await import('./cj-shopify-usa-order-ingest.service');
           
-          let retrySuccess = 0;
-          for (const order of blockedOrders) {
+          let postSaleSuccess = 0;
+          for (const order of postSaleOrders) {
             try {
-              log('info', `Retrying order ${order.shopifyOrderId}...`);
+              log('info', `Post-sale safe processing order ${order.shopifyOrderId} (${order.status})...`);
               const res = await cjShopifyUsaOrderIngestService.processOrder({ userId, orderId: order.id });
               if (res.status === 'CJ_ORDER_PLACED') {
-                retrySuccess++;
-                log('success', `Successfully recovered order ${order.shopifyOrderId} -> CJ Order: ${res.cjOrderId}`);
+                postSaleSuccess++;
+                log('success', `Supplier order created for ${order.shopifyOrderId} -> CJ Order: ${res.cjOrderId}`);
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
-              log('warn', `Retry failed for ${order.shopifyOrderId}: ${msg.slice(0, 80)}`);
+              log('warn', `Post-sale processing paused for ${order.shopifyOrderId}: ${msg.slice(0, 80)}`);
               // If it's a balance issue, stop trying the rest in this cycle to avoid API spam
-              if (msg.toLowerCase().includes('balance') || msg.toLowerCase().includes('payment')) {
-                log('warn', 'Balance is still insufficient. Aborting retry queue for this cycle.');
+              if (msg.toLowerCase().includes('balance') || msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('saldo')) {
+                log('warn', 'CJ supplier balance still appears insufficient. Keeping remaining orders waiting for balance.');
                 break;
               }
             }
             await new Promise((r) => setTimeout(r, 1000));
           }
-          if (retrySuccess > 0) {
-            log('success', `Recovered ${retrySuccess} blocked orders in this cycle.`);
+          if (postSaleSuccess > 0) {
+            log('success', `Post-sale queue placed ${postSaleSuccess} supplier orders in this cycle.`);
           }
         }
+
+        const { cjShopifyUsaOrderIngestService } = await import('./cj-shopify-usa-order-ingest.service');
+        const tracking = await cjShopifyUsaOrderIngestService.autoSyncAllTracking(userId);
+        if (tracking.checked > 0) {
+          log('info', `Tracking queue checked ${tracking.checked} CJ orders; ${tracking.synced} tracking numbers synced.`);
+        }
       } catch (err) {
-        log('warn', `Retry queue step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+        log('warn', `Post-sale queue step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
 
       // ── Step 0.8: Sync active listing prices (Phase 4) ──
