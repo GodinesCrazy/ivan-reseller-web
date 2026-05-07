@@ -35,6 +35,17 @@ type SalesAgentAction = {
   canExecute: boolean;
   guardrails: string[];
   payload?: Record<string, unknown>;
+  execution?: SalesAgentActionExecution;
+};
+
+type SalesAgentActionExecution = {
+  status: 'pending' | 'applied' | 'needs_review' | 'manual' | 'blocked';
+  lastRunAt: string | null;
+  summary: string;
+  affectedEstimate: number;
+  verified: boolean;
+  traceLabel: string;
+  steps: string[];
 };
 
 type SalesAgentSchedulerState = 'IDLE' | 'RUNNING' | 'PAUSED' | 'ERROR';
@@ -488,6 +499,106 @@ function buildDecisionTimeline(input: {
   return [...cycleItems, ...traceItems]
     .sort((a, b) => Number(new Date(b.ts)) - Number(new Date(a.ts)))
     .slice(0, 14);
+}
+
+const ACTION_TRACE_MAP: Partial<Record<SalesAgentActionType, string>> = {
+  RUN_PROFIT_GUARD: 'run_profit_guard',
+  PROMOTE_TOP_PRODUCTS: 'promote_top_products',
+  CURATE_SIMILAR_PRODUCTS: 'curate_similar_products',
+  PUBLISH_APPROVED_BACKLOG: 'publish_approved_backlog',
+  UNPUBLISH_UNSAFE_LISTINGS: 'unpublish_unsafe_listings',
+  FIX_CATALOG_QUALITY: 'fix_catalog_quality',
+  BUILD_SALES_CAMPAIGN: 'build_sales_campaign',
+  RUN_SALES_PIPELINE_REVIEW: 'run_sales_pipeline_review',
+};
+
+function actionTraceLabel(type: SalesAgentActionType): string {
+  return ACTION_TRACE_MAP[type] ?? type.toLowerCase();
+}
+
+function actionAffectedEstimate(action: SalesAgentAction): number {
+  const payload = action.payload ?? {};
+  const candidates = payload.candidates;
+  const issues = payload.issues;
+  const publishableDrafts = payload.publishableDrafts;
+  const duplicateGroups = payload.duplicateExactGroups;
+  if (Array.isArray(candidates)) return candidates.length;
+  if (Array.isArray(issues)) return issues.length;
+  if (Array.isArray(publishableDrafts)) return publishableDrafts.length;
+  if (Array.isArray(duplicateGroups)) return duplicateGroups.length;
+  if (typeof payload.limit === 'number') return payload.limit;
+  if (typeof payload.draftCount === 'number') return payload.draftCount;
+  if (typeof payload.overallScore === 'number') return 1;
+  return action.canExecute ? 1 : 0;
+}
+
+function actionExecutionSteps(action: SalesAgentAction): string[] {
+  if (action.type === 'RUN_PROFIT_GUARD') {
+    return ['Enriquecer shipping CJ faltante', 'Recalcular margen neto', 'Subir precio o pausar riesgo', 'Registrar auditoria'];
+  }
+  if (action.type === 'CURATE_SIMILAR_PRODUCTS') {
+    return ['Agrupar duplicados exactos', 'Elegir ganador por margen/imagen', 'Despublicar perdedores limitados', 'Registrar antes/despues'];
+  }
+  if (action.type === 'FIX_CATALOG_QUALITY') {
+    return ['Seleccionar fichas buyer-ready corregibles', 'Reescribir titulo/descripcion sin inventar atributos', 'Actualizar Shopify', 'Guardar evidencia'];
+  }
+  if (action.type === 'PUBLISH_APPROVED_BACKLOG') {
+    return ['Seleccionar drafts aprobados', 'Validar margen/stock/calidad', 'Publicar con guardrails', 'Registrar resultado'];
+  }
+  if (action.type === 'UNPUBLISH_UNSAFE_LISTINGS') {
+    return ['Seleccionar solo PAUSE_UNSAFE', 'Archivar en Shopify', 'Conservar trazabilidad local', 'Verificar conteo'];
+  }
+  if (action.type === 'PROMOTE_TOP_PRODUCTS') {
+    return ['Elegir productos activos rentables', 'Generar post organico', 'Encolar publicacion', 'Aprender de respuesta'];
+  }
+  if (action.type === 'BUILD_SALES_CAMPAIGN') {
+    return ['Leer scores comerciales', 'Separar promover/corregir/proteger', 'Registrar campana semanal', 'Programar revision'];
+  }
+  if (action.type === 'RUN_SALES_PIPELINE_REVIEW') {
+    return ['Leer catalogo y embudo', 'Detectar cuello de botella', 'Actualizar score por etapa', 'Priorizar siguiente accion'];
+  }
+  if (action.type === 'VERIFY_CHECKOUT') {
+    return ['Crear compra de prueba', 'Confirmar PayPal en checkout', 'Verificar captura de pago', 'Registrar evidencia'];
+  }
+  return ['Revisar recomendacion', 'Validar guardrails', 'Ejecutar con limite', 'Verificar resultado'];
+}
+
+function actionResultSummary(meta: Record<string, any>): string {
+  return [
+    n(meta.queued) ? `${n(meta.queued)} promociones` : null,
+    n(meta.published) ? `${n(meta.published)} publicados` : null,
+    n(meta.unpublished) ? `${n(meta.unpublished)} despublicados` : null,
+    n(meta.priceIncreases) ? `${n(meta.priceIncreases)} precios protegidos` : null,
+    n(meta.pausedUnsafe) ? `${n(meta.pausedUnsafe)} pausados` : null,
+    n(meta.shipping?.enriched ?? meta.shippingEnriched) ? `${n(meta.shipping?.enriched ?? meta.shippingEnriched)} shipping enriquecidos` : null,
+    n(meta.results && Array.isArray(meta.results) ? meta.results.filter((row: any) => row.ok).length : meta.fixed) ? `${n(meta.results && Array.isArray(meta.results) ? meta.results.filter((row: any) => row.ok).length : meta.fixed)} corregidos` : null,
+    n(meta.failed) ? `${n(meta.failed)} fallidos` : null,
+    n(meta.reviewRequired) ? `${n(meta.reviewRequired)} en revision` : null,
+  ].filter(Boolean).join(' · ') || 'accion registrada y sin cambios materiales';
+}
+
+function hydrateActionExecutions(input: {
+  actions: SalesAgentAction[];
+  traces: Array<{ message: string; meta: unknown; createdAt: Date }>;
+}): SalesAgentAction[] {
+  return input.actions.map((action) => {
+    const traceLabel = actionTraceLabel(action.type);
+    const trace = input.traces.find((item) => item.message === `sales_agent.action.${traceLabel}`);
+    const meta = trace ? safeMeta(trace.meta) : {};
+    const failed = n(meta.failed) + n(meta.results && Array.isArray(meta.results) ? meta.results.filter((row: any) => !row.ok).length : 0);
+    const reviewRequired = n(meta.reviewRequired);
+    const executedOk = Boolean(trace) && failed === 0 && reviewRequired === 0 && meta.rateLimited !== true;
+    const execution: SalesAgentActionExecution = {
+      status: !action.canExecute ? (action.risk === 'manual_required' ? 'manual' : 'blocked') : trace ? (executedOk ? 'applied' : 'needs_review') : 'pending',
+      lastRunAt: trace ? trace.createdAt.toISOString() : null,
+      summary: trace ? actionResultSummary(meta) : action.canExecute ? 'Lista para ejecutar con limites y trazabilidad.' : 'Requiere intervencion manual o aprobacion granular.',
+      affectedEstimate: actionAffectedEstimate(action),
+      verified: executedOk,
+      traceLabel,
+      steps: actionExecutionSteps(action),
+    };
+    return { ...action, execution };
+  });
 }
 
 function buildSalesCampaignPlan(input: {
@@ -1274,6 +1385,14 @@ export const cjShopifyUsaSalesAgentService = {
       })),
       currentCycle: schedulerStatus.currentCycle,
     });
+    const actionsWithExecution = hydrateActionExecutions({
+      actions: sortedActions,
+      traces: recentAgentTraces.map((trace) => ({
+        message: trace.message,
+        meta: trace.meta,
+        createdAt: trace.createdAt,
+      })),
+    });
 
     return {
       ok: true,
@@ -1382,7 +1501,7 @@ export const cjShopifyUsaSalesAgentService = {
       promotionCandidates,
       publishableDrafts,
       unsafeUnpublishCandidates,
-      actions: sortedActions,
+      actions: actionsWithExecution,
       profitGuard: {
         scanned: profitGuard.scanned,
         okCount: profitGuard.okCount,

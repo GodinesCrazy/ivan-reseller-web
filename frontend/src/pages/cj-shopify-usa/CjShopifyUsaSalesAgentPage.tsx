@@ -5,7 +5,9 @@ import {
   Bot,
   Brain,
   CheckCircle2,
+  Clock3,
   CircleDollarSign,
+  ListChecks,
   Megaphone,
   Pause,
   Play,
@@ -31,7 +33,18 @@ type SalesAction = {
   canExecute: boolean;
   guardrails: string[];
   payload?: Record<string, unknown>;
+  execution?: {
+    status: 'pending' | 'applied' | 'needs_review' | 'manual' | 'blocked';
+    lastRunAt: string | null;
+    summary: string;
+    affectedEstimate: number;
+    verified: boolean;
+    traceLabel: string;
+    steps: string[];
+  };
 };
+
+type ActionExecutionStatus = NonNullable<SalesAction['execution']>['status'] | 'running';
 
 type ActionExecutionResult = {
   ok?: boolean;
@@ -347,6 +360,39 @@ function actionResolved(result: ActionExecutionResult | undefined): boolean {
     && Number(result.shippingFailed ?? 0) === 0
     && Number(result.reviewRequired ?? 0) === 0
     && result.rateLimited !== true;
+}
+
+function executionLabel(status: ActionExecutionStatus): string {
+  if (status === 'running') return 'Ejecutando';
+  if (status === 'applied') return 'Aplicado y verificado';
+  if (status === 'needs_review') return 'Ejecutado con pendientes';
+  if (status === 'manual') return 'Manual';
+  if (status === 'blocked') return 'Bloqueado';
+  return 'Pendiente';
+}
+
+function executionTone(status: ActionExecutionStatus): string {
+  if (status === 'running') return 'border-cyan-400/40 bg-cyan-500/15 text-cyan-100';
+  if (status === 'applied') return 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100';
+  if (status === 'needs_review') return 'border-amber-500/45 bg-amber-500/15 text-amber-100';
+  if (status === 'manual') return 'border-violet-400/35 bg-violet-500/15 text-violet-100';
+  if (status === 'blocked') return 'border-slate-500/35 bg-slate-800/60 text-slate-200';
+  return 'border-slate-600/50 bg-slate-900/70 text-slate-200';
+}
+
+function actionResultMetrics(result: ActionExecutionResult | undefined): string {
+  if (!result) return '';
+  return [
+    result.fixed !== undefined ? `corregidos ${result.fixed}` : null,
+    result.published !== undefined ? `publicados ${result.published}` : null,
+    result.unpublished !== undefined ? `despublicados ${result.unpublished}` : null,
+    result.queued !== undefined ? `promociones ${result.queued}` : null,
+    result.priceIncreases !== undefined ? `precios subidos ${result.priceIncreases}` : null,
+    result.pausedUnsafe !== undefined ? `pausados ${result.pausedUnsafe}` : null,
+    result.shippingEnriched !== undefined ? `shipping enriquecidos ${result.shippingEnriched}` : null,
+    result.failed !== undefined ? `fallidos ${result.failed}` : null,
+    result.reviewRequired !== undefined ? `revision ${result.reviewRequired}` : null,
+  ].filter(Boolean).join(' · ');
 }
 
 export default function CjShopifyUsaSalesAgentPage() {
@@ -948,11 +994,23 @@ export default function CjShopifyUsaSalesAgentPage() {
               </div>
 
               <div className="space-y-3">
-                {data.actions.map((action) => (
+                {data.actions.map((action) => {
+                  const result = actionResults[action.id];
+                  const isRunning = running === action.id;
+                  const executionStatus: ActionExecutionStatus = isRunning
+                    ? 'running'
+                    : result
+                      ? actionResolved(result) ? 'applied' : 'needs_review'
+                      : action.execution?.status ?? (action.canExecute ? 'pending' : action.risk === 'manual_required' ? 'manual' : 'blocked');
+                  const metrics = actionResultMetrics(result);
+                  const steps = action.execution?.steps?.length
+                    ? action.execution.steps
+                    : ['Validar guardrails', 'Ejecutar accion', 'Registrar trazabilidad', 'Verificar resultado'];
+                  return (
                   <article
                     key={action.id}
                     className={`rounded-lg border p-4 ${
-                      actionResolved(actionResults[action.id])
+                      executionStatus === 'applied'
                         ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-50'
                         : priorityClass(action.priority)
                     }`}
@@ -966,52 +1024,81 @@ export default function CjShopifyUsaSalesAgentPage() {
                           <span className="rounded-full border border-white/15 px-2 py-0.5 text-[11px]">
                             {riskLabel(action.risk)}
                           </span>
-                          {actionResults[action.id] && (
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                              actionResolved(actionResults[action.id])
-                                ? 'bg-emerald-500/20 text-emerald-100'
-                                : 'bg-amber-500/20 text-amber-100'
-                            }`}>
-                              {actionResolved(actionResults[action.id]) ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-                              {actionResolved(actionResults[action.id]) ? 'Solucionado' : 'Ejecutado con pendientes'}
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${executionTone(executionStatus)}`}>
+                            {executionStatus === 'running' ? (
+                              <RefreshCw className="h-3 w-3 animate-spin" />
+                            ) : executionStatus === 'applied' ? (
+                              <CheckCircle2 className="h-3 w-3" />
+                            ) : executionStatus === 'needs_review' ? (
+                              <AlertTriangle className="h-3 w-3" />
+                            ) : (
+                              <Clock3 className="h-3 w-3" />
+                            )}
+                            {executionLabel(executionStatus)}
+                          </span>
+                          {action.execution?.lastRunAt && !result && (
+                            <span className="rounded-full bg-black/25 px-2 py-0.5 text-[11px] text-slate-300">
+                              Ultima: {dateTime(action.execution.lastRunAt)}
                             </span>
                           )}
                         </div>
                         <h4 className="mt-2 text-sm font-bold text-white">{action.title}</h4>
                         <p className="mt-1 text-sm text-slate-300">{action.rationale}</p>
                         <p className="mt-1 text-xs text-slate-400">{action.expectedImpact}</p>
-                        {actionResults[action.id] && (
-                          <div className="mt-3 rounded border border-emerald-500/30 bg-black/25 px-3 py-2 text-xs text-emerald-100">
-                            <p className="font-semibold">{actionResults[action.id].message || 'Accion ejecutada.'}</p>
-                            <p className="mt-1 text-emerald-200/80">
-                              {[
-                                actionResults[action.id].fixed !== undefined ? `corregidos ${actionResults[action.id].fixed}` : null,
-                                actionResults[action.id].published !== undefined ? `publicados ${actionResults[action.id].published}` : null,
-                                actionResults[action.id].unpublished !== undefined ? `despublicados ${actionResults[action.id].unpublished}` : null,
-                                actionResults[action.id].queued !== undefined ? `promociones ${actionResults[action.id].queued}` : null,
-                                actionResults[action.id].priceIncreases !== undefined ? `precios subidos ${actionResults[action.id].priceIncreases}` : null,
-                                actionResults[action.id].pausedUnsafe !== undefined ? `pausados ${actionResults[action.id].pausedUnsafe}` : null,
-                                actionResults[action.id].shippingEnriched !== undefined ? `shipping enriquecidos ${actionResults[action.id].shippingEnriched}` : null,
-                                actionResults[action.id].failed !== undefined ? `fallidos ${actionResults[action.id].failed}` : null,
-                                actionResults[action.id].reviewRequired !== undefined ? `revision ${actionResults[action.id].reviewRequired}` : null,
-                              ].filter(Boolean).join(' · ')}
+                        <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${executionTone(executionStatus)}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-semibold">
+                              {isRunning
+                                ? 'El agente esta ejecutando la accion con limites seguros.'
+                                : result?.message || action.execution?.summary || 'Lista para ejecutar con trazabilidad.'}
                             </p>
+                            <span className="rounded-full bg-black/25 px-2 py-0.5">
+                              Afecta aprox. {action.execution?.affectedEstimate ?? 0}
+                            </span>
                           </div>
-                        )}
+                          {(metrics || action.execution?.traceLabel) && (
+                            <p className="mt-1 opacity-85">
+                              {metrics || `Traza: sales_agent.action.${action.execution?.traceLabel}`}
+                            </p>
+                          )}
+                        </div>
                       </div>
                       {action.canExecute && (
                         <button
                           type="button"
-                          disabled={running === action.id}
+                          disabled={isRunning}
                           onClick={() => void execute(action)}
                           className="shrink-0 rounded-lg border border-cyan-400/50 bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50"
                         >
                           <span className="inline-flex items-center gap-2">
-                            {running === action.id && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-                            {running === action.id ? 'Ejecutando...' : actionResults[action.id]?.ok ? 'Ejecutar otra vez' : 'Ejecutar'}
+                            {isRunning && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                            {isRunning ? 'Ejecutando...' : result?.ok ? 'Ejecutar otra vez' : 'Ejecutar'}
                           </span>
                         </button>
                       )}
+                    </div>
+                    <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                      <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                        <ListChecks className="h-3.5 w-3.5" />
+                        Proceso visible
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-4">
+                        {steps.map((step, index) => {
+                          const done = executionStatus === 'applied' || executionStatus === 'needs_review' || (isRunning && index === 0);
+                          const active = isRunning && index === 1;
+                          return (
+                            <div key={`${action.id}-${step}`} className={`rounded border px-2 py-2 text-[11px] ${
+                              done
+                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                                : active
+                                  ? 'border-cyan-500/35 bg-cyan-500/10 text-cyan-100'
+                                  : 'border-slate-700 bg-slate-950/60 text-slate-400'
+                            }`}>
+                              <span className="font-bold">{index + 1}. </span>{step}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {action.guardrails.map((guardrail) => (
@@ -1021,7 +1108,8 @@ export default function CjShopifyUsaSalesAgentPage() {
                       ))}
                     </div>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
