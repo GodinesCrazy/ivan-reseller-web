@@ -611,7 +611,7 @@ export const cjShopifyUsaSalesAgentService = {
         rationale: `${duplicateExactGroups.length} duplicados exactos y ${crowdedFamilies.length} familias saturadas detectadas.`,
         expectedImpact: 'Menos confusion, mejor confianza y catalogo mas facil de comprar.',
         risk: 'approval_required',
-        canExecute: false,
+        canExecute: duplicateExactGroups.length > 0,
         guardrails: ['No despublicar ganadores sin evidencia', 'Conservar el producto con mejor margen/imagen', 'Agrupar variantes cuando corresponda'],
         payload: { duplicateExactGroups, crowdedFamilies },
       });
@@ -795,7 +795,7 @@ export const cjShopifyUsaSalesAgentService = {
   },
 
   async executeAction(userId: number, input: { actionType: SalesAgentActionType; limit?: number }) {
-    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY'].includes(input.actionType)) {
+    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'CURATE_SIMILAR_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY'].includes(input.actionType)) {
       await recordSalesAgentTrace(userId, 'sales_agent.action.blocked', {
         actionType: input.actionType,
         reason: 'This action requires explicit per-item approval in the current controlled mode.',
@@ -842,6 +842,64 @@ export const cjShopifyUsaSalesAgentService = {
         pausedUnsafe: result.pausedUnsafe,
         reviewRequired: result.reviewRequired,
         message: `Profit Guard aplicado: ${result.priceIncreases} precios subidos, ${result.pausedUnsafe} pausados, ${shipping.enriched} shipping enriquecidos, ${result.reviewRequired} en revision.`,
+      };
+    }
+
+    if (input.actionType === 'CURATE_SIMILAR_PRODUCTS') {
+      const active = await prisma.cjShopifyUsaListing.findMany({
+        where: { userId, status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE },
+        include: { product: true, evaluation: true },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: 1000,
+      });
+      const groups = new Map<string, typeof active>();
+      for (const listing of active) {
+        const key = normalizeTitle(buyerTitle(listing));
+        if (!key) continue;
+        groups.set(key, [...(groups.get(key) ?? []), listing]);
+      }
+      const duplicateGroups = Array.from(groups.values()).filter((rows) => rows.length > 1);
+      const results: Array<{ listingId: number; title: string; ok: boolean; keptListingId: number; error?: string }> = [];
+      let processedGroups = 0;
+      for (const rows of duplicateGroups) {
+        if (processedGroups >= limit) break;
+        const ranked = [...rows].sort((a, b) => {
+          const aScore = extractImageCount(a.draftPayload) * 5 + n(a.evaluation?.estimatedMarginPct) + n(a.listedPriceUsd) / 10;
+          const bScore = extractImageCount(b.draftPayload) * 5 + n(b.evaluation?.estimatedMarginPct) + n(b.listedPriceUsd) / 10;
+          return bScore - aScore;
+        });
+        const keeper = ranked[0];
+        const losers = ranked.slice(1).slice(0, Math.max(0, limit - results.length));
+        for (const loser of losers) {
+          try {
+            await cjShopifyUsaPublishService.unpublishListing({ userId, listingId: loser.id });
+            results.push({ listingId: loser.id, title: buyerTitle(loser), ok: true, keptListingId: keeper.id });
+          } catch (error) {
+            results.push({
+              listingId: loser.id,
+              title: buyerTitle(loser),
+              ok: false,
+              keptListingId: keeper.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+        processedGroups++;
+        if (results.length >= limit) break;
+      }
+      await recordSalesAgentTrace(userId, 'sales_agent.action.curate_similar_products', {
+        processedGroups,
+        results,
+      } as unknown as Prisma.InputJsonValue);
+      return {
+        ok: true,
+        executed: true,
+        actionType: input.actionType,
+        unpublished: results.filter((result) => result.ok).length,
+        failed: results.filter((result) => !result.ok).length,
+        reviewedGroups: processedGroups,
+        results,
+        message: `Curacion de duplicados: ${results.filter((result) => result.ok).length} duplicados despublicados, ${results.filter((result) => !result.ok).length} fallidos; se conservaron los mejores por grupo.`,
       };
     }
 
