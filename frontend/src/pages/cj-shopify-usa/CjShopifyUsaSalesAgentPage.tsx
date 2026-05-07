@@ -420,6 +420,28 @@ function actionRoleLabel(action: SalesAction, status: ActionExecutionStatus): st
   return 'Solo informacion';
 }
 
+function trafficQualitySignal(data: SalesAgentDashboard): { label: string; detail: string; className: string } {
+  if (data.kpis.visitors <= 0) {
+    return {
+      label: 'Sin trafico medible',
+      detail: 'El agente no usara visitas como evidencia hasta tener sesiones reales.',
+      className: 'border-slate-700 bg-slate-950/40 text-slate-300',
+    };
+  }
+  if (data.kpis.paidOrders30 === 0 && data.kpis.purchaseRatePct === 0) {
+    return {
+      label: 'Trafico no validado',
+      detail: 'Hay visitas, pero sin compra registrada. Tratar como posible bot o trafico frio hasta confirmar checkout real.',
+      className: 'border-amber-500/45 bg-amber-950/25 text-amber-100',
+    };
+  }
+  return {
+    label: 'Trafico con senal comercial',
+    detail: 'Existen ventas pagadas recientes; el agente puede aprender de productos y promociones ganadoras.',
+    className: 'border-emerald-500/35 bg-emerald-950/20 text-emerald-100',
+  };
+}
+
 export default function CjShopifyUsaSalesAgentPage() {
   const [data, setData] = useState<SalesAgentDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -428,6 +450,7 @@ export default function CjShopifyUsaSalesAgentPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [actionResults, setActionResults] = useState<Record<string, ActionExecutionResult>>({});
   const scheduler = data?.learning.scheduler;
+  const trafficSignal = data ? trafficQualitySignal(data) : null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -674,6 +697,12 @@ export default function CjShopifyUsaSalesAgentPage() {
                 Carrito {pct(data.kpis.addToCartRatePct)} · Checkout {pct(data.kpis.checkoutRatePct)}
               </p>
               <p className="text-xs text-slate-500">Compra {pct(data.kpis.purchaseRatePct)} · {data.kpis.visitors} visitantes</p>
+              {trafficSignal && (
+                <div className={`mt-3 rounded-md border px-2 py-1.5 text-xs ${trafficSignal.className}`}>
+                  <p className="font-semibold">{trafficSignal.label}</p>
+                  <p className="mt-1 leading-snug opacity-90">{trafficSignal.detail}</p>
+                </div>
+              )}
             </div>
           </section>
 

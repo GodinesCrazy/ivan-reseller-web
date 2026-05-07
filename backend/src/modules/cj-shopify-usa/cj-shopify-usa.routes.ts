@@ -612,6 +612,84 @@ router.post('/listings/:listingId/unpublish', async (req: Request, res: Response
   }
 });
 
+router.delete('/listings/:listingId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const listingId = Number(req.params.listingId);
+
+    if (!Number.isInteger(listingId) || listingId <= 0) {
+      throw new AppError('ID de listing CJ Shopify USA inválido.', 400, ErrorCode.VALIDATION_ERROR);
+    }
+
+    const listing = await prisma.cjShopifyUsaListing.findFirst({
+      where: { id: listingId, userId },
+      select: {
+        id: true,
+        status: true,
+        shopifyProductId: true,
+        shopifyHandle: true,
+        product: {
+          select: {
+            id: true,
+            title: true,
+            cjProductId: true,
+          },
+        },
+        _count: {
+          select: { orders: true },
+        },
+      },
+    });
+
+    if (!listing) {
+      throw new AppError('Listing CJ Shopify USA no encontrado.', 404, ErrorCode.NOT_FOUND);
+    }
+
+    const isPublishedOrChanging = new Set<string>([
+      CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+      CJ_SHOPIFY_USA_LISTING_STATUS.PUBLISHING,
+    ]).has(listing.status);
+    const needsShopifyUnpublishFirst =
+      Boolean(listing.shopifyProductId) &&
+      new Set<string>([
+        CJ_SHOPIFY_USA_LISTING_STATUS.PAUSED,
+        CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
+        CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_FAILED,
+      ]).has(listing.status);
+
+    if (isPublishedOrChanging || needsShopifyUnpublishFirst) {
+      throw new AppError(
+        'No se puede eliminar un artículo publicado o vinculado a Shopify. Primero usa Despublicar para retirarlo de la tienda.',
+        409,
+        ErrorCode.RESOURCE_CONFLICT,
+      );
+    }
+
+    if (listing._count.orders > 0) {
+      throw new AppError(
+        'No se puede eliminar un listing con órdenes asociadas.',
+        409,
+        ErrorCode.RESOURCE_CONFLICT,
+      );
+    }
+
+    await prisma.cjShopifyUsaListing.delete({ where: { id: listing.id } });
+    await recordTrace(userId, 'LISTING_DELETE', 'cj_shopify_usa.listing.deleted', {
+      listingId: listing.id,
+      status: listing.status,
+      shopifyProductId: listing.shopifyProductId,
+      shopifyHandle: listing.shopifyHandle,
+      productId: listing.product?.id,
+      cjProductId: listing.product?.cjProductId,
+      title: listing.product?.title,
+    } as Prisma.InputJsonValue);
+
+    res.json({ ok: true, deletedListingId: listing.id });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/listings/:listingId/expand-variants', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;

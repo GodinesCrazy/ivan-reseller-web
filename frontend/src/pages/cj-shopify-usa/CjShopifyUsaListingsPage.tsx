@@ -13,6 +13,7 @@ import {
   Search,
   Send,
   Square,
+  Trash2,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -276,6 +277,19 @@ function unpublishBlockReason(row: ListingRow): string | null {
   return null;
 }
 
+function deleteBlockReason(row: ListingRow): string | null {
+  if (['ACTIVE', 'PUBLISHING'].includes(row.status)) {
+    return 'No se puede eliminar un articulo publicado o en publicacion. Despublica primero.';
+  }
+  if (isShopifyLinked(row) && ['PAUSED', 'RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(row.status)) {
+    return 'Tiene producto Shopify vinculado. Despublica de Shopify antes de eliminar el registro local.';
+  }
+  if (!['DRAFT', 'FAILED', 'ARCHIVED'].includes(row.status)) {
+    return `Estado ${statusLabel(row)} no permite eliminar.`;
+  }
+  return null;
+}
+
 function expandBlockReason(row: ListingRow, maxSellPriceUsd: number): string | null {
   if (row.status !== 'ACTIVE') return 'Solo listings activos pueden ampliar variantes.';
   if (!row.publishTruth?.buyerFacingVerified) return 'Primero debe estar buyer-ready.';
@@ -420,6 +434,21 @@ export default function CjShopifyUsaListingsPage() {
         return 'Artículo despublicado.';
       },
       'Error al despublicar el artículo.',
+    );
+  }
+
+  async function deleteListing(row: ListingRow) {
+    const confirmed = window.confirm(
+      `Eliminar listing local #${row.id}?\n\nSolo se permite si no esta publicado en Shopify y no tiene ordenes asociadas. Esta accion limpia borradores/fallidos que no deben seguir en el flujo.`,
+    );
+    if (!confirmed) return;
+    await withAction(
+      row.id,
+      async () => {
+        await api.delete(`/api/cj-shopify-usa/listings/${row.id}`);
+        return 'Listing local eliminado del flujo.';
+      },
+      'Error al eliminar el listing local.',
     );
   }
 
@@ -830,6 +859,7 @@ export default function CjShopifyUsaListingsPage() {
                 const publishReason = publishBlockReason(row, maxSellPriceUsd);
                 const pauseReason = pauseBlockReason(row);
                 const unpublishReason = unpublishBlockReason(row);
+                const deleteReason = deleteBlockReason(row);
                 const expandReason = expandBlockReason(row, maxSellPriceUsd);
                 const storefrontReason = storefrontBlockReason(row);
                 const selected = selectedIds.includes(row.id);
@@ -954,6 +984,16 @@ export default function CjShopifyUsaListingsPage() {
                         >
                           <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                           {expandedId === row.id ? 'Ocultar' : 'Detalle'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === row.id || Boolean(deleteReason)}
+                          title={deleteReason ?? 'Eliminar borrador/fallido local'}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-800/70 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                          onClick={() => void deleteListing(row)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          Eliminar
                         </button>
                       </div>
                     </td>
