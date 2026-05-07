@@ -395,6 +395,31 @@ function actionResultMetrics(result: ActionExecutionResult | undefined): string 
   ].filter(Boolean).join(' · ');
 }
 
+function currentExecutionStatus(
+  action: SalesAction,
+  result: ActionExecutionResult | undefined,
+  isRunning: boolean,
+): ActionExecutionStatus {
+  if (isRunning) return 'running';
+  if (result) return actionResolved(result) ? 'applied' : 'needs_review';
+  return action.execution?.status ?? (action.canExecute ? 'pending' : action.risk === 'manual_required' ? 'manual' : 'blocked');
+}
+
+function actionNeedsUserDecision(action: SalesAction): boolean {
+  const status = action.execution?.status ?? (action.canExecute ? 'pending' : action.risk === 'manual_required' ? 'manual' : 'blocked');
+  if (status === 'applied') return false;
+  return status === 'manual' || status === 'needs_review' || action.canExecute;
+}
+
+function actionRoleLabel(action: SalesAction, status: ActionExecutionStatus): string {
+  if (status === 'running') return 'El agente esta trabajando';
+  if (status === 'applied') return 'Solo observar: ya fue aplicado';
+  if (status === 'manual') return 'Requiere accion manual tuya';
+  if (status === 'blocked') return 'Informativo: falta aprobacion granular';
+  if (action.canExecute) return 'Puedes accionar este boton';
+  return 'Solo informacion';
+}
+
 export default function CjShopifyUsaSalesAgentPage() {
   const [data, setData] = useState<SalesAgentDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -427,9 +452,17 @@ export default function CjShopifyUsaSalesAgentPage() {
     return () => window.clearInterval(timer);
   }, [load, running, scheduler?.currentCycle?.status, scheduler?.state]);
 
+  const actionGroups = useMemo(() => {
+    const actions = data?.actions ?? [];
+    const needsDecision = actions.filter(actionNeedsUserDecision);
+    const automatic = actions.filter((action) => action.canExecute && action.execution?.status === 'applied');
+    const observation = actions.filter((action) => !needsDecision.includes(action) && !automatic.includes(action));
+    return { needsDecision, automatic, observation };
+  }, [data]);
+
   const primaryAction = useMemo(
-    () => data?.actions.find((action) => action.canExecute) ?? null,
-    [data],
+    () => actionGroups.needsDecision.find((action) => action.canExecute) ?? null,
+    [actionGroups.needsDecision],
   );
 
   const execute = async (action: SalesAction) => {
@@ -542,6 +575,81 @@ export default function CjShopifyUsaSalesAgentPage() {
 
       {data && (
         <>
+          <section className="rounded-lg border border-cyan-500/30 bg-slate-950 p-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                  <Target className="h-4 w-4 text-cyan-300" />
+                  Centro de mando: que debes hacer ahora
+                </h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Esta franja separa decisiones humanas, automatizacion activa e informacion de observacion. Los botones importantes viven en el bloque de accion.
+                </p>
+              </div>
+              {primaryAction ? (
+                <button
+                  type="button"
+                  disabled={running === primaryAction.id}
+                  onClick={() => void execute(primaryAction)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-300 disabled:opacity-50"
+                >
+                  {running === primaryAction.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
+                  {running === primaryAction.id ? 'Ejecutando accion prioritaria' : 'Ejecutar accion prioritaria'}
+                </button>
+              ) : (
+                <span className="rounded-lg border border-emerald-500/35 bg-emerald-950/25 px-4 py-2 text-sm font-bold text-emerald-100">
+                  Sin acciones urgentes ejecutables
+                </span>
+              )}
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+              <div className="rounded-lg border border-amber-500/35 bg-amber-950/20 p-3">
+                <p className="text-xs font-bold uppercase text-amber-200">Requiere tu decision</p>
+                <p className="mt-2 text-3xl font-bold text-white">{actionGroups.needsDecision.length}</p>
+                <p className="mt-1 text-xs text-amber-100/80">
+                  Acciones manuales, pendientes o con boton disponible. Aqui decides si ejecutar o revisar.
+                </p>
+                <div className="mt-3 space-y-1">
+                  {actionGroups.needsDecision.slice(0, 3).map((action) => (
+                    <p key={action.id} className="truncate rounded bg-black/25 px-2 py-1 text-xs text-amber-50">{action.title}</p>
+                  ))}
+                  {actionGroups.needsDecision.length === 0 && (
+                    <p className="rounded bg-black/25 px-2 py-1 text-xs text-amber-50">No hay decisiones urgentes ahora.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-emerald-500/35 bg-emerald-950/20 p-3">
+                <p className="text-xs font-bold uppercase text-emerald-200">Automatico / ya aplicado</p>
+                <p className="mt-2 text-3xl font-bold text-white">{actionGroups.automatic.length}</p>
+                <p className="mt-1 text-xs text-emerald-100/80">
+                  Trabajo que el agente ya ejecuto o puede sostener por ciclo con guardrails.
+                </p>
+                <div className="mt-3 space-y-1">
+                  <p className="rounded bg-black/25 px-2 py-1 text-xs text-emerald-50">
+                    Ciclo vendedor: {scheduler?.state ?? 'N/D'} · modo seguro {scheduler?.config.safeMode ? 'ON' : 'OFF'}
+                  </p>
+                  <p className="rounded bg-black/25 px-2 py-1 text-xs text-emerald-50">
+                    Proximo ciclo: {dateTime(scheduler?.nextRunAt)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-700 bg-slate-900 p-3">
+                <p className="text-xs font-bold uppercase text-slate-400">Solo observacion</p>
+                <p className="mt-2 text-3xl font-bold text-white">{actionGroups.observation.length}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Pipeline, score, aprendizaje, verdad Shopify y listas de productos son evidencia para entender el estado.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <span className="rounded bg-black/25 px-2 py-1 text-slate-300">Pipeline {data.salesPipeline.overallScore}/100</span>
+                  <span className="rounded bg-black/25 px-2 py-1 text-slate-300">Salud {data.health.score}/100</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 p-4">
               <p className="text-xs uppercase tracking-wide text-cyan-200">Salud comercial</p>
@@ -574,10 +682,10 @@ export default function CjShopifyUsaSalesAgentPage() {
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
-                      <Bot className="h-4 w-4 text-cyan-300" />
-                      Ciclo autonomo vendedor
-                    </h3>
+                  <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                    <Bot className="h-4 w-4 text-cyan-300" />
+                      Automatizacion del agente vendedor
+                  </h3>
                     <span className={`rounded-full px-2 py-1 text-xs font-bold ${
                       scheduler.state === 'RUNNING'
                         ? 'bg-emerald-500/15 text-emerald-200'
@@ -597,8 +705,8 @@ export default function CjShopifyUsaSalesAgentPage() {
                     )}
                   </div>
                   <p className="mt-2 max-w-3xl text-sm text-slate-400">
-                    Diagnostica tienda, optimiza catalogo con limites, publica/despublica solo bajo guardrails,
-                    encola marketing organico y aprende de conversiones, trazas y resultados sociales.
+                    Esto corre por ciclos. Los botones Iniciar, Pausar, Detener y Ejecutar ahora controlan el piloto automatico;
+                    no son recomendaciones, cambian el estado real del agente.
                   </p>
                   <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-300 md:grid-cols-3">
                     <span className="rounded bg-slate-900 p-2">Ultimo ciclo: <b>{dateTime(scheduler.lastRunAt)}</b></span>
@@ -716,6 +824,9 @@ export default function CjShopifyUsaSalesAgentPage() {
                 <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
                   <TrendingUp className="h-4 w-4 text-cyan-300" />
                   Pipeline comercial de ventas
+                  <span className="rounded-full border border-slate-600 bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-slate-300">
+                    Solo observacion
+                  </span>
                 </h3>
                 <p className="mt-1 max-w-4xl text-sm text-slate-400">{data.salesPipeline.distinction}</p>
               </div>
@@ -976,9 +1087,11 @@ export default function CjShopifyUsaSalesAgentPage() {
                 <div>
                   <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
                     <Target className="h-4 w-4 text-amber-300" />
-                    Plan de ataque
+                    Acciones que puedes tomar
                   </h3>
-                  <p className="text-xs text-slate-500">Acciones ordenadas por impacto y riesgo.</p>
+                  <p className="text-xs text-slate-500">
+                    Aqui estan los items accionables. Lo aplicado queda como evidencia y no muestra boton principal.
+                  </p>
                 </div>
                 {primaryAction && (
                   <button
@@ -988,20 +1101,28 @@ export default function CjShopifyUsaSalesAgentPage() {
                     className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
                   >
                     {running === primaryAction.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
-                    {running === primaryAction.id ? 'Ejecutando...' : 'Ejecutar con guardrails'}
+                    {running === primaryAction.id ? 'Ejecutando...' : 'Ejecutar accion prioritaria'}
                   </button>
                 )}
               </div>
 
+              <div className="mb-3 grid grid-cols-1 gap-2 text-xs md:grid-cols-3">
+                <span className="rounded border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-amber-100">
+                  Decision usuario: revisar o presionar ejecutar
+                </span>
+                <span className="rounded border border-emerald-500/30 bg-emerald-950/20 px-3 py-2 text-emerald-100">
+                  Aplicado: solo evidencia, no requiere accion
+                </span>
+                <span className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-slate-300">
+                  Manual/bloqueado: debes resolver fuera del boton automatico
+                </span>
+              </div>
+
               <div className="space-y-3">
-                {data.actions.map((action) => {
+                {[...actionGroups.needsDecision, ...actionGroups.automatic, ...actionGroups.observation].map((action) => {
                   const result = actionResults[action.id];
                   const isRunning = running === action.id;
-                  const executionStatus: ActionExecutionStatus = isRunning
-                    ? 'running'
-                    : result
-                      ? actionResolved(result) ? 'applied' : 'needs_review'
-                      : action.execution?.status ?? (action.canExecute ? 'pending' : action.risk === 'manual_required' ? 'manual' : 'blocked');
+                  const executionStatus = currentExecutionStatus(action, result, isRunning);
                   const metrics = actionResultMetrics(result);
                   const steps = action.execution?.steps?.length
                     ? action.execution.steps
@@ -1036,6 +1157,9 @@ export default function CjShopifyUsaSalesAgentPage() {
                             )}
                             {executionLabel(executionStatus)}
                           </span>
+                          <span className="rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-bold text-slate-200">
+                            {actionRoleLabel(action, executionStatus)}
+                          </span>
                           {action.execution?.lastRunAt && !result && (
                             <span className="rounded-full bg-black/25 px-2 py-0.5 text-[11px] text-slate-300">
                               Ultima: {dateTime(action.execution.lastRunAt)}
@@ -1063,7 +1187,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                           )}
                         </div>
                       </div>
-                      {action.canExecute && (
+                      {action.canExecute && executionStatus !== 'applied' && (
                         <button
                           type="button"
                           disabled={isRunning}
@@ -1072,9 +1196,14 @@ export default function CjShopifyUsaSalesAgentPage() {
                         >
                           <span className="inline-flex items-center gap-2">
                             {isRunning && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-                            {isRunning ? 'Ejecutando...' : result?.ok ? 'Ejecutar otra vez' : 'Ejecutar'}
+                            {isRunning ? 'Ejecutando...' : executionStatus === 'needs_review' ? 'Reintentar / corregir' : 'Ejecutar'}
                           </span>
                         </button>
+                      )}
+                      {executionStatus === 'applied' && (
+                        <span className="shrink-0 rounded-lg border border-emerald-500/35 bg-emerald-950/25 px-3 py-2 text-xs font-bold text-emerald-100">
+                          Ya aplicado
+                        </span>
                       )}
                     </div>
                     <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
