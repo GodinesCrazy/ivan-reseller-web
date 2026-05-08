@@ -10,6 +10,7 @@ import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service';
 import { cjShopifyUsaAdminService } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
 import { cjShopifyUsaOperationLockService } from './cj-shopify-usa-operation-lock.service';
+import { buildDraftTitle, buildDraftDescription } from './cj-shopify-usa-title-builder.service';
 
 type SalesAgentPriority = 'critical' | 'high' | 'medium' | 'low';
 type SalesAgentActionType =
@@ -241,10 +242,10 @@ function titleCase(value: string): string {
     .join(' ');
 }
 
-function trimTitle(value: string, maxLength = 62): string {
-  const clean = value.replace(/\s+/g, ' ').trim();
+function trimTitle(title: string, maxLength = 58): string {
+  const clean = String(title || '').trim();
   if (clean.length <= maxLength) return clean;
-  const words = clean.split(/\s+/);
+  const words = clean.split(' ');
   const kept: string[] = [];
   for (const word of words) {
     const candidate = [...kept, word].join(' ');
@@ -252,37 +253,6 @@ function trimTitle(value: string, maxLength = 62): string {
     kept.push(word);
   }
   return kept.length ? kept.join(' ') : clean.slice(0, maxLength).trim();
-}
-
-function buildBuyerReadyTitle(rawTitle: string): string {
-  const cleaned = String(rawTitle || '')
-    .replace(/&/g, ' and ')
-    .replace(/\b(cj[a-z0-9]+|\d{8,}[a-z0-9]*)\b/gi, ' ')
-    .replace(/\bpet supplies\b/gi, '')
-    .replace(/\bwholesale\b/gi, '')
-    .replace(/\bnew\b/gi, '')
-    .replace(/\b(for dog cat|cat dog)\b/gi, 'for Dogs and Cats')
-    .replace(/\bout door\b/gi, 'Outdoor')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const lower = cleaned.toLowerCase();
-  let family = 'Pet Accessory';
-  if (/water|fountain|feeder|bowl|food|snack|treat/.test(lower)) family = 'Pet Feeding Accessory';
-  if (/groom|brush|comb|scissor|clipper|nail|trimmer|shampoo|bath/.test(lower)) family = 'Pet Grooming Tool';
-  if (/toy|ball|disc|chew|training|interactive|puzzle/.test(lower)) family = 'Pet Training Toy';
-  if (/collar|leash|harness|strap/.test(lower)) family = 'Dog Walking Accessory';
-  if (/carrier|backpack|bag|travel|seat/.test(lower)) family = 'Pet Travel Carrier';
-  if (/litter|mat|tray/.test(lower)) family = 'Cat Litter Accessory';
-  if (/bed|mat|blanket|cushion|house/.test(lower)) family = 'Pet Comfort Bed';
-
-  const detailWords = cleaned
-    .split(/\s+/)
-    .filter((word) => !/^(pet|dog|cat|dogs|cats|supplies|accessories|with|for|and|the|new)$/i.test(word))
-    .slice(0, 4)
-    .join(' ');
-  const candidate = detailWords ? `${detailWords} ${family}` : family;
-  return trimTitle(titleCase(candidate));
 }
 
 function titleQuality(title: string): { score: number; issues: string[] } {
@@ -313,19 +283,6 @@ function titleQuality(title: string): { score: number; issues: string[] } {
   }
 
   return { score: Math.max(0, score), issues };
-}
-
-function buildBuyerReadyDescription(title: string): string {
-  const cleanTitle = trimTitle(titleCase(title), 80);
-  return [
-    `<p><strong>${cleanTitle}</strong> is a practical PawVault pick for everyday pet care routines.</p>`,
-    '<ul>',
-    '<li>Selected for pet parents looking for useful, easy-to-understand accessories.</li>',
-    '<li>Review the product photos and available options before checkout.</li>',
-    '<li>Ships to the USA through the supplier network when stock is available.</li>',
-    '</ul>',
-    '<p>Questions before ordering? Contact PawVault support and we will help you confirm fit, use case, and availability.</p>',
-  ].join('');
 }
 
 function scoreGrade(score: number): CommercialScore['grade'] {
@@ -1061,8 +1018,8 @@ export const cjShopifyUsaSalesAgentService = {
         return {
           listingId: listing.id,
           title: buyerTitle(listing),
-          suggestedTitle: buildBuyerReadyTitle(buyerTitle(listing)),
-          suggestedDescriptionHtml: buildBuyerReadyDescription(buildBuyerReadyTitle(buyerTitle(listing))),
+          suggestedTitle: buildDraftTitle({ title: buyerTitle(listing), variantAttributes: draftRecord(listing.draftPayload).variantAttributes }),
+          suggestedDescriptionHtml: buildDraftDescription({ title: buyerTitle(listing), description, variantAttributes: draftRecord(listing.draftPayload).variantAttributes }),
           handle: listing.shopifyHandle,
           shopifyProductId: listing.shopifyProductId,
           imageCount: extractImageCount(listing.draftPayload),
@@ -1541,6 +1498,7 @@ export const cjShopifyUsaSalesAgentService = {
 
     if (input.actionType === 'RUN_SALES_PIPELINE_REVIEW') {
       await recordSalesAgentTrace(userId, 'sales_agent.action.run_sales_pipeline_review', {
+        ok: true,
         overallScore: dashboard.salesPipeline.overallScore,
         bottleneck: dashboard.salesPipeline.bottleneck,
         lifecycle: {
@@ -1565,6 +1523,7 @@ export const cjShopifyUsaSalesAgentService = {
 
     if (input.actionType === 'BUILD_SALES_CAMPAIGN') {
       await recordSalesAgentTrace(userId, 'sales_agent.action.build_sales_campaign', {
+        ok: true,
         campaign: dashboard.campaign,
         commercialScoreDistribution: dashboard.commercialScores.distribution,
         learningConfidence: dashboard.learning.memory.confidence,
@@ -1595,6 +1554,7 @@ export const cjShopifyUsaSalesAgentService = {
         return { shipping: shippingResult, result: guardResult };
       });
       await recordSalesAgentTrace(userId, 'sales_agent.action.run_profit_guard', {
+        ok: true,
         shipping,
         scanned: result.scanned,
         okCount: result.okCount,
@@ -1663,6 +1623,7 @@ export const cjShopifyUsaSalesAgentService = {
         }
       });
       await recordSalesAgentTrace(userId, 'sales_agent.action.curate_similar_products', {
+        ok: true,
         processedGroups,
         results,
       } as unknown as Prisma.InputJsonValue);
@@ -1692,10 +1653,10 @@ export const cjShopifyUsaSalesAgentService = {
               throw new Error('Listing has no Shopify product id.');
             }
             const beforeTitle = buyerTitle(listing);
-            const afterTitle = buildBuyerReadyTitle(beforeTitle);
             const draft = draftRecord(listing.draftPayload);
+            const afterTitle = buildDraftTitle({ title: beforeTitle, variantAttributes: draft.variantAttributes });
             const description = String(draft.descriptionHtml || draft.description || listing.product.description || '').replace(/<[^>]+>/g, ' ').trim();
-            const descriptionHtml = description.length < 120 ? buildBuyerReadyDescription(afterTitle || beforeTitle) : undefined;
+            const descriptionHtml = description.length < 120 ? buildDraftDescription({ title: afterTitle || beforeTitle, description, variantAttributes: draft.variantAttributes, shippingSnapshot: null }) : undefined;
             const titleChanged = Boolean(afterTitle) && normalizeTitle(beforeTitle) !== normalizeTitle(afterTitle);
             if (!titleChanged && !descriptionHtml) {
               results.push({ listingId: candidate.listingId, ok: true, beforeTitle, afterTitle: beforeTitle, descriptionUpdated: false });
@@ -1736,6 +1697,7 @@ export const cjShopifyUsaSalesAgentService = {
         }
       });
       await recordSalesAgentTrace(userId, 'sales_agent.action.fix_catalog_quality', {
+        ok: true,
         requested: selected.length,
         results,
       } as Prisma.InputJsonValue);
@@ -1769,6 +1731,7 @@ export const cjShopifyUsaSalesAgentService = {
         }
       });
       await recordSalesAgentTrace(userId, 'sales_agent.action.publish_approved_backlog', {
+        ok: true,
         requested: selected.length,
         results,
       } as Prisma.InputJsonValue);
@@ -1802,6 +1765,7 @@ export const cjShopifyUsaSalesAgentService = {
         }
       });
       await recordSalesAgentTrace(userId, 'sales_agent.action.unpublish_unsafe_listings', {
+        ok: true,
         requested: selected.length,
         results,
       } as Prisma.InputJsonValue);
@@ -1827,6 +1791,7 @@ export const cjShopifyUsaSalesAgentService = {
     }
 
     await recordSalesAgentTrace(userId, 'sales_agent.action.promote_top_products', {
+      ok: true,
       queued: selected.length,
       listingIds: selected.map((item) => item.listingId),
       titles: selected.map((item) => item.title),

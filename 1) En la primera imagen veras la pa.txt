@@ -1,0 +1,107 @@
+1) En la primera imagen veras la pagina de nuestro software , https://www.ivanreseller.com/cj-shopify-usa/listings, sin enbargo veras que dice que tiene solo 100 productos cuanto en la tienda que tenemos en shopify hay muchos mas, y enta pagina debe ser el reflejo del estado de los articulos en dicha tienda, planificar y luego corregir, 2) la pagina productos https://www.ivanreseller.com/cj-shopify-usa/products, deberas auditarla competamente entendiendo y mejorando su logica ya que los botones son poco claros en su funcion, y al parece no estan comportandose correctamente, en otras palabas esta lleno de basura poco cloara de lo que el usuario deberia hacer para solucionarlo. ( Debes entender y aqjustar al coclo que corresponde )  3) , en la pagina  https://www.ivanreseller.com/cj-shopify-usa/automation podras observar que esl sistema automatizado que se encuentra activo, los ultimos ciclos no ha logrado encontrar y publicar nuevos articulos, tambien abla de varios draft pendientes de piublicar, que entiendo que o deberia publicarlo automaticamente si cumplen con los requisitos o aparecer listados en el apartado correspondientes para que el usuario realice las tareas de correccion para continuar con el ciclo. ( Es decir si cumple con lor requisitos y demas policas y configuracion , los articulos no deberian quedar en draft o quedar pendientes en ese estado, tu debes analizar y hacer una solucion profesional acirde a nuestro actual software ), el ultilo log del modo automatico fue " 0
+
+EN CICLO ACTUAL
+
+0
+
+publicados
+
+APROBADOS
+
+0
+
+candidatos encontrados
+
+ERRORES
+
+0
+
+127m 31s duración
+
+LOG EN VIVO
+
+14:53:58
+·
+Cycle cycle-1777748038974 started — checking daily limits
+14:53:58
+·
+Will publish up to 80 products this cycle (443 remaining today)
+14:53:58
+·
+Step 0: Discovering new CJ pet products...
+15:01:33
+·
+Discovery "pet grooming": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:09:09
+·
+Discovery "hamster wheel": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:16:44
+·
+Discovery "dog cooling mat": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:21:49
+·
+Discovery "dog cooling vest": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:29:24
+·
+Discovery "dog slow feeder": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:29:26
+·
+Discovery "pet first aid kit": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:37:01
+·
+Discovery "dog bag": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:44:37
+·
+Discovery "pet seat belt": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:47:09
+·
+Discovery "dog booties": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:54:44
+·
+Discovery "pet sling carrier": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:57:47
+·
+Discovery "turtle basking platform": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:58:18
+·
+Discovery "small animal bedding": 0/25 enriched total; 0 approved, 0 rejected, 0 recent skipped.
+15:58:19
+·
+Discovery enriched 0 pet products / 0 variants from 360 CJ results; 0 approved, 0 rejected, 0 without stock.
+15:58:19
+·
+Step 0.5: Checking for blocked orders (SUPPLIER_PAYMENT_BLOCKED)...
+15:58:19
+·
+Step 0.8: Syncing prices for active listings...
+15:58:19
+·
+Checking CJ prices for 250 active products...
+17:01:26
+·
+Step 0.9: Evaluating unlisted catalog backlog...
+17:01:29
+✓
+Backlog evaluation created 2 decisions: 1 approved, 1 rejected.
+17:01:29
+·
+Scanning approved CJ products database...
+17:01:29
+·
+Found 217 latest approved product evaluations ≥ 10% margin
+17:01:29
+·
+Filtered: 217 excluded (14 non-pet, 198 already listed/draft/pending, 5 without sellable stock/cost, 0 duplicate evaluations)
+17:01:29
+·
+0 unique products ready to publish
+17:01:29
+·
+Step 2.5: Publishing existing DRAFT listings backlog...
+17:01:29
+·
+No DRAFT backlog to process
+17:01:29
+⚠
+No new candidates after discovery/backlog. Remaining catalog rows need fresh evaluation, fail the pet policy, or already have active/draft/pending listings." hace varios ciclo que no hace ni hallazgos nuevos ni publicaciones en el sitio, incuso y a pesar de que cambie los valores de la configuracion haciendolos menos restrictivos , y a pesar de ello no encuentra tampoco nuevos articulos, eso significa que algo esta fallando.  4) Tambien debes revisar la pagina logs , ya que esta mostrando errores, y quiero saber de que se trata o si necesita atencion o correccion https://www.ivanreseller.com/cj-shopify-usa/logs. 5) En la ultima imagen me gustaria me explicaras que  significa "Checkout / Payments Reality 
+Chile-based operator detected. Use a third-party checkout gateway; do not assume Shopify Payments." y como lo puedo solucionar, claramente explicado. 6) Analiza la tienda shipify si tenemos provesionalmente la emision de invoice con cada venta que hagamos.
