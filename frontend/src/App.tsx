@@ -99,6 +99,7 @@ const CjShopifyUsaLogsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyU
 const CjShopifyUsaDiscoverPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaDiscoverPage'));
 const CjShopifyUsaSettingsPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaSettingsPage'));
 const CjShopifyUsaAutomationPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaAutomationPage'));
+const CjShopifyUsaSocialPage = lazy(() => import('@pages/cj-shopify-usa/CjShopifyUsaSocialPage'));
 const TopDawgShopifyUsaModuleGate    = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaModuleGate'));
 const TopDawgShopifyUsaLayout        = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaLayout'));
 const TopDawgShopifyUsaOverviewPage  = lazy(() => import('@pages/topdawg-shopify-usa/TopDawgShopifyUsaOverviewPage'));
@@ -369,6 +370,7 @@ function AppContent() {
             <Route path="logs" element={<CjShopifyUsaLogsPage />} />
             <Route path="discover" element={<CjShopifyUsaDiscoverPage />} />
             <Route path="automation" element={<CjShopifyUsaAutomationPage />} />
+            <Route path="social" element={<CjShopifyUsaSocialPage />} />
           </Route>
         </Route>
 

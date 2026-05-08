@@ -16,6 +16,7 @@ import {
   Zap,
   Settings,
   ScrollText,
+  Share2,
 } from 'lucide-react';
 
 type NavGroup = {
@@ -52,6 +53,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Sistema',
     items: [
+      { to: '/cj-shopify-usa/social', label: 'Social Autopilot', icon: Share2 },
       { to: '/cj-shopify-usa/automation', label: 'Automatización', icon: Zap },
       { to: '/cj-shopify-usa/settings', label: 'Config', icon: Settings },
       { to: '/cj-shopify-usa/logs', label: 'Logs', icon: ScrollText },
