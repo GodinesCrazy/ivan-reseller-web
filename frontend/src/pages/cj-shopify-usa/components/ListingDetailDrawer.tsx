@@ -209,10 +209,10 @@ export function ListingDetailDrawer({ listing, open, onClose }: ListingDrawerPro
               </h4>
               <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3.5 space-y-2.5">
                 <div className="grid grid-cols-2 gap-2.5">
-                  <CheckItem label="Admin Status" ok={truth.shopify?.adminStatus === 'ACTIVE'} value={truth.shopify?.adminStatus ?? '—'} />
-                  <CheckItem label="Publicación" ok={truth.shopify?.publishedOnPublication === true} value={truth.shopify?.publishedOnPublication ? 'Online Store' : 'No publicado'} />
-                  <CheckItem label="Verificado" ok={truth.buyerFacingVerified === true} value={truth.buyerFacingVerified ? 'Buyer ready' : 'Pendiente'} />
-                  <CheckItem label="Inventario" ok={(truth.shopify?.inventoryQuantity ?? 0) > 0} value={String(truth.shopify?.inventoryQuantity ?? '—')} />
+                  <CheckItem label="Estado Admin" ok={truth.shopify?.adminStatus === 'ACTIVE'} value={truth.shopify?.adminStatus ?? '—'} tooltip="Estado del producto en el admin de Shopify. ACTIVE significa que existe y está habilitado." />
+                  <CheckItem label="Publicación" ok={truth.shopify?.publishedOnPublication === true} value={truth.shopify?.publishedOnPublication ? 'Online Store' : 'No publicado'} tooltip="Indica si el producto está asignado al canal Online Store de Shopify para ser visible al comprador." />
+                  <CheckItem label="Verificado" ok={truth.buyerFacingVerified === true} value={truth.buyerFacingVerified ? 'Listo para venta' : 'Pendiente'} tooltip="Confirma que el producto es accesible, tiene precio y botón de compra en la tienda pública." />
+                  <CheckItem label="Inventario" ok={(truth.shopify?.inventoryQuantity ?? 0) > 0} value={String(truth.shopify?.inventoryQuantity ?? '—')} tooltip="Unidades disponibles en Shopify. Si es 0, el producto no se puede comprar." />
                 </div>
                 {truth.reasons && truth.reasons.length > 0 && (
                   <div className="mt-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 p-2.5">
@@ -299,9 +299,9 @@ export function ListingDetailDrawer({ listing, open, onClose }: ListingDrawerPro
   );
 }
 
-function CheckItem({ label, ok, value }: { label: string; ok: boolean; value: string }) {
+function CheckItem({ label, ok, value, tooltip }: { label: string; ok: boolean; value: string; tooltip?: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-white dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50 px-3 py-2">
+    <div className="flex items-center gap-2 rounded-lg bg-white dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50 px-3 py-2" title={tooltip}>
       {ok ? (
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
       ) : (

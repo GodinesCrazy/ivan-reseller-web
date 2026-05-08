@@ -867,12 +867,12 @@ export default function CjShopifyUsaListingsPage() {
                 </button>
               </th>
               <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Estado</th>
+              <th className="px-3 py-2" title="Estado actual del listing: Draft, Publicando, Activo, Fallido, etc.">Estado</th>
               <th className="px-3 py-2">Producto</th>
-              <th className="px-3 py-2">Precio</th>
-              <th className="px-3 py-2">SKU CJ</th>
-              <th className="px-3 py-2">Shopify ID</th>
-              <th className="px-3 py-2">Shopify truth</th>
+              <th className="px-3 py-2" title="Precio de venta en USD configurado o sugerido">Precio</th>
+              <th className="px-3 py-2" title="SKU del proveedor CJ Dropshipping">SKU CJ</th>
+              <th className="px-3 py-2" title="ID del producto en Shopify Admin">Shopify ID</th>
+              <th className="px-3 py-2" title="Estado real verificado del producto en Shopify: admin status, publicación, inventario y storefront">Verificación Shopify</th>
               <th className="px-3 py-2">Bloqueo actual</th>
               <th className="px-3 py-2">
                 <span className="inline-flex items-center gap-1">

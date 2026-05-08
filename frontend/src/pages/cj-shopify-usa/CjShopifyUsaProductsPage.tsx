@@ -208,6 +208,22 @@ function buildManualReadiness(row: ProductRow, duplicateTitleCount: number): Man
   if (duplicateTitleCount > 1) reasons.push('posible titulo duplicado');
   reasons.push(...titleQualityIssues(row.title));
 
+  // ── Conflict state: published in Shopify but REJECTED by margin rules ──
+  const isRejectedByRules = ev?.decision === 'REJECTED';
+
+  if (verifiedActiveListing && isRejectedByRules) {
+    const reason = evaluationBlockReason(ev);
+    return {
+      state: 'review',
+      label: 'Publicado — Revisión de margen',
+      nextAction: 'Recalcular o despublicar',
+      reasons: reason
+        ? [`Shopify activo pero regla incumplida: ${reason}`]
+        : ['Shopify activo pero evaluación rechazada'],
+      className: 'border-orange-600/60 bg-orange-950/35 text-orange-200',
+    };
+  }
+
   if (verifiedActiveListing) {
     return {
       state: 'active',
@@ -215,6 +231,19 @@ function buildManualReadiness(row: ProductRow, duplicateTitleCount: number): Man
       nextAction: 'Monitorear stock y margen',
       reasons: [],
       className: 'border-emerald-700/60 bg-emerald-950/35 text-emerald-200',
+    };
+  }
+
+  if ((activeListing || linkedListing) && isRejectedByRules) {
+    const reason = evaluationBlockReason(ev);
+    return {
+      state: 'review',
+      label: 'En Shopify — Margen rechazado',
+      nextAction: 'Recalcular, corregir precio o despublicar',
+      reasons: reason
+        ? [`Vinculado a Shopify pero incumple regla: ${reason}`]
+        : ['Vinculado a Shopify pero evaluación rechazada'],
+      className: 'border-orange-600/60 bg-orange-950/35 text-orange-200',
     };
   }
 
@@ -516,6 +545,27 @@ export default function CjShopifyUsaProductsPage() {
         Ciclo manual recomendado: <strong>1. Recalcular</strong> confirma costo, stock, envio y margen; <strong>2. Preparar draft</strong> solo si pasa calidad comercial; <strong>3. Publicar draft</strong> envia a Shopify y canales; <strong>4. Store Products</strong> confirma buyer-ready. Los bloqueos de calidad son intencionales para evitar productos duplicados, sin imagenes, no-pet o con titulos que generen desconfianza.
       </div>
 
+      {/* Conflict banner: products in Shopify with rejected margin */}
+      {(() => {
+        const conflictCount = products.filter((p) => {
+          const hasShopify = p.listings.some((l) => Boolean(l.shopifyProductId));
+          return hasShopify && p.evaluations[0]?.decision === 'REJECTED';
+        }).length;
+        if (conflictCount === 0) return null;
+        return (
+          <div className="rounded-lg border border-orange-500/50 bg-orange-950/30 px-4 py-3 text-sm text-orange-100 flex items-start gap-2.5">
+            <ShieldAlert className="h-4 w-4 text-orange-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">{conflictCount} producto(s) publicado(s) con regla de margen incumplida</p>
+              <p className="text-xs mt-0.5 opacity-80">
+                Estos artículos están activos en Shopify pero su evaluación de margen actual no cumple las reglas comerciales.
+                Opciones: <strong>Recalcular</strong> para actualizar precios, o ir a <strong>Store Products</strong> para despublicar.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
       {filtered.length === 0 ? (
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-6 py-10 text-center">
           <p className="text-slate-500 dark:text-slate-400 text-sm">
@@ -591,8 +641,22 @@ export default function CjShopifyUsaProductsPage() {
                       <td className="px-3 py-2 tabular-nums">{row.variants.length}</td>
                       <td className="px-3 py-2">
                         {ev ? (
-                          <span className={`rounded px-2 py-0.5 text-xs font-medium ${DECISION_BADGE[ev.decision] ?? ''}`}>
-                            {DECISION_LABEL[ev.decision] ?? ev.decision}
+                          <span
+                            className={`rounded px-2 py-0.5 text-xs font-medium ${
+                              ev.decision === 'REJECTED' && hasShopifyLinkedListing
+                                ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                                : DECISION_BADGE[ev.decision] ?? ''
+                            }`}
+                            title={
+                              ev.decision === 'REJECTED' && hasShopifyLinkedListing
+                                ? 'Este producto está en Shopify pero no cumple las reglas de margen actuales. Recalcula para actualizar o despublica.'
+                                : undefined
+                            }
+                          >
+                            {ev.decision === 'REJECTED' && hasShopifyLinkedListing
+                              ? 'Margen rechazado'
+                              : DECISION_LABEL[ev.decision] ?? ev.decision
+                            }
                           </span>
                         ) : policyBlocked ? (
                           <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300">
@@ -646,11 +710,21 @@ export default function CjShopifyUsaProductsPage() {
                             Ver en tienda
                           </Link>
                         )}
-                        {verifiedActiveListing && (
+                        {verifiedActiveListing && ev?.decision !== 'REJECTED' && (
                           <span className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-medium text-emerald-700 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-300">
                             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
                             Shopify buyer-ready
                           </span>
+                        )}
+                        {verifiedActiveListing && ev?.decision === 'REJECTED' && (
+                          <Link
+                            to="/cj-shopify-usa/listings"
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-orange-400/60 bg-orange-50 px-2.5 text-xs font-medium text-orange-700 transition hover:bg-orange-100 dark:border-orange-700/60 dark:bg-orange-950/30 dark:text-orange-300 dark:hover:bg-orange-900/40"
+                            title="Este producto está en Shopify pero falla las reglas de margen. Ve a Store Products para despublicar o recalcula para actualizar."
+                          >
+                            <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                            Ir a Store Products
+                          </Link>
                         )}
                         {activeListing && !verifiedActiveListing && (
                           <span className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300">
@@ -659,10 +733,13 @@ export default function CjShopifyUsaProductsPage() {
                           </span>
                         )}
                         {!activeListing && hasShopifyLinkedListing && (
-                          <span className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300">
+                          <Link
+                            to="/cj-shopify-usa/listings"
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                          >
                             <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
-                            Revisar truth
-                          </span>
+                            Revisar en Store Products
+                          </Link>
                         )}
                         <button
                           type="button"
@@ -685,7 +762,13 @@ export default function CjShopifyUsaProductsPage() {
                         <button
                           type="button"
                           disabled={busyId === row.id || hasBlockingListing}
-                          title={hasBlockingListing ? 'Primero elimina u oculta el producto vinculado desde Store Products/Shopify.' : 'Eliminar artículo'}
+                          title={
+                            hasBlockingListing && activeListing
+                              ? 'Este producto está publicado en Shopify. Ve a Store Products y despublícalo primero.'
+                              : hasBlockingListing
+                                ? 'Tiene un listing vinculado a Shopify. Despublícalo o elimínalo desde Store Products antes.'
+                                : 'Eliminar artículo del catálogo local'
+                          }
                           className="inline-flex h-7 items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-800/70 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
                           onClick={() => void deleteProduct(row)}
                         >
@@ -703,9 +786,26 @@ export default function CjShopifyUsaProductsPage() {
                               <p className="font-medium text-slate-800 dark:text-slate-200 mb-1">Última evaluación</p>
                               <p>Decisión: <strong>{ev.decision}</strong> — Margen: {pct(ev.estimatedMarginPct)}</p>
                               {ev.decision === 'REJECTED' && evaluationBlockReason(ev) && (
-                                <p className="mt-1 rounded-md border border-amber-500/35 bg-amber-950/20 px-3 py-2 text-amber-100">
-                                  Rechazado por regla comercial: {evaluationBlockReason(ev)}. El margen puede verse alto y aun asi bloquearse si el costo, shipping, precio maximo/minimo o profit neto no cumplen.
-                                </p>
+                                <div className={`mt-1 rounded-md border px-3 py-2 ${
+                                  hasShopifyLinkedListing
+                                    ? 'border-orange-500/35 bg-orange-950/20 text-orange-100'
+                                    : 'border-amber-500/35 bg-amber-950/20 text-amber-100'
+                                }`}>
+                                  {hasShopifyLinkedListing ? (
+                                    <>
+                                      <p className="font-semibold">⚠ Conflicto: Publicado en Shopify pero margen rechazado</p>
+                                      <p className="mt-1">{evaluationBlockReason(ev)}</p>
+                                      <p className="mt-1 opacity-80">
+                                        <strong>¿Qué hacer?</strong> Presiona «Recalcular» para actualizar los costos. Si la regla sigue fallando,
+                                        ve a <strong>Store Products</strong> para despublicar este artículo de Shopify.
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <p>
+                                      Rechazado por regla comercial: {evaluationBlockReason(ev)}. El margen puede verse alto y aun asi bloquearse si el costo, shipping, precio maximo/minimo o profit neto no cumplen.
+                                    </p>
+                                  )}
+                                </div>
                               )}
                               {ev.reasons != null && (
                                 <details className="mt-1">
