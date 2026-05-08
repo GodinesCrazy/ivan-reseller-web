@@ -438,6 +438,38 @@ export default function CjShopifyUsaProductsPage() {
     }
   }
 
+  async function reEvaluateAllRejected() {
+    const toEval = products.filter((p) => p.evaluations[0]?.decision === 'REJECTED');
+    if (!toEval.length) return;
+    const confirmed = window.confirm(`¿Re-evaluar ${toEval.length} productos rechazados? Esto consultará el precio y stock más reciente de CJ Dropshipping.`);
+    if (!confirmed) return;
+
+    setBusyId(-1);
+    setActionMsg(`Iniciando re-evaluación de ${toEval.length} productos (en grupos de 4)...`);
+    setError(null);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < toEval.length; i += 4) {
+      const chunk = toEval.slice(i, i + 4);
+      await Promise.allSettled(
+        chunk.map(async (product) => {
+          try {
+            await api.post(`/api/cj-shopify-usa/products/${product.id}/re-evaluate`);
+            successCount++;
+          } catch (e) {
+            errorCount++;
+          }
+        })
+      );
+    }
+    
+    setActionMsg(`Re-evaluación completada. Actualizados: ${successCount}. Errores: ${errorCount}.`);
+    await load();
+    setBusyId(null);
+  }
+
   async function deleteProduct(product: ProductRow) {
     const confirmed = window.confirm(
       `Eliminar "${product.title}" del catálogo CJ Shopify USA?\n\nEsta acción borra el artículo local y sus drafts no publicados.`,
@@ -512,6 +544,17 @@ export default function CjShopifyUsaProductsPage() {
             {label}: {val}
           </button>
         ))}
+        {totals.rejected > 0 && filterDecision === 'REJECTED' && (
+          <button
+            type="button"
+            disabled={busyId === -1}
+            onClick={() => void reEvaluateAllRejected()}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${busyId === -1 ? 'animate-spin' : ''}`} aria-hidden="true" />
+            {busyId === -1 ? 'Recalculando...' : `Recalcular ${totals.rejected} rechazados`}
+          </button>
+        )}
       </div>
 
       {actionMsg && (

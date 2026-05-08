@@ -1201,7 +1201,40 @@ export default function CjShopifyUsaSalesAgentPage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-emerald-500/25 bg-emerald-950/10 p-4">
+            <div className="flex flex-col gap-4">
+              <div className="rounded-lg border border-orange-500/30 bg-orange-950/10 p-4">
+                <h3 className="flex items-center gap-2 text-base font-semibold text-orange-100">
+                  <ShieldCheck className="h-4 w-4" />
+                  Profit Guard
+                </h3>
+                <p className="mt-1 text-sm text-slate-300">Protección de márgenes y auditoría de precios.</p>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                  <span className="rounded bg-black/20 p-2">Auditados: <b>{data.profitGuard.scanned}</b></span>
+                  <span className="rounded bg-black/20 p-2 text-emerald-200">Sanos: <b>{data.profitGuard.okCount}</b></span>
+                  <span className="rounded bg-black/20 p-2 text-cyan-200">Ajustes precio: <b>{data.profitGuard.priceIncreases}</b></span>
+                  <span className="rounded bg-black/20 p-2 text-amber-200">Requieren revisión: <b>{data.profitGuard.reviewRequired}</b></span>
+                  <span className="col-span-2 rounded bg-black/20 p-2 text-red-200">Pausados por seguridad: <b>{data.profitGuard.pausedUnsafe}</b></span>
+                </div>
+                {data.profitGuard.sampleIssues.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-xs font-bold uppercase text-slate-500">Alertas de Margen / Costo</p>
+                    {data.profitGuard.sampleIssues.map((issue, idx) => (
+                      <div key={idx} className="rounded border border-orange-500/20 bg-black/20 px-3 py-2 text-xs">
+                        <p className="font-semibold text-orange-50 line-clamp-1">{issue.title}</p>
+                        <p className="mt-1 text-orange-200/80">{issue.reason}</p>
+                        <p className="mt-1 font-mono text-[10px] text-orange-300/60 uppercase">Acción: {issue.action}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {data.profitGuard.sampleIssues.length === 0 && data.profitGuard.reviewRequired === 0 && (
+                  <p className="mt-4 rounded border border-emerald-500/25 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-100">
+                    Todos los productos auditados cumplen con las reglas de margen.
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-emerald-500/25 bg-emerald-950/10 p-4">
               <h3 className="flex items-center gap-2 text-base font-semibold text-emerald-100">
                 <Megaphone className="h-4 w-4" />
                 Modo campana semanal
@@ -1233,6 +1266,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                 )}
               </div>
             </div>
+          </div>
           </section>
 
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
