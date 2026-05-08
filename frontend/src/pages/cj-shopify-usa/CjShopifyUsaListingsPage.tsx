@@ -605,14 +605,23 @@ export default function CjShopifyUsaListingsPage() {
     setActionMsg(null);
     let ok = 0;
     const failedIds: number[] = [];
-    for (const listing of targets) {
-      try {
-        await api.post('/api/cj-shopify-usa/listings/publish', { listingId: listing.id });
-        ok++;
-      } catch {
-        failedIds.push(listing.id);
-      }
+    
+    // Concurrency limiter: Process in chunks of 4
+    const concurrency = 4;
+    for (let i = 0; i < targets.length; i += concurrency) {
+      const chunk = targets.slice(i, i + concurrency);
+      await Promise.all(
+        chunk.map(async (listing) => {
+          try {
+            await api.post('/api/cj-shopify-usa/listings/publish', { listingId: listing.id });
+            ok++;
+          } catch {
+            failedIds.push(listing.id);
+          }
+        })
+      );
     }
+    
     await load();
     setBulkPublishing(false);
     if (failedIds.length > 0) {
@@ -655,14 +664,23 @@ export default function CjShopifyUsaListingsPage() {
     setActionMsg(null);
     let ok = 0;
     const failedIds: number[] = [];
-    for (const listing of selectedUnpublishableRows) {
-      try {
-        await api.post(`/api/cj-shopify-usa/listings/${listing.id}/unpublish`);
-        ok++;
-      } catch {
-        failedIds.push(listing.id);
-      }
+    
+    // Concurrency limiter: Process in chunks of 4
+    const concurrency = 4;
+    for (let i = 0; i < selectedUnpublishableRows.length; i += concurrency) {
+      const chunk = selectedUnpublishableRows.slice(i, i + concurrency);
+      await Promise.all(
+        chunk.map(async (listing) => {
+          try {
+            await api.post(`/api/cj-shopify-usa/listings/${listing.id}/unpublish`);
+            ok++;
+          } catch {
+            failedIds.push(listing.id);
+          }
+        })
+      );
     }
+    
     await load();
     setBulkUnpublishing(false);
     if (failedIds.length > 0) setError(`${failedIds.length} listings fallaron al despublicar: IDs ${failedIds.join(', ')}.`);

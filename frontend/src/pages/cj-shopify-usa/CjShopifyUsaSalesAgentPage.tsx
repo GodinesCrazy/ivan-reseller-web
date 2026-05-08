@@ -748,14 +748,50 @@ export default function CjShopifyUsaSalesAgentPage() {
             <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-400">Ventas 30 dias</p>
               <p className="mt-2 text-3xl font-bold text-white">{data.kpis.paidOrders30}</p>
-              <p className="text-xs text-slate-500">{money(data.kpis.revenue30Usd)} revenue detectado</p>
+              <p className="text-xs text-slate-500" title="Total en dólares de ventas pagadas">{money(data.kpis.revenue30Usd)} ingresos</p>
             </div>
             <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Embudo</p>
-              <p className="mt-2 text-sm text-slate-200">
-                Carrito {pct(data.kpis.addToCartRatePct)} · Checkout {pct(data.kpis.checkoutRatePct)}
-              </p>
-              <p className="text-xs text-slate-500">Compra {pct(data.kpis.purchaseRatePct)} · {data.kpis.visitors} visitantes</p>
+              <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Embudo de Conversión</p>
+              <div className="h-32 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={[
+                      { name: 'Visitantes', value: data.kpis.visitors, pct: 100, fill: '#3b82f6' },
+                      { name: 'Carrito', value: Math.round(data.kpis.visitors * (data.kpis.addToCartRatePct / 100)), pct: data.kpis.addToCartRatePct, fill: '#f59e0b' },
+                      { name: 'Checkout', value: Math.round(data.kpis.visitors * (data.kpis.checkoutRatePct / 100)), pct: data.kpis.checkoutRatePct, fill: '#8b5cf6' },
+                      { name: 'Compra', value: data.kpis.paidOrders30, pct: data.kpis.purchaseRatePct, fill: '#10b981' },
+                    ]}
+                    layout="vertical"
+                    margin={{ top: 0, right: 20, left: -20, bottom: 0 }}
+                  >
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                    <Tooltip
+                      cursor={{ fill: '#1e293b' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const d = payload[0].payload;
+                          return (
+                            <div className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-xs shadow-xl">
+                              <p className="font-bold text-white">{d.name}</p>
+                              <p className="text-slate-300">Volumen: {d.value}</p>
+                              <p className="text-slate-400">Conversión: {Number(d.pct).toFixed(2)}%</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
+                      {
+                        [0, 1, 2, 3].map((entry, index) => (
+                          <RechartsCell key={`cell-${index}`} fill={['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981'][index]} />
+                        ))
+                      }
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
               {trafficSignal && (
                 <div className={`mt-3 rounded-md border px-2 py-1.5 text-xs ${trafficSignal.className}`}>
                   <p className="font-semibold">{trafficSignal.label}</p>
@@ -919,7 +955,7 @@ export default function CjShopifyUsaSalesAgentPage() {
                 <p className="mt-1 max-w-4xl text-sm text-slate-400">{data.salesPipeline.distinction}</p>
               </div>
               <div className="grid min-w-[260px] grid-cols-2 gap-2 text-xs">
-                <span className="rounded bg-cyan-500/10 p-2 text-cyan-100">Score pipeline <b>{data.salesPipeline.overallScore}/100</b></span>
+                <span className="rounded bg-cyan-500/10 p-2 text-cyan-100" title="Puntuación algorítmica de qué tan listo está el catálogo para vender">Salud del pipeline: <b>{data.salesPipeline.overallScore}/100</b></span>
                 <span className={`rounded p-2 ${pipelineStatusClass(data.salesPipeline.bottleneck.status)}`}>
                   Cuello: <b>{data.salesPipeline.bottleneck.label}</b>
                 </span>
