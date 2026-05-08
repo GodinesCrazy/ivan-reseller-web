@@ -42,31 +42,31 @@ export default function CjShopifyUsaSocialPage() {
     }
   }
 
-  // Simulador de Motor de Contenido (Task 20)
-  async function generateAIContent(listingId: number, title: string) {
+  // Simulador de Motor de Contenido (Task 20) conectado al backend híbrido
+  async function generateAIContent(listingId: number, title: string, priceUsd: number, handle: string | null) {
     setGenerating(listingId);
     try {
-      // En un futuro esto llamará a POST /api/cj-shopify-usa/analytics/social-autopilot/generate-caption
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
-      const hooks = [
-        `¿Tu mascota también hace esto? 🐾 Descubre el nuevo ${title}.`,
-        `Simplifica tu vida y la de tu mejor amigo con ${title} ✨`,
-        `El secreto para una rutina perfecta de cuidado animal 🤫 👇`
-      ];
-      const selectedHook = hooks[Math.floor(Math.random() * hooks.length)];
-      
-      const newCaption = `${selectedHook}\n\n👉 Consíguelo ahora en PawVault y mejora su calidad de vida.\n\n#PawVault #MascotasFelices #PetLovers #DogLife #CatLife`;
-
-      setData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          candidates: prev.candidates.map((c) => 
-            c.listingId === listingId ? { ...c, caption: newCaption } : c
-          )
-        };
+      const res = await api.post<{ ok: boolean; caption: string }>('/api/cj-shopify-usa/analytics/social-autopilot/generate-caption', {
+        listingId,
+        title,
+        priceUsd,
+        handle,
+        platform: 'pinterest',
       });
+      
+      if (res.data.ok) {
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            candidates: prev.candidates.map((c) => 
+              c.listingId === listingId ? { ...c, caption: res.data.caption } : c
+            )
+          };
+        });
+      }
+    } catch {
+      // Ignorar el error visualmente por simplicidad en esta fase, o agregar toast
     } finally {
       setGenerating(null);
     }
@@ -209,7 +209,7 @@ export default function CjShopifyUsaSocialPage() {
                   
                   <div className="mt-4 flex gap-2">
                     <button
-                      onClick={() => generateAIContent(c.listingId, c.title)}
+                      onClick={() => generateAIContent(c.listingId, c.title, c.priceUsd, c.handle)}
                       disabled={generating === c.listingId}
                       className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                     >

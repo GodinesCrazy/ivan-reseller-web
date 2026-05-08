@@ -271,4 +271,26 @@ router.get('/analytics/social-autopilot', async (req: Request, res: Response, ne
   }
 });
 
+// ── POST /analytics/social-autopilot/generate-caption ────────────────────────
+router.post('/analytics/social-autopilot/generate-caption', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const { listingId, title, priceUsd, handle, platform = 'pinterest' } = req.body;
+    
+    // Lazy load the service to prevent circular deps or early loading issues
+    const { cjShopifyUsaContentService } = await import('../services/cj-shopify-usa-content.service');
+    
+    const caption = await cjShopifyUsaContentService.generateSocialCaption({
+      title: String(title),
+      priceUsd: Number(priceUsd),
+      handle: String(handle),
+      platform: platform as 'pinterest' | 'instagram' | 'tiktok',
+    });
+    
+    res.json({ ok: true, caption });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
