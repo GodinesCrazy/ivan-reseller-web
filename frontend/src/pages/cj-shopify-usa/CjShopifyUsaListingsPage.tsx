@@ -16,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
+import { ListingDetailDrawer } from './components/ListingDetailDrawer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -376,6 +377,7 @@ export default function CjShopifyUsaListingsPage() {
   const [bulkPausing, setBulkPausing] = useState(false);
   const [bulkUnpublishing, setBulkUnpublishing] = useState(false);
   const [resyncing, setResyncing] = useState(false);
+  const [drawerListingId, setDrawerListingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -895,11 +897,14 @@ export default function CjShopifyUsaListingsPage() {
 
                 return (
                 <Fragment key={row.id}>
-                  <tr className={`border-t border-slate-100 transition-colors duration-200 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40 ${selected ? 'bg-primary-50/60 dark:bg-primary-950/20' : ''}`}>
+                  <tr
+                    className={`border-t border-slate-100 transition-colors duration-200 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40 cursor-pointer ${selected ? 'bg-primary-50/60 dark:bg-primary-950/20' : ''}`}
+                    onClick={() => setDrawerListingId(row.id)}
+                  >
                     <td className="px-3 py-2">
                       <button
                         type="button"
-                        onClick={() => toggleRow(row.id)}
+                        onClick={(e) => { e.stopPropagation(); toggleRow(row.id); }}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200 dark:hover:bg-slate-800"
                         title={selected ? 'Quitar selección' : 'Seleccionar'}
                       >
@@ -938,7 +943,7 @@ export default function CjShopifyUsaListingsPage() {
                       <p>Upd {fmtDate(row.updatedAt)}</p>
                       <p>Pub {fmtDate(row.publishedAt)}</p>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                       <div className="flex min-w-[230px] max-w-[280px] flex-col gap-1.5">
                         <div className="flex items-center gap-1.5">
                           <button
@@ -1117,6 +1122,12 @@ export default function CjShopifyUsaListingsPage() {
           </tbody>
         </table>
       </div>
+
+      <ListingDetailDrawer
+        listing={listings.find((l) => l.id === drawerListingId) ?? null}
+        open={drawerListingId != null}
+        onClose={() => setDrawerListingId(null)}
+      />
     </div>
   );
 }

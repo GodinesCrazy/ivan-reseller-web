@@ -102,7 +102,7 @@ export class CjShopifyUsaQualificationService {
 
     // 1. Rechazar si el shipping destruye la economía
     if (estimatedShippingUsd > maxShippingUsd) {
-      reasons.push(`Shipping too expensive: $${estimatedShippingUsd.toFixed(2)} > max $${maxShippingUsd.toFixed(2)}`);
+      reasons.push(`Envío muy caro: $${estimatedShippingUsd.toFixed(2)} > máximo permitido $${maxShippingUsd.toFixed(2)}`);
       return {
         decision: 'REJECTED',
         reasons,
@@ -112,7 +112,7 @@ export class CjShopifyUsaQualificationService {
 
     // 2. Rechazar productos de costo muy bajo (difíciles de vender con margen sano)
     if (cjCostUsd < minCostUsd) {
-      reasons.push(`Product cost too low: $${cjCostUsd.toFixed(2)} < $${minCostUsd.toFixed(2)} minimum`);
+      reasons.push(`Costo de producto muy bajo: $${cjCostUsd.toFixed(2)} < mínimo permitido $${minCostUsd.toFixed(2)}`);
       return {
         decision: 'REJECTED',
         reasons,
@@ -132,7 +132,7 @@ export class CjShopifyUsaQualificationService {
 
     let rawSuggestedPrice: number;
     if (combinedPctDivisor <= 0.001) {
-      reasons.push('Fee and margin percentages exceed 100% - invalid configuration');
+      reasons.push('Fee y margen superan el 100% - configuración inválida');
       return {
         decision: 'REJECTED',
         reasons,
@@ -148,7 +148,7 @@ export class CjShopifyUsaQualificationService {
     // === RECHAZO POR PRECIO FUERA DE RANGO COMERCIAL ===
     if (suggestedSellPriceUsd < PRICING_DEFAULTS.minSellPriceUsd) {
       reasons.push(
-        `Rejected by minimum sell price rule: suggested Shopify price $${suggestedSellPriceUsd.toFixed(2)} is below the $${PRICING_DEFAULTS.minSellPriceUsd.toFixed(2)} minimum. Product is too low-ticket for the configured economics.`,
+        `Rechazado por regla de precio de venta mínimo: precio sugerido $${suggestedSellPriceUsd.toFixed(2)} está por debajo del mínimo de $${PRICING_DEFAULTS.minSellPriceUsd.toFixed(2)}. El producto es muy barato para la economía configurada.`,
       );
       return {
         decision: 'REJECTED',
@@ -159,7 +159,7 @@ export class CjShopifyUsaQualificationService {
 
     if (suggestedSellPriceUsd > maxSellPriceUsd) {
       reasons.push(
-        `Rejected by maximum sell price rule: suggested Shopify price $${suggestedSellPriceUsd.toFixed(2)} exceeds the configured $${maxSellPriceUsd.toFixed(2)} maximum. The product may be valid, but it is outside the current store price cap.`,
+        `Rechazado por regla de precio de venta máximo: precio sugerido $${suggestedSellPriceUsd.toFixed(2)} supera el máximo configurado de $${maxSellPriceUsd.toFixed(2)}.`,
       );
       return {
         decision: 'REJECTED',
@@ -176,7 +176,7 @@ export class CjShopifyUsaQualificationService {
 
     // 3. Rechazar si el margen neto real es insuficiente
     if (netMarginPct < marginPct) {
-      reasons.push(`Net margin too low: ${netMarginPct.toFixed(1)}% < ${marginPct.toFixed(1)}% minimum`);
+      reasons.push(`Margen neto muy bajo: ${netMarginPct.toFixed(1)}% < mínimo ${marginPct.toFixed(1)}%`);
       return {
         decision: 'REJECTED',
         reasons,
@@ -185,7 +185,7 @@ export class CjShopifyUsaQualificationService {
     }
 
     if (netProfitUsd < minProfitUsd) {
-      reasons.push(`Net profit too low: $${netProfitUsd.toFixed(2)} < $${minProfitUsd.toFixed(2)} minimum`);
+      reasons.push(`Profit neto muy bajo: $${netProfitUsd.toFixed(2)} < mínimo $${minProfitUsd.toFixed(2)}`);
       return {
         decision: 'REJECTED',
         reasons,
@@ -196,7 +196,7 @@ export class CjShopifyUsaQualificationService {
     // === APROBADO ===
     return {
       decision: 'APPROVED',
-      reasons: ['Product meets all pricing criteria for Shopify USA'],
+      reasons: ['El producto cumple con todos los criterios de precio para Shopify USA'],
       breakdown: this.buildBreakdown(cjCostUsd, estimatedShippingUsd, incidentBufferUsd, suggestedSellPriceUsd, providerFeePct, providerFeeFixed, marginPct, netProfitUsd, netMarginPct),
     };
   }

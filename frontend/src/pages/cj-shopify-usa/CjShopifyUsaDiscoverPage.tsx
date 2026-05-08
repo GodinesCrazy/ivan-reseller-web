@@ -132,47 +132,50 @@ function OriginBadge({ origin }: { origin?: 'US' | 'CN' | 'UNKNOWN' }) {
   if (!origin || origin === 'UNKNOWN') return null;
   const cls =
     origin === 'US'
-      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+      ? 'bg-blue-500/90 text-white shadow-lg shadow-blue-500/20'
+      : 'bg-slate-700/80 text-slate-200 backdrop-blur-sm';
   return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${cls}`}>
-      {origin === 'US' ? '🇺🇸 US Stock' : '🇨🇳 China'}
+    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wide ${cls}`}>
+      {origin === 'US' ? '🇺🇸 US' : '🇨🇳 CN'}
     </span>
   );
 }
 
 function PricingBreakdown({ b, decision }: { b: Breakdown; decision: string }) {
-  const decisionCls =
-    decision === 'APPROVED'
-      ? 'text-emerald-600 dark:text-emerald-400'
-      : decision === 'REJECTED'
-      ? 'text-red-500 dark:text-red-400'
-      : 'text-amber-500 dark:text-amber-400';
+  const isApproved = decision === 'APPROVED';
+  const isRejected = decision === 'REJECTED';
+  const profitUsd = b.suggestedSellPriceUsd - b.totalCostUsd - b.paymentProcessingFeeUsd;
+  const marginPct = b.suggestedSellPriceUsd > 0 ? (profitUsd / b.suggestedSellPriceUsd) * 100 : 0;
 
   const rows: [string, string][] = [
     ['Costo CJ', usd(b.supplierCostUsd)],
     ['Envío estimado', usd(b.shippingCostUsd)],
-    ['Total costo', usd(b.totalCostUsd)],
     ['Fee pago (~5.4%)', usd(b.paymentProcessingFeeUsd)],
-    ['Profit objetivo', usd(b.targetProfitUsd)],
   ];
 
   return (
-    <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3 space-y-1.5">
+    <div className={`mt-3 rounded-xl border p-3 space-y-1.5 ${isApproved ? 'border-emerald-200/80 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-950/20' : isRejected ? 'border-red-200/80 dark:border-red-800/40 bg-red-50/50 dark:bg-red-950/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'}`}>
+      {/* Decision badge */}
+      <div className={`flex items-center gap-1.5 text-xs font-bold rounded-lg px-2.5 py-1.5 ${isApproved ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : isRejected ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'}`}>
+        {isApproved ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+        {isApproved ? 'Aprobado para venta' : isRejected ? 'Rechazado' : decision}
+      </div>
       {rows.map(([label, value]) => (
-        <div key={label} className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+        <div key={label} className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400">
           <span>{label}</span>
           <span className="tabular-nums font-medium">{value}</span>
         </div>
       ))}
-      <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700 flex justify-between text-sm font-semibold">
-        <span>Precio sugerido</span>
-        <span className={`tabular-nums ${decisionCls}`}>{usd(b.suggestedSellPriceUsd)}</span>
-      </div>
-      <div className="flex items-center gap-1.5 pt-1">
-        <span className={`text-xs font-semibold uppercase ${decisionCls}`}>
-          {decision === 'APPROVED' ? '✓ Aprobado' : decision === 'REJECTED' ? '✗ Rechazado' : decision}
-        </span>
+      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/40 px-2.5 py-2 text-center">
+          <p className="text-[10px] font-semibold text-slate-400 uppercase">Precio</p>
+          <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{usd(b.suggestedSellPriceUsd)}</p>
+        </div>
+        <div className={`rounded-lg border px-2.5 py-2 text-center ${isApproved ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/50' : 'bg-white dark:bg-slate-800/80 border-slate-200/60 dark:border-slate-700/40'}`}>
+          <p className="text-[10px] font-semibold text-slate-400 uppercase">Profit</p>
+          <p className={`text-base font-bold tabular-nums ${isApproved ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>{usd(profitUsd)}</p>
+          <p className="text-[9px] tabular-nums text-slate-400">{marginPct.toFixed(1)}%</p>
+        </div>
       </div>
     </div>
   );
@@ -324,40 +327,56 @@ function ProductCard({
   const isRateLimited = Boolean(rateLimitUntil && rateLimitUntil > Date.now());
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition duration-300 motion-safe:hover:-translate-y-1 motion-safe:hover:shadow-lg dark:border-slate-700 dark:bg-slate-900">
+    <div className={`group flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-all duration-300 motion-safe:hover:-translate-y-1.5 motion-safe:hover:shadow-xl dark:bg-slate-900 ${
+      evalData?.qualification?.decision === 'APPROVED'
+        ? 'border-emerald-200/60 dark:border-emerald-800/40 hover:shadow-emerald-200/20 dark:hover:shadow-emerald-900/20'
+        : 'border-slate-200 dark:border-slate-700'
+    }`}>
       {/* Image */}
-      <div className="h-36 bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
+      <div className="relative h-48 bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
         {product.mainImageUrl ? (
           <img
             src={product.mainImageUrl}
             alt={product.title}
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            className="h-full w-full object-cover transition duration-700 group-hover:scale-110"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />
         ) : (
-          <Package className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+          <Package className="w-12 h-12 text-slate-300 dark:text-slate-600" />
+        )}
+        {/* Overlay badges */}
+        <div className="absolute top-2.5 right-2.5 flex flex-col items-end gap-1.5">
+          <OriginBadge origin={product.fulfillmentOrigin} />
+          {product.inventoryTotal != null && product.inventoryTotal === 0 && (
+            <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-red-500/90 text-white shadow-lg">Sin stock</span>
+          )}
+        </div>
+        {/* Bottom gradient */}
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent" />
+        {product.listPriceUsd != null && (
+          <div className="absolute bottom-2.5 left-2.5">
+            <span className="text-sm font-bold text-white drop-shadow-lg tabular-nums">{usd(product.listPriceUsd)}</span>
+            <span className="text-[10px] text-white/70 ml-1">CJ cost</span>
+          </div>
         )}
       </div>
 
       {/* Body */}
-      <div className="p-3 flex flex-col gap-2 flex-1">
-        <div className="flex items-start gap-2">
-          <p className="text-sm font-medium text-slate-800 dark:text-slate-100 line-clamp-2 flex-1">{product.title}</p>
-          <OriginBadge origin={product.fulfillmentOrigin} />
-        </div>
+      <div className="p-3.5 flex flex-col gap-2.5 flex-1">
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 leading-snug">{product.title}</p>
 
-        <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-          {product.listPriceUsd != null && (
-            <span className="font-semibold text-slate-700 dark:text-slate-300">{usd(product.listPriceUsd)}</span>
-          )}
-          {product.inventoryTotal != null && (
-            <span className={product.inventoryTotal === 0 ? 'text-red-400' : ''}>
-              {product.inventoryTotal === 0 ? 'Sin stock' : `Stock: ${product.inventoryTotal}`}
+        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          {product.inventoryTotal != null && product.inventoryTotal > 0 && (
+            <span className="flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 text-emerald-600 dark:text-emerald-400 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {product.inventoryTotal} en stock
             </span>
           )}
-          {product.inventoryTotal === undefined && <span className="text-slate-400">Stock: —</span>}
+          {product.inventoryTotal === undefined && (
+            <span className="text-slate-400 text-[11px]">Stock: —</span>
+          )}
         </div>
 
         <ProductLifecycleLine
@@ -761,14 +780,26 @@ export default function CjShopifyUsaDiscoverPage() {
       {/* States */}
 
       {searchState.kind === 'idle' && (
-        <div className="rounded-xl border border-dashed border-amber-200 dark:border-amber-800/40 py-14 flex flex-col items-center gap-3 text-center bg-amber-50/30 dark:bg-amber-900/5">
-          <span className="text-4xl">🐾</span>
-          <div>
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Pet Store — busca productos para mascotas</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-xs mx-auto">
-              Keyword <strong className="text-amber-600 dark:text-amber-400">pet supplies</strong> preseleccionado. Presiona Buscar o elige otra categoría.
+        <div className="relative rounded-2xl border-2 border-dashed border-amber-200/60 dark:border-amber-800/30 py-16 flex flex-col items-center gap-4 text-center bg-gradient-to-br from-amber-50/50 to-orange-50/30 dark:from-amber-950/10 dark:to-orange-950/5 overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.06),transparent_70%)]" />
+          <div className="relative">
+            <span className="text-5xl block mb-1">🐾</span>
+            <div className="w-12 h-0.5 mx-auto bg-gradient-to-r from-transparent via-amber-300 to-transparent dark:via-amber-700 rounded-full" />
+          </div>
+          <div className="relative">
+            <p className="text-base font-semibold text-slate-700 dark:text-slate-200">Descubre tu próximo producto ganador</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 max-w-sm mx-auto">
+              Keyword <strong className="text-amber-600 dark:text-amber-400">pet supplies</strong> preseleccionado.
+              Presiona <strong>Buscar</strong> o elige otra categoría.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => { doSearch('pet supplies', 1); }}
+            className="mt-1 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-sm font-semibold shadow-lg shadow-amber-200/30 dark:shadow-amber-900/40 transition-all duration-300 hover:-translate-y-0.5"
+          >
+            🔍 Buscar Pet Supplies
+          </button>
         </div>
       )}
 

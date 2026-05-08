@@ -502,7 +502,7 @@ export class CjShopifyUsaProfitGuardService {
         const issue: ProfitGuardIssue = {
           ...baseIssue,
           action,
-          reason: qualification.reasons.join('; ') || 'Pricing no longer meets profit policy.',
+          reason: qualification.reasons.join('; ') || 'El precio ya no cumple la política de profit.',
           recommendedPriceUsd,
           projectedNetProfitUsd,
           projectedNetMarginPct,

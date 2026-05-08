@@ -2,7 +2,24 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { CheckCircle2, XCircle, AlertCircle, Loader2, Search, Package, ShoppingBag, ClipboardList, ArrowRight, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import {
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  Search,
+  Package,
+  ShoppingBag,
+  ClipboardList,
+  ArrowRight,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  TrendingUp,
+  Activity,
+  Eye,
+  Zap,
+} from 'lucide-react';
 
 interface ReadinessCheck {
   id: string;
@@ -36,6 +53,57 @@ interface WebhookHealth {
   hasRecentActivity: boolean;
   ordersNeedingAttention: number;
 }
+
+// ── Pipeline stage component ─────────────────────────────────────────────────
+
+function PipelineStage({
+  label,
+  value,
+  subtext,
+  icon: Icon,
+  color,
+  isLast,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  subtext: string;
+  icon: React.ElementType;
+  color: string;
+  isLast?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <div className="flex items-center flex-1 min-w-0">
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex-1 group relative rounded-xl border border-slate-200/80 dark:border-slate-700/60 bg-white dark:bg-slate-900/60 px-4 py-4 text-left hover:shadow-md hover:shadow-slate-200/50 dark:hover:shadow-slate-900/50 hover:-translate-y-0.5 transition-all duration-300"
+      >
+        <div className={`absolute inset-x-0 top-0 h-1 rounded-t-xl ${color}`} />
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${color} bg-opacity-10`}>
+            <Icon className="w-4 h-4 text-white" />
+          </div>
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+            {label}
+          </span>
+        </div>
+        <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{value}</p>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">{subtext}</p>
+      </button>
+      {!isLast && (
+        <div className="hidden lg:flex items-center justify-center w-8 flex-shrink-0">
+          <div className="flex flex-col items-center">
+            <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CjShopifyUsaOverviewPage() {
   const navigate = useNavigate();
@@ -79,11 +147,21 @@ export default function CjShopifyUsaOverviewPage() {
     return () => clearInterval(t);
   }, [load]);
 
-  if (loading) return <p className="text-sm text-slate-500">Cargando resumen de integración…</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">Cargando resumen de integración…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+      <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-5 py-4 text-sm text-amber-900 dark:text-amber-100 flex items-center gap-3">
+        <AlertCircle className="w-5 h-5 flex-shrink-0" />
         {error}
       </div>
     );
@@ -91,57 +169,170 @@ export default function CjShopifyUsaOverviewPage() {
 
   const failCount = readiness?.checks.filter((c) => c.status === 'FAIL').length ?? 0;
   const warnCount = readiness?.checks.filter((c) => c.status === 'WARNING').length ?? 0;
+  const passCount = readiness?.checks.filter((c) => c.status === 'PASS').length ?? 0;
+  const totalChecks = readiness?.checks.length ?? 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 ir-fade-in">
 
-      {/* Header with refresh */}
-      <div className="flex items-center justify-between">
-        <div />
-        <button
-          type="button"
-          onClick={() => void load(true)}
-          disabled={refreshing}
-          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Actualizando…' : 'Actualizar'}
-        </button>
-      </div>
+      {/* ── Hero Section ───────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-700/50">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-600 via-primary-700 to-indigo-800 dark:from-primary-900 dark:via-primary-950 dark:to-indigo-950" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.1),transparent_60%)]" />
+        <div className="relative px-6 py-6 lg:px-8 lg:py-7">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">🐾</span>
+                <h1 className="text-xl font-bold text-white tracking-tight">PawVault · CJ → Shopify USA</h1>
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                  readiness?.ready
+                    ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/30'
+                    : 'bg-red-500/20 text-red-200 border border-red-400/30'
+                }`}>
+                  {readiness?.ready ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                  {readiness?.ready ? 'Operativo' : 'Atención requerida'}
+                </div>
+              </div>
+              <p className="text-primary-200/80 text-sm max-w-lg">
+                Catálogo CJ, evaluación operativa y gestión para tu tienda Shopify USA.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Health score circle */}
+              <div className="relative flex items-center justify-center w-20 h-20">
+                <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
+                  <circle
+                    cx="18" cy="18" r="15.5" fill="none"
+                    stroke={readiness?.ready ? '#34d399' : '#f87171'}
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(passCount / Math.max(totalChecks, 1)) * 97.5} 97.5`}
+                    className="transition-all duration-1000"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-lg font-bold text-white tabular-nums">{passCount}/{totalChecks}</span>
+                  <span className="text-[9px] text-primary-200/60 uppercase font-semibold tracking-wide">checks</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void load(true)}
+                disabled={refreshing}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-xs font-medium transition-colors border border-white/10"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Actualizando…' : 'Actualizar'}
+              </button>
+            </div>
+          </div>
 
-      {/* Webhook health banner */}
+          {/* Quick stats row */}
+          {counts && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+              {[
+                { label: 'Listings activos', value: counts.listingsActive, icon: ShoppingBag },
+                { label: 'Órdenes abiertas', value: counts.ordersOpen, icon: ClipboardList },
+                { label: 'Alertas', value: counts.alertsOpen, icon: AlertCircle },
+                { label: 'Actividad 24h', value: counts.tracesLast24h, icon: Activity },
+              ].map(({ label, value, icon: Icon }) => (
+                <div key={label} className="rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 px-4 py-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Icon className="w-3.5 h-3.5 text-white/60" />
+                    <span className="text-[10px] font-semibold text-white/60 uppercase tracking-wider">{label}</span>
+                  </div>
+                  <p className="text-xl font-bold tabular-nums text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── Webhook Health Banner ──────────────────────────────────────────── */}
       {webhookHealth && (
-        <section>
+        <section className="space-y-2">
           {webhookHealth.ordersNeedingAttention > 0 && (
             <button
               type="button"
               onClick={() => navigate('/cj-shopify-usa/orders')}
-              className="w-full flex items-center justify-between gap-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-800 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors mb-2"
+              className="w-full flex items-center justify-between gap-3 rounded-xl border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-950/30 px-5 py-3.5 text-sm text-red-800 dark:text-red-200 hover:bg-red-100 dark:hover:bg-red-950/50 transition-all duration-200 group"
             >
-              <div className="flex items-center gap-2">
-                <XCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{webhookHealth.ordersNeedingAttention} orden{webhookHealth.ordersNeedingAttention > 1 ? 'es' : ''} requieren atención (FAILED / NEEDS_MANUAL)</span>
+              <div className="flex items-center gap-2.5">
+                <XCircle className="w-5 h-5 flex-shrink-0" />
+                <span className="font-medium">{webhookHealth.ordersNeedingAttention} orden{webhookHealth.ordersNeedingAttention > 1 ? 'es' : ''} requieren atención</span>
               </div>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           )}
-          <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-sm ${webhookHealth.hasRecentActivity ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200' : 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200'}`}>
+          <div className={`flex items-center gap-3 rounded-xl border px-5 py-3 text-sm ${
+            webhookHealth.hasRecentActivity
+              ? 'border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'
+              : 'border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'
+          }`}>
             {webhookHealth.hasRecentActivity
               ? <Wifi className="w-4 h-4 flex-shrink-0" />
               : <WifiOff className="w-4 h-4 flex-shrink-0" />}
             <span>
               Webhook Shopify:{' '}
               {webhookHealth.hasRecentActivity
-                ? `Activo — última orden recibida ${webhookHealth.lastOrderReceived ? new Date(webhookHealth.lastOrderReceived).toLocaleString('es-CL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'recientemente'}`
-                : 'Sin órdenes en las últimas 48h — verifica que el webhook esté registrado en Shopify'}
+                ? `Activo — última orden ${webhookHealth.lastOrderReceived ? new Date(webhookHealth.lastOrderReceived).toLocaleString('es-CL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'recientemente'}`
+                : 'Sin órdenes en 48h — verifica webhook en Shopify'}
             </span>
           </div>
         </section>
       )}
 
+      {/* ── Pipeline Visual ────────────────────────────────────────────────── */}
+      {counts && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="w-4 h-4 text-slate-400" />
+            <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Pipeline del ciclo
+            </h2>
+          </div>
+          <div className="flex flex-col lg:flex-row gap-2 lg:gap-0">
+            <PipelineStage
+              label="Descubrir"
+              value={counts.products}
+              subtext={`${counts.evaluationsApproved} aprobados · ${counts.variants} variantes`}
+              icon={Search}
+              color="bg-violet-500"
+              onClick={() => navigate('/cj-shopify-usa/discover')}
+            />
+            <PipelineStage
+              label="Catálogo CJ"
+              value={counts.evaluationsApproved}
+              subtext={`${counts.evaluationsRejected} rechazados · ${counts.evaluationsPending} pendientes`}
+              icon={Package}
+              color="bg-blue-500"
+              onClick={() => navigate('/cj-shopify-usa/products')}
+            />
+            <PipelineStage
+              label="Shopify"
+              value={counts.shopifyProductsInSoftware}
+              subtext={`${counts.listingsActive} activos · ${counts.listings} listings total`}
+              icon={ShoppingBag}
+              color="bg-emerald-500"
+              onClick={() => navigate('/cj-shopify-usa/listings')}
+            />
+            <PipelineStage
+              label="Ventas"
+              value={counts.ordersOpen}
+              subtext={`${counts.orders} total · ${counts.ordersWithTracking} con tracking`}
+              icon={ClipboardList}
+              color="bg-amber-500"
+              onClick={() => navigate('/cj-shopify-usa/orders')}
+              isLast
+            />
+          </div>
+        </section>
+      )}
 
-
-      {/* Pipeline CTA strip */}
+      {/* ── Quick Actions ──────────────────────────────────────────────────── */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
           {
@@ -149,131 +340,114 @@ export default function CjShopifyUsaOverviewPage() {
             description: 'Busca en CJ, evalúa márgenes y crea drafts.',
             icon: Search,
             path: '/cj-shopify-usa/discover',
-            accent: 'border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20',
-            btnCls: 'bg-primary-600 hover:bg-primary-700',
+            gradient: 'from-violet-500/10 to-purple-500/5 dark:from-violet-500/15 dark:to-purple-500/10',
+            border: 'border-violet-200/80 dark:border-violet-800/40',
+            iconBg: 'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400',
           },
           {
-            label: 'Productos (Snapshots)',
-            description: `${counts?.products ?? 0} en DB · ${counts?.evaluationsApproved ?? 0} aprobados`,
-            icon: Package,
-            path: '/cj-shopify-usa/products',
-            accent: 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50',
-            btnCls: 'bg-slate-600 hover:bg-slate-700',
-          },
-          {
-            label: 'Store Products (Listings)',
-            description: `${counts?.shopifyProductsInSoftware ?? 0} productos Shopify · ${counts?.listingsActive ?? 0} listings activos`,
+            label: 'Store Products',
+            description: `${counts?.shopifyProductsInSoftware ?? 0} productos Shopify · ${counts?.listingsActive ?? 0} activos`,
             icon: ShoppingBag,
             path: '/cj-shopify-usa/listings',
-            accent: 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50',
-            btnCls: 'bg-slate-600 hover:bg-slate-700',
+            gradient: 'from-emerald-500/10 to-teal-500/5 dark:from-emerald-500/15 dark:to-teal-500/10',
+            border: 'border-emerald-200/80 dark:border-emerald-800/40',
+            iconBg: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400',
           },
-        ].map(({ label, description, icon: Icon, path, accent, btnCls }) => (
+          {
+            label: 'Agente Vendedor',
+            description: 'IA para optimización, pricing y promoción.',
+            icon: Zap,
+            path: '/cj-shopify-usa/sales-agent',
+            gradient: 'from-amber-500/10 to-orange-500/5 dark:from-amber-500/15 dark:to-orange-500/10',
+            border: 'border-amber-200/80 dark:border-amber-800/40',
+            iconBg: 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400',
+          },
+        ].map(({ label, description, icon: Icon, path, gradient, border, iconBg }) => (
           <button
             type="button"
             key={path}
             onClick={() => navigate(path)}
-            className={`rounded-xl border ${accent} px-4 py-4 text-left group hover:shadow-sm transition-shadow`}
+            className={`rounded-xl border ${border} bg-gradient-to-br ${gradient} px-4 py-4 text-left group hover:shadow-lg hover:-translate-y-1 transition-all duration-300`}
           >
             <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Icon className="w-4 h-4 text-slate-500 dark:text-slate-400 flex-shrink-0" />
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</p>
+              <div className="flex items-center gap-2.5">
+                <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${iconBg}`}>
+                  <Icon className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{description}</p>
+                </div>
               </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform flex-shrink-0" />
+              <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:translate-x-1 group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-all flex-shrink-0 mt-1" />
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-6">{description}</p>
           </button>
         ))}
       </section>
 
-      {/* Warnings strip */}
+      {/* ── Warnings ───────────────────────────────────────────────────────── */}
       {(failCount > 0 || warnCount > 0 || (counts?.alertsOpen ?? 0) > 0) && (
         <section className="space-y-2">
           {failCount > 0 && (
-            <div className="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-800 dark:text-red-200">
-              <XCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{failCount} verificación{failCount > 1 ? 'es' : ''} fallida{failCount > 1 ? 's' : ''} — la integración no está lista para operar.</span>
+            <div className="flex items-center gap-3 rounded-xl border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-950/20 px-5 py-3.5 text-sm text-red-800 dark:text-red-200">
+              <XCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="font-medium">{failCount} verificación{failCount > 1 ? 'es' : ''} fallida{failCount > 1 ? 's' : ''} — la integración no está lista para operar.</span>
             </div>
           )}
           {warnCount > 0 && failCount === 0 && (
-            <div className="flex items-center gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{warnCount} advertencia{warnCount > 1 ? 's' : ''} activa{warnCount > 1 ? 's' : ''} — revisa el estado antes de publicar.</span>
+            <div className="flex items-center gap-3 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 px-5 py-3.5 text-sm text-amber-800 dark:text-amber-200">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="font-medium">{warnCount} advertencia{warnCount > 1 ? 's' : ''} — revisa el estado antes de publicar.</span>
             </div>
           )}
           {(counts?.alertsOpen ?? 0) > 0 && (
             <button
               type="button"
               onClick={() => navigate('/cj-shopify-usa/alerts')}
-              className="w-full flex items-center justify-between gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+              className="w-full flex items-center justify-between gap-3 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 px-5 py-3.5 text-sm text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950/30 transition-colors group"
             >
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{counts!.alertsOpen} alerta{counts!.alertsOpen > 1 ? 's' : ''} abierta{counts!.alertsOpen > 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-2.5">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span className="font-medium">{counts!.alertsOpen} alerta{counts!.alertsOpen > 1 ? 's' : ''} abierta{counts!.alertsOpen > 1 ? 's' : ''}</span>
               </div>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           )}
         </section>
       )}
 
-      {/* Readiness Section */}
+      {/* ── Readiness Checks ───────────────────────────────────────────────── */}
       {readiness && (
-        <section className="bg-white dark:bg-slate-900 shadow rounded-xl p-6 border border-slate-200 dark:border-slate-800">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Estado de la Integración</h2>
-            <div className={`px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-2 ${readiness.ready ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-              {readiness.ready ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-              {readiness.ready ? 'Ready to operate' : 'Action Required'}
+        <section className="rounded-2xl border border-slate-200/80 dark:border-slate-700/50 bg-white dark:bg-slate-900/60 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800/80">
+            <div className="flex items-center gap-2.5">
+              <Eye className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Estado de la Integración</h2>
+            </div>
+            <div className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+              readiness.ready
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50'
+                : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400 border border-red-200 dark:border-red-800/50'
+            }`}>
+              {readiness.ready ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+              {readiness.ready ? 'Operativo' : 'Requiere atención'}
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-slate-100 dark:bg-slate-800/50">
             {readiness.checks.map((check) => (
-              <div key={check.id} className="border border-slate-100 dark:border-slate-800 rounded-lg p-4 bg-slate-50 dark:bg-slate-800/50">
+              <div key={check.id} className="bg-white dark:bg-slate-900/80 p-4">
                 <div className="flex items-start gap-3">
-                  {check.status === 'PASS'    && <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />}
+                  {check.status === 'PASS'    && <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />}
                   {check.status === 'FAIL'    && <XCircle      className="w-5 h-5 text-red-500   flex-shrink-0 mt-0.5" />}
                   {check.status === 'WARNING' && <AlertCircle  className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />}
                   {check.status === 'PENDING' && <Loader2      className="w-5 h-5 text-blue-500  flex-shrink-0 mt-0.5 animate-spin" />}
-                  <div>
-                    <h3 className="text-sm font-medium text-slate-900 dark:text-slate-200">{check.name}</h3>
-                    {check.message && <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{check.message}</p>}
-                    {check.hint && <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 italic">{check.hint}</p>}
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-200">{check.name}</h3>
+                    {check.message && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{check.message}</p>}
+                    {check.hint && <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 italic">{check.hint}</p>}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Counts grid */}
-      {counts && (
-        <section>
-          <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
-            Estado del pipeline
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { label: 'Productos CJ', value: counts.products, sub: `${counts.variants} variantes`, onClick: () => navigate('/cj-shopify-usa/products') },
-              { label: 'Productos Shopify', value: counts.shopifyProductsInSoftware, sub: `${counts.listingsActive} listings activos · ${counts.listings} total`, onClick: () => navigate('/cj-shopify-usa/listings') },
-              { label: 'Órdenes abiertas', value: counts.ordersOpen, sub: `${counts.orders} total · ${counts.ordersWithTracking} con tracking`, onClick: () => navigate('/cj-shopify-usa/orders') },
-              { label: 'Actividad 24h', value: counts.tracesLast24h, sub: 'trazas de ejecución', onClick: () => navigate('/cj-shopify-usa/logs') },
-            ].map(({ label, value, sub, onClick }) => (
-              <button
-                type="button"
-                key={label}
-                onClick={onClick}
-                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 px-4 py-3 text-left hover:shadow-sm transition-shadow group"
-              >
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
-                  <ClipboardList className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 group-hover:text-slate-400 transition-colors" />
-                </div>
-                <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100 mt-1">{value}</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{sub}</p>
-              </button>
             ))}
           </div>
         </section>

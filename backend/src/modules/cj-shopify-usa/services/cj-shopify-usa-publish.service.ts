@@ -12,6 +12,7 @@ import {
   CJ_SHOPIFY_USA_LISTING_STATUS,
   CJ_SHOPIFY_USA_TRACE_STEP,
 } from '../cj-shopify-usa.constants';
+import { buildDraftTitle as extBuildDraftTitle, buildDraftDescription as extBuildDraftDescription } from './cj-shopify-usa-title-builder.service';
 
 type VariantRow = {
   listingId: number;

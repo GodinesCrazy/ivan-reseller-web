@@ -36,6 +36,17 @@ import {
   CJ_SHOPIFY_USA_TRACE_STEP,
 } from './cj-shopify-usa.constants';
 
+// ── Extracted controllers (Phase 2 refactor) ──────────────────────────────────
+// These controllers contain duplicates of routes below.
+// They are imported here for future migration — the inline routes still take precedence.
+// import {
+//   overviewRouter,
+//   discoverRouter,
+//   ordersRouter,
+//   salesAgentRouter,
+//   analyticsRouter,
+// } from './controllers';
+
 const router = Router();
 
 function cjShopifyUsaEnabled(): boolean {

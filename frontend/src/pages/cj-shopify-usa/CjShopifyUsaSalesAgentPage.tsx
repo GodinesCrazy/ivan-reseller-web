@@ -18,6 +18,17 @@ import {
   Target,
   TrendingUp,
 } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell as RechartsCell,
+  PieChart,
+  Pie,
+} from 'recharts';
 import { api } from '@/services/api';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
@@ -915,6 +926,48 @@ export default function CjShopifyUsaSalesAgentPage() {
               </div>
             </div>
 
+            {data.salesPipeline.stages.length > 0 && (
+              <div className="mt-4 h-[240px] w-full rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={data.salesPipeline.stages}
+                    layout="vertical"
+                    margin={{ top: 0, right: 30, left: 10, bottom: 0 }}
+                  >
+                    <XAxis type="number" domain={[0, 100]} hide />
+                    <YAxis
+                      type="category"
+                      dataKey="label"
+                      width={110}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 600 }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: '#1e293b' }}
+                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
+                      itemStyle={{ color: '#f8fafc', fontWeight: 600 }}
+                      formatter={(value: number) => [`${value}/100`, 'Score']}
+                    />
+                    <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={24} background={{ fill: '#1e293b', radius: 6 }}>
+                      {data.salesPipeline.stages.map((entry, index) => (
+                        <RechartsCell
+                          key={`cell-${index}`}
+                          fill={
+                            entry.status === 'healthy'
+                              ? '#10b981'
+                              : entry.status === 'watch'
+                                ? '#f59e0b'
+                                : '#ef4444'
+                          }
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
             <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-6">
               {data.salesPipeline.stages.map((stage) => (
                 <article key={stage.key} className={`rounded-lg border p-3 ${pipelineStatusClass(stage.status)}`}>
@@ -1033,6 +1086,47 @@ export default function CjShopifyUsaSalesAgentPage() {
                   <span className="rounded bg-cyan-500/10 px-2 py-1 text-cyan-200">B {data.commercialScores.distribution.good}</span>
                   <span className="rounded bg-amber-500/10 px-2 py-1 text-amber-200">C {data.commercialScores.distribution.watch}</span>
                   <span className="rounded bg-red-500/10 px-2 py-1 text-red-200">D {data.commercialScores.distribution.risk}</span>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col md:flex-row md:items-center gap-6 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+                <div className="h-[180px] w-full md:w-[220px] flex-shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'A (Excelente)', value: data.commercialScores.distribution.excellent, fill: '#10b981' },
+                          { name: 'B (Bueno)', value: data.commercialScores.distribution.good, fill: '#06b6d4' },
+                          { name: 'C (Observación)', value: data.commercialScores.distribution.watch, fill: '#f59e0b' },
+                          { name: 'D (Riesgo)', value: data.commercialScores.distribution.risk, fill: '#ef4444' },
+                        ].filter((d) => d.value > 0)}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={75}
+                        stroke="none"
+                        paddingAngle={4}
+                      >
+                        {/* Se usa el color definido en el dataset (prop 'fill' automático en RechartsCell interno de Recharts) */}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
+                        itemStyle={{ color: '#f8fafc', fontWeight: 600 }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex-1 space-y-3">
+                  <p className="text-sm font-semibold text-slate-300">Resumen de catálogo</p>
+                  <p className="text-xs text-slate-400">
+                    El agente asigna a cada listing un grado basado en su completitud y potencial de conversión. 
+                    Un puntaje <b>A</b> indica que está listo para tráfico frío, mientras que <b>D</b> requiere intervención antes de promocionar.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <span className="rounded bg-black/20 p-2 text-slate-300">Total evaluados: <b>{data.commercialScores.distribution.excellent + data.commercialScores.distribution.good + data.commercialScores.distribution.watch + data.commercialScores.distribution.risk}</b></span>
+                    <span className="rounded bg-emerald-500/10 p-2 text-emerald-200">Alta calidad: <b>{data.commercialScores.distribution.excellent}</b></span>
+                  </div>
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
