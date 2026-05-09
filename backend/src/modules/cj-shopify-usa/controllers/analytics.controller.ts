@@ -293,4 +293,70 @@ router.post('/analytics/social-autopilot/generate-caption', async (req: Request,
   }
 });
 
+// ── POST /analytics/seo-optimizer/run (Shopify Bulk Description Updater) ──
+router.post('/analytics/seo-optimizer/run', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const { cjShopifyUsaContentService } = await import('../services/cj-shopify-usa-content.service');
+    
+    // 1. Get products that need better descriptions
+    const listings = await prisma.cjShopifyUsaListing.findMany({
+      where: {
+        userId,
+        status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+        shopifyProductId: { not: null },
+      },
+      include: { product: true },
+      take: 10,
+    });
+
+    const results = [];
+    
+    for (const listing of listings) {
+      // Create an engaging description/caption
+      const rawHtml = await cjShopifyUsaContentService.generateSocialCaption({
+        title: listing.product.title,
+        priceUsd: Number(listing.listedPriceUsd ?? 0),
+        handle: listing.shopifyHandle ?? '',
+        platform: 'pinterest',
+      });
+      
+      // Convert line breaks to HTML
+      const descriptionHtml = `<div class="pawvault-seo-optimized">${rawHtml.replace(/\n/g, '<br/>')}</div>`;
+      
+      // Update in Shopify safely without touching variants
+      const data = await cjShopifyUsaAdminService.graphql<{
+        productUpdate: { product?: { id: string } | null; userErrors: Array<{ message: string }> };
+      }>({
+        userId,
+        query: `
+          mutation CjShopifyUsaSeoUpdate($input: ProductInput!) {
+            productUpdate(input: $input) {
+              product { id }
+              userErrors { message }
+            }
+          }
+        `,
+        variables: {
+          input: {
+            id: listing.shopifyProductId,
+            descriptionHtml,
+          },
+        },
+      });
+
+      const errors = data.productUpdate?.userErrors ?? [];
+      if (errors.length > 0) {
+        results.push({ listingId: listing.id, status: 'error', error: errors[0].message });
+      } else {
+        results.push({ listingId: listing.id, status: 'success' });
+      }
+    }
+    
+    res.json({ ok: true, processed: listings.length, results });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

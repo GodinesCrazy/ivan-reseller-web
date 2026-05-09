@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/services/api';
-import { Share2, Instagram, MessageCircle, RefreshCw, PenTool, Calendar, Link as LinkIcon, CheckCircle2 } from 'lucide-react';
+import { Share2, Instagram, MessageCircle, RefreshCw, PenTool, Calendar, Link as LinkIcon, CheckCircle2, Zap } from 'lucide-react';
 
 interface SocialCandidate {
   listingId: number;
@@ -159,14 +159,36 @@ export default function CjShopifyUsaSocialPage() {
           <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
             <h3 className="text-sm font-bold text-slate-200 mb-2 flex items-center gap-2">
               <Calendar className="h-4 w-4 text-slate-400" />
-              Scheduling (En progreso)
+              Scheduling Social
             </h3>
             <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              El agente vendedor seleccionará productos "Grado A" para crear posts orgánicos automáticamente. Esta funcionalidad se activará al conectar las cuentas.
+              El agente vendedor seleccionará automáticamente tus productos "Grado A" y los promocionará (hasta 5 a la vez).
             </p>
-            <div className="rounded bg-slate-950 p-3 text-center border border-slate-800 border-dashed">
-              <span className="text-xs text-slate-600 font-semibold uppercase tracking-widest">Inactivo</span>
-            </div>
+            <button 
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const res = await api.post('/api/cj-shopify-usa/sales-agent/actions', {
+                    actionType: 'PROMOTE_TOP_PRODUCTS',
+                    limit: 3
+                  });
+                  if (res.data.blockedByLock) {
+                    alert(res.data.message);
+                  } else {
+                    alert(res.data.message || 'Se encolaron los productos exitosamente.');
+                    loadData();
+                  }
+                } catch (e) {
+                  alert('Error al ejecutar el scheduler social.');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="w-full rounded bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-600/30 border border-indigo-500/30 transition-colors flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Promocionar Top Productos
+            </button>
           </div>
         </div>
 
@@ -233,6 +255,38 @@ export default function CjShopifyUsaSocialPage() {
                 <p className="text-sm text-slate-500">No hay productos activos elegibles para redes sociales.</p>
               </div>
             )}
+          </div>
+          
+          <div className="mt-8 rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-indigo-950/30 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-200 flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-amber-400" />
+                  Auto-Optimizador SEO en Bulk
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 max-w-lg leading-relaxed">
+                  Utiliza el Motor de Contenido para detectar descripciones pobres en Shopify y re-escribirlas automáticamente con ganchos comerciales y emojis. Esto impactará tu SEO orgánico en Google y tu catálogo de Pinterest instantáneamente.
+                </p>
+              </div>
+              <button 
+                onClick={async () => {
+                  if (confirm('¿Estás seguro de optimizar las descripciones en Shopify? Esto usará el Motor de Contenido para 10 productos.')) {
+                    setLoading(true);
+                    try {
+                      const res = await api.post('/api/cj-shopify-usa/analytics/seo-optimizer/run');
+                      alert(`¡Éxito! Se optimizaron ${res.data.processed} productos en Shopify.`);
+                      loadData();
+                    } catch (e) {
+                      alert('Error optimizando el SEO en bulk.');
+                      setLoading(false);
+                    }
+                  }
+                }}
+                className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all"
+              >
+                Optimizar Catálogo Ahora
+              </button>
+            </div>
           </div>
         </div>
 
