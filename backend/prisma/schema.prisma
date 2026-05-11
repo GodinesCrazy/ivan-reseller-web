@@ -2761,6 +2761,9 @@ model CjShopifyUsaAccountSettings {
   automationLastRunAt        DateTime?
   automationNextRunAt        DateTime?
 
+  /// When false (default), bulk Shopify order sync skips orders with no CJ listing line match (reduces noise on mixed stores).
+  syncIncludeUnmappedOrders  Boolean  @default(false)
+
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 

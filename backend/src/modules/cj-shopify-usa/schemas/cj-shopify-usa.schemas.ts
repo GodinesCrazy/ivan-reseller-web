@@ -15,6 +15,8 @@ export const cjShopifyUsaUpdateConfigSchema = z.object({
   defaultPaymentFeePct: z.number().min(0).max(100).optional(),
   defaultPaymentFixedFeeUsd: z.number().min(0).optional(),
   cjPostCreateCheckoutMode: z.enum(['MANUAL', 'AUTO_CONFIRM_PAY']).optional(),
+  /** When true, sync persists Shopify orders even when no CJ listing matches (noisy on mixed stores). */
+  syncIncludeUnmappedOrders: z.boolean().optional(),
   // Safe metadata only. Accepts handle, myshopify domain, or full URL.
   shopifyStoreUrl: z.string().min(1).optional().nullable(),
   shopifyLocationId: z.string().optional().nullable(),

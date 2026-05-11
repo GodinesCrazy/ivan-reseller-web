@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { AppError, ErrorCode } from '../../middleware/error.middleware';
 import { createWebhookSignatureValidator } from '../../middleware/webhook-signature.middleware';
 import { env } from '../../config/env';
+import logger from '../../config/logger';
 import { prisma } from '../../config/database';
 import { cjShopifyUsaSystemReadinessService } from './services/cj-shopify-usa-system-readiness.service';
 import { cjShopifyUsaConfigService } from './services/cj-shopify-usa-config.service';
@@ -12,22 +13,24 @@ import { cjShopifyUsaAdminService } from './services/cj-shopify-usa-admin.servic
 import { cjShopifyUsaPublishService } from './services/cj-shopify-usa-publish.service';
 import { cjShopifyUsaReconciliationService } from './services/cj-shopify-usa-reconciliation.service';
 import { cjShopifyUsaOrderIngestService } from './services/cj-shopify-usa-order-ingest.service';
-import { cjShopifyUsaTrackingService } from './services/cj-shopify-usa-tracking.service';
 import { automationService } from './services/cj-shopify-usa-automation.service';
-import { cjShopifyUsaProfitGuardService } from './services/cj-shopify-usa-profit-guard.service';
-import { cjShopifyUsaSalesAgentService } from './services/cj-shopify-usa-sales-agent.service';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './services/cj-shopify-usa-policy.service';
 import {
   cjShopifyUsaListingDraftBodySchema,
   cjShopifyUsaListingPublishBodySchema,
-  cjShopifyUsaOrderImportBodySchema,
-  cjShopifyUsaTrackingSyncBodySchema,
   cjShopifyUsaUpdateConfigSchema,
-  cjShopifyUsaDiscoverSearchSchema,
-  cjShopifyUsaDiscoverEvaluateBodySchema,
-  cjShopifyUsaDiscoverImportDraftBodySchema,
-  cjShopifyUsaDiscoverAiSuggestionsBodySchema,
 } from './schemas/cj-shopify-usa.schemas';
+import {
+  safeParseShopifyOrderWebhookBody,
+  safeParseShopifyRefundCreateWebhookBody,
+} from './schemas/cj-shopify-usa-webhook.schemas';
+import {
+  analyticsRouter,
+  discoverRouter,
+  ordersRouter,
+  overviewRouter,
+  salesAgentRouter,
+} from './controllers';
 import { cjShopifyUsaDiscoverService } from './services/cj-shopify-usa-discover.service';
 import {
   CJ_SHOPIFY_USA_ALERT_TYPE,
@@ -35,17 +38,6 @@ import {
   CJ_SHOPIFY_USA_ORDER_STATUS,
   CJ_SHOPIFY_USA_TRACE_STEP,
 } from './cj-shopify-usa.constants';
-
-// ── Extracted controllers (Phase 2 refactor) ──────────────────────────────────
-// These controllers contain duplicates of routes below.
-// They are imported here for future migration — the inline routes still take precedence.
-// import {
-//   overviewRouter,
-//   discoverRouter,
-//   ordersRouter,
-//   salesAgentRouter,
-//   analyticsRouter,
-// } from './controllers';
 
 const router = Router();
 
@@ -72,27 +64,6 @@ async function recordTrace(userId: number, step: string, message: string, meta?:
   });
 }
 
-function pctFromCounts(numerator: number, denominator: number): number {
-  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return 0;
-  return Math.round((numerator / denominator) * 10_000) / 100;
-}
-
-function safeRate(value: unknown): number {
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? Math.min(100, n) : 0;
-}
-
-function normalizeCountMap(rows: Array<{ status: string; _count: { status: number } }>): Record<string, number> {
-  return rows.reduce<Record<string, number>>((acc, row) => {
-    acc[row.status] = row._count.status;
-    return acc;
-  }, {});
-}
-
-function sumStatuses(counts: Record<string, number>, statuses: string[]): number {
-  return statuses.reduce((sum, status) => sum + (counts[status] ?? 0), 0);
-}
-
 router.post(
   '/webhooks/orders-create',
   moduleGate,
@@ -102,11 +73,19 @@ router.post(
       const userId = await cjShopifyUsaOrderIngestService.resolveUserIdFromWebhookShop(
         req.headers['x-shopify-shop-domain'],
       );
+      const parsed = safeParseShopifyOrderWebhookBody(req.body);
+      if (!parsed.ok) {
+        logger.warn('[cj-shopify-usa] orders-create webhook payload rejected by schema', {
+          issues: parsed.error.flatten(),
+        });
+        res.status(200).json({ ok: false, error: 'WEBHOOK_PAYLOAD_INVALID' });
+        return;
+      }
       const result = await cjShopifyUsaOrderIngestService.handleOrdersCreateWebhook({
         userId,
-        body: req.body,
+        body: parsed.data,
       });
-      res.json({ ok: true, count: result.count });
+      res.json({ ok: true, count: result.count, skippedUnmappedExternal: result.skippedUnmappedExternal });
     } catch (error) {
       next(error);
     }
@@ -122,11 +101,24 @@ router.post(
       const userId = await cjShopifyUsaOrderIngestService.resolveUserIdFromWebhookShop(
         req.headers['x-shopify-shop-domain'],
       );
+      const parsed = safeParseShopifyOrderWebhookBody(req.body);
+      if (!parsed.ok) {
+        logger.warn('[cj-shopify-usa] orders-paid webhook payload rejected by schema', {
+          issues: parsed.error.flatten(),
+        });
+        res.status(200).json({ ok: false, error: 'WEBHOOK_PAYLOAD_INVALID' });
+        return;
+      }
       const result = await cjShopifyUsaOrderIngestService.handleOrdersPaidWebhook({
         userId,
-        body: req.body,
+        body: parsed.data,
       });
-      res.json({ ok: true, count: result.count, processed: result.processed });
+      res.json({
+        ok: true,
+        count: result.count,
+        skippedUnmappedExternal: result.skippedUnmappedExternal,
+        processed: result.processed,
+      });
     } catch (error) {
       next(error);
     }
@@ -142,9 +134,17 @@ router.post(
       const userId = await cjShopifyUsaOrderIngestService.resolveUserIdFromWebhookShop(
         req.headers['x-shopify-shop-domain'],
       );
+      const parsed = safeParseShopifyOrderWebhookBody(req.body);
+      if (!parsed.ok) {
+        logger.warn('[cj-shopify-usa] orders-cancelled webhook payload rejected by schema', {
+          issues: parsed.error.flatten(),
+        });
+        res.status(200).json({ ok: false, error: 'WEBHOOK_PAYLOAD_INVALID' });
+        return;
+      }
       const result = await cjShopifyUsaOrderIngestService.handleOrdersCancelledWebhook({
         userId,
-        body: req.body,
+        body: parsed.data,
       });
       res.json({ ok: true, ...result });
     } catch (error) {
@@ -162,11 +162,24 @@ router.post(
       const userId = await cjShopifyUsaOrderIngestService.resolveUserIdFromWebhookShop(
         req.headers['x-shopify-shop-domain'],
       );
-      const result = await cjShopifyUsaOrderIngestService.handleOrdersCancelledWebhook({
+      const raw = req.body as Record<string, unknown>;
+      const normalizedBody =
+        raw && typeof raw === 'object' && raw.order_id != null && raw.id == null
+          ? { ...raw, id: raw.order_id }
+          : raw;
+      const parsed = safeParseShopifyRefundCreateWebhookBody(normalizedBody);
+      if (!parsed.ok) {
+        logger.warn('[cj-shopify-usa] refunds-create webhook payload rejected by schema', {
+          issues: parsed.error.flatten(),
+        });
+        res.status(200).json({ ok: false, error: 'WEBHOOK_PAYLOAD_INVALID' });
+        return;
+      }
+      const result = await cjShopifyUsaOrderIngestService.handleRefundsCreateWebhook({
         userId,
-        body: req.body?.order_id ? { ...req.body, admin_graphql_api_id: null, id: req.body.order_id } : req.body,
+        body: parsed.data,
       });
-      res.json({ ok: true, ...result, refundWebhook: true });
+      res.json({ ok: true, ...result });
     } catch (error) {
       next(error);
     }
@@ -287,7 +300,7 @@ router.get('/config/preview-impact', async (req: Request, res: Response, next: N
     for (const ev of evaluations) {
       const margin = Number(ev.estimatedMarginPct ?? 0);
       const listing = ev.product.listings[0];
-      const draft = (listing?.draftPayload || null) as Record<string, any> | null;
+      const draft = (listing?.draftPayload || null) as Record<string, unknown> | null;
       const sellPrice = Number(listing?.listedPriceUsd ?? draft?.pricingSnapshot?.suggestedSellPriceUsd ?? 0);
       const pet = isCjShopifyUsaPetProduct({ title: ev.product.title, description: ev.product.description });
       const priceOk = !Number.isFinite(sellPrice) || sellPrice <= 0 || sellPrice <= maxSellPriceUsd;
@@ -420,121 +433,7 @@ router.get('/storefront-status', async (req: Request, res: Response, next: NextF
   }
 });
 
-router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    const [
-      products,
-      variants,
-      evaluations,
-      evaluationsApproved,
-      evaluationsRejected,
-      evaluationsPending,
-      shippingQuotes,
-      listings,
-      listingsActive,
-      listingsActiveOrPendingShopifyProducts,
-      orders,
-      ordersOpen,
-      ordersWithTracking,
-      alertsOpen,
-      profitSnapshots,
-      tracesLast24h,
-    ] = await Promise.all([
-      prisma.cjShopifyUsaProduct.count({ where: { userId } }),
-      prisma.cjShopifyUsaProductVariant.count({ where: { product: { userId } } }),
-      prisma.cjShopifyUsaProductEvaluation.count({ where: { userId } }),
-      prisma.cjShopifyUsaProductEvaluation.count({ where: { userId, decision: 'APPROVED' } }),
-      prisma.cjShopifyUsaProductEvaluation.count({ where: { userId, decision: 'REJECTED' } }),
-      prisma.cjShopifyUsaProductEvaluation.count({ where: { userId, decision: 'PENDING' } }),
-      prisma.cjShopifyUsaShippingQuote.count({ where: { userId } }),
-      prisma.cjShopifyUsaListing.count({ where: { userId } }),
-      prisma.cjShopifyUsaListing.count({
-        where: { userId, status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE },
-      }),
-      prisma.cjShopifyUsaListing.findMany({
-        where: {
-          userId,
-          status: {
-            in: [
-              CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
-              CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
-            ],
-          },
-          shopifyProductId: { not: null },
-        },
-        distinct: ['shopifyProductId'],
-        select: { shopifyProductId: true },
-      }),
-      prisma.cjShopifyUsaOrder.count({ where: { userId } }),
-      prisma.cjShopifyUsaOrder.count({
-        where: {
-          userId,
-          status: {
-            notIn: [CJ_SHOPIFY_USA_ORDER_STATUS.COMPLETED, CJ_SHOPIFY_USA_ORDER_STATUS.FAILED],
-          },
-        },
-      }),
-      prisma.cjShopifyUsaTracking.count({
-        where: {
-          order: { userId },
-          trackingNumber: { not: null },
-        },
-      }),
-      prisma.cjShopifyUsaAlert.count({ where: { userId, status: 'OPEN' } }),
-      prisma.cjShopifyUsaProfitSnapshot.count({ where: { userId } }),
-      prisma.cjShopifyUsaExecutionTrace.count({
-        where: {
-          userId,
-          createdAt: { gte: since24h },
-        },
-      }),
-    ]);
-
-    // Webhook health: last order ingested via webhook vs last 48h
-    const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
-    const lastWebhookOrder = await prisma.cjShopifyUsaOrder.findFirst({
-      where: { userId, createdAt: { gte: since48h } },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
-    });
-    const ordersNeedingAttention = await prisma.cjShopifyUsaOrder.count({
-      where: { userId, status: { in: ['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED'] } },
-    });
-    const webhookHealth = {
-      lastOrderReceived: lastWebhookOrder?.createdAt ?? null,
-      hasRecentActivity: !!lastWebhookOrder,
-      ordersNeedingAttention,
-    };
-
-    res.json({
-      ok: true,
-      counts: {
-        products,
-        variants,
-        evaluations,
-        evaluationsApproved,
-        evaluationsRejected,
-        evaluationsPending,
-        shippingQuotes,
-        listings,
-        listingsActive,
-        shopifyProductsInSoftware: listingsActiveOrPendingShopifyProducts.length,
-        orders,
-        ordersOpen,
-        ordersWithTracking,
-        alertsOpen,
-        profitSnapshots,
-        tracesLast24h,
-      },
-      webhookHealth,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+router.use(overviewRouter);
 
 router.get('/listings', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -787,799 +686,10 @@ router.post('/listings/:listingId/expand-variants', async (req: Request, res: Re
   }
 });
 
-router.get('/orders', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const page = Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1);
-    const pageSize = Math.max(10, Math.min(100, Number.parseInt(String(req.query.pageSize ?? '25'), 10) || 25));
-    const status = String(req.query.status ?? 'ALL').trim().toUpperCase();
-    const attentionOnly = String(req.query.attention ?? 'false') === 'true';
-    const q = String(req.query.q ?? '').trim();
-    const attentionStatuses = [
-      CJ_SHOPIFY_USA_ORDER_STATUS.FAILED,
-      CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
-      CJ_SHOPIFY_USA_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
-    ];
-
-    const where: Prisma.CjShopifyUsaOrderWhereInput = { userId };
-    if (attentionOnly) {
-      where.status = { in: attentionStatuses };
-    } else if (status !== 'ALL') {
-      where.status = status;
-    }
-    if (q) {
-      where.OR = [
-        { shopifyOrderId: { contains: q, mode: 'insensitive' } },
-        { cjOrderId: { contains: q, mode: 'insensitive' } },
-        { shopifySku: { contains: q, mode: 'insensitive' } },
-        { lastError: { contains: q, mode: 'insensitive' } },
-      ];
-    }
-
-    const [orders, total, groupedStatuses] = await Promise.all([
-      prisma.cjShopifyUsaOrder.findMany({
-        where,
-        include: {
-          tracking: true,
-          events: {
-            orderBy: { createdAt: 'desc' },
-            take: 10,
-          },
-        },
-        orderBy: { updatedAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      prisma.cjShopifyUsaOrder.count({ where }),
-      prisma.cjShopifyUsaOrder.groupBy({
-        by: ['status'],
-        where: { userId },
-        _count: { status: true },
-      }),
-    ]);
-    res.json({
-      ok: true,
-      orders,
-      page,
-      pageSize,
-      total,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
-      statusCounts: normalizeCountMap(groupedStatuses),
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/orders/sync', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const body = cjShopifyUsaOrderImportBodySchema.parse(req.body);
-    const result = await cjShopifyUsaOrderIngestService.syncOrders({
-      userId,
-      shopifyOrderId: body.shopifyOrderId,
-      sinceHours: body.sinceHours,
-      first: body.first,
-    });
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ── POST /orders/:orderId/process — idempotent CJ order placement ────────────
-router.post('/orders/:orderId/process', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const orderId = String(req.params.orderId || '').trim();
-    const result = await cjShopifyUsaOrderIngestService.processOrder({ userId, orderId });
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ── POST /orders/auto-sync-tracking — bulk tracking sync for all shipped orders
-router.post('/orders/auto-sync-tracking', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaOrderIngestService.autoSyncAllTracking(userId);
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/post-sale/dashboard', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const since72h = new Date(Date.now() - 72 * 60 * 60 * 1000);
-
-    const [
-      groupedStatuses,
-      recentOrders,
-      recentEvents,
-      openAlerts,
-      recentTraceCount,
-      lastOrder,
-      lastTracking,
-    ] = await Promise.all([
-      prisma.cjShopifyUsaOrder.groupBy({
-        by: ['status'],
-        where: { userId },
-        _count: { status: true },
-      }),
-      prisma.cjShopifyUsaOrder.findMany({
-        where: { userId },
-        include: {
-          tracking: true,
-          listing: {
-            select: {
-              id: true,
-              status: true,
-              listedPriceUsd: true,
-              product: { select: { title: true, cjProductId: true } },
-            },
-          },
-          events: { orderBy: { createdAt: 'desc' }, take: 3 },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 12,
-      }),
-      prisma.cjShopifyUsaOrderEvent.findMany({
-        where: { order: { userId } },
-        orderBy: { createdAt: 'desc' },
-        take: 15,
-        include: { order: { select: { id: true, shopifyOrderId: true, status: true, rawShopifySummary: true } } },
-      }),
-      prisma.cjShopifyUsaAlert.findMany({
-        where: {
-          userId,
-          status: 'OPEN',
-          type: {
-            in: [
-              CJ_SHOPIFY_USA_ALERT_TYPE.SUPPLIER_PAYMENT_BLOCKED,
-              CJ_SHOPIFY_USA_ALERT_TYPE.ORDER_FAILED,
-              CJ_SHOPIFY_USA_ALERT_TYPE.ORDER_NEEDS_MANUAL,
-              CJ_SHOPIFY_USA_ALERT_TYPE.TRACKING_MISSING,
-              CJ_SHOPIFY_USA_ALERT_TYPE.REFUND_PENDING,
-              CJ_SHOPIFY_USA_ALERT_TYPE.REFUND_FAILED,
-            ],
-          },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 10,
-      }),
-      prisma.cjShopifyUsaExecutionTrace.count({
-        where: {
-          userId,
-          createdAt: { gte: since72h },
-          step: {
-            in: [
-              CJ_SHOPIFY_USA_TRACE_STEP.ORDER_IMPORT_SUCCESS,
-              CJ_SHOPIFY_USA_TRACE_STEP.ORDER_PLACE_SUCCESS,
-              CJ_SHOPIFY_USA_TRACE_STEP.ORDER_PLACE_ERROR,
-              CJ_SHOPIFY_USA_TRACE_STEP.CJ_ORDER_CREATE_SUCCESS,
-              CJ_SHOPIFY_USA_TRACE_STEP.CJ_ORDER_CREATE_ERROR,
-              CJ_SHOPIFY_USA_TRACE_STEP.TRACKING_SYNC_SUCCESS,
-              CJ_SHOPIFY_USA_TRACE_STEP.TRACKING_SYNC_ERROR,
-            ],
-          },
-        },
-      }),
-      prisma.cjShopifyUsaOrder.findFirst({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, createdAt: true, status: true, rawShopifySummary: true },
-      }),
-      prisma.cjShopifyUsaTracking.findFirst({
-        where: { order: { userId }, trackingNumber: { not: null } },
-        orderBy: { updatedAt: 'desc' },
-        select: { orderId: true, trackingNumber: true, updatedAt: true, status: true },
-      }),
-    ]);
-
-    const countsByStatus = normalizeCountMap(groupedStatuses);
-    const stages = [
-      {
-        id: 'payment',
-        label: 'Pago Shopify',
-        ok: sumStatuses(countsByStatus, ['VALIDATED', 'CJ_ORDER_PLACING', 'CJ_ORDER_PLACED', 'CJ_ORDER_CREATED', 'CJ_ORDER_CONFIRMING', 'CJ_ORDER_CONFIRMED', 'CJ_PAYMENT_PENDING', 'CJ_PAYMENT_PROCESSING', 'CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING', 'CJ_SHIPPED', 'TRACKING_ON_SHOPIFY', 'COMPLETED']),
-        pending: sumStatuses(countsByStatus, ['WAITING_PAYMENT', 'DETECTED']),
-        blocked: 0,
-        next: 'Esperar PAID antes de comprar al proveedor.',
-      },
-      {
-        id: 'guardrails',
-        label: 'Guardrails',
-        ok: sumStatuses(countsByStatus, ['VALIDATED']),
-        pending: 0,
-        blocked: sumStatuses(countsByStatus, ['FAILED', 'NEEDS_MANUAL']),
-        next: 'Corregir errores de margen, país, SKU, dirección o listing.',
-      },
-      {
-        id: 'supplier',
-        label: 'Compra CJ',
-        ok: sumStatuses(countsByStatus, ['CJ_ORDER_PLACED', 'CJ_ORDER_CREATED', 'CJ_ORDER_CONFIRMED', 'CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING', 'CJ_SHIPPED', 'TRACKING_ON_SHOPIFY', 'COMPLETED']),
-        pending: sumStatuses(countsByStatus, ['CJ_ORDER_PLACING', 'CJ_ORDER_CONFIRMING', 'CJ_PAYMENT_PROCESSING']),
-        blocked: sumStatuses(countsByStatus, ['SUPPLIER_PAYMENT_BLOCKED']),
-        next: 'Crear/confirmar orden CJ solo si hay margen demostrado.',
-      },
-      {
-        id: 'balance',
-        label: 'Saldo proveedor',
-        ok: sumStatuses(countsByStatus, ['CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING', 'CJ_SHIPPED', 'TRACKING_ON_SHOPIFY', 'COMPLETED']),
-        pending: sumStatuses(countsByStatus, ['CJ_PAYMENT_PENDING']),
-        blocked: sumStatuses(countsByStatus, ['SUPPLIER_PAYMENT_BLOCKED']),
-        next: 'Recargar balance CJ; el ciclo retoma automáticamente.',
-      },
-      {
-        id: 'tracking',
-        label: 'Tracking',
-        ok: sumStatuses(countsByStatus, ['TRACKING_ON_SHOPIFY', 'COMPLETED']),
-        pending: sumStatuses(countsByStatus, ['CJ_FULFILLING', 'CJ_SHIPPED']),
-        blocked: openAlerts.filter((alert) => alert.type === CJ_SHOPIFY_USA_ALERT_TYPE.TRACKING_MISSING).length,
-        next: 'Sincronizar guía CJ y notificar a Shopify.',
-      },
-      {
-        id: 'complete',
-        label: 'Completado',
-        ok: countsByStatus.COMPLETED ?? 0,
-        pending: 0,
-        blocked: 0,
-        next: 'Orden cerrada con tracking o fulfillment confirmado.',
-      },
-    ];
-    const ordersNeedingAttention = sumStatuses(countsByStatus, ['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED']);
-    const activeQueue = sumStatuses(countsByStatus, ['VALIDATED', 'SUPPLIER_PAYMENT_BLOCKED', 'CJ_ORDER_PLACING', 'CJ_ORDER_PLACED', 'CJ_ORDER_CREATED', 'CJ_ORDER_CONFIRMING', 'CJ_ORDER_CONFIRMED', 'CJ_PAYMENT_PENDING', 'CJ_PAYMENT_PROCESSING', 'CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING', 'CJ_SHIPPED']);
-    const queueCanRun = sumStatuses(countsByStatus, ['VALIDATED', 'SUPPLIER_PAYMENT_BLOCKED']) > 0;
-    const recommendedAction = queueCanRun
-      ? {
-          key: 'queue',
-          label: 'Procesar cola post venta',
-          description: 'Compra/reintenta en CJ solo órdenes pagadas y validadas; si falta saldo, quedan esperando.',
-        }
-      : activeQueue > 0
-        ? {
-            key: 'tracking',
-            label: 'Sincronizar tracking CJ',
-            description: 'Busca guías disponibles y actualiza Shopify cuando CJ ya haya enviado.',
-          }
-        : {
-            key: 'sync',
-            label: 'Sincronizar órdenes Shopify',
-            description: 'Importa pagos recientes y detecta nuevas órdenes para iniciar el ciclo post venta.',
-          };
-
-    res.json({
-      ok: true,
-      countsByStatus,
-      stages,
-      totals: {
-        orders: Object.values(countsByStatus).reduce((sum, count) => sum + count, 0),
-        activeQueue,
-        waitingPayment: sumStatuses(countsByStatus, ['WAITING_PAYMENT', 'DETECTED']),
-        needsAttention: ordersNeedingAttention,
-        ordersNeedingAttention,
-        openAlerts: openAlerts.length,
-        completed: countsByStatus.COMPLETED ?? 0,
-        traceSignals72h: recentTraceCount,
-      },
-      health: {
-        lastOrder,
-        lastTracking,
-        openAlerts: openAlerts.length,
-        queueCanRun,
-      },
-      recommendedAction,
-      recentOrders,
-      recentEvents,
-      openAlerts,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/post-sale/run-safe-queue', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const orders = await prisma.cjShopifyUsaOrder.findMany({
-      where: {
-        userId,
-        status: {
-          in: [
-            CJ_SHOPIFY_USA_ORDER_STATUS.VALIDATED,
-            CJ_SHOPIFY_USA_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
-          ],
-        },
-      },
-      orderBy: { updatedAt: 'asc' },
-      take: 10,
-      select: { id: true, status: true },
-    });
-
-    const processed: Array<{ orderId: string; ok: boolean; status?: string; message?: string }> = [];
-    let stoppedForBalance = false;
-    for (const order of orders) {
-      try {
-        const result = await cjShopifyUsaOrderIngestService.processOrder({ userId, orderId: order.id });
-        processed.push({ orderId: order.id, ok: true, status: result.status });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        processed.push({ orderId: order.id, ok: false, message });
-        if (/balance|insufficient|saldo|funds|supplier payment/i.test(message)) {
-          stoppedForBalance = true;
-          break;
-        }
-      }
-    }
-    const tracking = await cjShopifyUsaOrderIngestService.autoSyncAllTracking(userId);
-    res.json({
-      ok: true,
-      checked: orders.length,
-      processed,
-      stoppedForBalance,
-      tracking,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/orders/:orderId/sync-tracking', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const body = cjShopifyUsaTrackingSyncBodySchema.parse(req.body || {});
-    const result = await cjShopifyUsaTrackingService.syncTracking({
-      userId,
-      orderId: req.params.orderId,
-      carrierCode: body.carrierCode,
-      trackingNumber: body.trackingNumber,
-      trackingUrl: body.trackingUrl,
-      notifyCustomer: body.notifyCustomer,
-    });
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ── GET /orders/:orderId — order detail ───────────────────────────────────────
-
-router.get('/orders/:orderId', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const id = String(req.params.orderId || '').trim();
-    const order = await prisma.cjShopifyUsaOrder.findFirst({
-      where: { id, userId },
-      include: {
-        tracking: true,
-        events: { orderBy: { createdAt: 'asc' } },
-        refunds: { orderBy: { createdAt: 'desc' } },
-      },
-    });
-    if (!order) {
-      res.status(404).json({ ok: false, error: 'ORDER_NOT_FOUND' });
-      return;
-    }
-    res.json({ ok: true, order });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ── Discover — live CJ catalog search + evaluate + import-and-draft ───────────
-
-router.get('/discover/search', async (req: Request, res: Response, next: NextFunction) => {
-  const userId = req.user?.userId || 0;
-  try {
-    const query = cjShopifyUsaDiscoverSearchSchema.parse(req.query);
-    const results = await cjShopifyUsaDiscoverService.search(userId, query.keyword, query.page, query.pageSize);
-    res.json({ ok: true, results, count: results.length, page: query.page, pageSize: query.pageSize });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    await recordTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.REQUEST_ERROR, 'discover.search.failed', {
-      error: msg,
-      stack: error instanceof Error ? error.stack : undefined,
-      query: req.query
-    } as Prisma.InputJsonValue).catch(() => {});
-    next(error);
-  }
-});
-
-router.post('/discover/evaluate', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const body = cjShopifyUsaDiscoverEvaluateBodySchema.parse(req.body);
-    const result = await cjShopifyUsaDiscoverService.evaluate(userId, body.cjProductId, body.quantity, body.destPostalCode);
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/discover/import-draft', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const body = cjShopifyUsaDiscoverImportDraftBodySchema.parse(req.body);
-    const result = await cjShopifyUsaDiscoverService.importAndDraft(
-      userId,
-      body.cjProductId,
-      body.variantCjVid,
-      body.quantity,
-      body.destPostalCode,
-    );
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/discover/ai-suggestions', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const body = cjShopifyUsaDiscoverAiSuggestionsBodySchema.parse(req.body || {});
-    const result = await cjShopifyUsaDiscoverService.aiSuggestions(userId, {
-      count: body.count,
-      destPostalCode: body.destPostalCode,
-      keywords: body.keywords,
-    });
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/analytics/funnel', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const latest = await prisma.cjShopifyUsaExecutionTrace.findFirst({
-      where: {
-        userId,
-        step: 'analytics.checkout_funnel',
-        message: 'analytics.checkout_funnel.snapshot',
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    const meta = (latest?.meta || {}) as Record<string, any>;
-    const visitors = Math.max(0, Number(meta.visitors ?? 0));
-    const addedToCart = Math.max(0, Number(meta.addedToCart ?? 0));
-    const reachedCheckout = Math.max(0, Number(meta.reachedCheckout ?? 0));
-    const purchases = Math.max(0, Number(meta.purchases ?? 0));
-    const localOrders = await prisma.cjShopifyUsaOrder.count({ where: { userId } });
-    const stages = [
-      { key: 'add_to_cart', label: 'Visitantes que agregaron al carrito', ratePct: safeRate(meta.addToCartRatePct ?? pctFromCounts(addedToCart, visitors)), count: addedToCart },
-      { key: 'checkout', label: 'Visitantes que llegaron al checkout', ratePct: safeRate(meta.checkoutRatePct ?? pctFromCounts(reachedCheckout, visitors)), count: reachedCheckout },
-      { key: 'purchase', label: 'Visitantes que compraron', ratePct: safeRate(meta.purchaseRatePct ?? pctFromCounts(purchases, visitors)), count: purchases },
-    ];
-    res.json({
-      ok: true,
-      snapshot: latest ? {
-        id: latest.id,
-        createdAt: latest.createdAt,
-        visitors,
-        addedToCart,
-        reachedCheckout,
-        purchases,
-        source: meta.source ?? 'manual',
-        notes: meta.notes ?? null,
-      } : null,
-      stages,
-      localOrders,
-      interpretation: {
-        checkoutDropRisk: stages[0].ratePct > 0 && stages[1].ratePct / Math.max(stages[0].ratePct, 0.01) < 0.35,
-        paymentRisk: stages[1].ratePct > 0 && stages[2].ratePct === 0,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/analytics/funnel', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const visitors = Math.max(0, Number(req.body?.visitors ?? 0));
-    const addToCartRatePct = safeRate(req.body?.addToCartRatePct);
-    const checkoutRatePct = safeRate(req.body?.checkoutRatePct);
-    const purchaseRatePct = safeRate(req.body?.purchaseRatePct);
-    const trace = await prisma.cjShopifyUsaExecutionTrace.create({
-      data: {
-        userId,
-        step: 'analytics.checkout_funnel',
-        message: 'analytics.checkout_funnel.snapshot',
-        meta: {
-          visitors,
-          addToCartRatePct,
-          checkoutRatePct,
-          purchaseRatePct,
-          addedToCart: Math.round(visitors * (addToCartRatePct / 100)),
-          reachedCheckout: Math.round(visitors * (checkoutRatePct / 100)),
-          purchases: Math.round(visitors * (purchaseRatePct / 100)),
-          source: String(req.body?.source || 'manual').slice(0, 80),
-          notes: String(req.body?.notes || '').slice(0, 1000),
-        },
-      },
-    });
-    res.json({ ok: true, snapshotId: trace.id });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/analytics/checkout-readiness', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const data = await cjShopifyUsaAdminService.graphql<{
-      shop: {
-        name: string;
-        currencyCode: string;
-        billingAddress?: { countryCodeV2?: string | null } | null;
-        primaryDomain?: { url?: string | null } | null;
-        paymentSettings?: { supportedDigitalWallets?: string[] | null } | null;
-      };
-      orders: { nodes: Array<{ id: string; name: string; createdAt: string; displayFinancialStatus: string | null; paymentGatewayNames: string[] }> };
-      products: { nodes: Array<{ handle: string; variants: { nodes: Array<{ legacyResourceId: string; availableForSale: boolean }> } }> };
-    }>({
-      userId,
-      query: `query CjShopifyUsaCheckoutReadiness {
-        shop {
-          name
-          currencyCode
-          billingAddress { countryCodeV2 }
-          primaryDomain { url }
-          paymentSettings { supportedDigitalWallets }
-        }
-        orders(first: 10, sortKey: CREATED_AT, reverse: true) {
-          nodes { id name createdAt displayFinancialStatus paymentGatewayNames }
-        }
-        products(first: 10, query: "status:active tag:cj-shopify-usa") {
-          nodes { handle variants(first: 5) { nodes { legacyResourceId availableForSale } } }
-        }
-      }`,
-    });
-
-    let checkoutProbe: Record<string, unknown> = { ok: false, reason: 'NO_PRODUCT_VARIANT' };
-    const storefront = data.shop.primaryDomain?.url?.replace(/\/$/, '');
-    const firstVariant = data.products.nodes
-      .flatMap((product) => product.variants.nodes)
-      .find((variant) => variant.availableForSale && variant.legacyResourceId);
-
-    if (storefront && firstVariant) {
-      try {
-        const addRes = await fetch(`${storefront}/cart/add.js`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: Number(firstVariant.legacyResourceId), quantity: 1 }),
-          redirect: 'manual',
-        });
-        const cookie = addRes.headers.get('set-cookie')?.split(';')[0];
-        const checkoutRes = await fetch(`${storefront}/checkout`, {
-          headers: cookie ? { cookie } : undefined,
-          redirect: 'manual',
-        });
-        checkoutProbe = {
-          ok: addRes.ok && checkoutRes.status >= 300 && checkoutRes.status < 400,
-          addToCartStatus: addRes.status,
-          checkoutStatus: checkoutRes.status,
-          checkoutLocation: checkoutRes.headers.get('location'),
-        };
-      } catch (error) {
-        checkoutProbe = { ok: false, reason: error instanceof Error ? error.message : String(error) };
-      }
-    }
-
-    const recentGateways = Array.from(new Set(data.orders.nodes.flatMap((order) => order.paymentGatewayNames || [])));
-    res.json({
-      ok: true,
-      shop: {
-        name: data.shop.name,
-        country: data.shop.billingAddress?.countryCodeV2 ?? null,
-        currencyCode: data.shop.currencyCode,
-        primaryDomain: data.shop.primaryDomain?.url ?? null,
-        supportedDigitalWallets: data.shop.paymentSettings?.supportedDigitalWallets ?? [],
-      },
-      recentOrders: data.orders.nodes,
-      recentGateways,
-      checkoutProbe,
-      paypalApiVisibility: {
-        canConfirmConfiguredGatewayByApi: false,
-        reason: 'Shopify Admin API exposes supported wallets and historical order gateway names, but not the complete enabled gateway list for a new store.',
-      },
-      recommendations: [
-        'Verify PayPal Express Checkout in Shopify Admin > Settings > Payments > Additional payment methods.',
-        'Run a live low-value test order with PayPal after switching to a PayPal Business account.',
-        'Keep a second card-capable provider active if available for Chile-based operations.',
-      ],
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/analytics/profit-guard', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaProfitGuardService.run(userId, {
-      dryRun: true,
-      limit: Number(req.query.limit ?? 500),
-    });
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/analytics/profit-guard/run', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaProfitGuardService.run(userId, {
-      dryRun: req.body?.dryRun !== false,
-      limit: Number(req.body?.limit ?? 500),
-      pauseUnsafe: req.body?.pauseUnsafe === true,
-      minIncreaseUsd: Number(req.body?.minIncreaseUsd ?? 0.5),
-    });
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/analytics/profit-guard/enrich-shipping', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaProfitGuardService.enrichMissingShipping(userId, {
-      dryRun: req.body?.dryRun !== false,
-      limit: Number(req.body?.limit ?? 25),
-    });
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/analytics/social-autopilot', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const products = await prisma.cjShopifyUsaListing.findMany({
-      where: {
-        userId,
-        status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
-        shopifyHandle: { not: null },
-      },
-      include: { product: true },
-      orderBy: { updatedAt: 'desc' },
-      take: 12,
-    });
-
-    const candidates = products.map((listing) => ({
-      listingId: listing.id,
-      title: listing.product.title,
-      handle: listing.shopifyHandle,
-      priceUsd: Number(listing.listedPriceUsd ?? 0),
-      url: listing.shopifyHandle ? `https://shop.ivanreseller.com/products/${listing.shopifyHandle}` : null,
-      caption: [
-        `PawVault pick: ${listing.product.title}`,
-        'Built for practical pet-parent routines.',
-        '#PawVault #PetSupplies #DogProducts #CatProducts #PetParents',
-      ].join('\n'),
-    }));
-
-    res.json({
-      ok: true,
-      status: 'READY_FOR_OAUTH',
-      platforms: {
-        instagram: {
-          required: ['Instagram Business or Creator account', 'Meta app with instagram_content_publish', 'OAuth token for @PawVault'],
-          canAutoPublishNow: false,
-        },
-        tiktok: {
-          required: ['TikTok developer app', 'Content Posting API approval', 'video.publish scope', 'OAuth token for @PawVault'],
-          canAutoPublishNow: false,
-        },
-      },
-      candidates,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/sales-agent', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaSalesAgentService.dashboard(userId);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/sales-agent/actions', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const actionType = String(req.body?.actionType || '').trim() as any;
-    const result = await cjShopifyUsaSalesAgentService.executeAction(userId, {
-      actionType,
-      limit: Number(req.body?.limit ?? 5),
-    });
-    res.status(200).json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('Catalog mutation lock is busy')) {
-      res.status(200).json({
-        ok: false,
-        executed: false,
-        actionType: String(req.body?.actionType || '').trim(),
-        blockedByLock: true,
-        message: 'El agente o la automatización ya está modificando el catálogo. Espera a que termine el ciclo activo y vuelve a ejecutar.',
-      });
-      return;
-    }
-    next(error);
-  }
-});
-
-router.get('/sales-agent/scheduler', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaSalesAgentService.getSchedulerStatus(userId);
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.patch('/sales-agent/scheduler/config', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaSalesAgentService.updateSchedulerConfig(userId, req.body ?? {});
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/sales-agent/scheduler/start', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaSalesAgentService.startScheduler(userId);
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/sales-agent/scheduler/pause', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaSalesAgentService.pauseScheduler(userId);
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/sales-agent/scheduler/stop', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaSalesAgentService.stopScheduler(userId);
-    res.json({ ok: true, ...result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/sales-agent/scheduler/run-now', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const result = await cjShopifyUsaSalesAgentService.runSalesCycle(userId);
-    res.json({ ok: true, cycle: result });
-  } catch (error) {
-    next(error);
-  }
-});
+router.use(discoverRouter);
+router.use(ordersRouter);
+router.use(analyticsRouter);
+router.use(salesAgentRouter);
 
 // ── GET /products — list CJ product snapshots with evaluations ─────────────────
 
@@ -2034,7 +1144,7 @@ router.patch('/listings/:listingId/price', async (req: Request, res: Response, n
 router.post('/collections/create', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const { title, handle, descriptionHtml = '', collectionType = 'manual' } = req.body as {
+    const { title, handle, descriptionHtml = '' } = req.body as {
       title?: string;
       handle?: string;
       descriptionHtml?: string;

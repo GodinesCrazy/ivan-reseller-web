@@ -9,6 +9,7 @@ type SettingsPayload = {
   maxShippingUsd: number;
   maxSellPriceUsd: number;
   minCostUsd: number;
+  syncIncludeUnmappedOrders: boolean;
 };
 
 /** Parse a number from user input supporting both dot and comma as decimal separator */
@@ -34,6 +35,7 @@ export default function CjShopifyUsaSettingsPage() {
     maxShippingUsd: 15,
     maxSellPriceUsd: 45,
     minCostUsd: 2,
+    syncIncludeUnmappedOrders: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,6 +57,7 @@ export default function CjShopifyUsaSettingsPage() {
             maxShippingUsd: Number(settings.maxShippingUsd ?? 15),
             maxSellPriceUsd: Number(settings.maxSellPriceUsd ?? 45),
             minCostUsd: Number(settings.minCostUsd ?? 2),
+            syncIncludeUnmappedOrders: Boolean(settings.syncIncludeUnmappedOrders),
           });
         }
       } catch (e) {
@@ -81,8 +84,15 @@ export default function CjShopifyUsaSettingsPage() {
   }
 
   async function saveSettings() {
-    // Guard: reject if any field is NaN before sending (avoids backend reset to defaults)
-    const hasNaN = Object.values(values).some((v) => !isFinite(v as number));
+    // Guard: reject if any numeric field is NaN before sending (avoids backend reset to defaults)
+    const numericKeys: (keyof Omit<SettingsPayload, 'syncIncludeUnmappedOrders'>)[] = [
+      'minMarginPct',
+      'minProfitUsd',
+      'maxShippingUsd',
+      'maxSellPriceUsd',
+      'minCostUsd',
+    ];
+    const hasNaN = numericKeys.some((k) => !isFinite(values[k]));
     if (hasNaN) {
       setError('Uno o más campos tienen un valor inválido. Usa punto (.) como separador decimal.');
       return;
@@ -120,6 +130,26 @@ export default function CjShopifyUsaSettingsPage() {
         </div>
 
         <div className="space-y-3">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={values.syncIncludeUnmappedOrders}
+              onChange={(e) =>
+                setValues((prev) => ({ ...prev, syncIncludeUnmappedOrders: e.target.checked }))
+              }
+              className="mt-1 rounded border-slate-300 dark:border-slate-600"
+            />
+            <span>
+              <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                Incluir órdenes no mapeadas a CJ en la sincronización
+              </span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Por defecto solo se persisten órdenes con SKU/listing vinculado. Activa esto si necesitas ver en el panel
+                todas las órdenes de la tienda (más ruido de tiendas mixtas).
+              </span>
+            </span>
+          </label>
+
           <label className="block">
             <span className="text-xs text-slate-500 dark:text-slate-400">Max shipping USD</span>
             <input

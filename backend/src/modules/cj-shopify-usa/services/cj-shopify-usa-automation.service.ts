@@ -270,7 +270,7 @@ class CjShopifyUsaAutomationService {
     const shouldRunNow = !this.nextRunAt || this.nextRunAt.getTime() <= Date.now() + 5_000;
     this.schedule(userId);
     if (shouldRunNow) {
-      void this.runCycle(userId);
+      void this.triggerCycle(userId);
     }
   }
 
@@ -410,7 +410,7 @@ class CjShopifyUsaAutomationService {
     this.schedule(userId);
     await this.persistRuntime(userId);
     // Fire first cycle immediately
-    void this.runCycle(userId);
+    void this.triggerCycle(userId);
     return this.getStatus(userId);
   }
 
@@ -423,7 +423,7 @@ class CjShopifyUsaAutomationService {
       this.schedule(userId);
       await this.persistRuntime(userId);
     }
-    void this.runCycle(userId);
+    void this.triggerCycle(userId);
     return this.getStatus(userId);
   }
 
@@ -463,7 +463,7 @@ class CjShopifyUsaAutomationService {
     this.abortSignal = false;
     this.schedule(userId);
     await this.persistRuntime(userId);
-    void this.runCycle(userId);
+    void this.triggerCycle(userId);
     return this.getStatus(userId);
   }
 
@@ -474,7 +474,7 @@ class CjShopifyUsaAutomationService {
     this.abortSignal = false;
     this.schedule(userId);
     await this.persistRuntime(userId);
-    void this.runCycle(userId);
+    void this.triggerCycle(userId);
     return this.getStatus(userId);
   }
 
@@ -483,7 +483,7 @@ class CjShopifyUsaAutomationService {
   private schedule(userId: number) {
     if (this.timer) clearInterval(this.timer);
     const ms = this.config.intervalHours * 60 * 60 * 1000;
-    this.timer = setInterval(() => void this.runCycle(userId), ms);
+    this.timer = setInterval(() => void this.triggerCycle(userId), ms);
     this.nextRunAt = new Date(Date.now() + ms);
   }
 
@@ -492,9 +492,28 @@ class CjShopifyUsaAutomationService {
     // Will be re-scheduled at next opportunity
   }
 
+  /**
+   * Prefer BullMQ when Redis is available so CJ rate-limit / long cycles get exponential backoff retries.
+   * Falls back to in-process `runAutomationCycle` when the queue is unavailable.
+   */
+  private async triggerCycle(userId: number) {
+    try {
+      const { enqueueCjShopifyUsaAutomationCycle } = await import('../../../services/cj-shopify-usa-automation.jobs');
+      const job = await enqueueCjShopifyUsaAutomationCycle(userId);
+      if (job) {
+        return;
+      }
+    } catch {
+      // fall through to in-process
+    }
+    void this.runAutomationCycle(userId);
+  }
+
   // ── Cycle runner ───────────────────────────────────────────────────────
 
-  private async runCycle(userId: number) {
+  /** Executes one automation cycle (also invoked by BullMQ worker when Redis is enabled). */
+  async runAutomationCycle(userId: number) {
+    await this.loadPersistedState(userId);
     if (this.currentCycle?.status === 'RUNNING') return; // Already running
     if (this.state !== 'RUNNING') return;
 
@@ -1143,8 +1162,11 @@ class CjShopifyUsaAutomationService {
 
         if (adapter) {
           try {
+            const { quoteShippingToUsWarehouseAwareCached } = await import(
+              './cj-shopify-usa-freight-quote-cache.service'
+            );
             const waResult = await withTimeout(
-              adapter.quoteShippingToUsWarehouseAware({
+              quoteShippingToUsWarehouseAwareCached(userId, adapter as import('../../cj-ebay/adapters/cj-supplier.adapter.interface').ICjSupplierAdapter, {
                 variantId: selected.cjVid ?? undefined,
                 productId: product.cjProductId,
                 quantity: 1,
@@ -1377,8 +1399,11 @@ class CjShopifyUsaAutomationService {
             let shippingAmountUsd = fallbackShippingUsd;
             let shippingQuoteId: number | null = null;
             try {
+              const { quoteShippingToUsWarehouseAwareCached } = await import(
+                './cj-shopify-usa-freight-quote-cache.service'
+              );
               const waResult = await withTimeout(
-                adapter.quoteShippingToUsWarehouseAware({
+                quoteShippingToUsWarehouseAwareCached(userId, adapter as import('../../cj-ebay/adapters/cj-supplier.adapter.interface').ICjSupplierAdapter, {
                   variantId: sourceVariant?.cjVid,
                   productId: detail.cjProductId,
                   quantity: 1,

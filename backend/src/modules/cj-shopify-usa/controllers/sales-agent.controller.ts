@@ -3,7 +3,10 @@
  * Extracted from cj-shopify-usa.routes.ts for maintainability.
  */
 import { Router, Request, Response, NextFunction } from 'express';
-import { cjShopifyUsaSalesAgentService } from '../services/cj-shopify-usa-sales-agent.service';
+import {
+  cjShopifyUsaSalesAgentService,
+  type SalesAgentActionType,
+} from '../services/cj-shopify-usa-sales-agent.service';
 
 const router = Router();
 
@@ -20,7 +23,7 @@ router.get('/sales-agent', async (req: Request, res: Response, next: NextFunctio
 router.post('/sales-agent/actions', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const actionType = String(req.body?.actionType || '').trim() as any;
+    const actionType = String(req.body?.actionType || '').trim() as SalesAgentActionType;
     const result = await cjShopifyUsaSalesAgentService.executeAction(userId, {
       actionType,
       limit: Number(req.body?.limit ?? 5),

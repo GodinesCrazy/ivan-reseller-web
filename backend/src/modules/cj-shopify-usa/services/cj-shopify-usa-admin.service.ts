@@ -1526,6 +1526,8 @@ export class CjShopifyUsaAdminService {
     first: number;
     sinceIso?: string;
     orderId?: string;
+    /** Merged with AND into Shopify Admin `orders` search query (optional). */
+    ordersQuery?: string;
   }) {
     const queryParts: string[] = [];
     if (trimOrEmpty(input.orderId)) {
@@ -1533,6 +1535,9 @@ export class CjShopifyUsaAdminService {
     }
     if (trimOrEmpty(input.sinceIso)) {
       queryParts.push(`created_at:>=${trimOrEmpty(input.sinceIso)}`);
+    }
+    if (trimOrEmpty(input.ordersQuery)) {
+      queryParts.push(String(input.ordersQuery).trim());
     }
 
     const data = await this.graphql<{

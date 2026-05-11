@@ -344,7 +344,10 @@ export class CjShopifyUsaProfitGuardService {
       }
 
       try {
-        const waResult = await adapter.quoteShippingToUsWarehouseAware({
+        const { quoteShippingToUsWarehouseAwareCached } = await import(
+          './cj-shopify-usa-freight-quote-cache.service'
+        );
+        const waResult = await quoteShippingToUsWarehouseAwareCached(userId, adapter, {
           variantId: listing.variant?.cjVid ?? undefined,
           productId: listing.product.cjProductId,
           quantity: 1,
