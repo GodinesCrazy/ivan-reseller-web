@@ -1,6 +1,7 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import { RefreshCw, Search, Send } from 'lucide-react';
 import { api } from '@/services/api';
 import CjEbayOperatorPathCallout from '@/components/cj-ebay/CjEbayOperatorPathCallout';
 
@@ -24,11 +25,37 @@ type ListingRow = {
   reconcileRetryAfter: string | null;
 };
 
+type StatusFilter =
+  | 'ALL'
+  | 'DRAFT'
+  | 'ACTIVE'
+  | 'PUBLISHABLE'
+  | 'POLICY_BLOCK'
+  | 'RECONCILE'
+  | 'FAILED';
+
+type SortKey = 'updatedDesc' | 'updatedAsc' | 'publishedDesc' | 'priceDesc' | 'priceAsc' | 'status' | 'idDesc';
+
+const FILTER_CONTROL_CLASS =
+  'h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200';
+
+function usd(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return '--';
+  return value.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+}
+
+function isPublishable(row: ListingRow) {
+  return ['DRAFT', 'FAILED'].includes(row.status);
+}
+
 export default function CjEbayListingsPage() {
   const [listings, setListings] = useState<ListingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [sortKey, setSortKey] = useState<SortKey>('updatedDesc');
   const [detailId, setDetailId] = useState<number | null>(null);
   const [detail, setDetail] = useState<{
     lastError: string | null;
@@ -233,46 +260,160 @@ export default function CjEbayListingsPage() {
   const hasReconcilePending = listings.some((r) => r.status === 'RECONCILE_PENDING');
   const hasReconcileFailed = listings.some((r) => r.status === 'RECONCILE_FAILED');
   const hasAccountPolicyBlock = listings.some((r) => r.status === 'ACCOUNT_POLICY_BLOCK');
+  const publishableCount = listings.filter(isPublishable).length;
+  const activeCount = listings.filter((r) => r.status === 'ACTIVE').length;
+  const pausedCount = listings.filter((r) => r.status === 'PAUSED').length;
+  const failedCount = listings.filter((r) => ['FAILED', 'RECONCILE_FAILED'].includes(r.status)).length;
+  const reconcileCount = listings.filter((r) => ['OFFER_ALREADY_EXISTS', 'RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(r.status)).length;
+
+  const metricCards = [
+    { label: 'Todos', value: listings.length, filter: 'ALL' as StatusFilter },
+    { label: 'Publicables', value: publishableCount, filter: 'PUBLISHABLE' as StatusFilter },
+    { label: 'Activos', value: activeCount, filter: 'ACTIVE' as StatusFilter },
+    { label: 'Reconciliar', value: reconcileCount, filter: 'RECONCILE' as StatusFilter },
+    { label: 'Policy block', value: listings.filter((r) => r.status === 'ACCOUNT_POLICY_BLOCK').length, filter: 'POLICY_BLOCK' as StatusFilter },
+    { label: 'Fallidos', value: failedCount, filter: 'FAILED' as StatusFilter },
+  ];
+
+  const filteredListings = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return listings
+      .filter((row) => {
+        if (statusFilter === 'PUBLISHABLE') return isPublishable(row);
+        if (statusFilter === 'ACTIVE') return row.status === 'ACTIVE';
+        if (statusFilter === 'DRAFT') return row.status === 'DRAFT';
+        if (statusFilter === 'POLICY_BLOCK') return row.status === 'ACCOUNT_POLICY_BLOCK';
+        if (statusFilter === 'RECONCILE') return ['OFFER_ALREADY_EXISTS', 'RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(row.status);
+        if (statusFilter === 'FAILED') return ['FAILED', 'RECONCILE_FAILED'].includes(row.status);
+        return true;
+      })
+      .filter((row) => {
+        if (!q) return true;
+        const haystack = [
+          row.id,
+          row.status,
+          row.productTitle,
+          row.cjProductId,
+          row.variantCjSku,
+          row.variantCjVid,
+          row.ebaySku,
+          row.ebayOfferId,
+          row.ebayListingId,
+          row.lastError,
+        ].join(' ').toLowerCase();
+        return haystack.includes(q);
+      })
+      .sort((a, b) => {
+        if (sortKey === 'updatedAsc') return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+        if (sortKey === 'publishedDesc') return new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime();
+        if (sortKey === 'priceDesc') return Number(b.listedPriceUsd ?? 0) - Number(a.listedPriceUsd ?? 0);
+        if (sortKey === 'priceAsc') return Number(a.listedPriceUsd ?? 0) - Number(b.listedPriceUsd ?? 0);
+        if (sortKey === 'status') return a.status.localeCompare(b.status);
+        if (sortKey === 'idDesc') return b.id - a.id;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+  }, [listings, query, sortKey, statusFilter]);
 
   return (
     <div className="space-y-4">
-      <CjEbayOperatorPathCallout variant="listings" />
-
-      {/* Module readiness summary */}
-      <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-4 py-3 text-xs space-y-1">
-        <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm">Estado del módulo CJ → eBay USA</p>
-        <div className="grid gap-1 sm:grid-cols-2">
-          {([
-            { label: 'Búsqueda CJ', ok: true },
-            { label: 'Selección variante / stock real', ok: true },
-            { label: 'Configuración pricing', ok: true },
-            { label: 'Evaluate (APPROVED)', ok: true },
-            { label: 'Crear draft listing', ok: true },
-            { label: 'Publicar en eBay (ship-from China)', ok: false, note: 'Pendiente: aprobación cuenta eBay overseas warehouse' },
-            { label: 'Postventa (órdenes)', ok: false, note: 'Se abre cuando exista un listing publicado real' },
-          ] as const).map((item) => (
-            <div key={item.label} className="flex items-start gap-1.5">
-              <span className={item.ok ? 'text-emerald-600 dark:text-emerald-400 mt-0.5' : 'text-amber-600 dark:text-amber-400 mt-0.5'}>
-                {item.ok ? '✓' : '○'}
-              </span>
-              <span className={item.ok ? 'text-slate-700 dark:text-slate-300' : 'text-slate-500 dark:text-slate-400'}>
-                {item.label}
-                {'note' in item && item.note && (
-                  <span className="block text-[11px] text-amber-600 dark:text-amber-400">{item.note}</span>
-                )}
-              </span>
-            </div>
-          ))}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+            Listings eBay
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {filteredListings.length} visibles de {listings.length} listings · {publishableCount} publicables · {pausedCount} pausados
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap justify-end">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void load()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60 transition"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            Actualizar
+          </button>
+          <button
+            type="button"
+            disabled={publishableCount === 0}
+            onClick={() => {
+              const target = filteredListings.find(isPublishable) ?? listings.find(isPublishable);
+              if (target) void publish(target.id);
+            }}
+            title="Publica el primer draft visible permitido. Para lote completo, validar uno por uno evita duplicados eBay."
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50 text-white px-3 py-1.5 text-sm font-semibold transition"
+          >
+            <Send className="h-4 w-4" aria-hidden="true" />
+            Publicar siguiente ({publishableCount})
+          </button>
         </div>
       </div>
 
-      <p className="text-sm text-slate-600 dark:text-slate-300">
-        Drafts listos para publicar. Origen:{' '}
-        <Link to="/cj-ebay/products" className="text-primary-600 dark:text-primary-400 underline">
-          Productos CJ
-        </Link>
-        {' '}→ Evaluar → Crear draft.
-      </p>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+        {metricCards.map(({ label, value, filter }) => {
+          const activeMetric = statusFilter === filter;
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setStatusFilter(filter)}
+              className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
+                activeMetric
+                  ? 'border-primary-400 bg-primary-950/75 shadow-[0_0_0_1px_rgba(96,165,250,0.24)]'
+                  : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/50 dark:hover:bg-slate-900'
+              }`}
+            >
+              <p className={`font-medium ${activeMetric ? 'text-primary-200' : 'text-slate-500 dark:text-slate-400'}`}>{label}</p>
+              <p className={`mt-1 text-lg font-semibold tabular-nums ${activeMetric ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>{value}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_180px_190px_minmax(220px,auto)]">
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar producto, SKU, offer, listing o error"
+            className={`${FILTER_CONTROL_CLASS} w-full pl-9 pr-3`}
+          />
+        </label>
+        <select
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          className={FILTER_CONTROL_CLASS}
+        >
+          <option value="ALL">Todos</option>
+          <option value="PUBLISHABLE">Publicables</option>
+          <option value="DRAFT">Draft local</option>
+          <option value="ACTIVE">Activos</option>
+          <option value="RECONCILE">Reconciliar</option>
+          <option value="POLICY_BLOCK">Policy block</option>
+          <option value="FAILED">Fallidos</option>
+        </select>
+        <select
+          value={sortKey}
+          onChange={(event) => setSortKey(event.target.value as SortKey)}
+          className={FILTER_CONTROL_CLASS}
+        >
+          <option value="updatedDesc">Actualizado: reciente</option>
+          <option value="updatedAsc">Actualizado: antiguo</option>
+          <option value="publishedDesc">Publicado: reciente</option>
+          <option value="priceDesc">Precio: mayor</option>
+          <option value="priceAsc">Precio: menor</option>
+          <option value="status">Estado</option>
+          <option value="idDesc">ID: mayor</option>
+        </select>
+        <div className="flex items-center justify-end rounded-lg border border-sky-800/70 bg-sky-950/25 px-3 text-xs text-sky-100">
+          Origen: <Link to="/cj-ebay/products" className="ml-1 underline">Productos CJ</Link> → evaluar → draft → eBay.
+        </div>
+      </div>
+
+      <CjEbayOperatorPathCallout variant="listings" />
 
       {/* OFFER_ALREADY_EXISTS banner */}
       {hasOfferAlreadyExists && (
@@ -380,15 +521,14 @@ export default function CjEbayListingsPage() {
             </tr>
           </thead>
           <tbody>
-            {listings.length === 0 ? (
+            {filteredListings.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
-                  Sin listings. Creá un draft desde <strong>Oportunidades</strong> / <strong>Product Research</strong> (CJ) o desde{' '}
-                  <strong>Productos CJ</strong> tras evaluación APPROVED.
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-500 text-sm">
+                  Sin resultados para los filtros actuales. Crea un draft desde <strong>Productos CJ</strong> tras evaluación APPROVED.
                 </td>
               </tr>
             ) : (
-              listings.map((row) => (
+              filteredListings.map((row) => (
                 <Fragment key={row.id}>
                   <tr className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40">
                     <td className="px-3 py-2 font-mono tabular-nums">{row.id}</td>
@@ -431,12 +571,7 @@ export default function CjEbayListingsPage() {
                       {row.productTitle}
                     </td>
                     <td className="px-3 py-2 tabular-nums">
-                      {row.listedPriceUsd != null
-                        ? row.listedPriceUsd.toLocaleString(undefined, {
-                            style: 'currency',
-                            currency: 'USD',
-                          })
-                        : '—'}
+                      {usd(row.listedPriceUsd)}
                     </td>
                     <td className="px-3 py-2 font-mono text-xs">{row.ebaySku || '—'}</td>
                     <td className="px-3 py-2">

@@ -31,6 +31,9 @@ Completed now:
 - Rebuild CJ-eBay USA navigation to match the CJ-Shopify USA module structure with grouped sidebar sections.
 - Add CJ-eBay USA frontend sections for settings, post-sale, analytics, sales agent, automation, and store optimizer.
 - Add a CJ-eBay USA store optimizer API that uses active listings, draft state, account quota, margin snapshots, and listing blockers to recommend operator actions.
+- Second visual parity pass started after screenshot comparison:
+  - CJ-eBay Overview was rebuilt to match the CJ-Shopify operational dashboard pattern: hero/status panel, readiness score, pipeline cards, quick actions, quota warning, alerts, and integration checks.
+  - CJ-eBay Listings was upgraded to the Shopify Store Products pattern: header actions, metric filters, search/sort controls, visible-result count, and a cleaner table flow while keeping eBay-specific reconciliation and policy-block actions.
 
 Next Shopify refactor:
 
@@ -81,17 +84,17 @@ Backend parity targets:
 Frontend parity targets:
 
 - Mirror the usable CJ-Shopify USA structure:
-  - overview, done,
+  - overview, visually aligned in second pass,
   - discover/opportunities, done,
   - products, done,
-  - listings, done,
+  - listings, visually aligned in second pass,
   - orders/order detail, done,
   - post-sale, done,
   - profit guard, done,
-  - analytics, done,
+  - analytics, present but still lighter than Shopify advanced analytics,
   - alerts, done,
-  - sales agent, done,
-  - automation, done,
+  - sales agent, present but still lighter than Shopify advanced sales agent,
+  - automation, present but still lighter than Shopify automation cockpit,
   - settings, done,
   - logs, done,
   - eBay store optimizer, done.
@@ -123,6 +126,7 @@ Frontend parity targets:
    - Add missing eBay pages/components.
    - Add quota, optimizer, and policy-block panels.
    - Completed first parity pass: CJ-eBay now exposes the same major module areas as CJ-Shopify with eBay-specific settings, quota analytics, post-sale, automation, sales-agent, and store optimizer views.
+   - Second visual pass: Overview and Listings now follow the Shopify screen composition more closely. Remaining visual depth gaps are Analytics, Sales Agent, and Automation because Shopify has much richer operational cockpit screens there.
 
 4. Verification
    - Type-check backend.
