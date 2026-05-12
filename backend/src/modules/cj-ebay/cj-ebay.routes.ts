@@ -41,6 +41,7 @@ import { cjEbayOpportunityPipelineService } from './services/cj-ebay-opportunity
 import { cjEbayRefundService } from './services/cj-ebay-refund.service';
 import { cjEbayAlertsService } from './services/cj-ebay-alerts.service';
 import { cjEbayProfitService } from './services/cj-ebay-profit.service';
+import { cjEbaySellingLimitsService } from './services/cj-ebay-selling-limits.service';
 
 const router = Router();
 
@@ -340,6 +341,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       alertsOpen,
       profitSnapshots,
       tracesLast24h,
+      sellingLimits,
     ] = await Promise.all([
       prisma.cjEbayProduct.count({ where: { userId } }),
       prisma.cjEbayProductVariant.count({
@@ -370,6 +372,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       prisma.cjEbayExecutionTrace.count({
         where: { userId, createdAt: { gte: since } },
       }),
+      cjEbaySellingLimitsService.getMonthlySnapshot(userId),
     ]);
 
     const body: CjEbayOverviewResponse = {
@@ -393,9 +396,21 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       },
       note:
         'FASE 3C–3E: aggregates on cj_ebay_* only (evaluations, quotes, listings, orders, traces).',
+      sellingLimits,
     };
     await traceComplete(req, userId, 'GET /overview', { statusCode: 200 });
     res.json(body);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/selling-limits', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const sellingLimits = await cjEbaySellingLimitsService.getMonthlySnapshot(userId);
+    await traceComplete(req, userId, 'GET /selling-limits', { statusCode: 200 });
+    res.json({ ok: true, sellingLimits });
   } catch (e) {
     next(e);
   }

@@ -8,6 +8,10 @@ import {
   CJ_SHOPIFY_USA_ORDER_STATUS,
 } from '../cj-shopify-usa.constants';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
+import {
+  type CjShopifyUsaWebhookOrderPayload,
+  cjShopifyUsaWebhookOrderPayloadSchema,
+} from '../schemas/cj-shopify-usa.schemas';
 
 // Non-retryable statuses — processing from these is a no-op (idempotency guard)
 const NON_RETRYABLE_STATUSES = new Set([
@@ -81,12 +85,22 @@ function normalizeGid(value: string | null | undefined) {
   return String(value || '').trim();
 }
 
-function normalizeShopifyWebhookOrderId(body: any): string | null {
-  const adminGid = normalizeGid(body?.admin_graphql_api_id);
+function parseShopifyWebhookOrderPayload(body: unknown): CjShopifyUsaWebhookOrderPayload | null {
+  const parsed = cjShopifyUsaWebhookOrderPayloadSchema.safeParse(body);
+  return parsed.success ? parsed.data : null;
+}
+
+function normalizeShopifyWebhookOrderId(body: CjShopifyUsaWebhookOrderPayload): string | null {
+  const adminGid = normalizeGid(body.admin_graphql_api_id);
   if (adminGid) return adminGid;
 
-  const numeric = String(body?.id || '').trim();
+  const numeric = String(body.id || '').trim();
   return numeric ? `gid://shopify/Order/${numeric}` : null;
+}
+
+function resolveShopifyWebhookOrderId(body: unknown): string | null {
+  const payload = parseShopifyWebhookOrderPayload(body);
+  return payload ? normalizeShopifyWebhookOrderId(payload) : null;
 }
 
 function shopifyFinancialStatusFromSummary(summary: unknown): string {
@@ -421,9 +435,9 @@ export const cjShopifyUsaOrderIngestService = {
 
   async handleOrdersCreateWebhook(input: {
     userId: number;
-    body: any;
+    body: unknown;
   }) {
-    const shopifyOrderId = normalizeShopifyWebhookOrderId(input.body);
+    const shopifyOrderId = resolveShopifyWebhookOrderId(input.body);
     if (!shopifyOrderId) {
       throw new AppError(
         'Shopify webhook payload did not include an order id.',
@@ -440,9 +454,9 @@ export const cjShopifyUsaOrderIngestService = {
 
   async handleOrdersPaidWebhook(input: {
     userId: number;
-    body: any;
+    body: unknown;
   }) {
-    const shopifyOrderId = normalizeShopifyWebhookOrderId(input.body);
+    const shopifyOrderId = resolveShopifyWebhookOrderId(input.body);
     if (!shopifyOrderId) {
       throw new AppError(
         'Shopify paid webhook payload did not include an order id.',
@@ -491,9 +505,9 @@ export const cjShopifyUsaOrderIngestService = {
 
   async handleOrdersCancelledWebhook(input: {
     userId: number;
-    body: any;
+    body: unknown;
   }) {
-    const shopifyOrderId = normalizeShopifyWebhookOrderId(input.body);
+    const shopifyOrderId = resolveShopifyWebhookOrderId(input.body);
     if (!shopifyOrderId) return { count: 0 };
     const order = await prisma.cjShopifyUsaOrder.findUnique({
       where: { userId_shopifyOrderId: { userId: input.userId, shopifyOrderId } },

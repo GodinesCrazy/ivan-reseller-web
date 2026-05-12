@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+export const cjShopifyUsaWebhookOrderPayloadSchema = z.object({
+  admin_graphql_api_id: z.string().min(1).optional().nullable(),
+  id: z.union([z.string().min(1), z.number().finite()]).optional().nullable(),
+}).passthrough();
+
+export type CjShopifyUsaWebhookOrderPayload = z.infer<typeof cjShopifyUsaWebhookOrderPayloadSchema>;
+
 export const cjShopifyUsaUpdateConfigSchema = z.object({
   minMarginPct: z.number().min(0).max(100).optional(),
   minProfitUsd: z.number().min(0).optional(),

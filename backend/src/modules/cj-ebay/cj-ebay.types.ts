@@ -29,6 +29,17 @@ export interface CjEbayOverviewResponse {
     tracesLast24h: number;
   };
   note: string;
+  sellingLimits?: {
+    periodStart: string;
+    periodEnd: string;
+    listingLimit: number | null;
+    amountLimitUsd: number | null;
+    usedListings: number;
+    usedAmountUsd: number;
+    remainingListings: number | null;
+    remainingAmountUsd: number | null;
+    configured: boolean;
+  };
 }
 
 export interface CjEbayConfigResponse {

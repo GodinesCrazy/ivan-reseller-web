@@ -21,6 +21,7 @@ import {
   resolveListingOrigin,
   computeHandlingTimeDays,
 } from '../policies/cj-ebay-listing-shipping.policy';
+import { cjEbaySellingLimitsService } from './cj-ebay-selling-limits.service';
 
 export const CJ_EBAY_LISTING_EVAL_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const CJ_EBAY_LISTING_QUOTE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
@@ -554,6 +555,12 @@ export const cjEbayListingService = {
       throw new AppError('Invalid price or quantity on draft.', 400);
     }
 
+    const sellingLimits = await cjEbaySellingLimitsService.assertCanPublish({
+      userId: input.userId,
+      projectedPriceUsd: listPrice,
+      projectedQuantity: listQty,
+    });
+
     // Recover aspects saved in draft payload (built from variant attributes at draft creation time)
     const draftAspects =
       draft.aspects &&
@@ -584,7 +591,7 @@ export const cjEbayListingService = {
       route: input.route,
       step: CJ_EBAY_TRACE_STEP.LISTING_PUBLISH_START,
       message: 'listing.publish.start',
-      meta: { listingId: listing.id, sku: listing.ebaySku },
+      meta: { listingId: listing.id, sku: listing.ebaySku, sellingLimits },
     });
 
     try {

@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
+import { env } from '../../../config/env';
+import { cacheService } from '../../../services/cache.service';
 import { CJ_SHOPIFY_USA_LISTING_STATUS } from '../cj-shopify-usa.constants';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
 import type { PricingBreakdown, QualificationResult } from './cj-shopify-usa-qualification.service';
@@ -69,6 +71,17 @@ type ListingWithProfitGuardRelations = Prisma.CjShopifyUsaListingGetPayload<{
   };
 }>;
 
+type ProfitGuardFreightQuote = {
+  quote: {
+    cost: number;
+    method?: string | null;
+    estimatedDays?: number | null;
+    warehouseEvidence?: string | null;
+  };
+  fulfillmentOrigin?: string | null;
+  servedFromCache?: boolean;
+};
+
 function num(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
@@ -76,6 +89,29 @@ function num(value: unknown): number | null {
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function buildProfitGuardFreightCacheKey(input: {
+  userId: number;
+  productId: string;
+  variantId?: string | null;
+  quantity: number;
+  destCountryCode: string;
+}): string {
+  return [
+    'cj-shopify-usa',
+    'profit-guard',
+    'freight',
+    `u${input.userId}`,
+    `p${String(input.productId || '').trim()}`,
+    `v${String(input.variantId || 'default').trim()}`,
+    `q${Math.max(1, Math.floor(input.quantity || 1))}`,
+    `dest${String(input.destCountryCode || 'US').trim().toUpperCase()}`,
+  ].join(':');
+}
+
+function freightCacheTtlSeconds(): number {
+  return Math.max(60, Math.floor(Number(env.OPPORTUNITY_CJ_FREIGHT_CACHE_TTL_MS || 1_800_000) / 1000));
 }
 
 const PRICING_DEFAULTS = {
@@ -330,6 +366,7 @@ export class CjShopifyUsaProfitGuardService {
     let skipped = 0;
     let failed = 0;
     let rateLimited = false;
+    let cacheHits = 0;
 
     const { createCjSupplierAdapter } = await import('./../../cj-ebay/adapters/cj-supplier.adapter.js');
     const { CjSupplierError } = await import('./../../cj-ebay/adapters/cj-supplier.errors.js');
@@ -344,12 +381,39 @@ export class CjShopifyUsaProfitGuardService {
       }
 
       try {
-        const waResult = await adapter.quoteShippingToUsWarehouseAware({
+        const freightInput = {
           variantId: listing.variant?.cjVid ?? undefined,
           productId: listing.product.cjProductId,
           quantity: 1,
           destCountryCode: 'US',
+        };
+        const freightCacheKey = buildProfitGuardFreightCacheKey({
+          userId,
+          productId: freightInput.productId,
+          variantId: freightInput.variantId,
+          quantity: freightInput.quantity,
+          destCountryCode: freightInput.destCountryCode,
         });
+        const cachedFreight = await cacheService.get<ProfitGuardFreightQuote>(freightCacheKey);
+        const waResult = cachedFreight
+          ? { ...cachedFreight, servedFromCache: true }
+          : await adapter.quoteShippingToUsWarehouseAware(freightInput);
+        if (cachedFreight) cacheHits++;
+
+        if (!cachedFreight) {
+          await cacheService.set(freightCacheKey, {
+            quote: {
+              cost: waResult.quote.cost,
+              method: waResult.quote.method ?? null,
+              estimatedDays: waResult.quote.estimatedDays ?? null,
+              warehouseEvidence: waResult.quote.warehouseEvidence ?? null,
+            },
+            fulfillmentOrigin: waResult.fulfillmentOrigin ?? null,
+          } satisfies ProfitGuardFreightQuote, {
+            ttl: freightCacheTtlSeconds(),
+            tags: ['cj-shopify-usa', 'profit-guard', 'freight'],
+          });
+        }
 
         if (!dryRun) {
           const quote = await prisma.cjShopifyUsaShippingQuote.create({
@@ -402,6 +466,7 @@ export class CjShopifyUsaProfitGuardService {
           scanned: missing.length,
           inspected,
           enriched,
+          cacheHits,
           skipped,
           failed,
           rateLimited,
