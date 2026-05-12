@@ -57,6 +57,8 @@ export interface CjEbayConfigResponse {
     defaultEbayFeePct: number | null;
     defaultPaymentFeePct: number | null;
     defaultPaymentFixedFeeUsd: number | null;
+    monthlyListingLimit: number | null;
+    monthlyAmountLimitUsd: number | null;
     /** Tras createOrder (payType=3): `MANUAL` o `AUTO_CONFIRM_PAY`. */
     cjPostCreateCheckoutMode: 'MANUAL' | 'AUTO_CONFIRM_PAY';
   };

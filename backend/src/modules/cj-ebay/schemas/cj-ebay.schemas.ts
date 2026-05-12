@@ -15,6 +15,8 @@ export const cjEbayUpdateConfigSchema = z
     defaultEbayFeePct: z.number().min(0).max(100).nullable().optional(),
     defaultPaymentFeePct: z.number().min(0).max(100).nullable().optional(),
     defaultPaymentFixedFeeUsd: z.number().min(0).nullable().optional(),
+    monthlyListingLimit: z.number().int().min(1).max(1_000_000).nullable().optional(),
+    monthlyAmountLimitUsd: z.number().min(0.01).nullable().optional(),
     cjPostCreateCheckoutMode: z.enum(['MANUAL', 'AUTO_CONFIRM_PAY']).optional(),
   })
   .strict();

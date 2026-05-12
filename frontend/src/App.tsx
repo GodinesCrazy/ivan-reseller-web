@@ -59,6 +59,12 @@ const CjEbayAlertsPage = lazy(() => import('@pages/cj-ebay/CjEbayAlertsPage'));
 const CjEbayProfitPage = lazy(() => import('@pages/cj-ebay/CjEbayProfitPage'));
 const CjEbayLogsPage = lazy(() => import('@pages/cj-ebay/CjEbayLogsPage'));
 const CjEbayOpportunityPage = lazy(() => import('@pages/cj-ebay/CjEbayOpportunityPage'));
+const CjEbaySettingsPage = lazy(() => import('@pages/cj-ebay/CjEbaySettingsPage'));
+const CjEbayAnalyticsPage = lazy(() => import('@pages/cj-ebay/CjEbayAnalyticsPage'));
+const CjEbaySalesAgentPage = lazy(() => import('@pages/cj-ebay/CjEbaySalesAgentPage'));
+const CjEbayStoreOptimizerPage = lazy(() => import('@pages/cj-ebay/CjEbayStoreOptimizerPage'));
+const CjEbayAutomationPage = lazy(() => import('@pages/cj-ebay/CjEbayAutomationPage'));
+const CjEbayPostSalePage = lazy(() => import('@pages/cj-ebay/CjEbayPostSalePage'));
 // CJ → eBay UK
 const CjEbayUkModuleGate = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkModuleGate'));
 const CjEbayUkLayout = lazy(() => import('@pages/cj-ebay-uk/CjEbayUkLayout'));
@@ -314,8 +320,14 @@ function AppContent() {
             <Route path="listings" element={<CjEbayListingsPage />} />
             <Route path="orders" element={<CjEbayOrdersPage />} />
             <Route path="orders/:orderId" element={<CjEbayOrderDetailPage />} />
+            <Route path="post-sale" element={<CjEbayPostSalePage />} />
             <Route path="alerts" element={<CjEbayAlertsPage />} />
             <Route path="profit" element={<CjEbayProfitPage />} />
+            <Route path="analytics" element={<CjEbayAnalyticsPage />} />
+            <Route path="sales-agent" element={<CjEbaySalesAgentPage />} />
+            <Route path="store-optimizer" element={<CjEbayStoreOptimizerPage />} />
+            <Route path="automation" element={<CjEbayAutomationPage />} />
+            <Route path="settings" element={<CjEbaySettingsPage />} />
             <Route path="logs" element={<CjEbayLogsPage />} />
             <Route path="discover" element={<CjEbayOpportunityPage />} />
           </Route>

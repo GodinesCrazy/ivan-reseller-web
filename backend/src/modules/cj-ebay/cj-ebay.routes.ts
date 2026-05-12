@@ -180,6 +180,34 @@ function liveStockVariantKeys(detail: CjProductDetail): string[] {
     .filter(Boolean);
 }
 
+function moneyFromUnknown(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+function nestedMoneyFromDraft(draftPayload: unknown, path: string[]): number | null {
+  let current: unknown = draftPayload;
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || !(key in current)) return null;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return moneyFromUnknown(current);
+}
+
+function titleFromDraft(draftPayload: unknown, fallback: string): string {
+  if (draftPayload && typeof draftPayload === 'object') {
+    const title = (draftPayload as Record<string, unknown>).title;
+    if (typeof title === 'string' && title.trim()) return title.trim();
+  }
+  return fallback;
+}
+
+function optimizerSeverity(priority: number): 'info' | 'warning' | 'critical' {
+  if (priority >= 80) return 'critical';
+  if (priority >= 40) return 'warning';
+  return 'info';
+}
+
 async function probeProductOperabilityByLiveStock(
   adapter: ReturnType<typeof createCjSupplierAdapter>,
   cjProductId: string
@@ -1070,6 +1098,150 @@ router.get('/listings/:listingId', async (req: Request, res: Response, next: Nex
     }
     await traceComplete(req, userId, 'GET /listings/:listingId', { statusCode: 200 });
     res.json({ ok: true, listing: row });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/store-optimizer', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const [listings, sellingLimits] = await Promise.all([
+      prisma.cjEbayListing.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 250,
+        include: {
+          product: { select: { title: true, cjProductId: true } },
+        },
+      }),
+      cjEbaySellingLimitsService.getMonthlySnapshot(userId),
+    ]);
+
+    const blockedStatuses = new Set([
+      'ACCOUNT_POLICY_BLOCK',
+      'OFFER_ALREADY_EXISTS',
+      'RECONCILE_PENDING',
+      'RECONCILE_FAILED',
+      'FAILED',
+    ]);
+
+    const actions = listings.flatMap((listing) => {
+      const draft = listing.draftPayload;
+      const title = titleFromDraft(draft, listing.product.title);
+      const currentPriceUsd = moneyFromUnknown(listing.listedPriceUsd);
+      const projectedMarginPct =
+        nestedMoneyFromDraft(draft, ['pricing', 'netMarginPct']) ??
+        nestedMoneyFromDraft(draft, ['breakdown', 'netMarginPct']) ??
+        nestedMoneyFromDraft(draft, ['pricingBreakdown', 'netMarginPct']);
+      const projectedProfitUsd =
+        nestedMoneyFromDraft(draft, ['pricing', 'netProfitUsd']) ??
+        nestedMoneyFromDraft(draft, ['breakdown', 'netProfitUsd']) ??
+        nestedMoneyFromDraft(draft, ['pricingBreakdown', 'netProfitUsd']);
+      const quantity = Math.max(1, Number(listing.quantity ?? 1));
+      const monthlyAmountExposureUsd = Math.round((currentPriceUsd ?? 0) * quantity * 100) / 100;
+      const rows: Array<{
+        listingId: number;
+        title: string;
+        status: string;
+        currentPriceUsd: number | null;
+        projectedMarginPct: number | null;
+        projectedProfitUsd: number | null;
+        monthlyAmountExposureUsd: number;
+        severity: 'info' | 'warning' | 'critical';
+        recommendation: string;
+        reason: string;
+      }> = [];
+
+      if (blockedStatuses.has(listing.status)) {
+        rows.push({
+          listingId: listing.id,
+          title,
+          status: listing.status,
+          currentPriceUsd,
+          projectedMarginPct,
+          projectedProfitUsd,
+          monthlyAmountExposureUsd,
+          severity: 'critical',
+          recommendation: 'Resolver bloqueo antes de intentar republicar.',
+          reason: listing.lastError || 'El listing esta en estado de bloqueo, duplicado o reconciliacion pendiente.',
+        });
+      }
+
+      if (listing.status === 'ACTIVE' && projectedMarginPct != null && projectedMarginPct < 10) {
+        const priority = projectedMarginPct < 3 ? 90 : 55;
+        rows.push({
+          listingId: listing.id,
+          title,
+          status: listing.status,
+          currentPriceUsd,
+          projectedMarginPct,
+          projectedProfitUsd,
+          monthlyAmountExposureUsd,
+          severity: optimizerSeverity(priority),
+          recommendation: projectedMarginPct < 3 ? 'Pausar o subir precio: margen critico.' : 'Revisar precio: margen bajo para eBay.',
+          reason: `Margen estimado ${projectedMarginPct.toFixed(1)}%. Debe proteger fees eBay, pago, incidentes y flete CJ.`,
+        });
+      }
+
+      if (
+        listing.status === 'ACTIVE' &&
+        sellingLimits.amountLimitUsd != null &&
+        monthlyAmountExposureUsd > 0 &&
+        monthlyAmountExposureUsd >= sellingLimits.amountLimitUsd * 0.15
+      ) {
+        rows.push({
+          listingId: listing.id,
+          title,
+          status: listing.status,
+          currentPriceUsd,
+          projectedMarginPct,
+          projectedProfitUsd,
+          monthlyAmountExposureUsd,
+          severity: 'warning',
+          recommendation: 'Verificar si este listing merece consumir cuota de monto.',
+          reason: `Consume ${monthlyAmountExposureUsd.toFixed(2)} USD de exposicion mensual potencial contra un limite de ${sellingLimits.amountLimitUsd.toFixed(2)} USD.`,
+        });
+      }
+
+      if (listing.status === 'DRAFT' && sellingLimits.remainingListings === 0) {
+        rows.push({
+          listingId: listing.id,
+          title,
+          status: listing.status,
+          currentPriceUsd,
+          projectedMarginPct,
+          projectedProfitUsd,
+          monthlyAmountExposureUsd,
+          severity: 'warning',
+          recommendation: 'Mantener en cola hasta liberar cuota mensual.',
+          reason: 'La cuota mensual de publicaciones eBay ya esta agotada.',
+        });
+      }
+
+      return rows;
+    });
+
+    const body = {
+      ok: true,
+      summary: {
+        totalListings: listings.length,
+        activeListings: listings.filter((l) => l.status === 'ACTIVE').length,
+        draftListings: listings.filter((l) => l.status === 'DRAFT').length,
+        blockedListings: listings.filter((l) => blockedStatuses.has(l.status)).length,
+        quotaConfigured: sellingLimits.configured,
+        usedListings: sellingLimits.usedListings,
+        listingLimit: sellingLimits.listingLimit,
+        usedAmountUsd: sellingLimits.usedAmountUsd,
+        amountLimitUsd: sellingLimits.amountLimitUsd,
+        remainingListings: sellingLimits.remainingListings,
+        remainingAmountUsd: sellingLimits.remainingAmountUsd,
+      },
+      actions: actions.slice(0, 100),
+    };
+
+    await traceComplete(req, userId, 'GET /store-optimizer', { statusCode: 200, actions: body.actions.length });
+    res.json(body);
   } catch (e) {
     next(e);
   }

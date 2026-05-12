@@ -97,6 +97,8 @@ type PricingConfigSettings = {
   defaultPaymentFeePct: NullableNum;
   defaultPaymentFixedFeeUsd: NullableNum;
   incidentBufferPct: NullableNum;
+  monthlyListingLimit: NullableNum;
+  monthlyAmountLimitUsd: NullableNum;
 };
 
 type PricingConfigResponse = {
@@ -313,7 +315,9 @@ function configFieldLabel(
     | 'defaultEbayFeePct'
     | 'defaultPaymentFeePct'
     | 'defaultPaymentFixedFeeUsd'
-    | 'incidentBufferPct',
+    | 'incidentBufferPct'
+    | 'monthlyListingLimit'
+    | 'monthlyAmountLimitUsd',
 ): string {
   switch (field) {
     case 'minMarginPct':
@@ -328,6 +332,10 @@ function configFieldLabel(
       return 'fee fijo de pago';
     case 'incidentBufferPct':
       return 'buffer de incidentes';
+    case 'monthlyListingLimit':
+      return 'limite mensual de publicaciones';
+    case 'monthlyAmountLimitUsd':
+      return 'limite mensual de monto';
     default:
       return field;
   }
@@ -343,6 +351,9 @@ function pricingConfigToForm(settings: PricingConfigSettings): PricingConfigForm
     defaultPaymentFixedFeeUsd:
       settings.defaultPaymentFixedFeeUsd != null ? String(settings.defaultPaymentFixedFeeUsd) : '',
     incidentBufferPct: settings.incidentBufferPct != null ? String(settings.incidentBufferPct) : '',
+    monthlyListingLimit: settings.monthlyListingLimit != null ? String(settings.monthlyListingLimit) : '',
+    monthlyAmountLimitUsd:
+      settings.monthlyAmountLimitUsd != null ? String(settings.monthlyAmountLimitUsd) : '',
   };
 }
 
@@ -351,6 +362,11 @@ function parseOptionalNumber(value: string): number | null {
   if (!trimmed) return null;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseOptionalInteger(value: string): number | null {
+  const parsed = parseOptionalNumber(value);
+  return parsed == null ? null : Math.max(1, Math.floor(parsed));
 }
 
 function summarizePricingSettings(settings: PricingConfigSettings) {
@@ -383,6 +399,9 @@ function summarizePricingSettings(settings: PricingConfigSettings) {
     feeConfigComplete: missingFeeFields.length === 0,
     missingFeeFields,
     feeConfigSource,
+    monthlyLimitsConfigured:
+      settings.monthlyListingLimit != null ||
+      settings.monthlyAmountLimitUsd != null,
   };
 }
 
@@ -638,6 +657,8 @@ export default function CjEbayProductsPage() {
     defaultPaymentFeePct: '',
     defaultPaymentFixedFeeUsd: '',
     incidentBufferPct: '',
+    monthlyListingLimit: '',
+    monthlyAmountLimitUsd: '',
   });
   const [pricingConfigLoading, setPricingConfigLoading] = useState(true);
   const [pricingConfigSaving, setPricingConfigSaving] = useState(false);
@@ -687,6 +708,8 @@ export default function CjEbayProductsPage() {
             defaultPaymentFeePct: res.data.settings.defaultPaymentFeePct,
             defaultPaymentFixedFeeUsd: res.data.settings.defaultPaymentFixedFeeUsd,
             incidentBufferPct: res.data.settings.incidentBufferPct,
+            monthlyListingLimit: res.data.settings.monthlyListingLimit,
+            monthlyAmountLimitUsd: res.data.settings.monthlyAmountLimitUsd,
           };
           setPricingSettings(nextSettings);
           setPricingConfigForm(pricingConfigToForm(nextSettings));
@@ -738,6 +761,8 @@ export default function CjEbayProductsPage() {
         defaultPaymentFeePct: parseOptionalNumber(pricingConfigForm.defaultPaymentFeePct),
         defaultPaymentFixedFeeUsd: parseOptionalNumber(pricingConfigForm.defaultPaymentFixedFeeUsd),
         incidentBufferPct: parseOptionalNumber(pricingConfigForm.incidentBufferPct),
+        monthlyListingLimit: parseOptionalInteger(pricingConfigForm.monthlyListingLimit),
+        monthlyAmountLimitUsd: parseOptionalNumber(pricingConfigForm.monthlyAmountLimitUsd),
       };
 
       const res = await api.post<PricingConfigResponse>('/api/cj-ebay/config', payload);
@@ -749,6 +774,8 @@ export default function CjEbayProductsPage() {
           defaultPaymentFeePct: res.data.settings.defaultPaymentFeePct,
           defaultPaymentFixedFeeUsd: res.data.settings.defaultPaymentFixedFeeUsd,
           incidentBufferPct: res.data.settings.incidentBufferPct,
+          monthlyListingLimit: res.data.settings.monthlyListingLimit,
+          monthlyAmountLimitUsd: res.data.settings.monthlyAmountLimitUsd,
         };
         setPricingSettings(nextSettings);
         setPricingConfigForm(pricingConfigToForm(nextSettings));
@@ -1397,6 +1424,25 @@ export default function CjEbayProductsPage() {
                               .join(', ')}.`
                           : 'Sin fees guardados; el preview usara defaults operativos hasta que los completes.'}
                     </p>
+                    <p
+                      className={`text-xs ${
+                        pricingSettingsSummary.monthlyLimitsConfigured
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : 'text-amber-700 dark:text-amber-300'
+                      }`}
+                    >
+                      {pricingSettingsSummary.monthlyLimitsConfigured
+                        ? `Limites eBay: ${
+                            pricingSettings?.monthlyListingLimit != null
+                              ? `${pricingSettings.monthlyListingLimit} publicaciones/mes`
+                              : 'publicaciones sin limite'
+                          } y ${
+                            pricingSettings?.monthlyAmountLimitUsd != null
+                              ? fmtUsd(pricingSettings.monthlyAmountLimitUsd)
+                              : 'monto sin limite'
+                          }.`
+                        : 'Limites mensuales eBay sin configurar; el publish no bloqueara por cuota.'}
+                    </p>
                   </>
                 ) : (
                   <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -1434,7 +1480,7 @@ export default function CjEbayProductsPage() {
               <div className="border-t border-slate-200 dark:border-slate-800 px-4 py-4 space-y-4">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Esta configuracion se guarda en tu cuenta via <code>/api/cj-ebay/config</code> y
-                  controla el preview pricing y las evaluaciones.
+                  controla pricing, evaluaciones y cuotas mensuales antes de publicar en eBay.
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
@@ -1527,6 +1573,36 @@ export default function CjEbayProductsPage() {
                         setPricingConfigMessage(null);
                       }}
                       placeholder="ej. 2"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Max publicaciones eBay por mes
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                      value={pricingConfigForm.monthlyListingLimit}
+                      onChange={(e) => {
+                        setPricingConfigForm((current) => ({
+                          ...current,
+                          monthlyListingLimit: e.target.value,
+                        }));
+                        setPricingConfigMessage(null);
+                      }}
+                      placeholder="ej. 250"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Max monto eBay por mes (USD)
+                    <input
+                      className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
+                      value={pricingConfigForm.monthlyAmountLimitUsd}
+                      onChange={(e) => {
+                        setPricingConfigForm((current) => ({
+                          ...current,
+                          monthlyAmountLimitUsd: e.target.value,
+                        }));
+                        setPricingConfigMessage(null);
+                      }}
+                      placeholder="ej. 5000"
                     />
                   </label>
                 </div>

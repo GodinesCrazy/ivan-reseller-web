@@ -1601,6 +1601,10 @@ model CjEbayAccountSettings {
   defaultPaymentFeePct      Decimal? @db.Decimal(6, 4)
   /// Comisión fija pasarela (USD por orden).
   defaultPaymentFixedFeeUsd Decimal? @db.Decimal(18, 2)
+  /// Límite mensual de publicaciones permitido por la cuenta eBay.
+  monthlyListingLimit       Int?
+  /// Límite mensual de monto total/listing exposure permitido por la cuenta eBay.
+  monthlyAmountLimitUsd     Decimal? @db.Decimal(18, 2)
   /// Tras `createOrderV2` con payType=3: `MANUAL` (confirm/pay vía API) o `AUTO_CONFIRM_PAY` (servidor llama confirm+payBalance).
   cjPostCreateCheckoutMode  String   @default("MANUAL")
   createdAt                DateTime @default(now())

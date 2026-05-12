@@ -29,19 +29,18 @@ function currentUtcMonthWindow(now = new Date()): { start: Date; end: Date } {
   return { start, end };
 }
 
-function configuredListingLimit(): number | null {
-  return optionalPositiveNumber(process.env.CJ_EBAY_MONTHLY_LISTING_LIMIT);
-}
-
-function configuredAmountLimitUsd(): number | null {
-  return optionalPositiveNumber(process.env.CJ_EBAY_MONTHLY_AMOUNT_LIMIT_USD);
-}
-
 export const cjEbaySellingLimitsService = {
   async getMonthlySnapshot(userId: number, now = new Date()): Promise<CjEbayMonthlySellingLimitsSnapshot> {
     const { start, end } = currentUtcMonthWindow(now);
-    const listingLimit = configuredListingLimit();
-    const amountLimitUsd = configuredAmountLimitUsd();
+    const settings = await prisma.cjEbayAccountSettings.findUnique({
+      where: { userId },
+      select: {
+        monthlyListingLimit: true,
+        monthlyAmountLimitUsd: true,
+      },
+    });
+    const listingLimit = optionalPositiveNumber(settings?.monthlyListingLimit);
+    const amountLimitUsd = optionalPositiveNumber(settings?.monthlyAmountLimitUsd);
 
     const rows = await prisma.cjEbayListing.findMany({
       where: {

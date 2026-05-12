@@ -17,6 +17,8 @@ function toSettingsDto(row: {
   defaultEbayFeePct: Prisma.Decimal | null;
   defaultPaymentFeePct: Prisma.Decimal | null;
   defaultPaymentFixedFeeUsd: Prisma.Decimal | null;
+  monthlyListingLimit: number | null;
+  monthlyAmountLimitUsd: Prisma.Decimal | null;
   cjPostCreateCheckoutMode: string;
 }): CjEbayConfigResponse['settings'] {
   return {
@@ -35,6 +37,9 @@ function toSettingsDto(row: {
       row.defaultPaymentFeePct != null ? Number(row.defaultPaymentFeePct) : null,
     defaultPaymentFixedFeeUsd:
       row.defaultPaymentFixedFeeUsd != null ? Number(row.defaultPaymentFixedFeeUsd) : null,
+    monthlyListingLimit: row.monthlyListingLimit ?? null,
+    monthlyAmountLimitUsd:
+      row.monthlyAmountLimitUsd != null ? Number(row.monthlyAmountLimitUsd) : null,
     cjPostCreateCheckoutMode:
       row.cjPostCreateCheckoutMode === CJ_EBAY_POST_CREATE_CHECKOUT_MODE.AUTO_CONFIRM_PAY
         ? CJ_EBAY_POST_CREATE_CHECKOUT_MODE.AUTO_CONFIRM_PAY
@@ -100,6 +105,13 @@ export const cjEbayConfigService = {
         body.defaultPaymentFixedFeeUsd === null
           ? null
           : new Prisma.Decimal(body.defaultPaymentFixedFeeUsd);
+    }
+    if (body.monthlyListingLimit !== undefined) {
+      data.monthlyListingLimit = body.monthlyListingLimit;
+    }
+    if (body.monthlyAmountLimitUsd !== undefined) {
+      data.monthlyAmountLimitUsd =
+        body.monthlyAmountLimitUsd === null ? null : new Prisma.Decimal(body.monthlyAmountLimitUsd);
     }
     if (body.cjPostCreateCheckoutMode !== undefined) {
       data.cjPostCreateCheckoutMode =

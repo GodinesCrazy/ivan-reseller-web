@@ -27,6 +27,10 @@ Completed now:
 - Add strict-ish runtime validation for Shopify order webhook IDs.
 - Replace webhook `any` with `unknown` at service boundaries.
 - Add Redis/memory cache for Profit Guard freight enrichment using `OPPORTUNITY_CJ_FREIGHT_CACHE_TTL_MS`.
+- Add CJ-eBay USA monthly publication and amount limits as account settings, configurable from the CJ-eBay UI instead of environment-only variables.
+- Rebuild CJ-eBay USA navigation to match the CJ-Shopify USA module structure with grouped sidebar sections.
+- Add CJ-eBay USA frontend sections for settings, post-sale, analytics, sales agent, automation, and store optimizer.
+- Add a CJ-eBay USA store optimizer API that uses active listings, draft state, account quota, margin snapshots, and listing blockers to recommend operator actions.
 
 Next Shopify refactor:
 
@@ -53,6 +57,7 @@ Backend parity targets:
   - Track monthly eBay listing count.
   - Track monthly eBay amount/value limit.
   - Block or queue publishing before crossing either limit.
+  - Expose both limits in the module settings UI for the operator/account owner.
 - eBay economics:
   - Use eBay final value fee, fixed order fee, promoted listing allowance, payment/transaction assumptions, refund risk, CJ product cost, CJ freight, incident buffer, and desired net margin.
   - Store a pricing snapshot per draft/listing so Profit Guard can prove every active listing.
@@ -76,24 +81,28 @@ Backend parity targets:
 Frontend parity targets:
 
 - Mirror the usable CJ-Shopify USA structure:
-  - overview,
-  - discover/opportunities,
-  - products,
-  - listings,
-  - orders/order detail,
-  - profit guard,
-  - alerts,
-  - logs,
-  - settings,
-  - eBay sales/store optimizer.
+  - overview, done,
+  - discover/opportunities, done,
+  - products, done,
+  - listings, done,
+  - orders/order detail, done,
+  - post-sale, done,
+  - profit guard, done,
+  - analytics, done,
+  - alerts, done,
+  - sales agent, done,
+  - automation, done,
+  - settings, done,
+  - logs, done,
+  - eBay store optimizer, done.
 - Keep eBay-specific UI visible:
-  - monthly listing count limit,
-  - monthly amount limit,
-  - available quota,
-  - eBay fee assumptions,
-  - policy/account blockers,
-  - listing quality warnings,
-  - publish queue state.
+  - monthly listing count limit, done,
+  - monthly amount limit, done,
+  - available quota, done,
+  - eBay fee assumptions, done,
+  - policy/account blockers, done,
+  - listing quality warnings, partially done from listing detail payload,
+  - publish queue state, partially done through listing status and optimizer recommendations.
 
 ## Execution Phases
 
@@ -113,6 +122,7 @@ Frontend parity targets:
    - Compare `frontend/src/pages/cj-shopify-usa` and `frontend/src/pages/cj-ebay`.
    - Add missing eBay pages/components.
    - Add quota, optimizer, and policy-block panels.
+   - Completed first parity pass: CJ-eBay now exposes the same major module areas as CJ-Shopify with eBay-specific settings, quota analytics, post-sale, automation, sales-agent, and store optimizer views.
 
 4. Verification
    - Type-check backend.
