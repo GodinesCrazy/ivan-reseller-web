@@ -13,7 +13,7 @@ import { cjShopifyUsaOperationLockService } from './cj-shopify-usa-operation-loc
 import { buildDraftTitle, buildDraftDescription } from './cj-shopify-usa-title-builder.service';
 
 type SalesAgentPriority = 'critical' | 'high' | 'medium' | 'low';
-export type SalesAgentActionType =
+type SalesAgentActionType =
   | 'VERIFY_CHECKOUT'
   | 'RUN_PROFIT_GUARD'
   | 'PROMOTE_TOP_PRODUCTS'

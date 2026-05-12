@@ -1,17 +1,30 @@
 /**
- * Overview controller — GET /overview (module-gated).
- * GET /system-readiness stays in cj-shopify-usa.routes.ts before moduleGate.
+ * Overview controller — GET /overview, GET /system-readiness
+ * Extracted from cj-shopify-usa.routes.ts for maintainability.
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../../../config/database';
-import { CJ_SHOPIFY_USA_LISTING_STATUS, CJ_SHOPIFY_USA_ORDER_STATUS } from '../cj-shopify-usa.constants';
+import { cjShopifyUsaSystemReadinessService } from '../services/cj-shopify-usa-system-readiness.service';
+import { CJ_SHOPIFY_USA_LISTING_STATUS, CJ_SHOPIFY_USA_TRACE_STEP } from '../cj-shopify-usa.constants';
+import { normalizeCountMap } from './route-helpers';
 
 const router = Router();
+
+router.get('/system-readiness', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSystemReadinessService.evaluateForUser(userId);
+    res.json({ ready: result.ready, checks: result.checks });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     const [
       products,
@@ -23,13 +36,14 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       shippingQuotes,
       listings,
       listingsActive,
-      listingsActiveOrPendingShopifyProducts,
+      shopifyProductsInSoftware,
       orders,
       ordersOpen,
       ordersWithTracking,
       alertsOpen,
       profitSnapshots,
       tracesLast24h,
+      lastOrderReceived,
     ] = await Promise.all([
       prisma.cjShopifyUsaProduct.count({ where: { userId } }),
       prisma.cjShopifyUsaProductVariant.count({ where: { product: { userId } } }),
@@ -42,59 +56,38 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
       prisma.cjShopifyUsaListing.count({
         where: { userId, status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE },
       }),
-      prisma.cjShopifyUsaListing.findMany({
-        where: {
-          userId,
-          status: {
-            in: [
-              CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
-              CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
-            ],
-          },
-          shopifyProductId: { not: null },
-        },
-        distinct: ['shopifyProductId'],
-        select: { shopifyProductId: true },
+      prisma.cjShopifyUsaListing.count({
+        where: { userId, shopifyProductId: { not: null } },
       }),
       prisma.cjShopifyUsaOrder.count({ where: { userId } }),
       prisma.cjShopifyUsaOrder.count({
-        where: {
-          userId,
-          status: {
-            notIn: [CJ_SHOPIFY_USA_ORDER_STATUS.COMPLETED, CJ_SHOPIFY_USA_ORDER_STATUS.FAILED],
-          },
-        },
+        where: { userId, status: { notIn: ['COMPLETED', 'FAILED', 'CANCELLED'] } },
       }),
-      prisma.cjShopifyUsaTracking.count({
-        where: {
-          order: { userId },
-          trackingNumber: { not: null },
-        },
+      prisma.cjShopifyUsaOrder.count({
+        where: { userId, tracking: { trackingNumber: { not: null } } },
       }),
       prisma.cjShopifyUsaAlert.count({ where: { userId, status: 'OPEN' } }),
       prisma.cjShopifyUsaProfitSnapshot.count({ where: { userId } }),
       prisma.cjShopifyUsaExecutionTrace.count({
-        where: {
-          userId,
-          createdAt: { gte: since24h },
-        },
+        where: { userId, createdAt: { gte: since24h } },
+      }),
+      prisma.cjShopifyUsaOrder.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
       }),
     ]);
 
-    const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
-    const lastWebhookOrder = await prisma.cjShopifyUsaOrder.findFirst({
-      where: { userId, createdAt: { gte: since48h } },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
-    });
+    const hasRecentActivity = lastOrderReceived
+      ? lastOrderReceived.createdAt >= since48h
+      : false;
+
     const ordersNeedingAttention = await prisma.cjShopifyUsaOrder.count({
-      where: { userId, status: { in: ['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED'] } },
+      where: {
+        userId,
+        status: { in: ['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED'] },
+      },
     });
-    const webhookHealth = {
-      lastOrderReceived: lastWebhookOrder?.createdAt ?? null,
-      hasRecentActivity: !!lastWebhookOrder,
-      ordersNeedingAttention,
-    };
 
     res.json({
       ok: true,
@@ -108,7 +101,7 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
         shippingQuotes,
         listings,
         listingsActive,
-        shopifyProductsInSoftware: listingsActiveOrPendingShopifyProducts.length,
+        shopifyProductsInSoftware,
         orders,
         ordersOpen,
         ordersWithTracking,
@@ -116,7 +109,11 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
         profitSnapshots,
         tracesLast24h,
       },
-      webhookHealth,
+      webhookHealth: {
+        lastOrderReceived: lastOrderReceived?.createdAt?.toISOString() ?? null,
+        hasRecentActivity,
+        ordersNeedingAttention,
+      },
     });
   } catch (error) {
     next(error);

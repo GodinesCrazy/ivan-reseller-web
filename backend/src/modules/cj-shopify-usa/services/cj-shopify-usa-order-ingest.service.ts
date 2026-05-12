@@ -1,4 +1,4 @@
-import { Prisma, type CjShopifyUsaOrder } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { AppError, ErrorCode } from '../../../middleware/error.middleware';
 import { cjShopifyUsaAdminService, normalizeShopifyShopDomain } from './cj-shopify-usa-admin.service';
@@ -6,16 +6,8 @@ import { env } from '../../../config/env';
 import {
   CJ_SHOPIFY_USA_ALERT_TYPE,
   CJ_SHOPIFY_USA_ORDER_STATUS,
-  CJ_SHOPIFY_USA_REFUND_STATUS,
-  CJ_SHOPIFY_USA_TRACE_STEP,
 } from '../cj-shopify-usa.constants';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
-import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
-import type { ShopifyOrderWebhookBody, ShopifyRefundCreateWebhookBody } from '../schemas/cj-shopify-usa-webhook.schemas';
-import {
-  normalizeShopifyWebhookOrderIdFromParsed,
-  normalizeShopifyOrderGidFromRefundPayload,
-} from '../schemas/cj-shopify-usa-webhook.schemas';
 
 // Non-retryable statuses — processing from these is a no-op (idempotency guard)
 const NON_RETRYABLE_STATUSES = new Set([
@@ -87,6 +79,14 @@ async function createAlert(userId: number, type: string, payload: Prisma.InputJs
 
 function normalizeGid(value: string | null | undefined) {
   return String(value || '').trim();
+}
+
+function normalizeShopifyWebhookOrderId(body: any): string | null {
+  const adminGid = normalizeGid(body?.admin_graphql_api_id);
+  if (adminGid) return adminGid;
+
+  const numeric = String(body?.id || '').trim();
+  return numeric ? `gid://shopify/Order/${numeric}` : null;
 }
 
 function shopifyFinancialStatusFromSummary(summary: unknown): string {
@@ -183,11 +183,7 @@ async function mapManagedLineItem(userId: number, order: ShopifyOrderNode) {
   };
 }
 
-async function upsertOrderFromShopifyNode(
-  userId: number,
-  order: ShopifyOrderNode,
-  options: { includeUnmappedOrders: boolean },
-): Promise<CjShopifyUsaOrder | null> {
+async function upsertOrderFromShopifyNode(userId: number, order: ShopifyOrderNode) {
   const mapping = await mapManagedLineItem(userId, order);
   const lineItems = order.lineItems?.nodes ?? [];
 
@@ -281,9 +277,6 @@ async function upsertOrderFromShopifyNode(
   }
 
   if (mapping.kind === 'none') {
-    if (!options.includeUnmappedOrders) {
-      return null;
-    }
     const orderRow = await prisma.cjShopifyUsaOrder.upsert({
       where: {
         userId_shopifyOrderId: {
@@ -405,42 +398,32 @@ export const cjShopifyUsaOrderIngestService = {
     sinceHours?: number;
     first?: number;
   }) {
-    const settings = await cjShopifyUsaConfigService.getOrCreateSettings(input.userId);
-    const includeUnmappedOrders = Boolean(settings.syncIncludeUnmappedOrders);
     const sinceIso = input.shopifyOrderId
       ? undefined
       : new Date(Date.now() - Math.max(1, input.sinceHours || 24) * 60 * 60 * 1000).toISOString();
-    const envOrderQuery = String(process.env.CJ_SHOPIFY_USA_ORDERS_GRAPHQL_QUERY || '').trim();
     const orders = await cjShopifyUsaAdminService.listRecentOrders({
       userId: input.userId,
       orderId: input.shopifyOrderId || undefined,
       sinceIso,
       first: input.shopifyOrderId ? 1 : input.first || 10,
-      ordersQuery: envOrderQuery || undefined,
     });
 
     const synced = [];
-    let skippedUnmappedExternal = 0;
     for (const order of orders) {
-      const row = await upsertOrderFromShopifyNode(input.userId, order, {
-        includeUnmappedOrders,
-      });
-      if (row) synced.push(row);
-      else skippedUnmappedExternal += 1;
+      synced.push(await upsertOrderFromShopifyNode(input.userId, order));
     }
 
     return {
       count: synced.length,
-      skippedUnmappedExternal,
       orders: synced,
     };
   },
 
   async handleOrdersCreateWebhook(input: {
     userId: number;
-    body: ShopifyOrderWebhookBody;
+    body: any;
   }) {
-    const shopifyOrderId = normalizeShopifyWebhookOrderIdFromParsed(input.body);
+    const shopifyOrderId = normalizeShopifyWebhookOrderId(input.body);
     if (!shopifyOrderId) {
       throw new AppError(
         'Shopify webhook payload did not include an order id.',
@@ -457,9 +440,9 @@ export const cjShopifyUsaOrderIngestService = {
 
   async handleOrdersPaidWebhook(input: {
     userId: number;
-    body: ShopifyOrderWebhookBody;
+    body: any;
   }) {
-    const shopifyOrderId = normalizeShopifyWebhookOrderIdFromParsed(input.body);
+    const shopifyOrderId = normalizeShopifyWebhookOrderId(input.body);
     if (!shopifyOrderId) {
       throw new AppError(
         'Shopify paid webhook payload did not include an order id.',
@@ -508,9 +491,9 @@ export const cjShopifyUsaOrderIngestService = {
 
   async handleOrdersCancelledWebhook(input: {
     userId: number;
-    body: ShopifyOrderWebhookBody;
+    body: any;
   }) {
-    const shopifyOrderId = normalizeShopifyWebhookOrderIdFromParsed(input.body);
+    const shopifyOrderId = normalizeShopifyWebhookOrderId(input.body);
     if (!shopifyOrderId) return { count: 0 };
     const order = await prisma.cjShopifyUsaOrder.findUnique({
       where: { userId_shopifyOrderId: { userId: input.userId, shopifyOrderId } },
@@ -535,66 +518,6 @@ export const cjShopifyUsaOrderIngestService = {
       cjOrderId: order.cjOrderId,
     } as Prisma.InputJsonValue);
     return { count: 1, blocked: false };
-  },
-
-  async handleRefundsCreateWebhook(input: { userId: number; body: ShopifyRefundCreateWebhookBody }) {
-    const shopifyOrderId = normalizeShopifyOrderGidFromRefundPayload(input.body);
-    if (!shopifyOrderId) {
-      return { ok: true, count: 0, skipped: true as const, reason: 'missing_order_id' as const };
-    }
-
-    const local = await prisma.cjShopifyUsaOrder.findUnique({
-      where: { userId_shopifyOrderId: { userId: input.userId, shopifyOrderId } },
-      select: { id: true, status: true, cjOrderId: true },
-    });
-    if (!local) {
-      return { ok: true, count: 0, skipped: true as const, reason: 'no_local_order' as const };
-    }
-
-    const refundKey = String(input.body.id ?? '').trim() || `legacy-${Date.now()}`;
-    const existingRefund = await prisma.cjShopifyUsaOrderRefund.findFirst({
-      where: { orderId: local.id, shopifyReturnId: refundKey },
-      select: { id: true },
-    });
-    if (existingRefund) {
-      return { ok: true, count: 0, skipped: true as const, reason: 'duplicate_refund' as const };
-    }
-
-    await prisma.cjShopifyUsaOrderRefund.create({
-      data: {
-        orderId: local.id,
-        userId: input.userId,
-        status: CJ_SHOPIFY_USA_REFUND_STATUS.REFUND_PENDING,
-        refundType: 'SHOPIFY_WEBHOOK',
-        shopifyReturnId: refundKey || null,
-        reason: input.body.note ? String(input.body.note).slice(0, 2000) : null,
-        events: {
-          source: 'shopify_refunds_create',
-          refundId: input.body.id ?? null,
-          orderId: input.body.order_id ?? input.body.order?.id ?? null,
-        } as Prisma.InputJsonValue,
-      },
-    });
-
-    await appendOrderEvent(
-      local.id,
-      CJ_SHOPIFY_USA_TRACE_STEP.REFUND_CREATED,
-      'Shopify refund webhook received; local refund record created.',
-      {
-        shopifyRefundId: input.body.id ?? null,
-        shopifyOrderId,
-      } as Prisma.InputJsonValue,
-    );
-
-    if (local.cjOrderId && isAdvancedOrderStatus(local.status)) {
-      await createAlert(input.userId, CJ_SHOPIFY_USA_ALERT_TYPE.REFUND_PENDING, {
-        shopifyOrderId,
-        cjOrderId: local.cjOrderId,
-        reason: 'refund_after_supplier_started',
-      } as Prisma.InputJsonValue);
-    }
-
-    return { ok: true, count: 1, refundWebhook: true as const };
   },
 
   // ── Manual order processing (idempotent) ────────────────────────────────

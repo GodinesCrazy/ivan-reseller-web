@@ -239,10 +239,7 @@ export const cjShopifyUsaDiscoverService = {
 
       if (selectedVariant) {
         try {
-          const { quoteShippingToUsWarehouseAwareCached } = await import(
-            './cj-shopify-usa-freight-quote-cache.service'
-          );
-          const waResult = await quoteShippingToUsWarehouseAwareCached(userId, adapter, {
+          const waResult = await adapter.quoteShippingToUsWarehouseAware({
             variantId: selectedVariant.cjVid,
             productId: cjProductId,
             quantity,
@@ -404,10 +401,7 @@ export const cjShopifyUsaDiscoverService = {
     let fulfillmentOrigin = 'CN';
 
     try {
-      const { quoteShippingToUsWarehouseAwareCached } = await import(
-        './cj-shopify-usa-freight-quote-cache.service'
-      );
-      const waResult = await quoteShippingToUsWarehouseAwareCached(userId, adapter, {
+      const waResult = await adapter.quoteShippingToUsWarehouseAware({
         variantId: (sourceVariant as CjVariantDetail).cjVid,
         productId: cjProductId,
         quantity,
@@ -563,11 +557,8 @@ export const cjShopifyUsaDiscoverService = {
           let fulfillmentOrigin: 'US' | 'CN' | 'UNKNOWN' = 'UNKNOWN';
           let estimatedDays: number | null = null;
           try {
-            const { quoteShippingToUsWarehouseAwareCached } = await import(
-              './cj-shopify-usa-freight-quote-cache.service'
-            );
             const shipping = await withSoftTimeout(
-              quoteShippingToUsWarehouseAwareCached(userId, adapter, {
+              adapter.quoteShippingToUsWarehouseAware({
                 variantId: variant.cjVid,
                 productId: detail.cjProductId,
                 quantity: 1,

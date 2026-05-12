@@ -77,7 +77,6 @@ export class ScheduledTasksService {
   private processPaidOrdersWorker: Worker | null = null;
   private fulfillmentTrackingSyncWorker: Worker | null = null;
   private supplierPostsaleSyncWorker: Worker | null = null;
-  private cjShopifyUsaAutomationWorker: Worker | null = null;
   private marketplaceOrderSyncWorker: Worker | null = null;
   private mercadolibreOrderSyncWorker: Worker | null = null;
   private amazonOrderSyncWorker: Worker | null = null;
@@ -625,33 +624,6 @@ export class ScheduledTasksService {
           attemptsMade: made,
           maxAttempts: max,
           retriesExhausted: made >= max,
-          error: err?.message,
-        });
-      });
-    }
-
-    // CJ → Shopify USA automation cycles (BullMQ producer in cj-shopify-usa-automation.jobs.ts)
-    if (this.bullMQRedis) {
-      this.cjShopifyUsaAutomationWorker = new Worker(
-        'cj-shopify-usa-automation',
-        async (job) => {
-          const userId = Number((job.data as { userId?: number })?.userId);
-          if (!Number.isFinite(userId) || userId <= 0) {
-            logger.warn('Scheduled Tasks: cj-shopify-usa-automation job missing userId', { jobId: job.id });
-            return;
-          }
-          logger.info('Scheduled Tasks: Running CJ Shopify USA automation cycle', { jobId: job.id, userId });
-          const { automationService } = await import('../modules/cj-shopify-usa/services/cj-shopify-usa-automation.service');
-          await automationService.runAutomationCycle(userId);
-        },
-        {
-          connection: this.bullMQRedis as any,
-          concurrency: 1,
-        },
-      );
-      this.cjShopifyUsaAutomationWorker.on('failed', (job, err) => {
-        logger.error('Scheduled Tasks: cj-shopify-usa-automation job failed', {
-          jobId: job?.id,
           error: err?.message,
         });
       });
@@ -2558,9 +2530,6 @@ export class ScheduledTasksService {
     }
     if (this.supplierPostsaleSyncQueue) {
       await this.supplierPostsaleSyncQueue.close();
-    }
-    if (this.cjShopifyUsaAutomationWorker) {
-      await this.cjShopifyUsaAutomationWorker.close();
     }
   }
 

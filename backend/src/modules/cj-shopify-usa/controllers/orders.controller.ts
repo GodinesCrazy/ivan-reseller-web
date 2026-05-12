@@ -3,7 +3,6 @@
  * Extracted from cj-shopify-usa.routes.ts for maintainability.
  */
 import { Router, Request, Response, NextFunction } from 'express';
-import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { cjShopifyUsaOrderIngestService } from '../services/cj-shopify-usa-order-ingest.service';
 import { cjShopifyUsaTrackingService } from '../services/cj-shopify-usa-tracking.service';
@@ -24,23 +23,13 @@ const router = Router();
 router.get('/orders', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const page = Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1);
-    const pageSize = Math.max(10, Math.min(100, Number.parseInt(String(req.query.pageSize ?? '25'), 10) || 25));
-    const status = String(req.query.status ?? 'ALL').trim().toUpperCase();
-    const attentionOnly = String(req.query.attention ?? 'false') === 'true';
-    const q = String(req.query.q ?? '').trim();
-    const attentionStatuses = [
-      CJ_SHOPIFY_USA_ORDER_STATUS.FAILED,
-      CJ_SHOPIFY_USA_ORDER_STATUS.NEEDS_MANUAL,
-      CJ_SHOPIFY_USA_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
-    ];
+    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize ?? '20'), 10) || 20));
+    const status = String(req.query.status || '').trim() || undefined;
+    const q = String(req.query.q || '').trim() || undefined;
 
-    const where: Prisma.CjShopifyUsaOrderWhereInput = { userId };
-    if (attentionOnly) {
-      where.status = { in: attentionStatuses };
-    } else if (status !== 'ALL') {
-      where.status = status;
-    }
+    const where: any = { userId };
+    if (status) where.status = status;
     if (q) {
       where.OR = [
         { shopifyOrderId: { contains: q, mode: 'insensitive' } },
