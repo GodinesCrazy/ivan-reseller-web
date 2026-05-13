@@ -116,7 +116,7 @@ export default function CjEbayAnalyticsPage() {
         <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
           <h2 className="text-sm font-semibold text-slate-100">Quota readiness</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Metric label="Publicaciones usadas" value={guard?.sellingLimits.listingLimit ? `${guard.sellingLimits.usedListings}/${guard.sellingLimits.listingLimit}` : String(guard?.sellingLimits.usedListings ?? 0)} />
+            <Metric label="Stock publicado" value={guard?.sellingLimits.listingLimit ? `${guard.sellingLimits.usedListings}/${guard.sellingLimits.listingLimit}` : String(guard?.sellingLimits.usedListings ?? 0)} />
             <Metric label="Monto usado" value={guard?.sellingLimits.amountLimitUsd ? `${usd(guard.sellingLimits.usedAmountUsd)} / ${usd(guard.sellingLimits.amountLimitUsd)}` : usd(guard?.sellingLimits.usedAmountUsd)} />
             <Metric label="Utilidad estimada" value={usd(guard?.kpis.estimatedGrossProfitUsd)} />
             <Metric label="Margen prom." value={pct(guard?.kpis.estimatedAvgMarginPct)} />

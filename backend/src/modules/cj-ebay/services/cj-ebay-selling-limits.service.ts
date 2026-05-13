@@ -29,6 +29,11 @@ function currentUtcMonthWindow(now = new Date()): { start: Date; end: Date } {
   return { start, end };
 }
 
+function listingQuantity(value: unknown): number {
+  const n = Math.floor(Number(value ?? 1));
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
 export const cjEbaySellingLimitsService = {
   async getMonthlySnapshot(userId: number, now = new Date()): Promise<CjEbayMonthlySellingLimitsSnapshot> {
     const { start, end } = currentUtcMonthWindow(now);
@@ -46,10 +51,6 @@ export const cjEbaySellingLimitsService = {
       where: {
         userId,
         status: CJ_EBAY_LISTING_STATUS.ACTIVE,
-        publishedAt: {
-          gte: start,
-          lt: end,
-        },
       },
       select: {
         listedPriceUsd: true,
@@ -57,10 +58,10 @@ export const cjEbaySellingLimitsService = {
       },
     });
 
-    const usedListings = rows.length;
+    const usedListings = rows.reduce((sum, row) => sum + listingQuantity(row.quantity), 0);
     const usedAmountUsd = roundMoney(rows.reduce((sum, row) => {
       const price = Number(row.listedPriceUsd ?? 0);
-      const quantity = Math.max(1, Math.floor(Number(row.quantity ?? 1)));
+      const quantity = listingQuantity(row.quantity);
       return sum + (Number.isFinite(price) ? price * quantity : 0);
     }, 0));
 
@@ -86,9 +87,9 @@ export const cjEbaySellingLimitsService = {
     const projectedQuantity = Math.max(1, Math.floor(input.projectedQuantity || 1));
     const projectedAmountUsd = roundMoney(input.projectedPriceUsd * projectedQuantity);
 
-    if (snapshot.listingLimit != null && snapshot.usedListings + 1 > snapshot.listingLimit) {
+    if (snapshot.listingLimit != null && snapshot.usedListings + projectedQuantity > snapshot.listingLimit) {
       throw new AppError(
-        `CJ-eBay monthly listing limit reached: ${snapshot.usedListings}/${snapshot.listingLimit} listings already published in this period.`,
+        `CJ-eBay published stock limit would be exceeded: current ${snapshot.usedListings} + projected ${projectedQuantity} > limit ${snapshot.listingLimit} units.`,
         423,
       );
     }

@@ -1605,7 +1605,7 @@ export default function CjEbayProductsPage() {
                     />
                   </label>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                    Max publicaciones eBay por mes
+                    Max stock publicado eBay
                     <input
                       className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
                       value={pricingConfigForm.monthlyListingLimit}
@@ -1616,11 +1616,11 @@ export default function CjEbayProductsPage() {
                         }));
                         setPricingConfigMessage(null);
                       }}
-                      placeholder="ej. 250"
+                      placeholder="ej. 300"
                     />
                   </label>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
-                    Max monto eBay por mes (USD)
+                    Max valor publicado eBay (USD)
                     <input
                       className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm"
                       value={pricingConfigForm.monthlyAmountLimitUsd}
@@ -1631,7 +1631,7 @@ export default function CjEbayProductsPage() {
                         }));
                         setPricingConfigMessage(null);
                       }}
-                      placeholder="ej. 5000"
+                      placeholder="ej. 20000000"
                     />
                   </label>
                 </div>

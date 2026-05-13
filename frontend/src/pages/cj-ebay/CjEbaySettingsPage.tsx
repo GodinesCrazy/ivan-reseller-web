@@ -45,8 +45,8 @@ type PreviewImpact = {
   issues: Array<{ type: string; severity: string; title: string; detail: string }>;
 };
 
-const DEFAULT_MONTHLY_LISTING_LIMIT = '10';
-const DEFAULT_MONTHLY_AMOUNT_LIMIT_USD = '500';
+const DEFAULT_MONTHLY_LISTING_LIMIT = '300';
+const DEFAULT_MONTHLY_AMOUNT_LIMIT_USD = '20000000';
 
 const initialForm: FormState = {
   minMarginPct: '',
@@ -224,14 +224,6 @@ export default function CjEbaySettingsPage() {
     </label>
   );
 
-  const applyDefaultSellingLimits = () => {
-    setForm((prev) => ({
-      ...prev,
-      monthlyListingLimit: DEFAULT_MONTHLY_LISTING_LIMIT,
-      monthlyAmountLimitUsd: DEFAULT_MONTHLY_AMOUNT_LIMIT_USD,
-    }));
-  };
-
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -278,17 +270,10 @@ export default function CjEbaySettingsPage() {
           <div className="space-y-3">
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
               eBay no publica un limite universal: cada cuenta debe revisar Seller Hub → Overview → Monthly limits.
-              Mientras no copies tus limites reales, este modulo usa un default conservador de 10 publicaciones y USD 500 al mes.
+              Para esta cuenta se configuro como base 300 unidades de stock publicado y USD 20.000.000 de valor maximo.
             </div>
-            {input('monthlyListingLimit', 'Max publicaciones eBay por mes', { min: 1, step: '1' })}
-            {input('monthlyAmountLimitUsd', 'Max monto eBay por mes (USD)', { min: 0.01 })}
-            <button
-              type="button"
-              onClick={applyDefaultSellingLimits}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              Usar default seguro: 10 / USD 500
-            </button>
+            {input('monthlyListingLimit', 'Max stock publicado eBay', { min: 1, step: '1' })}
+            {input('monthlyAmountLimitUsd', 'Max valor publicado eBay (USD)', { min: 0.01 })}
             {input('handlingBufferDays', 'Handling buffer dias', { min: 0, step: '1' })}
             <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
               <span className="text-slate-700 dark:text-slate-200">Rechazar shipping desconocido</span>

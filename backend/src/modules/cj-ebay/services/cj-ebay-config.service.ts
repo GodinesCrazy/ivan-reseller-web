@@ -4,8 +4,8 @@ import type { CjEbayConfigResponse } from '../cj-ebay.types';
 import { Prisma } from '@prisma/client';
 import { CJ_EBAY_POST_CREATE_CHECKOUT_MODE } from '../cj-ebay.constants';
 
-export const CJ_EBAY_DEFAULT_MONTHLY_LISTING_LIMIT = 10;
-export const CJ_EBAY_DEFAULT_MONTHLY_AMOUNT_LIMIT_USD = 500;
+export const CJ_EBAY_DEFAULT_MONTHLY_LISTING_LIMIT = 300;
+export const CJ_EBAY_DEFAULT_MONTHLY_AMOUNT_LIMIT_USD = 20_000_000;
 
 function toSettingsDto(row: {
   minMarginPct: Prisma.Decimal | null;

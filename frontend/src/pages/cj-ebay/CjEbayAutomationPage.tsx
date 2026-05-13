@@ -167,7 +167,7 @@ export default function CjEbayAutomationPage() {
           </div>
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Publicaciones libres" value={data?.sellingLimits.listingLimit ? `${data.sellingLimits.remainingListings}/${data.sellingLimits.listingLimit}` : 'Sin límite'} />
+          <Metric label="Stock libre" value={data?.sellingLimits.listingLimit ? `${data.sellingLimits.remainingListings}/${data.sellingLimits.listingLimit}` : 'Sin límite'} />
           <Metric label="Monto libre" value={data?.sellingLimits.amountLimitUsd ? `${usd(data.sellingLimits.remainingAmountUsd)} / ${usd(data.sellingLimits.amountLimitUsd)}` : 'Sin límite'} />
           <Metric label="Próxima corrida" value={data?.nextRunAt ? new Date(data.nextRunAt).toLocaleString() : '-'} />
           <Metric label="Última corrida" value={data?.lastRun?.status ?? 'Sin corrida'} />

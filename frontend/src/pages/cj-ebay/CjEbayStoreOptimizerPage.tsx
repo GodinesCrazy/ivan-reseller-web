@@ -133,7 +133,7 @@ export default function CjEbayStoreOptimizerPage() {
             <p className="text-xs text-slate-500">Policy/account/reconcile</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-            <p className="text-xs font-medium text-slate-500">Cuota publicaciones</p>
+            <p className="text-xs font-medium text-slate-500">Stock publicado</p>
             <p className="mt-1 text-2xl font-semibold">
               {summary.listingLimit ? `${summary.usedListings}/${summary.listingLimit}` : summary.usedListings}
             </p>
