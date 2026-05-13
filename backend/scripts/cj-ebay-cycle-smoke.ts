@@ -9,6 +9,7 @@ import { cjEbaySystemReadinessService } from '../src/modules/cj-ebay/services/cj
 
 const userId = Number(process.env.REAL_CYCLE_USER_ID || process.env.CJ_EBAY_SMOKE_USER_ID || 1);
 const publish = process.env.CJ_EBAY_SMOKE_PUBLISH === 'true';
+const autopilotDryRun = process.env.CJ_EBAY_SMOKE_AUTOPILOT_DRY_RUN !== 'false';
 
 async function waitForRun(runId: string, timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs;
@@ -57,6 +58,13 @@ async function main() {
     pricingGuardrailsComplete: autopilot.config.pricingGuardrailsComplete,
     sellingLimits: autopilot.sellingLimits,
   });
+
+  if (autopilotDryRun && !publish) {
+    const dryRun = await cjEbayAutopilotService.runNow(userId, 'DRY_RUN', { dryRun: true });
+    console.log('[cj-ebay-smoke] autopilot dry-run result', dryRun);
+    await prisma.$disconnect();
+    return;
+  }
 
   const discovery = await cjEbayOpportunityShortlistService.startDiscoveryRun(userId, {
     mode: 'STARTER',

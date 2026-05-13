@@ -84,24 +84,34 @@ export default function CjEbayLogsPage() {
   const policySteps = traces.filter((t) => t.step.includes('policy') || t.step.includes('balance_blocked')).length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <ScrollText className="h-5 w-5 text-slate-400" />
-          <div>
-            <h1 className="text-xl font-semibold text-slate-100">Logs CJ → eBay USA</h1>
-            <p className="text-xs text-slate-400">Trazas reales de publicación, reconciliación, órdenes, CJ checkout y tracking.</p>
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-slate-500/10 p-3 text-slate-200">
+              <ScrollText className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300">Evidencia operativa</p>
+              <h1 className="mt-1 text-xl font-semibold text-white">Logs CJ {'->'} eBay USA</h1>
+              <p className="text-sm text-slate-400">Trazas reales de publicacion, reconciliacion, ordenes, CJ checkout y tracking.</p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Recargar
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Recargar
-        </button>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <Metric label="Trazas visibles" value={traces.length} />
+          <Metric label="Errores" value={errorSteps} tone={errorSteps > 0 ? 'bad' : 'ok'} />
+          <Metric label="Política / saldo" value={policySteps} tone={policySteps > 0 ? 'warn' : 'slate'} />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -166,6 +176,23 @@ export default function CjEbayLogsPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Metric({ label, value, tone = 'slate' }: { label: string; value: number; tone?: 'slate' | 'ok' | 'warn' | 'bad' }) {
+  const cls =
+    tone === 'ok'
+      ? 'border-emerald-800/60 bg-emerald-950/20 text-emerald-100'
+      : tone === 'warn'
+        ? 'border-amber-800/60 bg-amber-950/20 text-amber-100'
+        : tone === 'bad'
+          ? 'border-red-800/60 bg-red-950/20 text-red-100'
+          : 'border-slate-800 bg-slate-900/60 text-slate-100';
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${cls}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
+      <p className="mt-1 text-xl font-bold tabular-nums">{value}</p>
     </div>
   );
 }

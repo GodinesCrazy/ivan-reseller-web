@@ -75,7 +75,8 @@ export default function CjEbayAnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+        <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-cyan-950 px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-200"><BarChart3 className="h-6 w-6" /></div>
@@ -88,6 +89,13 @@ export default function CjEbayAnalyticsPage() {
             <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"><RefreshCw className="h-4 w-4" />Refrescar</button>
             <button type="button" onClick={() => void runProfitGuard()} disabled={running} className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-60">{running ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}Profit Guard</button>
           </div>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Revenue estimado" value={usd(guard?.kpis.grossRevenueUsd)} />
+          <Metric label="Profit estimado" value={usd(guard?.kpis.estimatedGrossProfitUsd)} />
+          <Metric label="Margen prom." value={pct(guard?.kpis.estimatedAvgMarginPct)} />
+          <Metric label="Issues activos" value={String(guard?.issues.length ?? 0)} />
+        </div>
         </div>
       </div>
 

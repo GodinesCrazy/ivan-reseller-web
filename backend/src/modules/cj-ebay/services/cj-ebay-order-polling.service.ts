@@ -122,6 +122,7 @@ export const cjEbayOrderPollingService = {
     limit: number;
     correlationId?: string;
     route?: string;
+    dryRun?: boolean;
   }): Promise<{ checked: number; imported: number; mapped: number; needsManual: number; orders: Array<{ orderId: string; created: boolean; mapped: boolean; status: string }> }> {
     const from = new Date(Date.now() - Math.max(1, input.lookbackHours) * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '.000Z');
     await cjEbayTraceService.record({
@@ -130,7 +131,7 @@ export const cjEbayOrderPollingService = {
       route: input.route,
       step: 'automation.order_poll.start',
       message: 'automation.order_poll.start',
-      meta: { from, limit: input.limit },
+      meta: { from, limit: input.limit, dryRun: input.dryRun === true },
     });
     const result = await cjEbayEbayFacadeService.listRecentFulfillmentOrders(input.userId, {
       limit: Math.max(1, Math.min(100, input.limit)),
@@ -140,6 +141,16 @@ export const cjEbayOrderPollingService = {
     const rows = [];
     for (const ebay of result.orders) {
       if (!String(ebay.orderId || '').trim()) continue;
+      if (input.dryRun) {
+        const primary = primaryLine(ebay);
+        rows.push({
+          orderId: ebay.orderId,
+          created: false,
+          mapped: Boolean(primary?.sku),
+          status: primary?.sku ? CJ_EBAY_ORDER_STATUS.VALIDATED : CJ_EBAY_ORDER_STATUS.NEEDS_MANUAL,
+        });
+        continue;
+      }
       rows.push(await upsertOrderFromEbay(input.userId, ebay));
     }
     const summary = {

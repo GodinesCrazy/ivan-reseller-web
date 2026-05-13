@@ -1,71 +1,43 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { AlertCircle, ArrowRight, Brain, CheckCircle2, ChevronDown, ChevronUp, Loader2, Package, Search, ShieldCheck, Tags } from 'lucide-react';
 import { api } from '@/services/api';
-import CjEbayOpportunityCandidateDrawer from './CjEbayOpportunityCandidateDrawer';
 
-// ====================================
-// TYPES
-// ====================================
-
-type RunSummary = {
-  runId: string;
-  status: string;
-  mode: string;
-  seedCount: number;
-  candidateCount: number;
-  shortlistedCount: number;
-  approvedCount: number;
-  rejectedCount: number;
-  deferredCount: number;
-  startedAt?: string;
-  completedAt?: string;
-  errorMessage?: string;
-  createdAt: string;
+type CjProductSummary = {
+  cjProductId: string;
+  title: string;
+  mainImageUrl?: string;
+  listPriceUsd?: number;
+  inventoryTotal?: number;
+  operabilityStatus?: 'operable' | 'stock_unknown' | 'unavailable';
+  fulfillmentOrigin?: 'US' | 'CN' | 'UNKNOWN';
 };
 
-type PricingBreakdown = {
-  supplierCostUsd: number;
-  shippingUsd: number;
-  ebayFeeUsd: number;
-  paymentFeeUsd: number;
-  incidentBufferUsd: number;
-  totalCostUsd: number;
-  suggestedPriceUsd: number;
-  floorPriceUsd: number;
-  netProfitUsd: number;
-  netMarginPct: number | null;
-  marketObservedPriceUsd: number | null;
-  competitivenessDeltaPct: number | null;
+type SearchResponse = {
+  ok: boolean;
+  items: CjProductSummary[];
+  warehouseAwareEnabled?: boolean;
+  stockCoverage?: { withStock: number; unknownStock: number; zeroStock: number };
+  operabilitySummary?: { operable: number; stockUnknown: number; unavailable: number };
+  warehouseSummary?: {
+    usWarehouseConfirmed?: number;
+    cnWarehouse?: number;
+    originUnknown?: number;
+    probeLimit?: number;
+  };
 };
 
-type ScoreBreakdown = {
-  demandScore: number;
-  marginScore: number;
-  competitivenessScore: number;
-  shippingConfidenceScore: number;
-  simplicityScore: number;
-  accountRiskScore: number;
-  supplierReliabilityScore: number;
-  totalScore: number;
-  reasons: string[];
-  starterFlags: string[];
-  starterPenaltyApplied: boolean;
-};
+type SearchState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'results'; items: CjProductSummary[]; keyword: string; meta: SearchResponse }
+  | { kind: 'no_results'; keyword: string }
+  | { kind: 'error'; msg: string };
 
 export type DataSourceType = 'REAL' | 'ESTIMATED' | 'HYBRID' | 'MOCK';
 export type RecommendationConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
 export type StarterSuitability = 'GOOD_FOR_STARTER' | 'CAUTION_FOR_STARTER' | 'NOT_RECOMMENDED_FOR_STARTER';
-
-export type MarketPriceDetail = {
-  observedMinPrice: number | null;
-  observedMedianPrice: number | null;
-  observedMaxPrice: number | null;
-  observedTypicalPrice: number | null;
-  observedPriceConfidence: number;
-  marketSource: DataSourceType;
-  evidenceSummary: string;
-  listingCount: number;
-};
 
 export type CandidateItem = {
   id: string;
@@ -83,644 +55,343 @@ export type CandidateItem = {
   shippingDaysMax?: number;
   stockCount?: number;
   marketObservedPriceUsd?: number;
-  marketPriceIsEstimated?: boolean;
-  pricing: PricingBreakdown;
-  score: ScoreBreakdown;
+  pricing: {
+    supplierCostUsd: number;
+    shippingUsd: number;
+    ebayFeeUsd: number;
+    paymentFeeUsd: number;
+    incidentBufferUsd: number;
+    totalCostUsd: number;
+    suggestedPriceUsd: number;
+    floorPriceUsd: number;
+    netProfitUsd: number;
+    netMarginPct: number | null;
+    marketObservedPriceUsd: number | null;
+    competitivenessDeltaPct: number | null;
+  };
+  score: {
+    demandScore: number;
+    marginScore: number;
+    competitivenessScore: number;
+    shippingConfidenceScore: number;
+    simplicityScore: number;
+    accountRiskScore: number;
+    supplierReliabilityScore: number;
+    totalScore: number;
+    reasons: string[];
+    starterFlags: string[];
+    starterPenaltyApplied: boolean;
+  };
   recommendationReason: string;
   status: string;
   reviewNotes?: string;
-  reviewedAt?: string;
-  handedOffAt?: string;
-  createdAt: string;
-  // 3G.1 data quality
   trendSourceType?: DataSourceType;
   marketPriceSourceType?: DataSourceType;
   dataConfidenceScore?: number;
   recommendationConfidence?: RecommendationConfidence;
   starterSuitability?: StarterSuitability;
   evidenceSummary?: string;
-  marketPriceDetail?: MarketPriceDetail;
+  marketPriceDetail?: {
+    observedMinPrice: number | null;
+    observedMedianPrice: number | null;
+    observedMaxPrice: number | null;
+    observedTypicalPrice: number | null;
+    observedPriceConfidence: number;
+    marketSource: DataSourceType;
+    evidenceSummary: string;
+    listingCount: number;
+  };
 };
 
-// ====================================
-// HELPERS
-// ====================================
+const CATEGORY_PRESETS = [
+  { id: 'pets', label: 'Pets (Default)', keyword: 'pet supplies', hint: 'Pet supplies, accesorios y esenciales para eBay USA' },
+  { id: 'pet-dogs', label: 'Dogs', keyword: 'dog accessories', hint: 'Collares, correas, grooming y accesorios caninos' },
+  { id: 'pet-cats', label: 'Cats', keyword: 'cat accessories', hint: 'Juguetes, fuentes, cuidado y accesorios felinos' },
+  { id: 'pet-grooming', label: 'Pet Grooming', keyword: 'pet grooming brush', hint: 'Cepillos, cortaunas, shampoo y cuidado' },
+  { id: 'pet-toys', label: 'Pet Toys', keyword: 'interactive pet toy', hint: 'Juguetes interactivos y enriquecimiento' },
+  { id: 'pet-feeding', label: 'Pet Feeding', keyword: 'pet food bowl', hint: 'Bowls, feeders, fuentes y almacenamiento' },
+  { id: 'pet-travel', label: 'Pet Travel', keyword: 'pet carrier', hint: 'Carriers, arneses de auto y viaje' },
+  { id: 'pet-cleaning', label: 'Cleaning', keyword: 'pet hair remover', hint: 'Removedores de pelo y limpieza del hogar' },
+] as const;
 
-function apiError(e: unknown, fallback: string): string {
+function apiError(e: unknown, fallback = 'Error inesperado.'): string {
   if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
-    const d = e.response.data as { message?: string; error?: string };
-    return d.message || d.error || fallback;
+    const data = e.response.data as { message?: string; error?: string; cjMessage?: string };
+    return data.message || data.cjMessage || data.error || fallback;
   }
-  if (e instanceof Error) return e.message;
-  return fallback;
+  return e instanceof Error ? e.message : fallback;
 }
 
-function scoreColor(score: number): string {
-  if (score >= 70) return 'text-emerald-600 dark:text-emerald-400';
-  if (score >= 50) return 'text-amber-600 dark:text-amber-400';
-  return 'text-red-600 dark:text-red-400';
+function usd(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '-';
+  return value.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 }
 
-// ---- data quality badge helpers ----
-function sourceTypeBadge(src: DataSourceType | undefined, label: string): JSX.Element {
-  const map: Record<DataSourceType, string> = {
-    REAL:      'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-    HYBRID:    'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-    ESTIMATED: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-    MOCK:      'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400',
-  };
-  const s = src ?? 'MOCK';
-  const labelMap: Record<DataSourceType, string> = {
-    REAL: 'Real', HYBRID: 'Hybrid', ESTIMATED: 'Estimado', MOCK: 'Mock',
-  };
-  return (
-    <span key={label} className={`text-xs px-1.5 py-0.5 rounded font-medium ${map[s]}`}>
-      {label}: {labelMap[s]}
-    </span>
-  );
+function productStatus(item: CjProductSummary): 'ready' | 'check' | 'blocked' {
+  if (item.fulfillmentOrigin === 'US' && (item.inventoryTotal ?? 0) > 0) return 'ready';
+  if (item.operabilityStatus === 'unavailable' || item.inventoryTotal === 0 || item.fulfillmentOrigin === 'CN') return 'blocked';
+  return 'check';
 }
 
-function confidenceBadge(conf: RecommendationConfidence | undefined): JSX.Element {
-  const map: Record<RecommendationConfidence, string> = {
-    HIGH:   'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-    MEDIUM: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-    LOW:    'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  };
-  const c = conf ?? 'LOW';
-  return (
-    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${map[c]}`}>
-      Conf: {c}
-    </span>
-  );
-}
-
-function starterBadge(s: StarterSuitability | undefined): JSX.Element | null {
-  if (!s || s === 'CAUTION_FOR_STARTER') return null;
-  if (s === 'GOOD_FOR_STARTER') {
-    return (
-      <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-        ✓ Apto cuenta nueva
-      </span>
-    );
+function OriginBadge({ item }: { item: CjProductSummary }) {
+  const status = productStatus(item);
+  if (status === 'ready') {
+    return <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-300">USA stock confirmado</span>;
   }
+  if (status === 'blocked') {
+    return <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-bold text-rose-300">No publicable automatico</span>;
+  }
+  return <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-200">Requiere cotizacion USA</span>;
+}
+
+function ProductCard({ item }: { item: CjProductSummary }) {
+  const navigate = useNavigate();
+  const status = productStatus(item);
   return (
-    <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800">
-      ✗ No recomendado cuenta nueva
-    </span>
-  );
-}
-
-function scoreBg(score: number): string {
-  if (score >= 70) return 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800';
-  if (score >= 50) return 'bg-amber-100 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800';
-  return 'bg-red-100 dark:bg-red-900/30 border-red-200 dark:border-red-800';
-}
-
-function statusBadge(status: string) {
-  const map: Record<string, string> = {
-    SHORTLISTED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-    APPROVED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-    REJECTED: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-    DEFERRED: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
-  };
-  return map[status] ?? 'bg-slate-100 text-slate-600';
-}
-
-function RunStatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    PENDING: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
-    RUNNING: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 animate-pulse',
-    COMPLETED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-    FAILED: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${map[status] ?? ''}`}>
-      {status}
-    </span>
-  );
-}
-
-function MetricCard({ label, value, sub, tone = 'slate' }: { label: string; value: string | number; sub: string; tone?: 'slate' | 'emerald' | 'cyan' | 'amber' }) {
-  const toneClass =
-    tone === 'emerald'
-      ? 'border-emerald-800/60 bg-emerald-950/25 text-emerald-200'
-      : tone === 'cyan'
-        ? 'border-cyan-800/60 bg-cyan-950/25 text-cyan-200'
-        : tone === 'amber'
-          ? 'border-amber-800/60 bg-amber-950/25 text-amber-200'
-          : 'border-slate-700 bg-slate-900/65 text-slate-100';
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
-      <p className="mt-1 text-xs opacity-75">{sub}</p>
-    </div>
-  );
-}
-
-// ====================================
-// CANDIDATE CARD
-// ====================================
-
-function CandidateCard({
-  c,
-  onDecision,
-  onDetail,
-}: {
-  c: CandidateItem;
-  onDecision: (id: string, action: 'approve' | 'reject' | 'defer', notes?: string) => Promise<void>;
-  onDetail: (c: CandidateItem) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-
-  const act = async (action: 'approve' | 'reject' | 'defer') => {
-    setBusy(true);
-    try {
-      await onDecision(c.id, action);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const img = c.images[0];
-  const score = c.score.totalScore;
-
-  return (
-    <div
-      className={`border rounded-xl p-4 flex flex-col gap-3 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-shadow ${scoreBg(score)}`}
-    >
-      <div className="flex gap-3">
-        {img ? (
-          <img
-            src={img}
-            alt={c.cjProductTitle}
-            className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border border-slate-200 dark:border-slate-700"
-          />
+    <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
+      <div className="flex gap-3 p-3">
+        {item.mainImageUrl ? (
+          <img src={item.mainImageUrl} alt={item.title} className="h-20 w-20 flex-shrink-0 rounded-lg border border-slate-800 object-cover" />
         ) : (
-          <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-400 text-xs">
-            Sin imagen
-          </div>
+          <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 text-xs text-slate-500">Sin img</div>
         )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug">
-              {c.cjProductTitle}
-            </p>
-            <span className={`text-lg font-bold flex-shrink-0 ${scoreColor(score)}`}>
-              {score.toFixed(0)}
-            </span>
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-sm font-semibold leading-snug text-slate-100">{item.title}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <OriginBadge item={item} />
+            <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">Stock {item.inventoryTotal ?? 'por confirmar'}</span>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Seed: <span className="font-medium">{c.seedKeyword}</span>
-          </p>
-          <span className={`mt-1 inline-block px-2 py-0.5 rounded text-xs font-medium ${statusBadge(c.status)}`}>
-            {c.status}
-          </span>
+          <div className="mt-2 text-xs text-slate-400">
+            <span>CJ: {usd(item.listPriceUsd)}</span>
+            <span className="mx-2 text-slate-700">|</span>
+            <span>Origen: {item.fulfillmentOrigin ?? 'UNKNOWN'}</span>
+          </div>
         </div>
       </div>
-
-      {/* Pricing strip */}
-      <div className="grid grid-cols-3 gap-2 text-center bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2">
-        <div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Costo CJ</p>
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-            ${c.supplierCostUsd.toFixed(2)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Margen</p>
-          <p className={`text-sm font-semibold ${scoreColor(c.score.marginScore)}`}>
-            {c.pricing.netMarginPct != null ? `${c.pricing.netMarginPct.toFixed(1)}%` : '—'}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Precio sug.</p>
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-            ${c.pricing.suggestedPriceUsd.toFixed(2)}
-          </p>
-        </div>
-      </div>
-
-      {/* Competitiveness */}
-      {c.pricing.competitivenessDeltaPct != null && (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Mercado{c.marketPriceSourceType === 'REAL' ? '' : ' est.'}:{' '}
-          <span className="font-medium">
-            {c.pricing.competitivenessDeltaPct < 0
-              ? `${Math.abs(c.pricing.competitivenessDeltaPct).toFixed(1)}% más barato`
-              : `${c.pricing.competitivenessDeltaPct.toFixed(1)}% sobre mercado`}
-          </span>
-          {c.pricing.marketObservedPriceUsd != null && (
-            <span className="ml-1">(ref: ${c.pricing.marketObservedPriceUsd.toFixed(2)})</span>
-          )}
-        </p>
-      )}
-
-      {/* 3G.1 — Data quality badges */}
-      <div className="flex flex-wrap gap-1">
-        {sourceTypeBadge(c.trendSourceType, 'Trend')}
-        {sourceTypeBadge(c.marketPriceSourceType, 'Precio')}
-        {confidenceBadge(c.recommendationConfidence)}
-      </div>
-
-      {/* Starter suitability badge */}
-      {starterBadge(c.starterSuitability)}
-
-      {/* Starter flags */}
-      {c.score.starterFlags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {c.score.starterFlags.map((f) => (
-            <span
-              key={f}
-              className="text-xs px-1.5 py-0.5 bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 rounded"
-            >
-              {f}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Reason summary */}
-      <p className="text-xs text-slate-600 dark:text-slate-400 italic line-clamp-2">
-        {c.recommendationReason}
-      </p>
-
-      {/* Actions */}
-      <div className="flex gap-2 pt-1">
+      <div className="flex items-center justify-between border-t border-slate-800 px-3 py-2">
+        <span className={`text-[11px] font-semibold ${status === 'ready' ? 'text-emerald-300' : status === 'blocked' ? 'text-rose-300' : 'text-amber-200'}`}>
+          {status === 'ready' ? 'Listo para evaluar en eBay' : status === 'blocked' ? 'Bloqueado por guardrail' : 'Primero validar variante/flete'}
+        </span>
         <button
-          onClick={() => onDetail(c)}
-          className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          type="button"
+          onClick={() => navigate(`/cj-ebay/products?productId=${encodeURIComponent(item.cjProductId)}&keyword=${encodeURIComponent(item.title || 'pet supplies')}`)}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
         >
-          Ver detalle
+          Evaluar <ArrowRight className="h-3.5 w-3.5" />
         </button>
-        {c.status === 'SHORTLISTED' && (
-          <>
-            <button
-              disabled={busy}
-              onClick={() => act('approve')}
-              className="flex-1 text-xs px-2 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors font-medium"
-            >
-              Aprobar
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => act('reject')}
-              className="flex-1 text-xs px-2 py-1.5 rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 hover:bg-red-200 disabled:opacity-50 transition-colors"
-            >
-              Rechazar
-            </button>
-          </>
-        )}
       </div>
     </div>
   );
 }
-
-// ====================================
-// MAIN PAGE
-// ====================================
 
 export default function CjEbayOpportunityPage() {
-  const [run, setRun] = useState<RunSummary | null>(null);
-  const [candidates, setCandidates] = useState<CandidateItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [discovering, setDiscovering] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'STARTER' | 'STANDARD'>('STARTER');
-  const [drawerItem, setDrawerItem] = useState<CandidateItem | null>(null);
-  const [filter, setFilter] = useState<'ALL' | 'SHORTLISTED' | 'APPROVED' | 'REJECTED' | 'DEFERRED'>('ALL');
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollStartRef = useRef<number>(0);
-  const POLL_TIMEOUT_MS = 5 * 60 * 1000; // stop polling after 5 minutes
+  const [keyword, setKeyword] = useState('pet supplies');
+  const [searchState, setSearchState] = useState<SearchState>({ kind: 'idle' });
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
 
-  // On mount: load latest run + recommendations.
-  const loadRecommendations = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  async function doSearch(nextKeyword: string) {
+    const trimmed = nextKeyword.trim();
+    if (!trimmed) return;
+    setSearchState({ kind: 'loading' });
     try {
-      const res = await api.get<{ ok: boolean; run: RunSummary | null; candidates: CandidateItem[] }>(
-        '/api/cj-ebay/opportunities/recommendations'
-      );
-      if (res.data?.ok) {
-        setRun(res.data.run ?? null);
-        setCandidates(res.data.candidates ?? []);
-      }
+      const res = await api.post<SearchResponse>('/api/cj-ebay/cj/search', {
+        keyword: trimmed,
+        page: 1,
+        pageSize: 20,
+      });
+      const items = res.data?.items ?? [];
+      if (!items.length) setSearchState({ kind: 'no_results', keyword: trimmed });
+      else setSearchState({ kind: 'results', items, keyword: trimmed, meta: res.data });
     } catch (e) {
-      setError(apiError(e, 'No se pudieron cargar recomendaciones.'));
+      setSearchState({ kind: 'error', msg: apiError(e, 'No se pudo buscar en CJ.') });
+    }
+  }
+
+  async function runAiSuggestion() {
+    setAiLoading(true);
+    try {
+      await api.post('/api/cj-ebay/opportunities/discover', { mode: 'STARTER' });
+      await doSearch(keyword || 'pet supplies');
+    } catch (e) {
+      setSearchState({ kind: 'error', msg: apiError(e, 'No se pudo iniciar sugerencia IA eBay.') });
     } finally {
-      setLoading(false);
+      setAiLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    loadRecommendations();
-  }, [loadRecommendations]);
-
-  // Poll run until COMPLETED or FAILED (max 5 minutes).
-  const startPolling = useCallback((runId: string) => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollStartRef.current = Date.now();
-    pollRef.current = setInterval(async () => {
-      if (Date.now() - pollStartRef.current > POLL_TIMEOUT_MS) {
-        clearInterval(pollRef.current!);
-        pollRef.current = null;
-        setDiscovering(false);
-        setError('El descubrimiento tardó demasiado. Puede haber un problema con la conexión a CJ. Intenta de nuevo.');
-        return;
-      }
-      try {
-        const res = await api.get<{ ok: boolean; run: RunSummary }>(
-          `/api/cj-ebay/opportunities/runs/${runId}`
-        );
-        const r = res.data?.run;
-        if (!r) return;
-        setRun(r);
-        if (r.status === 'COMPLETED' || r.status === 'FAILED') {
-          clearInterval(pollRef.current!);
-          pollRef.current = null;
-          setDiscovering(false);
-          const cRes = await api.get<{ ok: boolean; candidates: CandidateItem[] }>(
-            `/api/cj-ebay/opportunities/runs/${runId}/candidates`
-          );
-          if (cRes.data?.ok) setCandidates(cRes.data.candidates ?? []);
-        }
-      } catch {
-        // polling errors are non-critical
-      }
-    }, 2500);
-  }, [POLL_TIMEOUT_MS]);
-
-  useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
-  const handleDiscover = async () => {
-    setDiscovering(true);
-    setError(null);
-    setCandidates([]);
-    try {
-      const res = await api.post<{ ok: boolean; runId: string; status: string }>(
-        '/api/cj-ebay/opportunities/discover',
-        { mode }
-      );
-      if (res.data?.ok) {
-        const newRun: RunSummary = {
-          runId: res.data.runId,
-          status: res.data.status,
-          mode,
-          seedCount: 0,
-          candidateCount: 0,
-          shortlistedCount: 0,
-          approvedCount: 0,
-          rejectedCount: 0,
-          deferredCount: 0,
-          createdAt: new Date().toISOString(),
-        };
-        setRun(newRun);
-        startPolling(res.data.runId);
-      }
-    } catch (e) {
-      setError(apiError(e, 'Error al iniciar descubrimiento.'));
-      setDiscovering(false);
-    }
-  };
-
-  const handleDecision = async (id: string, action: 'approve' | 'reject' | 'defer', notes?: string) => {
-    try {
-      const res = await api.post<{ ok: boolean; candidate: CandidateItem }>(
-        `/api/cj-ebay/opportunities/candidates/${id}/${action}`,
-        { notes }
-      );
-      if (res.data?.ok) {
-        setCandidates((prev) => prev.map((c) => (c.id === id ? res.data.candidate : c)));
-        setRun((prev) =>
-          prev
-            ? {
-                ...prev,
-                approvedCount: action === 'approve' ? prev.approvedCount + 1 : prev.approvedCount,
-                rejectedCount: action === 'reject' ? prev.rejectedCount + 1 : prev.rejectedCount,
-                deferredCount: action === 'defer' ? prev.deferredCount + 1 : prev.deferredCount,
-              }
-            : prev
-        );
-        if (drawerItem?.id === id) {
-          setDrawerItem(res.data.candidate);
-        }
-      }
-    } catch (e) {
-      setError(apiError(e, `Error al ${action === 'approve' ? 'aprobar' : action === 'reject' ? 'rechazar' : 'posponer'}.`));
-    }
-  };
-
-  const filteredCandidates = filter === 'ALL'
-    ? candidates
-    : candidates.filter((c) => c.status === filter);
-
-  const isRunning = run?.status === 'RUNNING' || run?.status === 'PENDING';
-  const avgScore = candidates.length
-    ? Math.round(candidates.reduce((sum, c) => sum + (c.score?.totalScore ?? 0), 0) / candidates.length)
-    : 0;
-  const avgMargin = candidates.length
-    ? candidates.reduce((sum, c) => sum + (c.pricing?.netMarginPct ?? 0), 0) / candidates.length
-    : 0;
-  const policyRiskCount = candidates.filter((c) => (c.score?.accountRiskScore ?? 100) < 55 || c.starterSuitability === 'NOT_RECOMMENDED_FOR_STARTER').length;
+  }
 
   return (
-    <div className="space-y-5">
-      {/* ── Header ── */}
-      <div className="rounded-2xl border border-indigo-800/50 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/70 p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300">CJ → eBay USA</p>
-            <h2 className="mt-1 text-xl font-semibold text-white">Descubrimiento de oportunidades</h2>
-            <p className="mt-1 max-w-2xl text-sm text-slate-300">
-              Motor de shortlist estilo Shopify, adaptado a eBay: score, fees, margen, cuota mensual y riesgo de políticas antes de crear drafts.
-            </p>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-slate-100">Descubrir Productos</h2>
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-300">Pet Store</span>
+            <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-xs font-semibold text-sky-300">eBay USA</span>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {/* Mode selector */}
-            <div className="flex overflow-hidden rounded-lg border border-slate-700 bg-slate-950/70 text-sm">
-              {(['STARTER', 'STANDARD'] as const).map((m) => (
+          <p className="mt-0.5 text-sm text-slate-400">
+            Busca en el catalogo CJ para eBay USA. <span className="font-medium text-amber-300">PET</span> queda preseleccionado por defecto y el ciclo exige warehouse USA antes de publicar.
+          </p>
+        </div>
+      </div>
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void doSearch(keyword);
+        }}
+        className="flex flex-wrap items-stretch gap-2"
+      >
+        <div className="relative min-w-[260px] flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            placeholder="Buscar en catalogo CJ (ej. pet bed, dog collar, cat toy...)"
+            className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2.5 pl-9 pr-4 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={searchState.kind === 'loading' || !keyword.trim()}
+          className="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+        >
+          {searchState.kind === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+          Buscar
+        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setCategoryMenuOpen((value) => !value)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+          >
+            <Tags className="h-4 w-4" />
+            Categorias CJ
+            {categoryMenuOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {categoryMenuOpen && (
+            <div className="absolute right-0 top-full z-20 mt-2 w-80 rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-xl">
+              <div className="px-2 py-1.5">
+                <p className="text-xs font-semibold text-slate-100">Buscar por categoria PET</p>
+                <p className="mt-0.5 text-[11px] text-slate-500">Puedes buscar otro nicho, pero PET es el modo recomendado para este ciclo.</p>
+              </div>
+              {CATEGORY_PRESETS.map((category) => (
                 <button
-                  key={m}
-                  onClick={() => setMode(m)}
-                  disabled={discovering}
-                  className={`px-3 py-1.5 font-medium transition-colors ${
-                    mode === m
-                      ? 'bg-primary-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800'
-                  }`}
+                  key={category.id}
+                  type="button"
+                  onClick={() => {
+                    setKeyword(category.keyword);
+                    setCategoryMenuOpen(false);
+                    void doSearch(category.keyword);
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left hover:bg-slate-800"
                 >
-                  {m === 'STARTER' ? 'Cuenta nueva' : 'Estándar'}
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-slate-100">{category.label}</span>
+                    <span className="text-[11px] text-slate-500">{category.keyword}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">{category.hint}</p>
                 </button>
               ))}
             </div>
-            <button
-              onClick={handleDiscover}
-              disabled={discovering}
-              className="flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-primary-700 disabled:opacity-60"
-            >
-              {discovering ? (
-                <>
-                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Buscando…
-                </>
-              ) : (
-                'Buscar por IA'
-              )}
-            </button>
-          </div>
+          )}
         </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard label="Candidatos" value={candidates.length} sub={`${filteredCandidates.length} visibles`} />
-          <MetricCard label="Aprobados" value={candidates.filter((c) => c.status === 'APPROVED').length} sub="Listos para Productos CJ" tone="emerald" />
-          <MetricCard label="Score promedio" value={avgScore || '--'} sub="demanda + margen + riesgo" tone="cyan" />
-          <MetricCard label="Riesgo policy" value={policyRiskCount} sub={`margen prom. ${avgMargin.toFixed(1)}%`} tone={policyRiskCount > 0 ? 'amber' : 'slate'} />
+        <button
+          type="button"
+          onClick={() => void runAiSuggestion()}
+          disabled={aiLoading}
+          className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+        >
+          {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+          Sugerencia IA
+        </button>
+      </form>
+
+      <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-100">
+        <div className="flex items-start gap-2">
+          <ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-300" />
+          <span>
+            Guardrail activo: el publicador eBay solo debe avanzar con productos PET que tengan inventario operativo y cotizacion CJ con origen USA. Los productos CN o sin evidencia quedan para revision, no para autopublicacion.
+          </span>
         </div>
       </div>
 
-      {/* ── Error ── */}
-      {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
-          {error}
-        </div>
-      )}
-
-      {/* ── Run status card ── */}
-      {run && (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 flex flex-wrap gap-4 items-center">
-          <div className="flex items-center gap-2">
-            <RunStatusBadge status={run.status} />
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Modo: {run.mode === 'STARTER' ? 'Cuenta nueva' : 'Estándar'}
-            </span>
+      {searchState.kind === 'idle' && (
+        <div className="relative flex flex-col items-center gap-4 overflow-hidden rounded-2xl border-2 border-dashed border-amber-800/40 bg-gradient-to-br from-amber-950/20 to-orange-950/10 py-16 text-center">
+          <Package className="h-10 w-10 text-amber-300" />
+          <div>
+            <p className="text-base font-semibold text-slate-100">Descubre tu proximo producto PET para eBay</p>
+            <p className="mx-auto mt-1.5 max-w-sm text-sm text-slate-400">
+              Keyword <strong className="text-amber-300">pet supplies</strong> preseleccionado. Presiona Buscar o elige una categoria PET.
+            </p>
           </div>
-          <div className="flex gap-4 text-sm text-slate-600 dark:text-slate-400 flex-wrap">
-            <span>Seeds: <b className="text-slate-900 dark:text-slate-100">{run.seedCount}</b></span>
-            <span>Matches CJ: <b className="text-slate-900 dark:text-slate-100">{run.candidateCount}</b></span>
-            <span>Shortlist: <b className="text-slate-900 dark:text-slate-100">{run.shortlistedCount}</b></span>
-            <span className="text-emerald-600 dark:text-emerald-400">
-              Aprobados: <b>{run.approvedCount}</b>
-            </span>
-            <span className="text-red-600 dark:text-red-400">
-              Rechazados: <b>{run.rejectedCount}</b>
-            </span>
-          </div>
-          {run.errorMessage && (
-            <p className="w-full text-xs text-red-600 dark:text-red-400">{run.errorMessage}</p>
-          )}
-          {isRunning && (
-            <div className="w-full">
-              <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                <div className="h-full bg-primary-500 rounded-full animate-pulse w-2/3" />
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Consultando CJ y calculando pricing…
-              </p>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => void doSearch('pet supplies')}
+            className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-950/40"
+          >
+            Buscar Pet Supplies
+          </button>
         </div>
       )}
 
-      {/* ── Filter bar ── */}
-      {candidates.length > 0 && (
-        <div className="flex gap-2 flex-wrap">
-          {(['ALL', 'SHORTLISTED', 'APPROVED', 'REJECTED', 'DEFERRED'] as const).map((f) => {
-            const count =
-              f === 'ALL' ? candidates.length : candidates.filter((c) => c.status === f).length;
-            return (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  filter === f
-                    ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-800 dark:text-primary-200'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                {f === 'ALL' ? 'Todos' : f.charAt(0) + f.slice(1).toLowerCase()} ({count})
-              </button>
-            );
-          })}
+      {searchState.kind === 'loading' && (
+        <div className="flex items-center justify-center gap-3 py-14 text-sm text-slate-400">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Buscando en catalogo CJ y priorizando stock USA...
         </div>
       )}
 
-      {/* ── Empty states ── */}
-      {loading && candidates.length === 0 && (
-        <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
-          Cargando recomendaciones…
-        </div>
-      )}
-
-      {!loading && !isRunning && candidates.length === 0 && !run && (
-        <div className="py-16 text-center space-y-3">
-          <p className="text-4xl">🔍</p>
-          <p className="text-lg font-medium text-slate-700 dark:text-slate-300">
-            Sin recomendaciones todavía
-          </p>
-          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-            Pulsa <strong>Buscar por IA</strong> para iniciar el motor de descubrimiento. El sistema
-            consultará tendencias de mercado, buscará productos en CJ, calculará pricing real y
-            construirá un shortlist priorizado.
-          </p>
-          <div className="mt-4 text-xs text-slate-400 dark:text-slate-500 space-y-1">
-            <p>Modo <strong>Cuenta nueva</strong>: criterios más estrictos, menor riesgo, ideal para primeros listings.</p>
-            <p>Modo <strong>Estándar</strong>: filtros relajados, mayor variedad de candidatos.</p>
+      {searchState.kind === 'error' && (
+        <div className="flex items-start gap-3 rounded-xl border border-rose-900 bg-rose-950/30 px-4 py-4 text-rose-100">
+          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold">Error al buscar en CJ</p>
+            <p className="mt-1 text-xs text-rose-200">{searchState.msg}</p>
           </div>
         </div>
       )}
 
-      {!loading && !isRunning && run?.status === 'COMPLETED' && candidates.length === 0 && !!run && (
-        <div className="py-10 text-center space-y-2">
-          <p className="text-3xl">⚠️</p>
-          <p className="text-base font-medium text-slate-700 dark:text-slate-300">
-            Descubrimiento completado sin candidatos
-          </p>
-          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-            Ningún producto encontrado en CJ alcanzó el umbral mínimo de score o margen.
-            Prueba el modo <strong>Estándar</strong> para criterios más relajados, o inicia un nuevo run.
-          </p>
+      {searchState.kind === 'no_results' && (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-800 py-14 text-center">
+          <Package className="h-8 w-8 text-slate-600" />
+          <div>
+            <p className="text-sm font-medium text-slate-300">Sin resultados para "{searchState.keyword}"</p>
+            <p className="mt-1 text-xs text-slate-500">Prueba otro termino PET en ingles.</p>
+          </div>
         </div>
       )}
 
-      {!loading && !isRunning && run?.status === 'COMPLETED' && filteredCandidates.length === 0 && candidates.length > 0 && (
-        <div className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-          No hay candidatos con el filtro seleccionado.
+      {searchState.kind === 'results' && (
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Resultados CJ" value={searchState.items.length} />
+            <Metric label="Operables" value={searchState.meta.operabilitySummary?.operable ?? 0} />
+            <Metric label="USA confirmado" value={searchState.meta.warehouseSummary?.usWarehouseConfirmed ?? searchState.items.filter((item) => item.fulfillmentOrigin === 'US').length} />
+            <Metric label="Stock conocido" value={searchState.meta.stockCoverage?.withStock ?? searchState.items.filter((item) => (item.inventoryTotal ?? 0) > 0).length} />
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500">{searchState.items.length} resultados para "{searchState.keyword}"</p>
+            {searchState.meta.warehouseAwareEnabled && <span className="text-xs text-emerald-300">Warehouse-aware activo</span>}
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {searchState.items.map((item) => <ProductCard key={item.cjProductId} item={item} />)}
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-slate-400">
+            Para crear draft/publicar, abre <strong className="text-slate-200">Productos CJ</strong>, selecciona variante, ejecuta pricing/evaluacion y luego crea el draft eBay. El autopilot usa los mismos guardrails de USA-only, margen y cuota.
+          </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* ── Candidate grid ── */}
-      {filteredCandidates.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredCandidates.map((c) => (
-            <CandidateCard
-              key={c.id}
-              c={c}
-              onDecision={handleDecision}
-              onDetail={setDrawerItem}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* ── Approved queue callout ── */}
-      {candidates.some((c) => c.status === 'APPROVED') && (
-        <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-4 text-sm text-emerald-800 dark:text-emerald-300">
-          <strong>{candidates.filter((c) => c.status === 'APPROVED').length} candidato(s) aprobado(s).</strong>{' '}
-          Ve a <strong>Products</strong> para evaluar y publicar en eBay usando el pipeline CJ → eBay.
-          Los candidatos aprobados contienen el cjProductId y cjVariantSku listos para usar en{' '}
-          <code className="bg-emerald-100 dark:bg-emerald-900/40 px-1 rounded">POST /api/cj-ebay/opportunities/ebay-pipeline</code>.
-        </div>
-      )}
-
-      {/* ── Detail drawer ── */}
-      {drawerItem && (
-        <CjEbayOpportunityCandidateDrawer
-          candidate={drawerItem}
-          onClose={() => setDrawerItem(null)}
-          onDecision={(id, action) => handleDecision(id, action)}
-        />
-      )}
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-bold tabular-nums text-white">{value}</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { Loader2, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { Loader2, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 
 type OptimizerAction = {
   listingId: number;
@@ -100,63 +100,60 @@ export default function CjEbayStoreOptimizerPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <SlidersHorizontal className="h-5 w-5 text-slate-500" />
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Store Optimizer eBay</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Prioriza acciones para proteger cuota mensual, margen y salud de listings eBay.
-            </p>
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+        <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950 px-6 py-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-amber-500/10 p-3 text-amber-200">
+                <SlidersHorizontal className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold text-white">Store Optimizer eBay</h1>
+                <p className="text-sm text-slate-400">
+                  Control de cuota, margen, policy blockers y riesgo de precio publicado para listings eBay.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Recalcular
+            </button>
           </div>
+
+          {summary && (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <HeroMetric label="Listings activos" value={String(summary.activeListings)} detail={`${summary.totalListings} totales · ${summary.draftListings} drafts`} />
+              <HeroMetric label="Bloqueados" value={String(summary.blockedListings)} detail="Policy/account/reconcile" />
+              <HeroMetric
+                label="Stock publicado"
+                value={summary.listingLimit ? `${summary.usedListings}/${summary.listingLimit}` : String(summary.usedListings)}
+                detail={summary.remainingListings == null ? 'Sin limite' : `${summary.remainingListings} libres`}
+              />
+              <HeroMetric
+                label="Monto eBay usado"
+                value={usd(summary.usedAmountUsd)}
+                detail={summary.amountLimitUsd ? `${usd(summary.remainingAmountUsd)} libres` : 'Sin limite'}
+              />
+            </div>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Recalcular
-        </button>
       </div>
 
-      {summary && (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-            <p className="text-xs font-medium text-slate-500">Listings activos</p>
-            <p className="mt-1 text-2xl font-semibold">{summary.activeListings}</p>
-            <p className="text-xs text-slate-500">{summary.totalListings} totales · {summary.draftListings} drafts</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-            <p className="text-xs font-medium text-slate-500">Bloqueados</p>
-            <p className="mt-1 text-2xl font-semibold">{summary.blockedListings}</p>
-            <p className="text-xs text-slate-500">Policy/account/reconcile</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-            <p className="text-xs font-medium text-slate-500">Stock publicado</p>
-            <p className="mt-1 text-2xl font-semibold">
-              {summary.listingLimit ? `${summary.usedListings}/${summary.listingLimit}` : summary.usedListings}
-            </p>
-            <p className="text-xs text-slate-500">{summary.remainingListings == null ? 'Sin limite' : `${summary.remainingListings} libres`}</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-            <p className="text-xs font-medium text-slate-500">Monto eBay usado</p>
-            <p className="mt-1 text-2xl font-semibold">{usd(summary.usedAmountUsd)}</p>
-            <p className="text-xs text-slate-500">{summary.amountLimitUsd ? `${usd(summary.remainingAmountUsd)} libres` : 'Sin limite'}</p>
-          </div>
-        </div>
-      )}
-
-      <section className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Acciones recomendadas</h2>
+      <section className="rounded-xl border border-slate-800 bg-slate-950">
+        <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
+          <ShieldCheck className="h-4 w-4 text-amber-300" />
+          <h2 className="text-sm font-semibold text-slate-100">Acciones recomendadas</h2>
         </div>
         {actions.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-slate-500">
             No hay acciones urgentes con los datos actuales.
           </div>
         ) : (
-          <div className="divide-y divide-slate-200 dark:divide-slate-700">
+          <div className="divide-y divide-slate-900">
             {actions.map((action) => (
               <div key={`${action.listingId}-${action.recommendation}`} className={`m-3 rounded-lg border p-3 ${severityClass(action.severity)}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -177,6 +174,16 @@ export default function CjEbayStoreOptimizerPage() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function HeroMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-2xl font-bold text-white">{value}</p>
+      <p className="text-xs text-slate-500">{detail}</p>
     </div>
   );
 }

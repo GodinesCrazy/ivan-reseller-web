@@ -848,7 +848,7 @@ for (const command of ['start', 'pause', 'resume', 'stop', 'run-now'] as const) 
       if (command === 'start' || command === 'resume') out = await cjEbayAutopilotService.start(userId);
       else if (command === 'pause') out = await cjEbayAutopilotService.pause(userId);
       else if (command === 'stop') out = await cjEbayAutopilotService.stop(userId);
-      else out = await cjEbayAutopilotService.runNow(userId, 'MANUAL');
+      else out = await cjEbayAutopilotService.runNow(userId, 'MANUAL', { dryRun: req.body?.dryRun === true });
       await traceComplete(req, userId, `POST /automation/${command}`, { statusCode: 200 });
       res.json({ ok: true, command, message: `Automation ${command} ejecutado para CJ-eBay autopilot.`, result: out });
     } catch (e) {
@@ -929,6 +929,14 @@ router.get('/sales-agent', async (req: Request, res: Response, next: NextFunctio
       })),
       actions: [
         {
+          id: 'dry-run-autopilot',
+          listingId: 0,
+          title: 'CJ USA → eBay USA',
+          severity: 'info',
+          recommendation: 'Probar ciclo completo en dry-run',
+          reason: 'Valida discovery, evaluación, draft, polling de ventas y postventa sin publicar en eBay ni pagar CJ.',
+        },
+        {
           id: 'run-autopilot',
           listingId: 0,
           title: 'CJ USA → eBay USA',
@@ -964,8 +972,10 @@ router.post('/sales-agent/actions', async (req: Request, res: Response, next: Ne
     const userId = req.user!.userId;
     const rawId = String((req.body ?? {}).id || '').trim();
     let result: unknown;
-    if (rawId === 'run-discovery' || rawId === 'publish-next' || rawId === 'run-autopilot') {
-      result = await cjEbayAutopilotService.runNow(userId, 'SALES_AGENT');
+    if (rawId === 'dry-run-autopilot') {
+      result = await cjEbayAutopilotService.runNow(userId, 'DRY_RUN', { dryRun: true });
+    } else if (rawId === 'run-discovery' || rawId === 'publish-next' || rawId === 'run-autopilot') {
+      result = await cjEbayAutopilotService.runNow(userId, 'SALES_AGENT', { dryRun: req.body?.dryRun === true });
     } else if (rawId === 'poll-orders') {
       const settings = await cjEbayConfigService.getOrCreateSettings(userId);
       result = await cjEbayOrderPollingService.pollRecentOrders({
@@ -1027,7 +1037,7 @@ for (const command of ['start', 'pause', 'stop', 'run-now'] as const) {
             ? await cjEbayAutopilotService.pause(userId)
             : command === 'stop'
               ? await cjEbayAutopilotService.stop(userId)
-              : await cjEbayAutopilotService.runNow(userId, 'SALES_AGENT');
+              : await cjEbayAutopilotService.runNow(userId, 'SALES_AGENT', { dryRun: req.body?.dryRun === true });
       await traceComplete(req, userId, `POST /sales-agent/scheduler/${command}`, { statusCode: 200 });
       res.json({ ok: true, command, scheduler: result });
     } catch (e) {

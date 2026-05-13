@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
 
@@ -565,6 +565,7 @@ function ProductStage({ label, value, active }: { label: string; value: string |
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function CjEbayProductsPage() {
+  const [searchParams] = useSearchParams();
   // ─── Trend recommendation ─────────────────────────────────────────────────────
   const [showTrendPanel, setShowTrendPanel] = useState(false);
   const [trendCandidates, setTrendCandidates] = useState<Array<{
@@ -632,7 +633,7 @@ export default function CjEbayProductsPage() {
   }
 
   // ─── Search ──────────────────────────────────────────────────────────────────
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('pet supplies');
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<CjProductSummary[] | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -683,6 +684,7 @@ export default function CjEbayProductsPage() {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewOk | null>(null);
   const [evaluate, setEvaluate] = useState<EvaluateOk | null>(null);
+  const handoffAppliedRef = useRef(false);
 
   // ─── Derived ──────────────────────────────────────────────────────────────────
   const canRunPipeline = productId.trim().length > 0 && variantId.trim().length > 0;
@@ -742,6 +744,46 @@ export default function CjEbayProductsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (handoffAppliedRef.current) return;
+    const handoffProductId = searchParams.get('productId')?.trim();
+    const handoffKeyword = searchParams.get('keyword')?.trim();
+    if (!handoffProductId && !handoffKeyword) return;
+    handoffAppliedRef.current = true;
+
+    async function applyDiscoverHandoff() {
+      const keyword = handoffKeyword || 'pet supplies';
+      setSearchQuery(keyword);
+      setSearchError(null);
+      setSearchLoading(true);
+      setSearchResults(null);
+      setWarehouseAwareEnabled(false);
+      setWarehouseSummary(undefined);
+      setSelectedProduct(null);
+      setSelectedVariantKey('');
+      setProductId('');
+      setVariantId('');
+      setPreview(null);
+      setEvaluate(null);
+      setError(null);
+      try {
+        const res = await api.post<SearchResponse>('/api/cj-ebay/cj/search', { keyword, page: 1, pageSize: 20 });
+        const items = res.data?.items ?? [];
+        setSearchResults(items);
+        setWarehouseAwareEnabled(res.data?.warehouseAwareEnabled ?? false);
+        setWarehouseSummary(res.data?.warehouseSummary);
+        const match = handoffProductId ? items.find((item) => item.cjProductId === handoffProductId) : null;
+        if (match) await selectProduct(match);
+      } catch (e) {
+        setSearchError(extractApiError(e, 'Error al abrir el producto desde Discover.'));
+      } finally {
+        setSearchLoading(false);
+      }
+    }
+
+    void applyDiscoverHandoff();
+  }, [searchParams]);
 
   /** Opens the inline pricing panel and scrolls it into view (panel sits above the breakdown). */
   function openPricingConfigPanelAndReveal() {
@@ -983,7 +1025,7 @@ export default function CjEbayProductsPage() {
               Buscar producto CJ
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Escribe un término para explorar el catálogo CJ Dropshipping
+              PET queda preseleccionado. Evalúa solo productos con variante, stock y flete CJ compatible con eBay USA.
             </p>
           </div>
           <button
@@ -992,7 +1034,7 @@ export default function CjEbayProductsPage() {
             className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 text-xs font-medium hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
           >
             <span>✦</span>
-            <span>Suggest winning products</span>
+            <span>Sugerir PET con IA</span>
             {showTrendPanel ? <span>▲</span> : <span>▼</span>}
           </button>
         </div>
@@ -1002,9 +1044,9 @@ export default function CjEbayProductsPage() {
           <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-900/10 p-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-xs font-medium text-violet-800 dark:text-violet-300">USA Trending Product Ideas</p>
+                <p className="text-xs font-medium text-violet-800 dark:text-violet-300">Ideas PET para eBay USA</p>
                 <p className="text-[11px] text-violet-600 dark:text-violet-400 mt-0.5">
-                  Source: HEURISTIC (seasonal eBay USA patterns, not live API) · Click a keyword to search CJ
+                  Señales eBay + búsqueda CJ. Haz click en un keyword para buscar variantes con stock USA.
                 </p>
               </div>
               <button
@@ -1013,22 +1055,22 @@ export default function CjEbayProductsPage() {
                 disabled={trendDiscovering}
                 className="shrink-0 px-2.5 py-1 rounded border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs hover:bg-violet-100 dark:hover:bg-violet-900/30 disabled:opacity-50"
               >
-                {trendDiscovering ? 'Discovering…' : '↻ Refresh'}
+                  {trendDiscovering ? 'Buscando…' : 'Actualizar'}
               </button>
             </div>
 
             {trendLoading ? (
-              <p className="text-xs text-violet-500">Loading recommendations…</p>
+              <p className="text-xs text-violet-500">Cargando recomendaciones…</p>
             ) : trendCandidates.length === 0 ? (
               <div className="text-center py-3">
-                <p className="text-xs text-violet-500">No recommendations yet.</p>
+                <p className="text-xs text-violet-500">Aún no hay recomendaciones.</p>
                 <button
                   type="button"
                   onClick={() => void runTrendDiscovery()}
                   disabled={trendDiscovering}
                   className="mt-2 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 disabled:opacity-50"
                 >
-                  {trendDiscovering ? 'Discovering…' : '✦ Run Discovery'}
+                  {trendDiscovering ? 'Buscando…' : 'Ejecutar discovery'}
                 </button>
               </div>
             ) : (
@@ -1066,7 +1108,7 @@ export default function CjEbayProductsPage() {
           <input
             type="text"
             className="flex-1 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
-            placeholder="p.ej. phone holder, laptop stand, led lamp…"
+            placeholder="p.ej. pet supplies, dog collar, cat toy, pet grooming brush..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -1950,7 +1992,7 @@ export default function CjEbayProductsPage() {
                   value={feeSourceLabel}
                   hint={
                     pricingContext.feeConfigSource === 'account'
-                      ? 'Sin placeholders'
+                      ? 'Configuracion completa desde tu cuenta'
                       : pricingContext.feeConfigSource === 'mixed'
                         ? 'Parte desde cuenta y parte desde defaults'
                         : 'Todos los fees salen de defaults operativos'

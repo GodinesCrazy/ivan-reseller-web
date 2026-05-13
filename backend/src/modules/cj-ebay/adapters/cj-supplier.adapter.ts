@@ -45,8 +45,8 @@ import type {
   CjPayBalanceResult,
 } from './cj-supplier.adapter.interface';
 
-/** CJ documents QPS ≈ 1; stay slightly above 1s between calls. */
-const CJ_MIN_INTERVAL_MS = 1100;
+/** CJ documents QPS ≈ 1; stay safely above 1s between calls, including token refreshes. */
+const CJ_MIN_INTERVAL_MS = 1600;
 let cjGlobalLastCallAt = 0;
 let cjGlobalCooldownUntil = 0;
 let cjGlobalThrottleTail: Promise<void> = Promise.resolve();

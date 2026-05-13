@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 import { env } from '../../../config/env';
 import logger from '../../../config/logger';
+import { createCjSupplierAdapter } from '../adapters/cj-supplier.adapter';
 import { CJ_EBAY_ALERT_TYPE, CJ_EBAY_LISTING_STATUS, CJ_EBAY_ORDER_STATUS } from '../cj-ebay.constants';
 import { cjEbayAlertsService } from './cj-ebay-alerts.service';
 import { cjEbayCjCheckoutService } from './cj-ebay-cj-checkout.service';
@@ -52,6 +53,14 @@ type AutomationMetrics = {
   recoveriesRun: number;
   errorsCount: number;
   events: string[];
+};
+
+type PublishCandidate = {
+  cjProductId: string;
+  cjProductTitle: string;
+  cjVariantSku?: string | null;
+  status: string;
+  dataConfidenceScore?: number | null;
 };
 
 const locks = new Set<number>();
@@ -184,8 +193,6 @@ export const cjEbayAutopilotService = {
       requireUsWarehouseOnly: true,
       marketNiche: 'PET_SUPPLIES',
       requirePetCategory: true,
-      cjPostCreateCheckoutMode: 'AUTO_CONFIRM_PAY',
-      autoPayCjOrders: true,
     } as any);
     await prisma.cjEbayAccountSettings.update({
       where: { userId },
@@ -207,7 +214,11 @@ export const cjEbayAutopilotService = {
     return this.getStatus(userId);
   },
 
-  async runNow(userId: number, trigger: 'MANUAL' | 'SCHEDULED' | 'SALES_AGENT' = 'MANUAL') {
+  async runNow(
+    userId: number,
+    trigger: 'MANUAL' | 'SCHEDULED' | 'SALES_AGENT' | 'DRY_RUN' = 'MANUAL',
+    options: { dryRun?: boolean } = {}
+  ) {
     if (locks.has(userId)) {
       return { skipped: true, reason: 'LOCKED', ...(await this.getStatus(userId)) };
     }
@@ -216,7 +227,7 @@ export const cjEbayAutopilotService = {
     const metrics = emptyMetrics();
     await cjEbayConfigService.getOrCreateSettings(userId);
     const run = await prisma.cjEbayAutomationRun.create({
-      data: { userId, trigger, status: 'RUNNING', lockKey: `cj-ebay-autopilot:${userId}` },
+      data: { userId, trigger: options.dryRun ? 'DRY_RUN' : trigger, status: 'RUNNING', lockKey: `cj-ebay-autopilot:${userId}` },
     });
     try {
       await cjEbayTraceService.record({
@@ -224,7 +235,7 @@ export const cjEbayAutopilotService = {
         route: 'cj-ebay-autopilot',
         step: 'automation.run.start',
         message: 'automation.run.start',
-        meta: { runId: run.id, trigger },
+        meta: { runId: run.id, trigger, dryRun: options.dryRun === true },
       });
       const settings = await cjEbayConfigService.getOrCreateSettings(userId);
       const readiness = await cjEbaySystemReadinessService.evaluateForUser(userId);
@@ -232,11 +243,15 @@ export const cjEbayAutopilotService = {
         metrics.errorsCount++;
         metrics.events.push('Readiness incomplete; destructive steps skipped.');
       } else {
-        await this.runDiscoveryAndPublish(userId, settings, metrics);
-        await this.runOrderPolling(userId, settings, metrics);
-        await this.runFulfillment(userId, settings, metrics);
-        await this.runTracking(userId, settings, metrics);
-        await this.runRecovery(userId, metrics);
+        await this.runDiscoveryAndPublish(userId, settings, metrics, options);
+        await this.runOrderPolling(userId, settings, metrics, options);
+        if (options.dryRun) {
+          metrics.events.push('Dry-run: fulfillment, CJ payment, tracking submission and recovery writes skipped.');
+        } else {
+          await this.runFulfillment(userId, settings, metrics);
+          await this.runTracking(userId, settings, metrics);
+          await this.runRecovery(userId, metrics);
+        }
       }
 
       const completedAt = new Date();
@@ -308,7 +323,12 @@ export const cjEbayAutopilotService = {
     return { users: ids.length };
   },
 
-  async runDiscoveryAndPublish(userId: number, settings: any, metrics: AutomationMetrics) {
+  async runDiscoveryAndPublish(
+    userId: number,
+    settings: any,
+    metrics: AutomationMetrics,
+    options: { dryRun?: boolean } = {}
+  ) {
     if (settings.maxPublishesPerRun <= 0 || env.BLOCK_NEW_PUBLICATIONS) {
       metrics.events.push(env.BLOCK_NEW_PUBLICATIONS ? 'Publish skipped by BLOCK_NEW_PUBLICATIONS.' : 'Publish skipped: maxPublishesPerRun=0.');
       return;
@@ -326,7 +346,11 @@ export const cjEbayAutopilotService = {
     const discovery = await cjEbayOpportunityShortlistService.startDiscoveryRun(userId, { mode: 'STARTER' } as any);
     metrics.discoveryRuns++;
     await waitForDiscovery(discovery.runId, userId);
-    const candidates = await cjEbayOpportunityShortlistService.getActiveRecommendations(userId);
+    let candidates: PublishCandidate[] = await cjEbayOpportunityShortlistService.getActiveRecommendations(userId);
+    if (candidates.length === 0) {
+      metrics.events.push('No shortlist candidate found; trying direct PET CJ fallback search.');
+      candidates = await this.findDirectPetCandidates(userId, metrics);
+    }
     const eligible = candidates.filter((c) => {
       const confidence = Number(c.dataConfidenceScore ?? 0);
       return ['SHORTLISTED', 'APPROVED'].includes(c.status) && confidence >= settings.minDataConfidenceScore;
@@ -335,16 +359,24 @@ export const cjEbayAutopilotService = {
       if (metrics.listingsPublished >= settings.maxPublishesPerRun) break;
       metrics.candidatesChecked++;
       try {
-        const variantId = candidate.cjVariantSku;
+        const variantId = candidate.cjVariantSku || undefined;
         const out = await cjEbayOpportunityPipelineService.run({
           userId,
-          body: { productId: candidate.cjProductId, variantId, quantity: 1, publish: true },
-          route: 'cj-ebay-autopilot.publish',
+          body: {
+            productId: candidate.cjProductId,
+            variantId,
+            quantity: 1,
+            publish: options.dryRun ? false : true,
+            draftOnly: options.dryRun ? true : undefined,
+          },
+          route: options.dryRun ? 'cj-ebay-autopilot.dry-run' : 'cj-ebay-autopilot.publish',
         });
         if (out.listing) metrics.draftsCreated++;
         if (out.publish) {
           metrics.listingsPublished++;
           metrics.events.push(`Published ${candidate.cjProductTitle.slice(0, 80)}`);
+        } else if (options.dryRun && out.listing) {
+          metrics.events.push(`Dry-run draft validated for ${candidate.cjProductTitle.slice(0, 80)}`);
         } else if (String(out.publishSkippedReason || '').includes('US_WAREHOUSE_REQUIRED')) {
           metrics.listingsRejectedUs++;
         } else if (out.publishSkippedReason) {
@@ -359,12 +391,52 @@ export const cjEbayAutopilotService = {
     }
   },
 
-  async runOrderPolling(userId: number, settings: any, metrics: AutomationMetrics) {
+  async findDirectPetCandidates(userId: number, metrics: AutomationMetrics): Promise<PublishCandidate[]> {
+    const adapter = createCjSupplierAdapter(userId);
+    const keywords = ['pet supplies', 'dog grooming brush', 'pet hair remover', 'cat toy'];
+    const out: PublishCandidate[] = [];
+    for (const keyword of keywords) {
+      try {
+        const products = await adapter.searchProducts({ keyword, page: 1, pageSize: 8 });
+        for (const product of products) {
+          const productId = String(product.cjProductId || '').trim();
+          if (!productId) continue;
+          if (product.fulfillmentOrigin === 'CN' || product.inventoryTotal === 0) continue;
+          try {
+            const detail = await adapter.getProductById(productId);
+            const variant = detail.variants.find((v) => Number(v.stock || 0) > 0 && String(v.cjVid || v.cjSku || '').trim());
+            if (!variant) continue;
+            out.push({
+              cjProductId: productId,
+              cjProductTitle: product.title,
+              cjVariantSku: String(variant.cjVid || variant.cjSku).trim(),
+              status: 'SHORTLISTED',
+              dataConfidenceScore: 70,
+            });
+            if (out.length >= 3) return out;
+          } catch (e) {
+            metrics.events.push(`Direct fallback detail skipped: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`);
+          }
+        }
+      } catch (e) {
+        metrics.events.push(`Direct fallback search skipped (${keyword}): ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`);
+      }
+    }
+    return out;
+  },
+
+  async runOrderPolling(
+    userId: number,
+    settings: any,
+    metrics: AutomationMetrics,
+    options: { dryRun?: boolean } = {}
+  ) {
     const out = await cjEbayOrderPollingService.pollRecentOrders({
       userId,
       lookbackHours: settings.orderPollingLookbackHours,
       limit: settings.maxOrdersPerRun,
-      route: 'cj-ebay-autopilot.order-poll',
+      route: options.dryRun ? 'cj-ebay-autopilot.order-poll.dry-run' : 'cj-ebay-autopilot.order-poll',
+      dryRun: options.dryRun === true,
     });
     metrics.ordersImported += out.imported;
     metrics.events.push(`Order poll checked=${out.checked}, imported=${out.imported}, mapped=${out.mapped}`);

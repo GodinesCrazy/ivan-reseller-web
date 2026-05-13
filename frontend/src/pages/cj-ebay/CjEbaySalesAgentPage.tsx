@@ -87,13 +87,14 @@ export default function CjEbaySalesAgentPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+        <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-violet-950 px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-violet-500/10 p-3 text-violet-200"><Bot className="h-6 w-6" /></div>
             <div>
               <h1 className="text-xl font-semibold text-white">Agente Vendedor eBay</h1>
-              <p className="text-sm text-slate-400">Cockpit de oportunidades, cuota mensual, política eBay, profit y acciones supervisadas.</p>
+              <p className="text-sm text-slate-400">Cockpit PET: oportunidades, cuota mensual, política eBay, profit y acciones supervisadas.</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -109,6 +110,7 @@ export default function CjEbaySalesAgentPage() {
           <Metric label="Cuota monto" value={data?.quotas.amountLimitUsd ? `${usd(data.quotas.remainingAmountUsd)} / ${usd(data.quotas.amountLimitUsd)}` : 'Sin límite'} />
           <Metric label="Utilidad estimada" value={usd(data?.kpis.estimatedGrossProfitUsd)} />
           <Metric label="Margen promedio" value={pct(data?.kpis.estimatedAvgMarginPct)} />
+        </div>
         </div>
       </div>
 

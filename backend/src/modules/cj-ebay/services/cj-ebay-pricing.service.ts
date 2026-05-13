@@ -27,7 +27,7 @@ import { Prisma } from '@prisma/client';
 /** ~13.25% FVF orientativo categoría general; ajustar en `defaultEbayFeePct` en BD. */
 export const PRICING_DEFAULT_EBAY_FEE_PCT = 13.25;
 
-/** ~2.9% + fijo típico pasarela (no es dato AliExpress; solo placeholder). */
+/** ~2.9% + fijo típico de pago; supuesto operativo hasta guardar la configuración real. */
 export const PRICING_DEFAULT_PAYMENT_FEE_PCT = 2.9;
 export const PRICING_DEFAULT_PAYMENT_FIXED_FEE_USD = 0.3;
 

@@ -2,6 +2,13 @@
 
 Date: 2026-05-12
 
+Update: 2026-05-13
+
+- User-requested correction confirmed: CJ-eBay must be a near visual/logical clone of CJ-Shopify for equivalent pages, with only marketplace-specific behavior differing.
+- New production-readiness stance: do not run a real publish until Discover, Overview, Listings, pricing guardrails, category/aspects, and stale operational truth are corrected and a dry-run passes.
+- The CJ-eBay operating niche is PET by default for the US market.
+- The eBay selling limits configured for this account are 300 total published stock units and USD 20,000,000 exposure.
+
 ## Audit Verdict
 
 1. `backend/src/modules/cj-shopify-usa/services/cj-shopify-usa-publish.service.ts`
@@ -143,12 +150,70 @@ Backend endpoints added in third pass:
 
 Remaining visual parity work after third pass:
 
-- Discover still needs a final skin pass to look exactly like Shopify Discover while keeping eBay opportunity scoring.
+- Discover final skin pass started 2026-05-13:
+  - Replaced the "Cuenta nueva / Estandar" opportunity cockpit with a Shopify-like CJ search screen.
+  - `pet supplies` is the default keyword.
+  - Category menu is PET-first.
+  - Search uses real `POST /api/cj-ebay/cj/search`.
+  - Results expose stock, warehouse origin, and USA-only guardrail state.
+  - Remaining Discover work: connect approved result handoff more tightly into Products and add eBay category/aspects preview in the product cards.
+- Automation final skin pass started 2026-05-13:
+  - Rebuilt eBay Automation with the Shopify cockpit composition: engine ring, control buttons, phase line, stats row, live log, right-side config, checklist, and explanation panel.
+  - Kept eBay-specific data: warehouse USA, quota, order polling, CJ payment, tracking, last run metrics and readiness checks.
+  - Remaining Automation work: add dry-run/live mode visibility and richer per-phase event labels from `cj_ebay_automation_runs`.
+- Full-page visual alignment pass continued 2026-05-13:
+  - Analitica now uses the same dark cockpit hero + compact KPI strip as the operational Shopify pages.
+  - Agente eBay now opens as a PET/eBay sales cockpit with the same hero density, quota/profit metrics, scheduler and action sections.
+  - Store Optimizer was restyled as an eBay-only cockpit extra instead of a light standalone admin page.
+  - Logs and Configuracion were also aligned with hero metrics so secondary pages no longer feel like placeholders.
 - Productos CJ still needs final compaction and config separation so it reads less like an admin panel and more like the Shopify product lifecycle table.
 - Orders and Order Detail should keep the richer eBay operational evidence, but need final Shopify-style toolbar, chips, pagination density, and detail section alignment.
 - Listings already has a true right-side detail drawer and lifecycle line; remaining work is stronger bulk safe actions and final table density polish.
-- Profit and Alerts are functional and acceptable, but need minor visual tuning for exact Shopify density.
-- Store Optimizer remains an eBay-only extra and should not substitute any missing Shopify-equivalent page.
+- Profit and Alerts are functional and acceptable; only micro-spacing/density tuning remains if pixel-level parity is required.
+- Store Optimizer remains an eBay-only extra and now uses the same cockpit visual language, but it does not substitute any missing Shopify-equivalent page.
+
+Critical production blockers as of 2026-05-13:
+
+- Reset operational data for CJ-eBay before the first real cycle so Overview starts from true zero while preserving credentials and configuration.
+- Fix or verify Listings runtime behavior after reset.
+- Strengthen eBay PET category/aspects mapping beyond title-only category suggestion.
+- Make Discover -> Products handoff explicit so the operator can evaluate the exact CJ product/variant found from Discover.
+- Confirm USA warehouse evidence is persisted and visible through evaluation, draft, listing and autopilot run.
+- Confirm pricing UI states clearly that eBay fees are operational estimates until settlement integration exists.
+- Run dry-run cycle before any real publish.
+
+Operational hardening update 2026-05-13:
+
+- Autopilot `start` no longer forces CJ auto-pay on. Payment remains controlled by the visible `autoPayCjOrders` setting.
+- Added `dryRun` support to automation `run-now` and sales-agent execution. Dry-run validates discovery/evaluation/draft/order-poll logic but skips eBay publish, CJ payment, tracking submission, fulfillment writes and recovery writes.
+- eBay order polling now supports dry-run mode: it can inspect recent eBay orders without upserting local orders.
+- Autopilot discovery/publish now has a PET direct-search fallback when the AI shortlist returns no candidates.
+- CJ supplier throttle was increased to reduce 429 pressure.
+- Discover -> Products handoff now passes `productId` and keyword so the exact CJ result can be opened in the product pipeline.
+- Safe smoke results:
+  - `frontend npm run type-check`: passed.
+  - `frontend npm run build`: passed.
+  - `backend npm run type-check`: passed.
+  - `backend npm run build`: passed.
+  - `backend npm run cj-ebay:cycle-smoke` in safe mode proved credentials/settings/quota, but local smoke did not complete a candidate because CJ returned repeated 429 during discovery. This blocks declaring the live publication test complete until a deployed dry-run succeeds.
+
+Page-by-page parity status after current pass:
+
+- Overview: Shopify-style hero, readiness ring, pipeline, quota and quick actions are present. Needs reset to show true zero state.
+- Discover: rebuilt to Shopify-like CJ search with PET default and USA-stock evidence.
+- Productos CJ: PET default and eBay/USA copy applied; remaining work is deeper compaction of the large pricing/admin sections.
+- Listings eBay: drawer, lifecycle line, filters and conservative bulk actions are present; needs runtime verification after operational reset.
+- Orders: Shopify-like hero, KPIs, filters, import eBay ID and dense table are present.
+- Order Detail: eBay evidence/refunds/flow kept, with compact hero, status, quick actions and operational sections.
+- Post Venta: cockpit dashboard, safe queue, tracking, refunds and alerts are present.
+- Alertas: eBay risk center with filters and action cards is present.
+- Profit: eBay-specific financial cockpit with estimated fees/margins/refunds is present.
+- Analitica: funnel, quota readiness and Profit Guard issues are present.
+- Agente eBay: cockpit, scheduler, recommendations and executable actions are present.
+- Automatizacion: rebuilt to Shopify cockpit pattern while preserving real eBay autopilot state.
+- Configuracion: hero, PET/fees/quotas, impact preview and operational reset are present.
+- Logs: real trace table with Shopify/eBay-style hero and evidence metrics is present.
+- Store Optimizer: kept as eBay-only extra with cockpit styling, not a substitute for any Shopify-equivalent page.
 
 ## Execution Phases
 
@@ -171,8 +236,8 @@ Remaining visual parity work after third pass:
    - Completed first parity pass: CJ-eBay now exposes the same major module areas as CJ-Shopify with eBay-specific settings, quota analytics, post-sale, automation, sales-agent, and store optimizer views.
    - Second visual pass: Overview and Listings now follow the Shopify screen composition more closely.
    - Third visual/API pass: Logs, Post Venta, Analitica, Agente eBay, Automatizacion, Settings preview, and Listings lifecycle are now backed by real eBay APIs and cockpit screens instead of placeholders/light panels.
-   - Remaining work is visual micro-parity and interaction parity on Discover, Productos CJ, Orders, Order Detail, Listings bulk safe actions, Profit, and Alerts.
-   - Fourth visual pass target: close the final visible gaps with compact Shopify-style headers, metric cards, toolbars, dense tables, safe bulk actions, and final page-by-page acceptance checks.
+   - Fourth visual pass continued: Discover, Automation, Analitica, Agente eBay, Configuracion, Logs and Store Optimizer received final cockpit/header alignment.
+   - Remaining work is now narrower: final interaction parity on Discover -> Products handoff, Productos CJ compaction, Listings bulk safe actions, and authenticated runtime smoke after reset.
 
 4. Verification
    - Type-check backend.

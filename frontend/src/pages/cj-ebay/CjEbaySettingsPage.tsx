@@ -234,12 +234,28 @@ export default function CjEbaySettingsPage() {
   }
 
   return (
-    <div className="max-w-6xl space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Configuracion CJ → eBay USA</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Reglas de margen, fees, riesgo, fulfillment y cuotas mensuales usadas antes de publicar en eBay.
-        </p>
+    <div className="max-w-6xl space-y-5">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-primary-500/10 p-3 text-primary-200">
+              <Settings className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300">Control del ciclo</p>
+              <h1 className="mt-1 text-xl font-semibold text-white">Configuracion CJ {'->'} eBay USA</h1>
+              <p className="text-sm text-slate-400">
+                Reglas de margen, fees, riesgo, fulfillment, nicho PET y cuotas mensuales antes de publicar en eBay.
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <HeaderMetric label="Stock max" value={form.monthlyListingLimit || DEFAULT_MONTHLY_LISTING_LIMIT} />
+            <HeaderMetric label="Monto max" value={form.monthlyAmountLimitUsd || DEFAULT_MONTHLY_AMOUNT_LIMIT_USD} />
+            <HeaderMetric label="Nicho" value="PET" />
+            <HeaderMetric label="Checkout" value={form.cjPostCreateCheckoutMode === 'AUTO_CONFIRM_PAY' ? 'AUTO' : 'MANUAL'} />
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.72fr_0.78fr]">
@@ -401,6 +417,15 @@ function Metric({ label, value }: { label: string; value: number | string }) {
     <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
       <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
       <p className="mt-1 text-base font-bold text-slate-900 dark:text-white">{value}</p>
+    </div>
+  );
+}
+
+function HeaderMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-sm font-bold text-white">{value}</p>
     </div>
   );
 }
