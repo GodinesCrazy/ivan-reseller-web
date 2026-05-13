@@ -1,28 +1,49 @@
 import 'dotenv/config';
-import { prisma } from '../src/config/database';
-import { env } from '../src/config/env';
-import { cjEbayAutopilotService } from '../src/modules/cj-ebay/services/cj-ebay-autopilot.service';
-import { cjEbayConfigService } from '../src/modules/cj-ebay/services/cj-ebay-config.service';
-import { cjEbayOpportunityPipelineService } from '../src/modules/cj-ebay/services/cj-ebay-opportunity-pipeline.service';
-import { cjEbayOpportunityShortlistService } from '../src/modules/cj-ebay/services/cj-ebay-opportunity-shortlist.service';
-import { cjEbaySystemReadinessService } from '../src/modules/cj-ebay/services/cj-ebay-system-readiness.service';
 
 const userId = Number(process.env.REAL_CYCLE_USER_ID || process.env.CJ_EBAY_SMOKE_USER_ID || 1);
 const publish = process.env.CJ_EBAY_SMOKE_PUBLISH === 'true';
 const autopilotDryRun = process.env.CJ_EBAY_SMOKE_AUTOPILOT_DRY_RUN !== 'false';
 
+type Services = Awaited<ReturnType<typeof loadServices>>;
+
+async function loadServices() {
+  console.log('[cj-ebay-smoke] loading services');
+  const [{ prisma }, { env }, autopilotMod, configMod, pipelineMod, shortlistMod, readinessMod] = await Promise.all([
+    import('../src/config/database'),
+    import('../src/config/env'),
+    import('../src/modules/cj-ebay/services/cj-ebay-autopilot.service'),
+    import('../src/modules/cj-ebay/services/cj-ebay-config.service'),
+    import('../src/modules/cj-ebay/services/cj-ebay-opportunity-pipeline.service'),
+    import('../src/modules/cj-ebay/services/cj-ebay-opportunity-shortlist.service'),
+    import('../src/modules/cj-ebay/services/cj-ebay-system-readiness.service'),
+  ]);
+  console.log('[cj-ebay-smoke] services loaded');
+  return {
+    prisma,
+    env,
+    cjEbayAutopilotService: autopilotMod.cjEbayAutopilotService,
+    cjEbayConfigService: configMod.cjEbayConfigService,
+    cjEbayOpportunityPipelineService: pipelineMod.cjEbayOpportunityPipelineService,
+    cjEbayOpportunityShortlistService: shortlistMod.cjEbayOpportunityShortlistService,
+    cjEbaySystemReadinessService: readinessMod.cjEbaySystemReadinessService,
+  };
+}
+
 async function waitForRun(runId: string, timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const run = await cjEbayOpportunityShortlistService.getRunSummary(runId, userId);
+    const run = await services.cjEbayOpportunityShortlistService.getRunSummary(runId, userId);
     if (!run) return null;
     if (run.status === 'COMPLETED' || run.status === 'FAILED') return run;
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  return cjEbayOpportunityShortlistService.getRunSummary(runId, userId);
+  return services.cjEbayOpportunityShortlistService.getRunSummary(runId, userId);
 }
 
 async function main() {
+  services = await loadServices();
+  const { prisma, env, cjEbayAutopilotService, cjEbayConfigService, cjEbayOpportunityPipelineService, cjEbayOpportunityShortlistService, cjEbaySystemReadinessService } = services;
+  console.log('[cj-ebay-smoke] starting', { userId, publish, autopilotDryRun });
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, username: true, email: true, isActive: true },
@@ -132,8 +153,10 @@ async function main() {
   await prisma.$disconnect();
 }
 
+let services: Services;
+
 main().catch(async (error) => {
   console.error('[cj-ebay-smoke] FAILED', error instanceof Error ? error.message : String(error));
-  await prisma.$disconnect().catch(() => undefined);
+  await services?.prisma.$disconnect().catch(() => undefined);
   process.exit(1);
 });

@@ -343,10 +343,15 @@ export const cjEbayAutopilotService = {
       metrics.events.push('Publish skipped: pricing guardrails incomplete (fees, margin/profit and monthly limits must be configured).');
       return;
     }
-    const discovery = await cjEbayOpportunityShortlistService.startDiscoveryRun(userId, { mode: 'STARTER' } as any);
-    metrics.discoveryRuns++;
-    await waitForDiscovery(discovery.runId, userId);
-    let candidates: PublishCandidate[] = await cjEbayOpportunityShortlistService.getActiveRecommendations(userId);
+    let candidates: PublishCandidate[] = [];
+    if (options.dryRun) {
+      metrics.events.push('Dry-run discovery uses bounded direct PET CJ search to avoid long-lived async workers.');
+    } else {
+      const discovery = await cjEbayOpportunityShortlistService.startDiscoveryRun(userId, { mode: 'STARTER' } as any);
+      metrics.discoveryRuns++;
+      await waitForDiscovery(discovery.runId, userId);
+      candidates = await cjEbayOpportunityShortlistService.getActiveRecommendations(userId);
+    }
     if (candidates.length === 0) {
       metrics.events.push('No shortlist candidate found; trying direct PET CJ fallback search.');
       candidates = await this.findDirectPetCandidates(userId, metrics);

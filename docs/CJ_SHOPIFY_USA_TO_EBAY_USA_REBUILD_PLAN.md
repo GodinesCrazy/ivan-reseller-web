@@ -197,6 +197,25 @@ Operational hardening update 2026-05-13:
   - `backend npm run build`: passed.
   - `backend npm run cj-ebay:cycle-smoke` in safe mode proved credentials/settings/quota, but local smoke did not complete a candidate because CJ returned repeated 429 during discovery. This blocks declaring the live publication test complete until a deployed dry-run succeeds.
 
+Closure update 2026-05-13:
+
+- Added `backend/scripts/cj-ebay-operational-reset.ts` and `npm run cj-ebay:operational-reset`.
+  - Default mode is inspection-only.
+  - Destructive reset requires `CJ_EBAY_RESET_CONFIRM=RESET_CJ_EBAY_USA`.
+  - Reset preserves credentials and CJ-eBay settings, forces PET niche, USA warehouse only, autopilot paused, and CJ auto-pay off.
+- Reset was executed for user `1` after inspecting stale listings:
+  - Deleted stale non-PET CJ-eBay operational rows: 3 listings, 9 products, 18 evaluations, 18 shipping quotes, 14 opportunity runs, 37 candidates, 2 automation runs, and 1424 traces.
+  - Post-reset validation shows `cj_ebay_listings=0` and `cj_ebay_orders=0`.
+- Added `backend/scripts/cj-ebay-bounded-cycle-smoke.ts` and `npm run cj-ebay:bounded-cycle-smoke`.
+  - This smoke validates the bounded path: PET keyword discovery against CJ, readiness, credentials, settings, USA-only guardrails, then evaluation/draft when CJ product details are available.
+  - It never publishes unless `CJ_EBAY_SMOKE_PUBLISH=true`.
+- Live bounded smoke after reset:
+  - Readiness: passed.
+  - PET default: confirmed with real CJ search keywords.
+  - CJ search: returned real PET products for `pet supplies`, `dog grooming brush`, `pet hair remover`, and `cat toy`.
+  - Blocker: CJ returned repeated HTTP 429 on `product/query` detail calls for every candidate, so the script could not reach freight/evaluation/draft.
+  - Result: the system is clean and guarded, but a real publish proof is still pending because CJ is rate-limiting product detail calls.
+
 Page-by-page parity status after current pass:
 
 - Overview: Shopify-style hero, readiness ring, pipeline, quota and quick actions are present. Needs reset to show true zero state.

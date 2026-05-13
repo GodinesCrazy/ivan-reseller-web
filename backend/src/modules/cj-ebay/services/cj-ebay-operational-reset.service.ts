@@ -80,7 +80,11 @@ export const cjEbayOperationalResetService = {
           },
         });
       }
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      maxWait: 20_000,
+      timeout: 60_000,
+    });
 
     return {
       ok: true,
