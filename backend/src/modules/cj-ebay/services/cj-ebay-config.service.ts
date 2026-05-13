@@ -4,6 +4,9 @@ import type { CjEbayConfigResponse } from '../cj-ebay.types';
 import { Prisma } from '@prisma/client';
 import { CJ_EBAY_POST_CREATE_CHECKOUT_MODE } from '../cj-ebay.constants';
 
+export const CJ_EBAY_DEFAULT_MONTHLY_LISTING_LIMIT = 10;
+export const CJ_EBAY_DEFAULT_MONTHLY_AMOUNT_LIMIT_USD = 500;
+
 function toSettingsDto(row: {
   minMarginPct: Prisma.Decimal | null;
   minProfitUsd: Prisma.Decimal | null;
@@ -78,7 +81,21 @@ export const cjEbayConfigService = {
     let row = await prisma.cjEbayAccountSettings.findUnique({ where: { userId } });
     if (!row) {
       row = await prisma.cjEbayAccountSettings.create({
-        data: { userId },
+        data: {
+          userId,
+          monthlyListingLimit: CJ_EBAY_DEFAULT_MONTHLY_LISTING_LIMIT,
+          monthlyAmountLimitUsd: new Prisma.Decimal(CJ_EBAY_DEFAULT_MONTHLY_AMOUNT_LIMIT_USD),
+        },
+      });
+    } else if (row.monthlyListingLimit == null || row.monthlyAmountLimitUsd == null) {
+      row = await prisma.cjEbayAccountSettings.update({
+        where: { userId },
+        data: {
+          monthlyListingLimit: row.monthlyListingLimit ?? CJ_EBAY_DEFAULT_MONTHLY_LISTING_LIMIT,
+          monthlyAmountLimitUsd:
+            row.monthlyAmountLimitUsd ??
+            new Prisma.Decimal(CJ_EBAY_DEFAULT_MONTHLY_AMOUNT_LIMIT_USD),
+        },
       });
     }
     return toSettingsDto(row);

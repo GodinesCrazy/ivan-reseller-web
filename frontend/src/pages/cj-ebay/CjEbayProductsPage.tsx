@@ -400,7 +400,7 @@ function summarizePricingSettings(settings: PricingConfigSettings) {
     missingFeeFields,
     feeConfigSource,
     monthlyLimitsConfigured:
-      settings.monthlyListingLimit != null ||
+      settings.monthlyListingLimit != null &&
       settings.monthlyAmountLimitUsd != null,
   };
 }

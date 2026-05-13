@@ -73,7 +73,7 @@ export const cjEbaySellingLimitsService = {
       usedAmountUsd,
       remainingListings: listingLimit == null ? null : Math.max(0, listingLimit - usedListings),
       remainingAmountUsd: amountLimitUsd == null ? null : roundMoney(Math.max(0, amountLimitUsd - usedAmountUsd)),
-      configured: listingLimit != null || amountLimitUsd != null,
+      configured: listingLimit != null && amountLimitUsd != null,
     };
   },
 

@@ -1,5 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
+import {
+  CJ_EBAY_DEFAULT_MONTHLY_AMOUNT_LIMIT_USD,
+  CJ_EBAY_DEFAULT_MONTHLY_LISTING_LIMIT,
+} from './cj-ebay-config.service';
 
 export const cjEbayOperationalResetService = {
   async resetUserData(userId: number, options?: { keepSettings?: boolean }) {
@@ -47,6 +51,8 @@ export const cjEbayOperationalResetService = {
             autopilotState: 'PAUSED',
             autoPayCjOrders: false,
             maxPublishesPerRun: 1,
+            monthlyListingLimit: CJ_EBAY_DEFAULT_MONTHLY_LISTING_LIMIT,
+            monthlyAmountLimitUsd: new Prisma.Decimal(CJ_EBAY_DEFAULT_MONTHLY_AMOUNT_LIMIT_USD),
           },
           update: {
             marketNiche: 'PET_SUPPLIES',
@@ -57,6 +63,8 @@ export const cjEbayOperationalResetService = {
             autoPayCjOrders: false,
             autopilotLastRunAt: null,
             autopilotNextRunAt: null,
+            monthlyListingLimit: CJ_EBAY_DEFAULT_MONTHLY_LISTING_LIMIT,
+            monthlyAmountLimitUsd: new Prisma.Decimal(CJ_EBAY_DEFAULT_MONTHLY_AMOUNT_LIMIT_USD),
           },
         });
       } else {
@@ -67,6 +75,8 @@ export const cjEbayOperationalResetService = {
             marketNiche: 'PET_SUPPLIES',
             requirePetCategory: true,
             requireUsWarehouseOnly: true,
+            monthlyListingLimit: CJ_EBAY_DEFAULT_MONTHLY_LISTING_LIMIT,
+            monthlyAmountLimitUsd: new Prisma.Decimal(CJ_EBAY_DEFAULT_MONTHLY_AMOUNT_LIMIT_USD),
           },
         });
       }
@@ -82,4 +92,3 @@ export const cjEbayOperationalResetService = {
     };
   },
 };
-
