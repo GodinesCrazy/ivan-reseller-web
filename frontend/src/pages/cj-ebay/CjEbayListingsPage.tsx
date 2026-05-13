@@ -4,6 +4,7 @@ import axios from 'axios';
 import { RefreshCw, Search, Send } from 'lucide-react';
 import { api } from '@/services/api';
 import CjEbayOperatorPathCallout from '@/components/cj-ebay/CjEbayOperatorPathCallout';
+import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
 type ListingRow = {
   id: number;
@@ -46,6 +47,33 @@ function usd(value: number | null) {
 
 function isPublishable(row: ListingRow) {
   return ['DRAFT', 'FAILED'].includes(row.status);
+}
+
+function lifecycleSteps(row: ListingRow): ProductLifecycleStep[] {
+  const hasOffer = Boolean(row.ebayOfferId);
+  const hasListing = Boolean(row.ebayListingId);
+  const blocked = ['FAILED', 'ACCOUNT_POLICY_BLOCK', 'RECONCILE_FAILED'].includes(row.status);
+  return [
+    { key: 'draft', label: 'Draft', state: 'done', title: 'Draft local creado desde evaluación CJ/eBay' },
+    {
+      key: 'offer',
+      label: 'Offer',
+      state: hasOffer || hasListing ? 'done' : row.status === 'PUBLISHING' ? 'active' : blocked ? 'blocked' : 'pending',
+      title: hasOffer ? `Offer eBay: ${row.ebayOfferId}` : 'Oferta eBay pendiente',
+    },
+    {
+      key: 'listing',
+      label: 'Listing',
+      state: hasListing ? 'done' : ['RECONCILE_PENDING', 'OFFER_ALREADY_EXISTS'].includes(row.status) ? 'active' : blocked ? 'blocked' : 'pending',
+      title: hasListing ? `Listing eBay: ${row.ebayListingId}` : 'ListingId pendiente de eBay',
+    },
+    {
+      key: 'buyer',
+      label: 'Venta',
+      state: row.status === 'ACTIVE' ? 'active' : row.status === 'ARCHIVED' ? 'blocked' : 'pending',
+      title: row.status === 'ACTIVE' ? 'Visible para venta en eBay' : 'Aún no listo para venta',
+    },
+  ];
 }
 
 export default function CjEbayListingsPage() {
@@ -517,13 +545,14 @@ export default function CjEbayListingsPage() {
               <th className="px-3 py-2">Precio</th>
               <th className="px-3 py-2">SKU</th>
               <th className="px-3 py-2">eBay</th>
+              <th className="px-3 py-2">Ciclo</th>
               <th className="px-3 py-2">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {filteredListings.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-slate-500 text-sm">
+                <td colSpan={8} className="px-3 py-8 text-center text-slate-500 text-sm">
                   Sin resultados para los filtros actuales. Crea un draft desde <strong>Productos CJ</strong> tras evaluación APPROVED.
                 </td>
               </tr>
@@ -591,6 +620,9 @@ export default function CjEbayListingsPage() {
                       ) : (
                         '—'
                       )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <ProductLifecycleLine steps={lifecycleSteps(row)} compact className="min-w-[210px]" />
                     </td>
                     <td className="px-3 py-2 space-x-2 whitespace-nowrap">
                       {row.status === 'ACCOUNT_POLICY_BLOCK' ? (
@@ -690,7 +722,7 @@ export default function CjEbayListingsPage() {
                   </tr>
                   {detailId === row.id && detail && (
                     <tr className="bg-slate-50/90 dark:bg-slate-950/50">
-                      <td colSpan={7} className="px-3 py-3 text-xs text-slate-600 dark:text-slate-400">
+                      <td colSpan={8} className="px-3 py-3 text-xs text-slate-600 dark:text-slate-400">
                         <p className="font-medium text-slate-800 dark:text-slate-200 mb-1">
                           Estado API: {detail.status}
                         </p>

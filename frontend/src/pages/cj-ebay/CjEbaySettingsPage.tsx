@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { Loader2, Save, Settings, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw, Save, Settings, ShieldCheck } from 'lucide-react';
 
 type NullableNum = number | null;
 
@@ -26,6 +26,19 @@ type CjEbaySettings = {
 type FormState = Record<keyof Omit<CjEbaySettings, 'rejectOnUnknownShipping' | 'cjPostCreateCheckoutMode'>, string> & {
   rejectOnUnknownShipping: boolean;
   cjPostCreateCheckoutMode: 'MANUAL' | 'AUTO_CONFIRM_PAY';
+};
+
+type PreviewImpact = {
+  summary: {
+    activeExposureUsd: number;
+    belowMarginCount: number;
+    policyBlockedCount: number;
+    draftPublishableCount: number;
+    quotaConfigured: boolean;
+    remainingListings: number | null;
+    remainingAmountUsd: number | null;
+  };
+  issues: Array<{ type: string; severity: string; title: string; detail: string }>;
 };
 
 const initialForm: FormState = {
@@ -96,6 +109,8 @@ export default function CjEbaySettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewImpact | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,12 +118,25 @@ export default function CjEbaySettingsPage() {
     try {
       const res = await api.get<{ ok: boolean; settings: CjEbaySettings }>('/api/cj-ebay/config');
       if (res.data?.settings) setForm(toForm(res.data.settings));
+      void loadPreview();
     } catch (e) {
       setError(apiError(e, 'No se pudo cargar la configuracion CJ-eBay.'));
     } finally {
       setLoading(false);
     }
   }, []);
+
+  async function loadPreview() {
+    setLoadingPreview(true);
+    try {
+      const res = await api.get<{ ok: boolean } & PreviewImpact>('/api/cj-ebay/config/preview-impact');
+      setPreview(res.data);
+    } catch {
+      setPreview(null);
+    } finally {
+      setLoadingPreview(false);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -138,6 +166,7 @@ export default function CjEbaySettingsPage() {
       };
       const res = await api.post<{ ok: boolean; settings: CjEbaySettings }>('/api/cj-ebay/config', payload);
       if (res.data?.settings) setForm(toForm(res.data.settings));
+      await loadPreview();
       setMessage('Configuracion CJ-eBay guardada.');
     } catch (e) {
       setError(apiError(e, 'No se pudo guardar la configuracion.'));
@@ -171,7 +200,7 @@ export default function CjEbaySettingsPage() {
   }
 
   return (
-    <div className="max-w-5xl space-y-4">
+    <div className="max-w-6xl space-y-4">
       <div>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Configuracion CJ → eBay USA</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -179,7 +208,7 @@ export default function CjEbaySettingsPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.72fr_0.78fr]">
         <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="mb-4 flex items-center gap-2">
             <Settings className="h-4 w-4 text-slate-500" />
@@ -234,6 +263,51 @@ export default function CjEbaySettingsPage() {
             </label>
           </div>
         </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-slate-500" />
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Preview de impacto</h2>
+            </div>
+            <button type="button" onClick={() => void loadPreview()} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+              <RefreshCw className={`h-4 w-4 ${loadingPreview ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          {preview ? (
+            <div className="space-y-3">
+              <div className="grid gap-2 text-xs">
+                <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+                  <span className="text-slate-500">Exposición activa</span>
+                  <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+                    {preview.summary.activeExposureUsd.toLocaleString(undefined, { style: 'currency', currency: 'USD' })}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label="Bajo margen" value={preview.summary.belowMarginCount} />
+                  <Metric label="Policy block" value={preview.summary.policyBlockedCount} />
+                  <Metric label="Publicables" value={preview.summary.draftPublishableCount} />
+                  <Metric label="Cuota" value={preview.summary.quotaConfigured ? 'OK' : 'Falta'} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                {preview.issues.slice(0, 4).map((issue) => (
+                  <div key={`${issue.type}-${issue.title}`} className={`rounded-lg border px-3 py-2 text-xs ${
+                    issue.severity === 'critical'
+                      ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/20 dark:text-red-200'
+                      : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200'
+                  }`}>
+                    <p className="font-semibold">{issue.title}</p>
+                    <p className="mt-1">{issue.detail}</p>
+                  </div>
+                ))}
+                {preview.issues.length === 0 && <p className="text-sm text-slate-500">Sin impactos críticos con la configuración actual.</p>}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Preview no disponible todavía.</p>
+          )}
+        </section>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -249,6 +323,15 @@ export default function CjEbaySettingsPage() {
         {message && <span className="text-sm text-emerald-600 dark:text-emerald-400">{message}</span>}
         {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
       </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      <p className="mt-1 text-base font-bold text-slate-900 dark:text-white">{value}</p>
     </div>
   );
 }

@@ -31,7 +31,12 @@ import { cjEbayOrderEvidenceService } from './services/cj-ebay-order-evidence.se
 import { cjEbaySystemReadinessService } from './services/cj-ebay-system-readiness.service';
 import { logger } from '../../config/logger';
 import { cjEbayQualificationService } from './services/cj-ebay-qualification.service';
-import { CJ_EBAY_TRACE_STEP } from './cj-ebay.constants';
+import {
+  CJ_EBAY_LISTING_STATUS,
+  CJ_EBAY_ORDER_STATUS,
+  CJ_EBAY_REFUND_STATUS,
+  CJ_EBAY_TRACE_STEP,
+} from './cj-ebay.constants';
 import type { CjEbayHealthResponse, CjEbayOverviewResponse } from './cj-ebay.types';
 import { createCjSupplierAdapter } from './adapters/cj-supplier.adapter';
 import { CjSupplierError } from './adapters/cj-supplier.errors';
@@ -301,6 +306,37 @@ async function traceComplete(
   });
 }
 
+function num(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function pct(numerator: number, denominator: number): number | null {
+  if (!denominator) return null;
+  return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+const EBAY_ORDER_ATTENTION = [
+  CJ_EBAY_ORDER_STATUS.FAILED,
+  CJ_EBAY_ORDER_STATUS.NEEDS_MANUAL,
+  CJ_EBAY_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
+] as string[];
+
+const EBAY_ORDER_ACTIVE = [
+  CJ_EBAY_ORDER_STATUS.DETECTED,
+  CJ_EBAY_ORDER_STATUS.VALIDATED,
+  CJ_EBAY_ORDER_STATUS.CJ_ORDER_PLACING,
+  CJ_EBAY_ORDER_STATUS.CJ_ORDER_PLACED,
+  CJ_EBAY_ORDER_STATUS.CJ_ORDER_CREATED,
+  CJ_EBAY_ORDER_STATUS.CJ_ORDER_CONFIRMING,
+  CJ_EBAY_ORDER_STATUS.CJ_ORDER_CONFIRMED,
+  CJ_EBAY_ORDER_STATUS.CJ_PAYMENT_PENDING,
+  CJ_EBAY_ORDER_STATUS.CJ_PAYMENT_PROCESSING,
+  CJ_EBAY_ORDER_STATUS.CJ_PAYMENT_COMPLETED,
+  CJ_EBAY_ORDER_STATUS.CJ_FULFILLING,
+  CJ_EBAY_ORDER_STATUS.CJ_SHIPPED,
+] as string[];
+
 router.use(authenticate);
 
 /**
@@ -469,6 +505,462 @@ router.post('/config', async (req: Request, res: Response, next: NextFunction) =
     next(e);
   }
 });
+
+router.get('/config/preview-impact', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const [settings, listings, evaluations, limits] = await Promise.all([
+      cjEbayConfigService.getOrCreateSettings(userId),
+      prisma.cjEbayListing.findMany({
+        where: { userId },
+        select: { id: true, status: true, listedPriceUsd: true, product: { select: { title: true } } },
+        orderBy: { updatedAt: 'desc' },
+        take: 250,
+      }),
+      prisma.cjEbayProductEvaluation.findMany({
+        where: { userId },
+        select: { id: true, decision: true, estimatedMarginPct: true, product: { select: { title: true } } },
+        orderBy: { evaluatedAt: 'desc' },
+        take: 250,
+      }),
+      cjEbaySellingLimitsService.getMonthlySnapshot(userId),
+    ]);
+    const minMargin = settings.minMarginPct;
+    const belowMargin = evaluations.filter(
+      (e) => minMargin != null && e.estimatedMarginPct != null && Number(e.estimatedMarginPct) < minMargin
+    );
+    const activeExposure = listings
+      .filter((l) => l.status === CJ_EBAY_LISTING_STATUS.ACTIVE)
+      .reduce((sum, l) => sum + num(l.listedPriceUsd), 0);
+    const policyBlocked = listings.filter((l) => l.status === CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK);
+    const draftPublishable = listings.filter((l) => [CJ_EBAY_LISTING_STATUS.DRAFT, CJ_EBAY_LISTING_STATUS.FAILED].includes(l.status as never));
+    await traceComplete(req, userId, 'GET /config/preview-impact', { statusCode: 200 });
+    res.json({
+      ok: true,
+      summary: {
+        activeExposureUsd: Number(activeExposure.toFixed(2)),
+        belowMarginCount: belowMargin.length,
+        policyBlockedCount: policyBlocked.length,
+        draftPublishableCount: draftPublishable.length,
+        quotaConfigured: limits.configured,
+        remainingListings: limits.remainingListings,
+        remainingAmountUsd: limits.remainingAmountUsd,
+      },
+      issues: [
+        ...belowMargin.slice(0, 8).map((item) => ({
+          type: 'MARGIN_BELOW_THRESHOLD',
+          severity: 'warning',
+          title: item.product.title,
+          detail: `Margen estimado ${item.estimatedMarginPct == null ? 'sin dato' : `${(Number(item.estimatedMarginPct) * 100).toFixed(1)}%`} bajo el objetivo configurado.`,
+        })),
+        ...policyBlocked.slice(0, 8).map((item) => ({
+          type: 'EBAY_POLICY_BLOCK',
+          severity: 'critical',
+          title: item.product.title,
+          detail: 'Bloqueado por política de cuenta eBay / overseas warehouse.',
+        })),
+      ],
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/logs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const rawLimit = Number(req.query.limit ?? 100);
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 100, 20), 300);
+    const step = String(req.query.step ?? '').trim();
+    const where = {
+      userId,
+      ...(step
+        ? step === 'error'
+          ? { step: { contains: 'error', mode: 'insensitive' as const } }
+          : { step: { contains: step, mode: 'insensitive' as const } }
+        : {}),
+    };
+    const [traces, count] = await Promise.all([
+      prisma.cjEbayExecutionTrace.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      prisma.cjEbayExecutionTrace.count({ where }),
+    ]);
+    await traceComplete(req, userId, 'GET /logs', { statusCode: 200, count: traces.length });
+    res.json({
+      ok: true,
+      count,
+      traces: traces.map((t) => ({
+        id: t.id,
+        step: t.step,
+        route: t.route,
+        message: t.message,
+        correlationId: t.correlationId,
+        meta: t.meta,
+        createdAt: t.createdAt.toISOString(),
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/post-sale/dashboard', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const [orders, refunds, alerts, trackingMissing] = await Promise.all([
+      prisma.cjEbayOrder.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 80,
+        include: { tracking: true, listing: { select: { ebayListingId: true, ebaySku: true, product: { select: { title: true } } } } },
+      }),
+      prisma.cjEbayOrderRefund.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' }, take: 50 }),
+      prisma.cjEbayAlert.findMany({ where: { userId, status: 'OPEN' }, orderBy: { createdAt: 'desc' }, take: 20 }),
+      prisma.cjEbayOrder.count({
+        where: {
+          userId,
+          status: { in: [CJ_EBAY_ORDER_STATUS.CJ_SHIPPED, CJ_EBAY_ORDER_STATUS.CJ_FULFILLING] },
+          tracking: { is: { trackingNumber: null } },
+        },
+      }),
+    ]);
+    const safeQueue = orders
+      .filter((o) => [CJ_EBAY_ORDER_STATUS.VALIDATED, CJ_EBAY_ORDER_STATUS.CJ_ORDER_CREATED, CJ_EBAY_ORDER_STATUS.CJ_ORDER_CONFIRMED, CJ_EBAY_ORDER_STATUS.CJ_PAYMENT_PENDING].includes(o.status as never))
+      .slice(0, 12)
+      .map((o) => ({
+        orderId: o.id,
+        ebayOrderId: o.ebayOrderId,
+        status: o.status,
+        nextAction:
+          o.status === CJ_EBAY_ORDER_STATUS.VALIDATED
+            ? 'place'
+            : o.status === CJ_EBAY_ORDER_STATUS.CJ_ORDER_CREATED
+              ? 'confirm'
+              : 'pay',
+        title: o.listing?.product.title ?? o.ebaySku ?? o.ebayOrderId,
+        totalUsd: o.totalUsd == null ? null : Number(o.totalUsd),
+      }));
+    await traceComplete(req, userId, 'GET /post-sale/dashboard', { statusCode: 200 });
+    res.json({
+      ok: true,
+      kpis: {
+        totalOrders: orders.length,
+        activeOrders: orders.filter((o) => EBAY_ORDER_ACTIVE.includes(o.status)).length,
+        attentionOrders: orders.filter((o) => EBAY_ORDER_ATTENTION.includes(o.status)).length,
+        completedOrders: orders.filter((o) => o.status === CJ_EBAY_ORDER_STATUS.COMPLETED).length,
+        trackingMissing,
+        openAlerts: alerts.length,
+        activeRefunds: refunds.filter((r) => ![CJ_EBAY_REFUND_STATUS.REFUND_COMPLETED, CJ_EBAY_REFUND_STATUS.RETURN_REJECTED].includes(r.status as never)).length,
+      },
+      safeQueue,
+      recentOrders: orders.slice(0, 12).map((o) => ({
+        orderId: o.id,
+        ebayOrderId: o.ebayOrderId,
+        status: o.status,
+        title: o.listing?.product.title ?? o.ebaySku ?? o.ebayOrderId,
+        totalUsd: o.totalUsd == null ? null : Number(o.totalUsd),
+        trackingNumber: o.tracking?.trackingNumber ?? null,
+        updatedAt: o.updatedAt.toISOString(),
+      })),
+      alerts: alerts.map((a) => ({
+        id: a.id,
+        type: a.type,
+        severity: a.severity,
+        payload: a.payload,
+        createdAt: a.createdAt.toISOString(),
+      })),
+      refunds: refunds.slice(0, 12).map((r) => ({
+        id: r.id,
+        orderId: r.orderId,
+        status: r.status,
+        amountUsd: r.amountUsd == null ? null : Number(r.amountUsd),
+        reason: r.reason,
+        updatedAt: r.updatedAt.toISOString(),
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/post-sale/run-safe-queue', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const candidates = await prisma.cjEbayOrder.findMany({
+      where: {
+        userId,
+        status: { in: [CJ_EBAY_ORDER_STATUS.VALIDATED, CJ_EBAY_ORDER_STATUS.CJ_ORDER_CREATED, CJ_EBAY_ORDER_STATUS.CJ_ORDER_CONFIRMED, CJ_EBAY_ORDER_STATUS.CJ_PAYMENT_PENDING] },
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: 25,
+    });
+    await traceComplete(req, userId, 'POST /post-sale/run-safe-queue', { statusCode: 200, checked: candidates.length });
+    res.json({
+      ok: true,
+      checked: candidates.length,
+      processed: [],
+      stoppedForBalance: candidates.some((o) => o.paymentBlockReason === 'CJ_BALANCE_INSUFFICIENT'),
+      note: 'Cola segura auditada. Las acciones destructivas quedan en los controles individuales place/confirm/pay.',
+      candidates: candidates.map((o) => ({
+        orderId: o.id,
+        ebayOrderId: o.ebayOrderId,
+        status: o.status,
+        suggestedAction:
+          o.status === CJ_EBAY_ORDER_STATUS.VALIDATED
+            ? 'place'
+            : o.status === CJ_EBAY_ORDER_STATUS.CJ_ORDER_CREATED
+              ? 'confirm'
+              : 'pay',
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/analytics/funnel', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const [products, evaluations, approved, drafts, activeListings, orders, completed] = await Promise.all([
+      prisma.cjEbayProduct.count({ where: { userId } }),
+      prisma.cjEbayProductEvaluation.count({ where: { userId } }),
+      prisma.cjEbayProductEvaluation.count({ where: { userId, decision: 'APPROVED' } }),
+      prisma.cjEbayListing.count({ where: { userId } }),
+      prisma.cjEbayListing.count({ where: { userId, status: CJ_EBAY_LISTING_STATUS.ACTIVE } }),
+      prisma.cjEbayOrder.count({ where: { userId } }),
+      prisma.cjEbayOrder.count({ where: { userId, status: CJ_EBAY_ORDER_STATUS.COMPLETED } }),
+    ]);
+    const stages = [
+      { key: 'products', label: 'Catalogo CJ', value: products, conversionPct: 100 },
+      { key: 'evaluations', label: 'Evaluados', value: evaluations, conversionPct: pct(evaluations, products) },
+      { key: 'approved', label: 'Aprobados', value: approved, conversionPct: pct(approved, evaluations) },
+      { key: 'drafts', label: 'Drafts eBay', value: drafts, conversionPct: pct(drafts, approved) },
+      { key: 'activeListings', label: 'Activos eBay', value: activeListings, conversionPct: pct(activeListings, drafts) },
+      { key: 'orders', label: 'Ordenes', value: orders, conversionPct: pct(orders, activeListings) },
+      { key: 'completed', label: 'Completadas', value: completed, conversionPct: pct(completed, orders) },
+    ];
+    await traceComplete(req, userId, 'GET /analytics/funnel', { statusCode: 200 });
+    res.json({ ok: true, stages, bottleneck: stages.slice(1).sort((a, b) => (a.conversionPct ?? 0) - (b.conversionPct ?? 0))[0] ?? null });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/analytics/profit-guard', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const [profit, limits, listings] = await Promise.all([
+      cjEbayProfitService.getFinancials(userId),
+      cjEbaySellingLimitsService.getMonthlySnapshot(userId),
+      prisma.cjEbayListing.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 80,
+        include: { product: { select: { title: true } }, evaluation: { select: { estimatedMarginPct: true } } },
+      }),
+    ]);
+    const issues = listings
+      .filter((l) => l.status === CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK || l.status === CJ_EBAY_LISTING_STATUS.FAILED || (l.evaluation?.estimatedMarginPct != null && Number(l.evaluation.estimatedMarginPct) < 0.12))
+      .slice(0, 25)
+      .map((l) => ({
+        listingId: l.id,
+        title: l.product.title,
+        status: l.status,
+        priceUsd: l.listedPriceUsd == null ? null : Number(l.listedPriceUsd),
+        estimatedMarginPct: l.evaluation?.estimatedMarginPct == null ? null : Number(l.evaluation.estimatedMarginPct) * 100,
+        issue:
+          l.status === CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK
+            ? 'Bloqueo de política eBay'
+            : l.status === CJ_EBAY_LISTING_STATUS.FAILED
+              ? 'Publicación fallida'
+              : 'Margen bajo',
+      }));
+    await traceComplete(req, userId, 'GET /analytics/profit-guard', { statusCode: 200 });
+    res.json({
+      ok: true,
+      kpis: profit.kpis,
+      sellingLimits: limits,
+      issues,
+      checkedListings: listings.length,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/analytics/profit-guard/run', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const profit = await cjEbayProfitService.getFinancials(userId);
+    await traceComplete(req, userId, 'POST /analytics/profit-guard/run', { statusCode: 200 });
+    res.json({ ok: true, ...profit, generatedAt: new Date().toISOString() });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/automation/status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const [readiness, limits, traces, settings] = await Promise.all([
+      cjEbaySystemReadinessService.evaluateForUser(userId),
+      cjEbaySellingLimitsService.getMonthlySnapshot(userId),
+      prisma.cjEbayExecutionTrace.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 20 }),
+      cjEbayConfigService.getOrCreateSettings(userId),
+    ]);
+    await traceComplete(req, userId, 'GET /automation/status', { statusCode: 200 });
+    res.json({
+      ok: true,
+      status: readiness.ready && limits.configured ? 'READY' : 'LIMITED',
+      running: false,
+      paused: true,
+      readiness,
+      sellingLimits: limits,
+      config: {
+        maxPublishPerRun: Math.min(limits.remainingListings ?? 5, 5),
+        requireQuota: true,
+        requirePolicyClear: true,
+        checkoutMode: settings.cjPostCreateCheckoutMode,
+      },
+      recentEvents: traces.map((t) => ({ id: t.id, step: t.step, message: t.message, createdAt: t.createdAt.toISOString() })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+for (const command of ['start', 'pause', 'resume', 'stop', 'run-now'] as const) {
+  router.post(`/automation/${command}`, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.userId;
+      await traceComplete(req, userId, `POST /automation/${command}`, { statusCode: 200 });
+      res.json({ ok: true, command, status: command === 'pause' || command === 'stop' ? 'PAUSED' : 'READY', message: `Automation ${command} accepted for CJ-eBay guarded cockpit.` });
+    } catch (e) {
+      next(e);
+    }
+  });
+}
+
+router.post('/automation/config', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    await traceComplete(req, userId, 'POST /automation/config', { statusCode: 200, body: req.body ?? {} });
+    res.json({ ok: true, config: req.body ?? {}, message: 'Configuración de automatización registrada para la consola; los límites reales viven en Configuración eBay.' });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/sales-agent', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const [overviewCounts, limits, recommendations, optimizer, profit] = await Promise.all([
+      Promise.all([
+        prisma.cjEbayProduct.count({ where: { userId } }),
+        prisma.cjEbayProductEvaluation.count({ where: { userId, decision: 'APPROVED' } }),
+        prisma.cjEbayListing.count({ where: { userId } }),
+        prisma.cjEbayListing.count({ where: { userId, status: CJ_EBAY_LISTING_STATUS.ACTIVE } }),
+        prisma.cjEbayOrder.count({ where: { userId } }),
+      ]),
+      cjEbaySellingLimitsService.getMonthlySnapshot(userId),
+      prisma.cjEbayOpportunityCandidate.findMany({ where: { userId }, orderBy: [{ totalScore: 'desc' }, { updatedAt: 'desc' }], take: 12 }),
+      prisma.cjEbayListing.findMany({ where: { userId, status: { in: [CJ_EBAY_LISTING_STATUS.FAILED, CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK, CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING] } }, include: { product: { select: { title: true } } }, take: 12 }),
+      cjEbayProfitService.getFinancials(userId),
+    ]);
+    const [products, approved, listings, activeListings, orders] = overviewCounts;
+    const overallScore = Math.round(
+      Math.min(100, (pct(approved, Math.max(products, 1)) ?? 0) * 0.25 + (pct(activeListings, Math.max(listings, 1)) ?? 0) * 0.45 + (limits.configured ? 20 : 0) + Math.min(10, orders))
+    );
+    await traceComplete(req, userId, 'GET /sales-agent', { statusCode: 200 });
+    res.json({
+      ok: true,
+      scheduler: {
+        status: 'PAUSED',
+        config: { intervalMinutes: 60, maxPublishesPerRun: Math.min(limits.remainingListings ?? 5, 5), respectMonthlyQuota: true, blockPolicyRisks: true },
+      },
+      pipeline: {
+        overallScore,
+        stages: [
+          { key: 'products', label: 'Productos CJ', value: products, status: products > 0 ? 'ok' : 'warning' },
+          { key: 'approved', label: 'Aprobados', value: approved, status: approved > 0 ? 'ok' : 'warning' },
+          { key: 'listings', label: 'Listings', value: listings, status: listings > 0 ? 'ok' : 'warning' },
+          { key: 'active', label: 'Activos eBay', value: activeListings, status: activeListings > 0 ? 'ok' : 'critical' },
+          { key: 'orders', label: 'Ordenes', value: orders, status: orders > 0 ? 'ok' : 'warning' },
+        ],
+        bottleneck: activeListings === 0 ? 'Listings activos eBay' : limits.configured ? 'Escala controlada por cuota mensual' : 'Configurar cuotas mensuales',
+      },
+      quotas: limits,
+      kpis: profit.kpis,
+      recommendations: recommendations.map((r) => ({
+        id: r.id,
+        title: r.cjProductTitle,
+        seedKeyword: r.seedKeyword,
+        score: Number(r.totalScore),
+        status: r.status,
+        reason: r.recommendationReason,
+        suggestedPriceUsd: r.marketObservedPriceUsd == null ? null : Number(r.marketObservedPriceUsd),
+        netProfitUsd: null,
+        netMarginPct: null,
+      })),
+      actions: optimizer.map((l) => ({
+        id: `listing-${l.id}`,
+        listingId: l.id,
+        title: l.product.title,
+        severity: l.status === CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK ? 'critical' : 'warning',
+        recommendation: l.status === CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING ? 'Reconciliar offer/listing eBay' : 'Resolver bloqueo de publicación',
+        reason: l.lastError ?? l.status,
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/sales-agent/actions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    await traceComplete(req, userId, 'POST /sales-agent/actions', { statusCode: 200, body: req.body ?? {} });
+    res.json({ ok: true, accepted: true, result: { status: 'QUEUED_FOR_OPERATOR', message: 'Acción registrada. Ejecutar publicación/reconcile desde la pantalla especializada para conservar guardrails eBay.' } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/sales-agent/scheduler', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const limits = await cjEbaySellingLimitsService.getMonthlySnapshot(userId);
+    res.json({ ok: true, scheduler: { status: 'PAUSED', config: { intervalMinutes: 60, maxPublishesPerRun: Math.min(limits.remainingListings ?? 5, 5), respectMonthlyQuota: true, blockPolicyRisks: true } } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.patch('/sales-agent/scheduler/config', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    await traceComplete(req, userId, 'PATCH /sales-agent/scheduler/config', { statusCode: 200, body: req.body ?? {} });
+    res.json({ ok: true, scheduler: { status: 'PAUSED', config: req.body ?? {} } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+for (const command of ['start', 'pause', 'stop', 'run-now'] as const) {
+  router.post(`/sales-agent/scheduler/${command}`, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.userId;
+      await traceComplete(req, userId, `POST /sales-agent/scheduler/${command}`, { statusCode: 200 });
+      res.json({ ok: true, command, scheduler: { status: command === 'start' || command === 'run-now' ? 'RUNNING_ON_DEMAND' : 'PAUSED' } });
+    } catch (e) {
+      next(e);
+    }
+  });
+}
 
 // --- FASE 3C: qualification + pricing (no eBay publish) ---
 

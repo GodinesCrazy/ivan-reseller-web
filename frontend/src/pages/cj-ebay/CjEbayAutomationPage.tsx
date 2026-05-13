@@ -1,22 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { Loader2, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Pause, Play, RefreshCw, Settings, Square, Zap } from 'lucide-react';
 
-type ReadinessCheck = {
-  key: string;
-  label: string;
-  ok: boolean;
-  detail?: string;
-  action?: string;
-};
-
-type SellingLimits = {
-  configured: boolean;
-  listingLimit: number | null;
-  amountLimitUsd: number | null;
-  remainingListings: number | null;
-  remainingAmountUsd: number | null;
+type AutomationStatus = {
+  status: string;
+  running: boolean;
+  paused: boolean;
+  readiness: { ready: boolean; checks: Array<{ id: string; ok: boolean; detail: string; hint?: string }> };
+  sellingLimits: { configured: boolean; remainingListings: number | null; listingLimit: number | null; remainingAmountUsd: number | null; amountLimitUsd: number | null };
+  config: { maxPublishPerRun: number; requireQuota: boolean; requirePolicyClear: boolean; checkoutMode: string };
+  recentEvents: Array<{ id: string; step: string; message: string; createdAt: string }>;
 };
 
 function apiError(e: unknown, fallback: string): string {
@@ -33,89 +27,129 @@ function usd(value: number | null | undefined): string {
 }
 
 export default function CjEbayAutomationPage() {
-  const [ready, setReady] = useState<boolean | null>(null);
-  const [checks, setChecks] = useState<ReadinessCheck[]>([]);
-  const [limits, setLimits] = useState<SellingLimits | null>(null);
+  const [data, setData] = useState<AutomationStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [readinessRes, limitsRes] = await Promise.all([
-          api.get<{ ready: boolean; checks: ReadinessCheck[] }>('/api/cj-ebay/system-readiness'),
-          api.get<{ ok: boolean; sellingLimits: SellingLimits }>('/api/cj-ebay/selling-limits'),
-        ]);
-        if (!cancelled) {
-          setReady(readinessRes.data.ready);
-          setChecks(readinessRes.data.checks ?? []);
-          setLimits(limitsRes.data.sellingLimits);
-        }
-      } catch (e) {
-        if (!cancelled) setError(apiError(e, 'No se pudo cargar automatizacion CJ-eBay.'));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get<{ ok: boolean } & AutomationStatus>('/api/cj-ebay/automation/status');
+      setData(res.data);
+    } catch (e) {
+      setError(apiError(e, 'No se pudo cargar automatización CJ-eBay.'));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Cargando automatizacion CJ-eBay...
-      </div>
-    );
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function command(cmd: 'start' | 'pause' | 'resume' | 'stop' | 'run-now') {
+    setBusy(cmd);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await api.post<{ message?: string }>(`/api/cj-ebay/automation/${cmd}`);
+      setMessage(res.data.message ?? `Comando ${cmd} aceptado.`);
+      await load();
+    } catch (e) {
+      setError(apiError(e, `No se pudo ejecutar ${cmd}.`));
+    } finally {
+      setBusy(null);
+    }
   }
 
-  if (error) return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300">{error}</div>;
+  if (loading) return <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Cargando automatización CJ-eBay...</div>;
+
+  const ready = data?.readiness.ready && data.sellingLimits.configured;
+  const failedChecks = data?.readiness.checks.filter((c) => !c.ok) ?? [];
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-2">
-        <Zap className="h-5 w-5 text-slate-500" />
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Automatizacion CJ → eBay USA</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Control operativo para publicar solo cuando credenciales, cuotas y politicas estan listas.
-          </p>
-        </div>
-      </div>
-
-      <div className={`rounded-xl border px-4 py-3 ${ready ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-200' : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200'}`}>
-        <p className="text-sm font-semibold">{ready ? 'Modulo listo para automatizar con supervision' : 'Automatizacion limitada por readiness'}</p>
-        {limits && (
-          <p className="mt-1 text-xs">
-            Cuotas: {limits.listingLimit ? `${limits.remainingListings}/${limits.listingLimit} publicaciones libres` : 'sin limite de publicaciones'} · {limits.amountLimitUsd ? `${usd(limits.remainingAmountUsd)} libres de ${usd(limits.amountLimitUsd)}` : 'sin limite de monto'}
-          </p>
-        )}
-      </div>
-
-      <section className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Checklist de automatizacion</h2>
-        </div>
-        <div className="divide-y divide-slate-200 dark:divide-slate-700">
-          {checks.map((check) => (
-            <div key={check.key} className="flex items-start gap-3 px-4 py-3">
-              <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${check.ok ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
-                {check.ok ? '✓' : '!'}
-              </span>
-              <div>
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{check.label}</p>
-                {check.detail && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{check.detail}</p>}
-                {check.action && <p className="mt-1 text-xs font-medium text-primary-700 dark:text-primary-300">{check.action}</p>}
-              </div>
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className={`rounded-xl p-3 ${ready ? 'bg-emerald-500/10 text-emerald-200' : 'bg-amber-500/10 text-amber-200'}`}><Zap className="h-6 w-6" /></div>
+            <div>
+              <h1 className="text-xl font-semibold text-white">Automatización CJ → eBay USA</h1>
+              <p className="text-sm text-slate-400">Cockpit con guardrails de cuota, política eBay, checkout CJ y publicación supervisada.</p>
             </div>
-          ))}
+          </div>
+          <div className={`rounded-full px-3 py-1 text-xs font-bold ${ready ? 'bg-emerald-500/10 text-emerald-200' : 'bg-amber-500/10 text-amber-200'}`}>
+            {ready ? 'READY' : 'LIMITED'}
+          </div>
         </div>
-      </section>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Publicaciones libres" value={data?.sellingLimits.listingLimit ? `${data.sellingLimits.remainingListings}/${data.sellingLimits.listingLimit}` : 'Sin límite'} />
+          <Metric label="Monto libre" value={data?.sellingLimits.amountLimitUsd ? `${usd(data.sellingLimits.remainingAmountUsd)} / ${usd(data.sellingLimits.amountLimitUsd)}` : 'Sin límite'} />
+          <Metric label="Max por corrida" value={String(data?.config.maxPublishPerRun ?? 0)} />
+          <Metric label="Checkout CJ" value={data?.config.checkoutMode ?? 'MANUAL'} />
+        </div>
+      </div>
+
+      {message && <div className="rounded-lg border border-emerald-800 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100">{message}</div>}
+      {error && <div className="rounded-lg border border-rose-900 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">{error}</div>}
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+        <section className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+          <h2 className="text-sm font-semibold text-slate-100">Controles operativos</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              { cmd: 'start', label: 'Iniciar', Icon: Play },
+              { cmd: 'run-now', label: 'Run now', Icon: Zap },
+              { cmd: 'pause', label: 'Pausar', Icon: Pause },
+              { cmd: 'resume', label: 'Reanudar', Icon: RefreshCw },
+              { cmd: 'stop', label: 'Stop', Icon: Square },
+            ].map(({ cmd, label, Icon }) => (
+              <button key={String(cmd)} type="button" onClick={() => void command(cmd as 'start' | 'pause' | 'resume' | 'stop' | 'run-now')} disabled={busy === cmd} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">
+                {busy === cmd ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-100"><Settings className="h-4 w-4" />Guardrails activos</div>
+            <div className="grid gap-2 text-xs text-slate-300 sm:grid-cols-3">
+              <span className="rounded bg-slate-950 px-3 py-2">Cuota requerida: <b>{data?.config.requireQuota ? 'Sí' : 'No'}</b></span>
+              <span className="rounded bg-slate-950 px-3 py-2">Policy clear: <b>{data?.config.requirePolicyClear ? 'Sí' : 'No'}</b></span>
+              <span className="rounded bg-slate-950 px-3 py-2">Readiness: <b>{data?.readiness.ready ? 'OK' : 'Atención'}</b></span>
+            </div>
+          </div>
+        </section>
+
+        <aside className="space-y-4">
+          <section className="rounded-xl border border-slate-800 bg-slate-950">
+            <div className="border-b border-slate-800 px-4 py-3 text-sm font-semibold text-slate-100">Checklist</div>
+            <div className="divide-y divide-slate-900">
+              {data?.readiness.checks.map((check) => (
+                <div key={check.id} className="flex items-start gap-3 px-4 py-3">
+                  {check.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" /> : <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-300" />}
+                  <div><p className="text-xs font-semibold text-slate-200">{check.id}</p><p className="mt-1 text-xs text-slate-500">{check.detail}</p></div>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="rounded-xl border border-slate-800 bg-slate-950">
+            <div className="border-b border-slate-800 px-4 py-3 text-sm font-semibold text-slate-100">Eventos recientes</div>
+            <div className="divide-y divide-slate-900">
+              {data?.recentEvents.slice(0, 8).map((event) => <div key={event.id} className="px-4 py-3"><p className="text-xs font-mono text-cyan-300">{event.step}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{event.message}</p></div>)}
+              {data?.recentEvents.length === 0 && <div className="px-4 py-6 text-sm text-slate-500">Sin eventos.</div>}
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      {failedChecks.length > 0 && <div className="rounded-xl border border-amber-800 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{failedChecks.length} checks requieren atención antes de liberar automatización completa.</div>}
     </div>
   );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 truncate text-lg font-bold text-white">{value}</p></div>;
 }

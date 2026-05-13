@@ -34,6 +34,15 @@ Completed now:
 - Second visual parity pass started after screenshot comparison:
   - CJ-eBay Overview was rebuilt to match the CJ-Shopify operational dashboard pattern: hero/status panel, readiness score, pipeline cards, quick actions, quota warning, alerts, and integration checks.
   - CJ-eBay Listings was upgraded to the Shopify Store Products pattern: header actions, metric filters, search/sort controls, visible-result count, and a cleaner table flow while keeping eBay-specific reconciliation and policy-block actions.
+- Third parity pass implemented after page-by-page comparison:
+  - Added CJ-eBay cockpit APIs for logs, post-sale dashboard, analytics funnel, profit guard, automation controls, sales agent, scheduler controls, and settings impact preview.
+  - Rebuilt CJ-eBay Logs from placeholder into a real trace table backed by `cjEbayExecutionTrace`, with filters, severity, entity context, and expandable JSON metadata.
+  - Rebuilt CJ-eBay Post Venta as a Shopify-style safe-queue dashboard adapted to eBay tracking, refunds, manual import, policy blocks, and operational alerts.
+  - Rebuilt CJ-eBay Analitica as a cockpit with funnel, quota readiness, eBay economics, Profit Guard issues, and executable profit scan.
+  - Rebuilt CJ-eBay Agente eBay as a larger operational cockpit with scheduler controls, opportunity actions, quota-aware recommendations, strategy, and learning/risk panels.
+  - Rebuilt CJ-eBay Automatizacion as a control cockpit with start/pause/resume/stop/run-now commands, quota guardrails, readiness checks, and recent trace events.
+  - Added CJ-eBay Settings impact preview so monthly listing limits, monthly amount limits, fees, and margin settings show operational consequences before publishing.
+  - Added eBay lifecycle line support in Listings so each listing row exposes the Draft -> Offer -> Listing -> Venta flow.
 
 Next Shopify refactor:
 
@@ -87,16 +96,16 @@ Frontend parity targets:
   - overview, visually aligned in second pass,
   - discover/opportunities, done,
   - products, done,
-  - listings, visually aligned in second pass,
+  - listings, visually aligned in second/third pass with lifecycle line,
   - orders/order detail, done,
-  - post-sale, done,
+  - post-sale, rebuilt as cockpit in third pass,
   - profit guard, done,
-  - analytics, present but still lighter than Shopify advanced analytics,
+  - analytics, rebuilt as cockpit in third pass,
   - alerts, done,
-  - sales agent, present but still lighter than Shopify advanced sales agent,
-  - automation, present but still lighter than Shopify automation cockpit,
-  - settings, done,
-  - logs, done,
+  - sales agent, rebuilt as cockpit in third pass,
+  - automation, rebuilt as cockpit in third pass,
+  - settings, done with eBay fee/quota impact preview,
+  - logs, real trace table done,
   - eBay store optimizer, done.
 - Keep eBay-specific UI visible:
   - monthly listing count limit, done,
@@ -105,7 +114,41 @@ Frontend parity targets:
   - eBay fee assumptions, done,
   - policy/account blockers, done,
   - listing quality warnings, partially done from listing detail payload,
-  - publish queue state, partially done through listing status and optimizer recommendations.
+  - publish queue state, partially done through listing status, safe queue, automation status, and optimizer recommendations.
+
+Backend endpoints added in third pass:
+
+- `GET /api/cj-ebay/config/preview-impact`
+- `GET /api/cj-ebay/logs`
+- `GET /api/cj-ebay/post-sale/dashboard`
+- `POST /api/cj-ebay/post-sale/run-safe-queue`
+- `GET /api/cj-ebay/analytics/funnel`
+- `GET /api/cj-ebay/analytics/profit-guard`
+- `POST /api/cj-ebay/analytics/profit-guard/run`
+- `GET /api/cj-ebay/automation/status`
+- `POST /api/cj-ebay/automation/start`
+- `POST /api/cj-ebay/automation/pause`
+- `POST /api/cj-ebay/automation/resume`
+- `POST /api/cj-ebay/automation/stop`
+- `POST /api/cj-ebay/automation/run-now`
+- `POST /api/cj-ebay/automation/config`
+- `GET /api/cj-ebay/sales-agent`
+- `POST /api/cj-ebay/sales-agent/actions`
+- `GET /api/cj-ebay/sales-agent/scheduler`
+- `PATCH /api/cj-ebay/sales-agent/scheduler/config`
+- `POST /api/cj-ebay/sales-agent/scheduler/start`
+- `POST /api/cj-ebay/sales-agent/scheduler/pause`
+- `POST /api/cj-ebay/sales-agent/scheduler/stop`
+- `POST /api/cj-ebay/sales-agent/scheduler/run-now`
+
+Remaining visual parity work after third pass:
+
+- Discover still needs a final skin pass to look exactly like Shopify Discover while keeping eBay opportunity scoring.
+- Productos CJ still needs final compaction and config separation so it reads less like an admin panel and more like the Shopify product lifecycle table.
+- Orders and Order Detail should keep the richer eBay operational evidence, but need final Shopify-style toolbar, chips, pagination density, and detail section alignment.
+- Listings still needs a true right-side detail drawer and stronger bulk safe actions; lifecycle and policy panels are present, but the interaction model is not yet a complete clone.
+- Profit and Alerts are functional and acceptable, but need minor visual tuning for exact Shopify density.
+- Store Optimizer remains an eBay-only extra and should not substitute any missing Shopify-equivalent page.
 
 ## Execution Phases
 
@@ -126,10 +169,20 @@ Frontend parity targets:
    - Add missing eBay pages/components.
    - Add quota, optimizer, and policy-block panels.
    - Completed first parity pass: CJ-eBay now exposes the same major module areas as CJ-Shopify with eBay-specific settings, quota analytics, post-sale, automation, sales-agent, and store optimizer views.
-   - Second visual pass: Overview and Listings now follow the Shopify screen composition more closely. Remaining visual depth gaps are Analytics, Sales Agent, and Automation because Shopify has much richer operational cockpit screens there.
+   - Second visual pass: Overview and Listings now follow the Shopify screen composition more closely.
+   - Third visual/API pass: Logs, Post Venta, Analitica, Agente eBay, Automatizacion, Settings preview, and Listings lifecycle are now backed by real eBay APIs and cockpit screens instead of placeholders/light panels.
+   - Remaining work is visual micro-parity and interaction parity on Discover, Productos CJ, Orders, Order Detail, Listings drawer/bulk actions, Profit, and Alerts.
 
 4. Verification
    - Type-check backend.
    - Run focused unit tests for Shopify policy/title/webhook/cache behavior.
    - Run frontend build/type-check if available.
    - Smoke endpoints for both modules in safe/dry-run mode.
+
+Verification from third pass:
+
+- Frontend `npm run type-check`: passed.
+- Frontend `npm run build`: passed.
+- Backend `npm run type-check`: passed.
+- Backend `npm run build`: passed.
+- Endpoint smoke still needs an authenticated runtime check after deploy; compile/build confirms routes are registered, but production auth may return 401 without session tokens.

@@ -1,33 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { Loader2, PackageCheck, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, PackageCheck, Play, RefreshCw, Truck } from 'lucide-react';
 
-type OrderRow = {
-  id: string;
-  ebayOrderId: string;
-  status: string;
-  cjOrderId: string | null;
-  ebaySku: string | null;
-  totalUsd: number | null;
-  lastError: string | null;
-  cjConfirmedAt: string | null;
-  cjPaidAt: string | null;
-  updatedAt: string;
+type Dashboard = {
+  kpis: {
+    totalOrders: number;
+    activeOrders: number;
+    attentionOrders: number;
+    completedOrders: number;
+    trackingMissing: number;
+    openAlerts: number;
+    activeRefunds: number;
+  };
+  safeQueue: Array<{ orderId: string; ebayOrderId: string; status: string; nextAction: string; title: string; totalUsd: number | null }>;
+  recentOrders: Array<{ orderId: string; ebayOrderId: string; status: string; title: string; totalUsd: number | null; trackingNumber: string | null; updatedAt: string }>;
+  alerts: Array<{ id: number; type: string; severity: string; createdAt: string }>;
+  refunds: Array<{ id: string; orderId: string; status: string; amountUsd: number | null; reason: string | null; updatedAt: string }>;
 };
-
-const POST_SALE_STATUSES = new Set([
-  'CJ_ORDER_CREATED',
-  'CJ_ORDER_CONFIRMING',
-  'CJ_PAYMENT_PENDING',
-  'CJ_PAYMENT_PROCESSING',
-  'CJ_PAYMENT_COMPLETED',
-  'CJ_FULFILLING',
-  'CJ_SHIPPED',
-  'TRACKING_ON_EBAY',
-  'SUPPLIER_PAYMENT_BLOCKED',
-  'NEEDS_MANUAL',
-]);
 
 function apiError(e: unknown, fallback: string): string {
   if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
@@ -42,33 +33,24 @@ function usd(value: number | null | undefined): string {
   return value.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 }
 
-function nextStep(status: string): string {
-  const map: Record<string, string> = {
-    CJ_ORDER_CREATED: 'Confirmar orden CJ',
-    CJ_ORDER_CONFIRMING: 'Esperar confirmacion CJ',
-    CJ_PAYMENT_PENDING: 'Pagar balance CJ',
-    CJ_PAYMENT_PROCESSING: 'Esperar pago CJ',
-    CJ_PAYMENT_COMPLETED: 'Monitorear fulfillment',
-    CJ_FULFILLING: 'Esperar despacho CJ',
-    CJ_SHIPPED: 'Sincronizar tracking a eBay',
-    TRACKING_ON_EBAY: 'Monitorear entrega',
-    SUPPLIER_PAYMENT_BLOCKED: 'Resolver balance CJ',
-    NEEDS_MANUAL: 'Intervencion operador',
-  };
-  return map[status] ?? 'Revisar estado';
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleString('es-CL', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function CjEbayPostSalePage() {
-  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const navigate = useNavigate();
+  const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get<{ ok: boolean; orders: OrderRow[] }>('/api/cj-ebay/orders');
-      setOrders(res.data.orders ?? []);
+      const res = await api.get<{ ok: boolean } & Dashboard>('/api/cj-ebay/post-sale/dashboard');
+      setData(res.data);
     } catch (e) {
       setError(apiError(e, 'No se pudo cargar post venta CJ-eBay.'));
     } finally {
@@ -80,87 +62,120 @@ export default function CjEbayPostSalePage() {
     void load();
   }, [load]);
 
-  const postSaleOrders = useMemo(() => orders.filter((order) => POST_SALE_STATUSES.has(order.status)), [orders]);
-  const blocked = postSaleOrders.filter((order) => order.status === 'SUPPLIER_PAYMENT_BLOCKED' || order.status === 'NEEDS_MANUAL');
-  const trackingPending = postSaleOrders.filter((order) => order.status === 'CJ_SHIPPED');
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Cargando post venta eBay...
-      </div>
-    );
+  async function runSafeQueue() {
+    setRunning(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await api.post<{ checked: number; stoppedForBalance: boolean; note?: string }>('/api/cj-ebay/post-sale/run-safe-queue');
+      setMessage(`${res.data.note ?? 'Cola revisada.'} Revisadas: ${res.data.checked}${res.data.stoppedForBalance ? ' · saldo CJ requiere atención' : ''}.`);
+      await load();
+    } catch (e) {
+      setError(apiError(e, 'No se pudo ejecutar la cola segura.'));
+    } finally {
+      setRunning(false);
+    }
   }
 
-  if (error) return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300">{error}</div>;
+  if (loading) {
+    return <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Cargando post venta eBay...</div>;
+  }
+
+  if (error && !data) {
+    return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300">{error}</div>;
+  }
+
+  const kpis = data?.kpis;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <PackageCheck className="h-5 w-5 text-slate-500" />
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Post Venta CJ → eBay USA</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Seguimiento de pago CJ, fulfillment, tracking e incidencias posteriores a la venta.
-            </p>
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+        <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-cyan-950 px-6 py-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-200"><PackageCheck className="h-6 w-6" /></div>
+              <div>
+                <h1 className="text-xl font-semibold text-white">Post Venta CJ → eBay USA</h1>
+                <p className="text-sm text-slate-400">Cola segura, tracking, refunds y alertas posteriores a la venta.</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">
+                <RefreshCw className="h-4 w-4" /> Refrescar
+              </button>
+              <button type="button" onClick={() => void runSafeQueue()} disabled={running} className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-60">
+                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Ejecutar cola segura
+              </button>
+            </div>
           </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refrescar
-        </button>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-xs font-medium text-slate-500">Ordenes post venta</p>
-          <p className="mt-1 text-2xl font-semibold">{postSaleOrders.length}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-xs font-medium text-slate-500">Tracking pendiente</p>
-          <p className="mt-1 text-2xl font-semibold">{trackingPending.length}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-xs font-medium text-slate-500">Bloqueos</p>
-          <p className="mt-1 text-2xl font-semibold">{blocked.length}</p>
+          {kpis && (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+              {[
+                ['Total', kpis.totalOrders],
+                ['Activas', kpis.activeOrders],
+                ['Atención', kpis.attentionOrders],
+                ['Completadas', kpis.completedOrders],
+                ['Sin tracking', kpis.trackingMissing],
+                ['Alertas', kpis.openAlerts],
+                ['Refunds', kpis.activeRefunds],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-        <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-900/70">
-            <tr>
-              <th className="px-4 py-3 text-left">Orden eBay</th>
-              <th className="px-4 py-3 text-left">Estado</th>
-              <th className="px-4 py-3 text-left">Siguiente paso</th>
-              <th className="px-4 py-3 text-right">Total</th>
-              <th className="px-4 py-3 text-left">Error</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-            {postSaleOrders.map((order) => (
-              <tr key={order.id}>
-                <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{order.ebayOrderId}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{order.status}</td>
-                <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{nextStep(order.status)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{usd(order.totalUsd)}</td>
-                <td className="max-w-sm truncate px-4 py-3 text-xs text-red-600 dark:text-red-300">{order.lastError ?? '-'}</td>
-              </tr>
+      {message && <div className="rounded-lg border border-emerald-800 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100">{message}</div>}
+      {error && <div className="rounded-lg border border-rose-900 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">{error}</div>}
+
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="rounded-xl border border-slate-800 bg-slate-950">
+          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+            <h2 className="text-sm font-semibold text-slate-100">Cola segura</h2>
+            <span className="text-xs text-slate-500">{data?.safeQueue.length ?? 0} acciones</span>
+          </div>
+          <div className="divide-y divide-slate-900">
+            {data?.safeQueue.map((item) => (
+              <button key={item.orderId} type="button" onClick={() => navigate(`/cj-ebay/orders/${item.orderId}`)} className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-slate-900/70">
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">{item.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.ebayOrderId} · {item.status}</p>
+                </div>
+                <div className="text-right">
+                  <span className="rounded bg-cyan-500/10 px-2 py-1 text-xs font-semibold text-cyan-200">{item.nextAction}</span>
+                  <p className="mt-1 text-xs text-slate-500">{usd(item.totalUsd)}</p>
+                </div>
+              </button>
             ))}
-            {postSaleOrders.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">Sin ordenes en post venta.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
+            {data?.safeQueue.length === 0 && <div className="px-4 py-8 text-center text-sm text-slate-500">Sin acciones pendientes en cola segura.</div>}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-950">
+            <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3"><AlertTriangle className="h-4 w-4 text-amber-300" /><h2 className="text-sm font-semibold text-slate-100">Alertas abiertas</h2></div>
+            <div className="divide-y divide-slate-900">
+              {data?.alerts.slice(0, 6).map((alert) => <div key={alert.id} className="px-4 py-3 text-sm text-slate-300">{alert.type}<p className="text-xs text-slate-500">{alert.severity} · {fmtDate(alert.createdAt)}</p></div>)}
+              {data?.alerts.length === 0 && <div className="px-4 py-6 text-sm text-slate-500">Sin alertas abiertas.</div>}
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950">
+            <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3"><Truck className="h-4 w-4 text-sky-300" /><h2 className="text-sm font-semibold text-slate-100">Órdenes recientes</h2></div>
+            <div className="divide-y divide-slate-900">
+              {data?.recentOrders.slice(0, 8).map((order) => (
+                <button key={order.orderId} type="button" onClick={() => navigate(`/cj-ebay/orders/${order.orderId}`)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-900/70">
+                  <div><p className="text-sm text-slate-200">{order.ebayOrderId}</p><p className="text-xs text-slate-500">{order.status}</p></div>
+                  {order.trackingNumber ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <span className="text-xs text-slate-500">{fmtDate(order.updatedAt)}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
