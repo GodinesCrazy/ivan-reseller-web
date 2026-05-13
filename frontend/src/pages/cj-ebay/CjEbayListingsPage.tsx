@@ -4,6 +4,7 @@ import axios from 'axios';
 import { RefreshCw, Search, Send } from 'lucide-react';
 import { api } from '@/services/api';
 import CjEbayOperatorPathCallout from '@/components/cj-ebay/CjEbayOperatorPathCallout';
+import CjEbayListingDetailDrawer, { type CjEbayListingDetail } from './components/CjEbayListingDetailDrawer';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
 type ListingRow = {
@@ -85,14 +86,8 @@ export default function CjEbayListingsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [sortKey, setSortKey] = useState<SortKey>('updatedDesc');
   const [detailId, setDetailId] = useState<number | null>(null);
-  const [detail, setDetail] = useState<{
-    lastError: string | null;
-    draftPayload: unknown;
-    status: string;
-    reconcileAttempts?: number | null;
-    reconcileRetryAfter?: string | null;
-    qualityWarnings?: Array<{ code: string; message: string }>;
-  } | null>(null);
+  const [detail, setDetail] = useState<CjEbayListingDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -251,6 +246,7 @@ export default function CjEbayListingsPage() {
       return;
     }
     setDetailId(id);
+    setDetailLoading(true);
     try {
       const res = await api.get<{
         ok: boolean;
@@ -277,6 +273,8 @@ export default function CjEbayListingsPage() {
       }
     } catch {
       setDetail({ lastError: 'No se pudo cargar detalle', draftPayload: null, status: '?' });
+    } finally {
+      setDetailLoading(false);
     }
   }
 
@@ -716,137 +714,27 @@ export default function CjEbayListingsPage() {
                         className="text-xs text-slate-500 underline"
                         onClick={() => void showDetail(row.id)}
                       >
-                        {detailId === row.id ? 'Ocultar' : 'Detalle'}
+                        Detalle
                       </button>
                     </td>
                   </tr>
-                  {detailId === row.id && detail && (
-                    <tr className="bg-slate-50/90 dark:bg-slate-950/50">
-                      <td colSpan={8} className="px-3 py-3 text-xs text-slate-600 dark:text-slate-400">
-                        <p className="font-medium text-slate-800 dark:text-slate-200 mb-1">
-                          Estado API: {detail.status}
-                        </p>
-                        {detail.status === 'ACCOUNT_POLICY_BLOCK' ? (
-                          <div className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 mb-2 space-y-1 text-amber-900 dark:text-amber-100">
-                            <p className="font-semibold">Bloqueo de cuenta eBay — no es error del listing</p>
-                            <p>
-                              eBay rechazó el publish con error 25019: <em>Overseas Warehouse Block Policy /
-                              Location_Mismatch_Inventory_Block</em>. La cuenta no está autorizada para
-                              publicar con ship-from China (CJ Dropshipping).
-                            </p>
-                            <p>
-                              <strong>El draft se conserva.</strong> No corregir título ni descripción — el
-                              problema es a nivel de cuenta/política, no de contenido.
-                            </p>
-                            <p>
-                              <strong>Acción requerida:</strong> esperar aprobación de eBay para el perfil
-                              de vendedor global / overseas warehouse. Una vez aprobada, reintentar publish
-                              desde este panel (primero cambiar el estado a DRAFT o contactar soporte).
-                            </p>
-                          </div>
-                        ) : detail.status === 'OFFER_ALREADY_EXISTS' ? (
-                          <div className="rounded border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 px-3 py-2 mb-2 space-y-1 text-sky-900 dark:text-sky-100">
-                            <p className="font-semibold">Oferta ya existente en eBay (error 25002)</p>
-                            <p>
-                              Durante el publish, eBay respondió que la oferta para este SKU ya existía
-                              (<em>Offer entity already exists</em>). El sistema guardó el <code>offerId</code>.
-                            </p>
-                            <p>
-                              <strong>La oferta SÍ existe en eBay.</strong> Pulsar <strong>Reconciliar</strong> para
-                              recuperar el <code>listingId</code>. El sistema intentará: buscar por offerId,
-                              publicar la oferta existente, y buscar por SKU.
-                            </p>
-                            <p className="text-xs text-sky-700 dark:text-sky-300">
-                              No pulsar Publicar — crearía un duplicado.
-                            </p>
-                          </div>
-                        ) : detail.status === 'RECONCILE_PENDING' ? (
-                          <div className="rounded border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 px-3 py-2 mb-2 space-y-1 text-violet-900 dark:text-violet-100">
-                            <p className="font-semibold">Reconciliación en espera — propagación eBay pendiente</p>
-                            <p>
-                              El sistema ejecutó todas las estrategias de reconciliación ({detail.reconcileAttempts ?? 0}/10 intentos).
-                              eBay confirmó la oferta pero el <code>listingId</code> aún no está disponible
-                              en la API (lag de propagación típico: 1–5 min).
-                            </p>
-                            {detail.reconcileRetryAfter && (
-                              <p>
-                                <strong>Reintentar después de:</strong>{' '}
-                                {new Date(detail.reconcileRetryAfter).toLocaleTimeString('es-CL')}
-                              </p>
-                            )}
-                            <p>
-                              <strong>Próximo paso:</strong> pulsar <strong>Diagnóstico eBay</strong> o{' '}
-                              <strong>Reintentar reconciliar</strong>. El sistema volverá a intentar GET por offerId, publish, y GET por SKU.
-                            </p>
-                            <p className="text-xs text-violet-700 dark:text-violet-300">
-                              No pulsar Publicar — la oferta ya existe en eBay.
-                            </p>
-                          </div>
-                        ) : detail.status === 'RECONCILE_FAILED' ? (
-                          <div className="rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3 py-2 mb-2 space-y-1 text-red-900 dark:text-red-100">
-                            <p className="font-semibold">Reconciliación agotada — acción del operador requerida</p>
-                            <p>
-                              El sistema ejecutó {detail.reconcileAttempts ?? 0} ciclos completos de reconciliación
-                              sin recuperar el <code>listingId</code> de eBay.
-                            </p>
-                            <p><strong>Pasos recomendados:</strong></p>
-                            <ol className="list-decimal pl-4 text-xs space-y-1">
-                              <li>
-                                Pulsar <strong>"Diagnóstico eBay"</strong> en la fila — consulta eBay en tiempo real.
-                                Si el listing existe, se marca ACTIVE automáticamente.
-                              </li>
-                              <li>
-                                Ir a <strong>eBay Seller Hub → Active Listings</strong> y buscar por título o SKU.
-                              </li>
-                              <li>
-                                <strong>Si el listing SÍ está en Seller Hub:</strong> inconsistencia eBay API — reportar a soporte eBay con el offerId.
-                              </li>
-                              <li>
-                                <strong>Si el listing NO está en Seller Hub:</strong> pulsar{' '}
-                                <strong>"Republicar desde cero"</strong> — resetea a DRAFT y permite publicar nuevamente.
-                                El draft (título, precio, imágenes) se conserva.
-                              </li>
-                            </ol>
-                            {detail.lastError && (
-                              <details className="mt-1">
-                                <summary className="cursor-pointer text-xs text-red-600 dark:text-red-400">Ver mensaje completo</summary>
-                                <pre className="whitespace-pre-wrap text-xs mt-1">{detail.lastError}</pre>
-                              </details>
-                            )}
-                          </div>
-                        ) : (
-                          detail.lastError && (
-                            <pre className="whitespace-pre-wrap text-rose-800 dark:text-rose-200 mb-2">
-                              {detail.lastError}
-                            </pre>
-                          )
-                        )}
-                        {detail.qualityWarnings && detail.qualityWarnings.length > 0 && (
-                          <div className="rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-2 py-1.5 mb-2 space-y-0.5">
-                            <p className="font-medium text-amber-800 dark:text-amber-200 text-[11px] uppercase tracking-wide">Avisos de calidad</p>
-                            {detail.qualityWarnings.map((w) => (
-                              <p key={w.code} className="text-amber-700 dark:text-amber-300">
-                                <span className="font-mono text-[10px] mr-1 opacity-70">[{w.code}]</span>
-                                {w.message}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                        <details>
-                          <summary className="cursor-pointer text-slate-500">Draft payload (JSON)</summary>
-                          <pre className="mt-2 max-h-48 overflow-auto rounded bg-slate-100 dark:bg-slate-900 p-2">
-                            {JSON.stringify(detail.draftPayload, null, 2)}
-                          </pre>
-                        </details>
-                      </td>
-                    </tr>
-                  )}
                 </Fragment>
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      <CjEbayListingDetailDrawer
+        open={detailId != null}
+        listing={listings.find((row) => row.id === detailId) ?? null}
+        detail={detail}
+        loading={detailLoading}
+        onClose={() => {
+          setDetailId(null);
+          setDetail(null);
+        }}
+      />
     </div>
   );
 }
