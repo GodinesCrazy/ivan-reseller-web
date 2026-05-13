@@ -222,6 +222,39 @@ function isEvalStale(evaluatedAt: Date): boolean {
   return Date.now() - evaluatedAt.getTime() > CJ_EBAY_LISTING_EVAL_MAX_AGE_MS;
 }
 
+function assertPricingSnapshotSafe(draft: Record<string, unknown>, settings: {
+  minMarginPct: Prisma.Decimal | null;
+  minProfitUsd: Prisma.Decimal | null;
+  defaultEbayFeePct: Prisma.Decimal | null;
+  defaultPaymentFeePct: Prisma.Decimal | null;
+  defaultPaymentFixedFeeUsd: Prisma.Decimal | null;
+  incidentBufferPct: Prisma.Decimal | null;
+}) {
+  const snapshot = draft.breakdownSnapshot as Record<string, unknown> | undefined;
+  const context = snapshot?.pricingContext as Record<string, unknown> | undefined;
+  const feeConfigComplete = context?.feeConfigComplete === true;
+  const thresholdsConfigured = context?.thresholdsConfigured === true;
+  const hasAccountFees = [
+    settings.defaultEbayFeePct,
+    settings.defaultPaymentFeePct,
+    settings.defaultPaymentFixedFeeUsd,
+    settings.incidentBufferPct,
+  ].every((value) => value != null);
+  const hasThresholds = settings.minMarginPct != null && settings.minProfitUsd != null;
+
+  if (!feeConfigComplete || !thresholdsConfigured || !hasAccountFees || !hasThresholds) {
+    throw new AppError(
+      'Publish bloqueado: pricing incompleto. Configura fee eBay, fee pago, fee fijo, buffer incidentes, margen y utilidad minima antes de publicar.',
+      423
+    );
+  }
+  const netProfit = Number(snapshot?.netProfitUsd);
+  const netMargin = Number(snapshot?.netMarginPct);
+  if (!Number.isFinite(netProfit) || netProfit <= 0 || !Number.isFinite(netMargin) || netMargin <= 0) {
+    throw new AppError('Publish bloqueado: el snapshot financiero no protege utilidad neta positiva.', 423);
+  }
+}
+
 export const cjEbayListingService = {
   async createOrUpdateDraft(input: {
     userId: number;
@@ -539,7 +572,11 @@ export const cjEbayListingService = {
       throw new AppError('Linked evaluation or shipping quote missing.', 400);
     }
     const settings = await prisma.cjEbayAccountSettings.findUnique({ where: { userId: input.userId } });
-    const requireUsWarehouseOnly = settings?.requireUsWarehouseOnly ?? true;
+    if (!settings) {
+      throw new AppError('Missing CJ-eBay settings; configure pricing before publishing.', 400);
+    }
+    assertPricingSnapshotSafe(draft, settings);
+    const requireUsWarehouseOnly = settings.requireUsWarehouseOnly;
     const quoteOrigin = String(evaluation.shippingQuote.originCountryCode || 'CN').toUpperCase();
     if (requireUsWarehouseOnly && quoteOrigin !== 'US') {
       throw new AppError(

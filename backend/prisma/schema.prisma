@@ -1618,6 +1618,10 @@ model CjEbayAccountSettings {
   autoPayCjOrders           Boolean  @default(false)
   orderPollingLookbackHours Int      @default(24)
   minDataConfidenceScore    Int      @default(60)
+  /// Nicho operativo principal para discovery/autopilot eBay USA. Default: pet market.
+  marketNiche               String   @default("PET_SUPPLIES")
+  /// Si true, el discovery/autopilot prioriza y filtra oportunidades Pet Supplies.
+  requirePetCategory        Boolean  @default(true)
   autopilotLastRunAt        DateTime?
   autopilotNextRunAt        DateTime?
   createdAt                DateTime @default(now())

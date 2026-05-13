@@ -51,6 +51,47 @@ const PAY_FROM = new Set([
   CJ_EBAY_ORDER_STATUS.SUPPLIER_PAYMENT_BLOCKED,
 ]);
 
+function assertPayFinancialGuard(order: {
+  lineQuantity: number;
+  totalUsd: unknown;
+  listing: { listedPriceUsd: unknown; draftPayload: unknown } | null;
+}, settings: {
+  minMarginPct: unknown;
+  minProfitUsd: unknown;
+}) {
+  if (!order.listing) {
+    throw new AppError('Auto-pay blocked: order has no mapped listing/pricing snapshot.', 423);
+  }
+  const draft = order.listing.draftPayload as Record<string, unknown> | null;
+  const snapshot = draft?.breakdownSnapshot as Record<string, unknown> | undefined;
+  const context = snapshot?.pricingContext as Record<string, unknown> | undefined;
+  if (context?.feeConfigComplete !== true || context?.thresholdsConfigured !== true) {
+    throw new AppError('Auto-pay blocked: listing pricing snapshot used incomplete fees or thresholds.', 423);
+  }
+  const quantity = Math.max(1, Number(order.lineQuantity) || 1);
+  const realizedRevenue = Number(order.totalUsd ?? order.listing.listedPriceUsd) / quantity;
+  const minimumAllowedPriceUsd = Number(snapshot?.minimumAllowedPriceUsd);
+  const netProfitUsd = Number(snapshot?.netProfitUsd);
+  const netMarginPct = Number(snapshot?.netMarginPct);
+  const minProfitUsd = Number(settings.minProfitUsd);
+  const minMarginPct = Number(settings.minMarginPct);
+  if (!Number.isFinite(realizedRevenue) || realizedRevenue <= 0) {
+    throw new AppError('Auto-pay blocked: eBay order total is missing or invalid.', 423);
+  }
+  if (Number.isFinite(minimumAllowedPriceUsd) && realizedRevenue < minimumAllowedPriceUsd) {
+    throw new AppError(
+      `Auto-pay blocked: realized eBay unit revenue $${realizedRevenue.toFixed(2)} is below protected floor $${minimumAllowedPriceUsd.toFixed(2)}.`,
+      423
+    );
+  }
+  if (
+    (Number.isFinite(minProfitUsd) && (!Number.isFinite(netProfitUsd) || netProfitUsd < minProfitUsd)) ||
+    (Number.isFinite(minMarginPct) && (!Number.isFinite(netMarginPct) || netMarginPct < minMarginPct))
+  ) {
+    throw new AppError('Auto-pay blocked: listing margin/profit snapshot is below current account guardrails.', 423);
+  }
+}
+
 export const cjEbayCjCheckoutService = {
   async confirmCjOrder(input: {
     userId: number;
@@ -60,6 +101,7 @@ export const cjEbayCjCheckoutService = {
   }): Promise<{ skipped?: boolean; orderId: string; cjOrderId: string }> {
     const order = await prisma.cjEbayOrder.findFirst({
       where: { id: input.orderId, userId: input.userId },
+      include: { listing: true },
     });
     if (!order) {
       throw new AppError('Order not found', 404);
@@ -160,6 +202,7 @@ export const cjEbayCjCheckoutService = {
   }): Promise<{ skipped?: boolean; orderId: string; cjOrderId: string }> {
     const order = await prisma.cjEbayOrder.findFirst({
       where: { id: input.orderId, userId: input.userId },
+      include: { listing: true },
     });
     if (!order) {
       throw new AppError('Order not found', 404);
@@ -185,6 +228,12 @@ export const cjEbayCjCheckoutService = {
         400
       );
     }
+
+    const settings = await prisma.cjEbayAccountSettings.findUnique({ where: { userId: input.userId } });
+    if (!settings) {
+      throw new AppError('Auto-pay blocked: CJ-eBay settings not found.', 423);
+    }
+    assertPayFinancialGuard(order, settings);
 
     await cjEbayTraceService.record({
       userId: input.userId,

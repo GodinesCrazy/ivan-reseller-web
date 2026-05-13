@@ -66,6 +66,11 @@ function buildRunSettings(req: DiscoverOpportunitiesRequest): OpportunityRunSett
   };
 }
 
+function isPetOpportunitySeed(seed: { keyword: string; category?: string; productConcept?: string }): boolean {
+  const haystack = `${seed.keyword} ${seed.category ?? ''} ${seed.productConcept ?? ''}`.toLowerCase();
+  return /\b(pet|dog|cat|puppy|kitten|grooming|leash|bowl|feeder|toy|poop|litter|aquarium|hamster)\b/.test(haystack);
+}
+
 function mapRunToSummary(run: {
   id: string;
   status: string;
@@ -293,13 +298,23 @@ class CjEbayOpportunityShortlistService {
         data: { status: 'RUNNING', startedAt: new Date() },
       });
 
+      const settingsRow = await cjEbayConfigService.getOrCreateSettings(userId);
+      const effectiveSettings: OpportunityRunSettings = {
+        ...settings,
+        marketNiche: 'PET_SUPPLIES',
+        requirePetCategory: settingsRow.requirePetCategory,
+      };
+
       // Step 1: Trend discovery (real eBay Browse or mock fallback).
-      const { seeds, providerUsed, providerNote } = await cjEbayTrendDiscoveryService.discoverSeeds(
-        settings,
+      const discovered = await cjEbayTrendDiscoveryService.discoverSeeds(
+        effectiveSettings,
         undefined,
         userId,
       );
-      logger.info(`[OpportunityShortlist] Run ${runId}: ${seeds.length} seeds via ${providerUsed} — ${providerNote}`);
+      const seeds = settingsRow.requirePetCategory
+        ? discovered.seeds.filter(isPetOpportunitySeed)
+        : discovered.seeds;
+      logger.info(`[OpportunityShortlist] Run ${runId}: ${seeds.length} pet seeds via ${discovered.providerUsed} — ${discovered.providerNote}`);
 
       await prisma.cjEbayOpportunityRun.update({
         where: { id: runId },
@@ -308,8 +323,7 @@ class CjEbayOpportunityShortlistService {
 
       // Step 2: CJ candidate matching.
       const adapter = createCjSupplierAdapter(userId);
-      const settingsRow = await cjEbayConfigService.getOrCreateSettings(userId);
-      const matches = await cjEbayCandidateMatchingService.matchSeeds(seeds, settings, adapter, {
+      const matches = await cjEbayCandidateMatchingService.matchSeeds(seeds, effectiveSettings, adapter, {
         requireUsWarehouseOnly: settingsRow.requireUsWarehouseOnly,
       });
 
@@ -333,7 +347,7 @@ class CjEbayOpportunityShortlistService {
       }
 
       // Step 3 + 4: Pricing + Scoring for each match (with real market prices).
-      const scored = await this.scoreCandidates(matches, settings, settingsRow, userId);
+      const scored = await this.scoreCandidates(matches, effectiveSettings, settingsRow, userId);
 
       // Step 5: Build shortlist (top N by score, above minimum threshold).
       const shortlist = scored

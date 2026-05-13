@@ -70,6 +70,8 @@ export interface CjEbayConfigResponse {
     autoPayCjOrders: boolean;
     orderPollingLookbackHours: number;
     minDataConfidenceScore: number;
+    marketNiche: string;
+    requirePetCategory: boolean;
     autopilotLastRunAt: string | null;
     autopilotNextRunAt: string | null;
   };

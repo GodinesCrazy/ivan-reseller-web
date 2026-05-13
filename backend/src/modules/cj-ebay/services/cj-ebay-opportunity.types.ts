@@ -85,6 +85,10 @@ export interface OpportunityRunSettings {
   minMarginPctFilter: number;
   /** Maximum shipping cost USD to consider a candidate viable. */
   maxShippingUsdFilter: number;
+  /** Current vertical focus. eBay USA is pet-first for this account. */
+  marketNiche?: 'PET_SUPPLIES';
+  /** If true, shortlist only pet-related seeds/candidates. */
+  requirePetCategory?: boolean;
   /** Weights for scoring sub-components (must sum to 100). */
   scoringWeights: ScoringWeights;
   starterModeConfig?: StarterModeConfig;
@@ -139,6 +143,8 @@ export const DEFAULT_RUN_SETTINGS: OpportunityRunSettings = {
   minScoreForShortlist: 35,
   minMarginPctFilter: 15,
   maxShippingUsdFilter: 12,
+  marketNiche: 'PET_SUPPLIES',
+  requirePetCategory: true,
   scoringWeights: DEFAULT_SCORING_WEIGHTS,
   starterModeConfig: DEFAULT_STARTER_CONFIG,
 };

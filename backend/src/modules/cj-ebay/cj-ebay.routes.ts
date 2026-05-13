@@ -19,6 +19,7 @@ import {
   cjEbayListingPublishBodySchema,
   cjEbayOrderImportBodySchema,
   cjEbayOpportunityPipelineBodySchema,
+  cjEbayResetOperationalDataSchema,
 } from './schemas/cj-ebay.schemas';
 import { cjEbayListingService } from './services/cj-ebay-listing.service';
 import { cjEbayOrderIngestService } from './services/cj-ebay-order-ingest.service';
@@ -49,6 +50,7 @@ import { cjEbayProfitService } from './services/cj-ebay-profit.service';
 import { cjEbaySellingLimitsService } from './services/cj-ebay-selling-limits.service';
 import { cjEbayAutopilotService } from './services/cj-ebay-autopilot.service';
 import { cjEbayOrderPollingService } from './services/cj-ebay-order-polling.service';
+import { cjEbayOperationalResetService } from './services/cj-ebay-operational-reset.service';
 
 const router = Router();
 
@@ -503,6 +505,28 @@ router.post('/config', async (req: Request, res: Response, next: NextFunction) =
     const settings = await cjEbayConfigService.updateSettings(userId, parsed.data);
     await traceComplete(req, userId, 'POST /config', { statusCode: 200 });
     res.json({ ok: true, settings });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/config/reset-operational-data', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const parsed = cjEbayResetOperationalDataSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      throw new AppError('Invalid reset body. Use confirm=RESET_CJ_EBAY_USA.', 400);
+    }
+    await cjEbayAutopilotService.stop(userId);
+    const out = await cjEbayOperationalResetService.resetUserData(userId, {
+      keepSettings: parsed.data.keepSettings,
+    });
+    await traceComplete(req, userId, 'POST /config/reset-operational-data', {
+      statusCode: 200,
+      deleted: out.deleted,
+      marketNiche: out.marketNiche,
+    });
+    res.json(out);
   } catch (e) {
     next(e);
   }

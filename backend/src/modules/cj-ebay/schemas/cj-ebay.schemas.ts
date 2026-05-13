@@ -27,6 +27,8 @@ export const cjEbayUpdateConfigSchema = z
     autoPayCjOrders: z.boolean().optional(),
     orderPollingLookbackHours: z.number().int().min(1).max(720).optional(),
     minDataConfidenceScore: z.number().int().min(0).max(100).optional(),
+    marketNiche: z.enum(['PET_SUPPLIES']).optional(),
+    requirePetCategory: z.boolean().optional(),
   })
   .strict();
 
@@ -127,3 +129,12 @@ export const cjEbayOrderImportBodySchema = z
   .strict();
 
 export type CjEbayOrderImportBody = z.infer<typeof cjEbayOrderImportBodySchema>;
+
+export const cjEbayResetOperationalDataSchema = z
+  .object({
+    confirm: z.literal('RESET_CJ_EBAY_USA'),
+    keepSettings: z.boolean().optional().default(true),
+  })
+  .strict();
+
+export type CjEbayResetOperationalDataBody = z.infer<typeof cjEbayResetOperationalDataSchema>;

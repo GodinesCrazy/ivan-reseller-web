@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
-import { AlertTriangle, Loader2, RefreshCw, Save, Settings, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw, RotateCcw, Save, Settings, ShieldCheck } from 'lucide-react';
 
 type NullableNum = number | null;
 
@@ -21,11 +21,15 @@ type CjEbaySettings = {
   monthlyListingLimit: NullableNum;
   monthlyAmountLimitUsd: NullableNum;
   cjPostCreateCheckoutMode: 'MANUAL' | 'AUTO_CONFIRM_PAY';
+  marketNiche: 'PET_SUPPLIES';
+  requirePetCategory: boolean;
 };
 
-type FormState = Record<keyof Omit<CjEbaySettings, 'rejectOnUnknownShipping' | 'cjPostCreateCheckoutMode'>, string> & {
+type FormState = Record<keyof Omit<CjEbaySettings, 'rejectOnUnknownShipping' | 'cjPostCreateCheckoutMode' | 'marketNiche' | 'requirePetCategory'>, string> & {
   rejectOnUnknownShipping: boolean;
   cjPostCreateCheckoutMode: 'MANUAL' | 'AUTO_CONFIRM_PAY';
+  marketNiche: 'PET_SUPPLIES';
+  requirePetCategory: boolean;
 };
 
 type PreviewImpact = {
@@ -57,6 +61,8 @@ const initialForm: FormState = {
   monthlyListingLimit: '',
   monthlyAmountLimitUsd: '',
   cjPostCreateCheckoutMode: 'MANUAL',
+  marketNiche: 'PET_SUPPLIES',
+  requirePetCategory: true,
 };
 
 function apiError(error: unknown, fallback: string): string {
@@ -100,6 +106,8 @@ function toForm(settings: CjEbaySettings): FormState {
     monthlyListingLimit: numberText(settings.monthlyListingLimit),
     monthlyAmountLimitUsd: numberText(settings.monthlyAmountLimitUsd),
     cjPostCreateCheckoutMode: settings.cjPostCreateCheckoutMode,
+    marketNiche: 'PET_SUPPLIES',
+    requirePetCategory: settings.requirePetCategory ?? true,
   };
 }
 
@@ -111,6 +119,7 @@ export default function CjEbaySettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewImpact | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,6 +172,8 @@ export default function CjEbaySettingsPage() {
         monthlyListingLimit: parseOptionalInteger(form.monthlyListingLimit),
         monthlyAmountLimitUsd: parseOptionalNumber(form.monthlyAmountLimitUsd),
         cjPostCreateCheckoutMode: form.cjPostCreateCheckoutMode,
+        marketNiche: 'PET_SUPPLIES',
+        requirePetCategory: form.requirePetCategory,
       };
       const res = await api.post<{ ok: boolean; settings: CjEbaySettings }>('/api/cj-ebay/config', payload);
       if (res.data?.settings) setForm(toForm(res.data.settings));
@@ -172,6 +183,26 @@ export default function CjEbaySettingsPage() {
       setError(apiError(e, 'No se pudo guardar la configuracion.'));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function resetOperationalData() {
+    const ok = window.confirm('Esto limpia productos, drafts, listings, ordenes, alertas, logs y recomendaciones CJ-eBay para partir desde cero. No borra credenciales ni otros modulos. Continuar?');
+    if (!ok) return;
+    setResetting(true);
+    setMessage(null);
+    setError(null);
+    try {
+      await api.post('/api/cj-ebay/config/reset-operational-data', {
+        confirm: 'RESET_CJ_EBAY_USA',
+        keepSettings: true,
+      });
+      await load();
+      setMessage('Datos operativos CJ-eBay limpiados. Nicho pet y guardrails USA quedaron activos.');
+    } catch (e) {
+      setError(apiError(e, 'No se pudo limpiar CJ-eBay.'));
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -261,6 +292,17 @@ export default function CjEbaySettingsPage() {
                 <option value="AUTO_CONFIRM_PAY">Auto confirmar y pagar</option>
               </select>
             </label>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+              <span className="text-slate-700 dark:text-slate-200">Discovery solo Pet Supplies eBay USA</span>
+              <input
+                type="checkbox"
+                checked={form.requirePetCategory}
+                onChange={(e) => setForm((prev) => ({ ...prev, requirePetCategory: e.target.checked }))}
+              />
+            </label>
+            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/20 dark:text-sky-200">
+              Nicho activo: Pet Supplies USA. El agente prioriza articulos pet livianos, con warehouse CJ USA y margen protegido.
+            </div>
           </div>
         </section>
 
@@ -323,6 +365,26 @@ export default function CjEbaySettingsPage() {
         {message && <span className="text-sm text-emerald-600 dark:text-emerald-400">{message}</span>}
         {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
       </div>
+
+      <section className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/20">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-red-900 dark:text-red-100">Reset operativo CJ-eBay</h2>
+            <p className="mt-1 text-xs text-red-700 dark:text-red-200">
+              Limpia la verdad operativa del modulo para partir desde cero: productos, recomendaciones, listings, ordenes, alertas, profit y logs.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void resetOperationalData()}
+            disabled={resetting}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950 dark:text-red-100 dark:hover:bg-red-900"
+          >
+            {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+            Limpiar CJ-eBay
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

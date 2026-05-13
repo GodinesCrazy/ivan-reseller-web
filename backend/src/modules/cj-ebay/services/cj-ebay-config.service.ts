@@ -29,6 +29,8 @@ function toSettingsDto(row: {
   autoPayCjOrders: boolean;
   orderPollingLookbackHours: number;
   minDataConfidenceScore: number;
+  marketNiche: string;
+  requirePetCategory: boolean;
   autopilotLastRunAt: Date | null;
   autopilotNextRunAt: Date | null;
 }): CjEbayConfigResponse['settings'] {
@@ -64,6 +66,8 @@ function toSettingsDto(row: {
     autoPayCjOrders: row.autoPayCjOrders,
     orderPollingLookbackHours: row.orderPollingLookbackHours,
     minDataConfidenceScore: row.minDataConfidenceScore,
+    marketNiche: row.marketNiche || 'PET_SUPPLIES',
+    requirePetCategory: row.requirePetCategory,
     autopilotLastRunAt: row.autopilotLastRunAt?.toISOString() ?? null,
     autopilotNextRunAt: row.autopilotNextRunAt?.toISOString() ?? null,
   };
@@ -150,6 +154,8 @@ export const cjEbayConfigService = {
     if (body.autoPayCjOrders !== undefined) data.autoPayCjOrders = body.autoPayCjOrders;
     if (body.orderPollingLookbackHours !== undefined) data.orderPollingLookbackHours = body.orderPollingLookbackHours;
     if (body.minDataConfidenceScore !== undefined) data.minDataConfidenceScore = body.minDataConfidenceScore;
+    if (body.marketNiche !== undefined) data.marketNiche = body.marketNiche;
+    if (body.requirePetCategory !== undefined) data.requirePetCategory = body.requirePetCategory;
     const row = await prisma.cjEbayAccountSettings.update({
       where: { userId },
       data,

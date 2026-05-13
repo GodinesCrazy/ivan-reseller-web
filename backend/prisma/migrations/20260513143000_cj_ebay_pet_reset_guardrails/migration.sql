@@ -1,0 +1,4 @@
+ALTER TABLE "cj_ebay_account_settings"
+  ADD COLUMN IF NOT EXISTS "marketNiche" TEXT NOT NULL DEFAULT 'PET_SUPPLIES',
+  ADD COLUMN IF NOT EXISTS "requirePetCategory" BOOLEAN NOT NULL DEFAULT true;
+

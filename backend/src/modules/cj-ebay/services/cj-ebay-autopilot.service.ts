@@ -16,6 +16,28 @@ import { cjEbaySystemReadinessService } from './cj-ebay-system-readiness.service
 import { cjEbayTraceService } from './cj-ebay-trace.service';
 import { cjEbayTrackingService } from './cj-ebay-tracking.service';
 
+function hasCompletePricingGuardrails(settings: {
+  minMarginPct: number | null;
+  minProfitUsd: number | null;
+  defaultEbayFeePct: number | null;
+  defaultPaymentFeePct: number | null;
+  defaultPaymentFixedFeeUsd: number | null;
+  incidentBufferPct: number | null;
+  monthlyListingLimit: number | null;
+  monthlyAmountLimitUsd: number | null;
+}): boolean {
+  return [
+    settings.minMarginPct,
+    settings.minProfitUsd,
+    settings.defaultEbayFeePct,
+    settings.defaultPaymentFeePct,
+    settings.defaultPaymentFixedFeeUsd,
+    settings.incidentBufferPct,
+    settings.monthlyListingLimit,
+    settings.monthlyAmountLimitUsd,
+  ].every((value) => value != null && Number.isFinite(Number(value)));
+}
+
 type AutomationMetrics = {
   discoveryRuns: number;
   candidatesChecked: number;
@@ -102,6 +124,9 @@ export const cjEbayAutopilotService = {
         autoPayCjOrders: settings.autoPayCjOrders,
         orderPollingLookbackHours: settings.orderPollingLookbackHours,
         minDataConfidenceScore: settings.minDataConfidenceScore,
+        marketNiche: settings.marketNiche,
+        requirePetCategory: settings.requirePetCategory,
+        pricingGuardrailsComplete: hasCompletePricingGuardrails(settings),
         checkoutMode: settings.cjPostCreateCheckoutMode,
       },
       lastRun: lastRun
@@ -145,6 +170,8 @@ export const cjEbayAutopilotService = {
       autoPayCjOrders: typeof body['autoPayCjOrders'] === 'boolean' ? body['autoPayCjOrders'] : undefined,
       orderPollingLookbackHours: Number.isFinite(Number(body['orderPollingLookbackHours'])) ? Number(body['orderPollingLookbackHours']) : undefined,
       minDataConfidenceScore: Number.isFinite(Number(body['minDataConfidenceScore'])) ? Number(body['minDataConfidenceScore']) : undefined,
+      marketNiche: 'PET_SUPPLIES',
+      requirePetCategory: true,
     } as any);
     if (settings.autopilotEnabled && settings.autopilotState === 'RUNNING') this.schedule(userId, settings.autopilotIntervalMinutes);
     return settings;
@@ -155,6 +182,8 @@ export const cjEbayAutopilotService = {
       autopilotEnabled: true,
       autopilotState: 'RUNNING',
       requireUsWarehouseOnly: true,
+      marketNiche: 'PET_SUPPLIES',
+      requirePetCategory: true,
       cjPostCreateCheckoutMode: 'AUTO_CONFIRM_PAY',
       autoPayCjOrders: true,
     } as any);
@@ -287,6 +316,11 @@ export const cjEbayAutopilotService = {
     const limits = await cjEbaySellingLimitsService.getMonthlySnapshot(userId);
     if (limits.remainingListings !== null && limits.remainingListings <= 0) {
       metrics.events.push('Publish skipped: monthly listing quota exhausted.');
+      return;
+    }
+    if (!hasCompletePricingGuardrails(settings)) {
+      metrics.errorsCount++;
+      metrics.events.push('Publish skipped: pricing guardrails incomplete (fees, margin/profit and monthly limits must be configured).');
       return;
     }
     const discovery = await cjEbayOpportunityShortlistService.startDiscoveryRun(userId, { mode: 'STARTER' } as any);

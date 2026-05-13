@@ -39,84 +39,68 @@ export interface IMarketTrendProvider {
 
 const MOCK_SEEDS: Omit<TrendSeed, 'source'>[] = [
   {
-    keyword: 'LED strip lights bedroom',
-    category: 'Home & Garden > Lighting',
-    productConcept: 'Decorative LED strips with remote, 5m, multicolor',
+    keyword: 'dog grooming brush self cleaning',
+    category: 'Pet Supplies > Dog Grooming',
+    productConcept: 'Self-cleaning slicker brush for dogs, one-button hair release',
     trendConfidence: 0.88,
-    rawSignal: { basisPoints: 8800, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real (fuente: datos de referencia internos)',
+    rawSignal: { basisPoints: 8800, region: 'US', dataAge: 'mock', niche: 'PET_SUPPLIES' },
+    evidenceSummary: 'Seed pet mock — producto liviano, repetible y compatible con eBay Pet Supplies.',
   },
   {
-    keyword: 'phone case wireless charging',
-    category: 'Cell Phones & Accessories > Cases',
-    productConcept: 'Qi-compatible slim protective case for popular phone models',
-    trendConfidence: 0.82,
-    rawSignal: { basisPoints: 8200, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real',
+    keyword: 'cat water fountain filter',
+    category: 'Pet Supplies > Cat Supplies',
+    productConcept: 'Replacement filters or small automatic water fountain accessories',
+    trendConfidence: 0.84,
+    rawSignal: { basisPoints: 8400, region: 'US', dataAge: 'mock', niche: 'PET_SUPPLIES' },
+    evidenceSummary: 'Seed pet mock — consumible/repuesto con buena recurrencia potencial.',
   },
   {
-    keyword: 'car phone holder dashboard',
-    category: 'eBay Motors > Auto Parts > Accessories',
-    productConcept: 'Magnetic or suction mount, 360-degree rotation, universal fit',
-    trendConfidence: 0.79,
-    rawSignal: { basisPoints: 7900, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real',
-  },
-  {
-    keyword: 'kitchen gadgets set',
-    category: 'Home & Garden > Kitchen',
-    productConcept: 'Compact multipurpose kitchen tools bundle',
-    trendConfidence: 0.74,
-    rawSignal: { basisPoints: 7400, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real',
-  },
-  {
-    keyword: 'portable bluetooth speaker outdoor',
-    category: 'Consumer Electronics > Portable Audio',
-    productConcept: 'Waterproof mini speaker, USB-C charge, 8h battery',
-    trendConfidence: 0.77,
-    rawSignal: { basisPoints: 7700, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real',
-  },
-  {
-    keyword: 'fitness resistance bands set',
-    category: 'Sporting Goods > Fitness',
-    productConcept: 'Multi-resistance loop bands + carry bag',
+    keyword: 'dog poop bag holder leash',
+    category: 'Pet Supplies > Dog Supplies',
+    productConcept: 'Clip-on waste bag dispenser for leash walking',
     trendConfidence: 0.81,
-    rawSignal: { basisPoints: 8100, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real',
+    rawSignal: { basisPoints: 8100, region: 'US', dataAge: 'mock', niche: 'PET_SUPPLIES' },
+    evidenceSummary: 'Seed pet mock — bajo costo, bajo riesgo logístico y demanda cotidiana.',
   },
   {
-    keyword: 'cable organizer desk',
-    category: 'Computers > Accessories',
-    productConcept: 'Silicone cable clips + box management, compact desk bundle',
-    trendConfidence: 0.72,
-    rawSignal: { basisPoints: 7200, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real',
+    keyword: 'cat toy interactive wand',
+    category: 'Pet Supplies > Cat Toys',
+    productConcept: 'Interactive teaser wand or feather toy for indoor cats',
+    trendConfidence: 0.78,
+    rawSignal: { basisPoints: 7800, region: 'US', dataAge: 'mock', niche: 'PET_SUPPLIES' },
+    evidenceSummary: 'Seed pet mock — artículo liviano, no electrónico y fácil de publicar.',
   },
   {
-    keyword: 'pet grooming brush self cleaning',
+    keyword: 'pet nail grinder replacement',
     category: 'Pet Supplies > Grooming',
-    productConcept: 'Retractable slicker brush for dogs/cats, push-button hair removal',
+    productConcept: 'Pet nail grinder accessories or low-voltage grooming tool',
+    trendConfidence: 0.75,
+    rawSignal: { basisPoints: 7500, region: 'US', dataAge: 'mock', niche: 'PET_SUPPLIES' },
+    evidenceSummary: 'Seed pet mock — grooming demand; requires policy/image check if powered.',
+  },
+  {
+    keyword: 'dog training clicker',
+    category: 'Pet Supplies > Dog Training',
+    productConcept: 'Small dog training clicker with wrist strap',
+    trendConfidence: 0.73,
+    rawSignal: { basisPoints: 7300, region: 'US', dataAge: 'mock', niche: 'PET_SUPPLIES' },
+    evidenceSummary: 'Seed pet mock — simple, small, low capital risk.',
+  },
+  {
+    keyword: 'pet hair remover laundry',
+    category: 'Pet Supplies > Cleaning & Odor Removal',
+    productConcept: 'Reusable pet hair remover for laundry or furniture',
+    trendConfidence: 0.72,
+    rawSignal: { basisPoints: 7200, region: 'US', dataAge: 'mock', niche: 'PET_SUPPLIES' },
+    evidenceSummary: 'Seed pet mock — household pet pain point, repeatable accessory.',
+  },
+  {
+    keyword: 'slow feeder dog bowl insert',
+    category: 'Pet Supplies > Dog Bowls & Feeders',
+    productConcept: 'Slow-feeder insert or puzzle bowl for dogs',
     trendConfidence: 0.76,
-    rawSignal: { basisPoints: 7600, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real',
-  },
-  {
-    keyword: 'posture corrector back support',
-    category: 'Health & Beauty > Back Support',
-    productConcept: 'Adjustable brace, breathable material, unisex M-XL',
-    trendConfidence: 0.69,
-    rawSignal: { basisPoints: 6900, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real',
-  },
-  {
-    keyword: 'plant watering spikes set',
-    category: 'Home & Garden > Plants',
-    productConcept: 'Ceramic/plastic slow-drip self-watering stakes (set of 6)',
-    trendConfidence: 0.65,
-    rawSignal: { basisPoints: 6500, region: 'US', dataAge: 'mock' },
-    evidenceSummary: 'Seed mock — sin verificación de mercado real',
+    rawSignal: { basisPoints: 7600, region: 'US', dataAge: 'mock', niche: 'PET_SUPPLIES' },
+    evidenceSummary: 'Seed pet mock — practical accessory; watch dimensions and material claims.',
   },
 ];
 
@@ -129,7 +113,8 @@ class MockTrendProvider implements IMarketTrendProvider {
 
   async fetchSeeds(settings: OpportunityRunSettings): Promise<TrendSeed[]> {
     const limit = settings.maxSeedsPerRun ?? 8;
-    const seeds = MOCK_SEEDS.slice(0, limit).map((s) => ({
+    const pool = settings.requirePetCategory ? MOCK_SEEDS.filter(isPetSeed) : MOCK_SEEDS;
+    const seeds = pool.slice(0, limit).map((s) => ({
       ...s,
       source: 'MOCK_TREND' as TrendSeedSource,
     }));
@@ -223,7 +208,7 @@ class CjEbayTrendDiscoveryService {
 
     // 3. Mock fallback — always available, clearly labelled
     const mock = new MockTrendProvider();
-    const seeds = await mock.fetchSeeds(settings);
+    const seeds = await mock.fetchSeeds({ ...settings, marketNiche: 'PET_SUPPLIES', requirePetCategory: true });
     return {
       seeds,
       providerUsed: 'MOCK_TREND',
@@ -254,3 +239,8 @@ class CjEbayTrendDiscoveryService {
 }
 
 export const cjEbayTrendDiscoveryService = new CjEbayTrendDiscoveryService();
+
+function isPetSeed(seed: Pick<TrendSeed, 'keyword' | 'category' | 'productConcept'>): boolean {
+  const haystack = `${seed.keyword} ${seed.category ?? ''} ${seed.productConcept ?? ''}`.toLowerCase();
+  return /\b(pet|dog|cat|puppy|kitten|grooming|leash|bowl|feeder|toy|poop|litter)\b/.test(haystack);
+}
