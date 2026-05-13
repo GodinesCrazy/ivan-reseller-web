@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
-import { RefreshCw, Search, Send } from 'lucide-react';
+import { CheckSquare, RefreshCw, Search, Send, Square } from 'lucide-react';
 import { api } from '@/services/api';
 import CjEbayOperatorPathCallout from '@/components/cj-ebay/CjEbayOperatorPathCallout';
 import CjEbayListingDetailDrawer, { type CjEbayListingDetail } from './components/CjEbayListingDetailDrawer';
@@ -46,6 +46,15 @@ function usd(value: number | null) {
   return value.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 }
 
+function axiosMsg(e: unknown, fallback: string): string {
+  if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
+    const d = e.response.data as { message?: string; error?: string };
+    return d.message || d.error || fallback;
+  }
+  if (e instanceof Error) return e.message;
+  return fallback;
+}
+
 function isPublishable(row: ListingRow) {
   return ['DRAFT', 'FAILED'].includes(row.status);
 }
@@ -85,6 +94,8 @@ export default function CjEbayListingsPage() {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [sortKey, setSortKey] = useState<SortKey>('updatedDesc');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [detail, setDetail] = useState<CjEbayListingDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -239,6 +250,35 @@ export default function CjEbayListingsPage() {
     }
   }
 
+  async function runBulkAction(kind: 'reconcile' | 'diagnose' | 'pause') {
+    const selectedRows = listings.filter((row) => selectedIds.has(row.id));
+    const targets = selectedRows.filter((row) => {
+      if (kind === 'pause') return row.status === 'ACTIVE';
+      if (kind === 'diagnose') return ['RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(row.status);
+      return ['OFFER_ALREADY_EXISTS', 'RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(row.status);
+    });
+    if (targets.length === 0) {
+      setError('No hay filas seleccionadas compatibles con esta acción segura.');
+      return;
+    }
+    setBulkBusy(kind);
+    setError(null);
+    try {
+      for (const target of targets) {
+        if (kind === 'pause') await api.post(`/api/cj-ebay/listings/${target.id}/pause`);
+        else if (kind === 'diagnose') await api.get(`/api/cj-ebay/listings/${target.id}/ebay-snapshot`);
+        else await api.post(`/api/cj-ebay/listings/${target.id}/reconcile`);
+      }
+      setSelectedIds(new Set());
+      await load();
+    } catch (e: unknown) {
+      setError(axiosMsg(e, 'Error ejecutando acción masiva segura.'));
+      await load();
+    } finally {
+      setBulkBusy(null);
+    }
+  }
+
   async function showDetail(id: number) {
     if (detailId === id) {
       setDetailId(null);
@@ -340,6 +380,13 @@ export default function CjEbayListingsPage() {
       });
   }, [listings, query, sortKey, statusFilter]);
 
+  const visibleIds = filteredListings.map((row) => row.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const selectedRows = listings.filter((row) => selectedIds.has(row.id));
+  const selectedReconcile = selectedRows.filter((row) => ['OFFER_ALREADY_EXISTS', 'RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(row.status)).length;
+  const selectedDiagnose = selectedRows.filter((row) => ['RECONCILE_PENDING', 'RECONCILE_FAILED'].includes(row.status)).length;
+  const selectedActive = selectedRows.filter((row) => row.status === 'ACTIVE').length;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -436,6 +483,38 @@ export default function CjEbayListingsPage() {
         </select>
         <div className="flex items-center justify-end rounded-lg border border-sky-800/70 bg-sky-950/25 px-3 text-xs text-sky-100">
           Origen: <Link to="/cj-ebay/products" className="ml-1 underline">Productos CJ</Link> → evaluar → draft → eBay.
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/55 px-3 py-2 text-xs text-slate-300">
+        <div>
+          <span className="font-semibold text-slate-100">{selectedIds.size}</span> seleccionados · acciones seguras eBay sin publicación masiva
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={bulkBusy != null || selectedReconcile === 0}
+            onClick={() => void runBulkAction('reconcile')}
+            className="rounded-md border border-violet-700 px-2.5 py-1 font-medium text-violet-200 disabled:opacity-40"
+          >
+            {bulkBusy === 'reconcile' ? '…' : `Reconciliar (${selectedReconcile})`}
+          </button>
+          <button
+            type="button"
+            disabled={bulkBusy != null || selectedDiagnose === 0}
+            onClick={() => void runBulkAction('diagnose')}
+            className="rounded-md border border-sky-700 px-2.5 py-1 font-medium text-sky-200 disabled:opacity-40"
+          >
+            {bulkBusy === 'diagnose' ? '…' : `Diagnóstico (${selectedDiagnose})`}
+          </button>
+          <button
+            type="button"
+            disabled={bulkBusy != null || selectedActive === 0}
+            onClick={() => void runBulkAction('pause')}
+            className="rounded-md border border-amber-700 px-2.5 py-1 font-medium text-amber-200 disabled:opacity-40"
+          >
+            {bulkBusy === 'pause' ? '…' : `Pausar activos (${selectedActive})`}
+          </button>
         </div>
       </div>
 
@@ -537,6 +616,23 @@ export default function CjEbayListingsPage() {
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 dark:bg-slate-900/80 text-left text-xs font-medium text-slate-500 uppercase">
             <tr>
+              <th className="px-3 py-2 w-9">
+                <button
+                  type="button"
+                  className="text-slate-400 hover:text-slate-100"
+                  onClick={() => {
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id));
+                      else visibleIds.forEach((id) => next.add(id));
+                      return next;
+                    });
+                  }}
+                  aria-label={allVisibleSelected ? 'Deseleccionar visibles' : 'Seleccionar visibles'}
+                >
+                  {allVisibleSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                </button>
+              </th>
               <th className="px-3 py-2">ID</th>
               <th className="px-3 py-2">Estado</th>
               <th className="px-3 py-2">Título</th>
@@ -550,7 +646,7 @@ export default function CjEbayListingsPage() {
           <tbody>
             {filteredListings.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-slate-500 text-sm">
+                <td colSpan={9} className="px-3 py-8 text-center text-slate-500 text-sm">
                   Sin resultados para los filtros actuales. Crea un draft desde <strong>Productos CJ</strong> tras evaluación APPROVED.
                 </td>
               </tr>
@@ -558,6 +654,23 @@ export default function CjEbayListingsPage() {
               filteredListings.map((row) => (
                 <Fragment key={row.id}>
                   <tr className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/40">
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        className="text-slate-500 hover:text-primary-300"
+                        onClick={() => {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(row.id)) next.delete(row.id);
+                            else next.add(row.id);
+                            return next;
+                          });
+                        }}
+                        aria-label={selectedIds.has(row.id) ? 'Deseleccionar listing' : 'Seleccionar listing'}
+                      >
+                        {selectedIds.has(row.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                      </button>
+                    </td>
                     <td className="px-3 py-2 font-mono tabular-nums">{row.id}</td>
                     <td className="px-3 py-2">
                       {row.status === 'ACCOUNT_POLICY_BLOCK' ? (

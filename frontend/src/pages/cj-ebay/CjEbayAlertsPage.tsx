@@ -116,13 +116,17 @@ export default function CjEbayAlertsPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap rounded-2xl border border-slate-800 bg-slate-950/80 p-5">
         <div>
-          <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Alertas del módulo</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">Centro de riesgo eBay</p>
+          <h1 className="mt-1 text-xl font-semibold text-white">Alertas del módulo</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-300">
             {open > 0
               ? `${open} alerta${open !== 1 ? 's' : ''} abierta${open !== 1 ? 's' : ''} · ${acked} vista${acked !== 1 ? 's' : ''}`
               : 'Sin alertas abiertas'}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Seguimiento de policy/account blockers, tracking ausente, refunds activos, cuotas y payment issues del ciclo CJ-eBay.
           </p>
         </div>
         {/* Filtros */}

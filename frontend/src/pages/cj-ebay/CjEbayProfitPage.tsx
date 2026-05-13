@@ -162,19 +162,24 @@ export default function CjEbayProfitPage() {
   const { kpis } = data!;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Finanzas CJ → eBay USA</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            {data!.period.from
-              ? `${fmtDate(data!.period.from)} — ${fmtDate(data!.period.to)}`
-              : 'Sin órdenes en el período'}
-          </p>
-        </div>
-        {/* Filtros de fecha */}
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Profit Guard eBay</p>
+            <h1 className="mt-1 text-xl font-semibold text-white">Finanzas CJ → eBay USA</h1>
+            <p className="mt-1 max-w-2xl text-sm text-slate-300">
+              Profit operativo con exposición eBay, final value fee, payment fee, promoted allowance, refunds y bloqueos de cuenta.
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {data!.period.from
+                ? `${fmtDate(data!.period.from)} — ${fmtDate(data!.period.to)}`
+                : 'Sin órdenes en el período'}
+            </p>
+          </div>
+          {/* Filtros de fecha */}
+          <div className="flex items-center gap-2 flex-wrap">
           <input
             type="date"
             value={from}
@@ -195,6 +200,7 @@ export default function CjEbayProfitPage() {
               className="text-xs text-slate-500 dark:text-slate-400 underline"
             >Limpiar</button>
           )}
+          </div>
         </div>
       </div>
 

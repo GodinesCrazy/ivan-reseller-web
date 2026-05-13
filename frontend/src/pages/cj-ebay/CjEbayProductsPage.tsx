@@ -553,6 +553,15 @@ function SearchResultCard({
   );
 }
 
+function ProductStage({ label, value, active }: { label: string; value: string | number; active: boolean }) {
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${active ? 'border-cyan-700 bg-cyan-950/30 text-cyan-100' : 'border-slate-800 bg-slate-900/70 text-slate-400'}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
+      <p className="mt-1 text-base font-bold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function CjEbayProductsPage() {
@@ -947,7 +956,24 @@ export default function CjEbayProductsPage() {
 
   // ─── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300">Productos CJ → eBay</p>
+            <h1 className="mt-1 text-xl font-semibold text-white">Pipeline de producto</h1>
+            <p className="mt-1 max-w-2xl text-sm text-slate-300">
+              Flujo principal compacto: buscar en CJ, elegir variante con stock, cotizar freight, evaluar fees/cuotas eBay y crear draft publicable.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <ProductStage label="Busqueda" value={searchResults?.length ?? 0} active={searchResults !== null} />
+            <ProductStage label="Variante" value={selectedVariant ? 1 : 0} active={!!selectedVariant} />
+            <ProductStage label="Evaluate" value={evaluate ? 'OK' : preview ? 'Preview' : '--'} active={!!evaluate || !!preview} />
+            <ProductStage label="Draft" value={draftListingId ?? '--'} active={draftListingId != null} />
+          </div>
+        </div>
+      </div>
 
       {/* ══ SECCIÓN A — Buscador CJ ═══════════════════════════════════════════════ */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-3">
@@ -1357,8 +1383,11 @@ export default function CjEbayProductsPage() {
       {(canRunPipeline || (selectedProduct && !productDetailLoading)) && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4 space-y-4">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            Configuración
+            Operación del ciclo
           </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Solo cantidad y destino quedan en el flujo principal. Pricing, fees y cuotas eBay viven en el panel secundario para no contaminar la publicación.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
               Cantidad

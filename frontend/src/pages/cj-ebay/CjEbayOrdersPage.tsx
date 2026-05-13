@@ -94,6 +94,23 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function HeroMetric({ label, value, tone = 'slate' }: { label: string; value: number; tone?: 'slate' | 'blue' | 'amber' | 'emerald' }) {
+  const cls =
+    tone === 'blue'
+      ? 'border-blue-800 bg-blue-950/30 text-blue-100'
+      : tone === 'amber'
+        ? 'border-amber-800 bg-amber-950/30 text-amber-100'
+        : tone === 'emerald'
+          ? 'border-emerald-800 bg-emerald-950/30 text-emerald-100'
+          : 'border-slate-800 bg-slate-900/70 text-slate-100';
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${cls}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
+      <p className="mt-1 text-base font-bold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function axiosMsg(e: unknown, fallback: string): string {
@@ -127,6 +144,8 @@ export default function CjEbayOrdersPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterAttention, setFilterAttention] = useState(false);
   const [filterSearch, setFilterSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
 
   const loadList = useCallback(async () => {
     setError(null);
@@ -177,6 +196,13 @@ export default function CjEbayOrdersPage() {
     }
     return list;
   }, [orders, filterStatus, filterAttention, filterSearch]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterStatus, filterAttention, filterSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -298,13 +324,22 @@ export default function CjEbayOrdersPage() {
       <CjEbayOperatorPathCallout variant="orders" />
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          Órdenes CJ → eBay USA
-        </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-          Gestión postventa — importa, opera y hace seguimiento del ciclo completo de cada venta.
-        </p>
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300">Postventa eBay</p>
+            <h1 className="mt-1 text-xl font-semibold text-white">Órdenes CJ → eBay USA</h1>
+            <p className="mt-1 max-w-2xl text-sm text-slate-300">
+              Toolbar, chips y cola operativa al estilo Shopify, con import manual por eBay Order ID como acción adicional.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <HeroMetric label="Total" value={kpis.total} />
+            <HeroMetric label="Activas" value={kpis.active} tone="blue" />
+            <HeroMetric label="Atención" value={kpis.attention} tone={kpis.attention > 0 ? 'amber' : 'slate'} />
+            <HeroMetric label="Completadas" value={kpis.completed} tone="emerald" />
+          </div>
+        </div>
       </div>
 
       {/* ── KPIs ─────────────────────────────────────────────────────────── */}
@@ -492,7 +527,7 @@ export default function CjEbayOrdersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => {
+              {paginated.map((row) => {
                 const canPlace =
                   row.status === 'VALIDATED' ||
                   (row.listingId != null &&
@@ -621,6 +656,31 @@ export default function CjEbayOrdersPage() {
           </table>
         )}
       </div>
+      {filtered.length > pageSize && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+          <span>
+            Mostrando {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filtered.length)} de {filtered.length}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              className="rounded-md border border-slate-700 px-3 py-1 disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              className="rounded-md border border-slate-700 px-3 py-1 disabled:opacity-40"
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

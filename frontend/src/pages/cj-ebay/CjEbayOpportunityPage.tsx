@@ -200,6 +200,24 @@ function RunStatusBadge({ status }: { status: string }) {
   );
 }
 
+function MetricCard({ label, value, sub, tone = 'slate' }: { label: string; value: string | number; sub: string; tone?: 'slate' | 'emerald' | 'cyan' | 'amber' }) {
+  const toneClass =
+    tone === 'emerald'
+      ? 'border-emerald-800/60 bg-emerald-950/25 text-emerald-200'
+      : tone === 'cyan'
+        ? 'border-cyan-800/60 bg-cyan-950/25 text-cyan-200'
+        : tone === 'amber'
+          ? 'border-amber-800/60 bg-amber-950/25 text-amber-200'
+          : 'border-slate-700 bg-slate-900/65 text-slate-100';
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
+      <p className="mt-1 text-xs opacity-75">{sub}</p>
+    </div>
+  );
+}
+
 // ====================================
 // CANDIDATE CARD
 // ====================================
@@ -499,51 +517,65 @@ export default function CjEbayOpportunityPage() {
     : candidates.filter((c) => c.status === filter);
 
   const isRunning = run?.status === 'RUNNING' || run?.status === 'PENDING';
+  const avgScore = candidates.length
+    ? Math.round(candidates.reduce((sum, c) => sum + (c.score?.totalScore ?? 0), 0) / candidates.length)
+    : 0;
+  const avgMargin = candidates.length
+    ? candidates.reduce((sum, c) => sum + (c.pricing?.netMarginPct ?? 0), 0) / candidates.length
+    : 0;
+  const policyRiskCount = candidates.filter((c) => (c.score?.accountRiskScore ?? 100) < 55 || c.starterSuitability === 'NOT_RECOMMENDED_FOR_STARTER').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Descubrimiento de oportunidades
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            El sistema analiza tendencias, busca en CJ, calcula pricing real y construye un shortlist inteligente.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {/* Mode selector */}
-          <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden text-sm">
-            {(['STARTER', 'STANDARD'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                disabled={discovering}
-                className={`px-3 py-1.5 font-medium transition-colors ${
-                  mode === m
-                    ? 'bg-primary-600 text-white'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                {m === 'STARTER' ? 'Cuenta nueva' : 'Estándar'}
-              </button>
-            ))}
+      <div className="rounded-2xl border border-indigo-800/50 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/70 p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300">CJ → eBay USA</p>
+            <h2 className="mt-1 text-xl font-semibold text-white">Descubrimiento de oportunidades</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-300">
+              Motor de shortlist estilo Shopify, adaptado a eBay: score, fees, margen, cuota mensual y riesgo de políticas antes de crear drafts.
+            </p>
           </div>
-          <button
-            onClick={handleDiscover}
-            disabled={discovering}
-            className="px-5 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-semibold text-sm shadow transition-colors disabled:opacity-60 flex items-center gap-2"
-          >
-            {discovering ? (
-              <>
-                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Buscando…
-              </>
-            ) : (
-              'Buscar por IA'
-            )}
-          </button>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Mode selector */}
+            <div className="flex overflow-hidden rounded-lg border border-slate-700 bg-slate-950/70 text-sm">
+              {(['STARTER', 'STANDARD'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  disabled={discovering}
+                  className={`px-3 py-1.5 font-medium transition-colors ${
+                    mode === m
+                      ? 'bg-primary-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {m === 'STARTER' ? 'Cuenta nueva' : 'Estándar'}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleDiscover}
+              disabled={discovering}
+              className="flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-primary-700 disabled:opacity-60"
+            >
+              {discovering ? (
+                <>
+                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Buscando…
+                </>
+              ) : (
+                'Buscar por IA'
+              )}
+            </button>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard label="Candidatos" value={candidates.length} sub={`${filteredCandidates.length} visibles`} />
+          <MetricCard label="Aprobados" value={candidates.filter((c) => c.status === 'APPROVED').length} sub="Listos para Productos CJ" tone="emerald" />
+          <MetricCard label="Score promedio" value={avgScore || '--'} sub="demanda + margen + riesgo" tone="cyan" />
+          <MetricCard label="Riesgo policy" value={policyRiskCount} sub={`margen prom. ${avgMargin.toFixed(1)}%`} tone={policyRiskCount > 0 ? 'amber' : 'slate'} />
         </div>
       </div>
 

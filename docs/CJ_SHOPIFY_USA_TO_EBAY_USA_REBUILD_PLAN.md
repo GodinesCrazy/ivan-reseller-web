@@ -146,7 +146,7 @@ Remaining visual parity work after third pass:
 - Discover still needs a final skin pass to look exactly like Shopify Discover while keeping eBay opportunity scoring.
 - Productos CJ still needs final compaction and config separation so it reads less like an admin panel and more like the Shopify product lifecycle table.
 - Orders and Order Detail should keep the richer eBay operational evidence, but need final Shopify-style toolbar, chips, pagination density, and detail section alignment.
-- Listings still needs a true right-side detail drawer and stronger bulk safe actions; lifecycle and policy panels are present, but the interaction model is not yet a complete clone.
+- Listings already has a true right-side detail drawer and lifecycle line; remaining work is stronger bulk safe actions and final table density polish.
 - Profit and Alerts are functional and acceptable, but need minor visual tuning for exact Shopify density.
 - Store Optimizer remains an eBay-only extra and should not substitute any missing Shopify-equivalent page.
 
@@ -171,7 +171,8 @@ Remaining visual parity work after third pass:
    - Completed first parity pass: CJ-eBay now exposes the same major module areas as CJ-Shopify with eBay-specific settings, quota analytics, post-sale, automation, sales-agent, and store optimizer views.
    - Second visual pass: Overview and Listings now follow the Shopify screen composition more closely.
    - Third visual/API pass: Logs, Post Venta, Analitica, Agente eBay, Automatizacion, Settings preview, and Listings lifecycle are now backed by real eBay APIs and cockpit screens instead of placeholders/light panels.
-   - Remaining work is visual micro-parity and interaction parity on Discover, Productos CJ, Orders, Order Detail, Listings drawer/bulk actions, Profit, and Alerts.
+   - Remaining work is visual micro-parity and interaction parity on Discover, Productos CJ, Orders, Order Detail, Listings bulk safe actions, Profit, and Alerts.
+   - Fourth visual pass target: close the final visible gaps with compact Shopify-style headers, metric cards, toolbars, dense tables, safe bulk actions, and final page-by-page acceptance checks.
 
 4. Verification
    - Type-check backend.
@@ -186,3 +187,12 @@ Verification from third pass:
 - Backend `npm run type-check`: passed.
 - Backend `npm run build`: passed.
 - Endpoint smoke still needs an authenticated runtime check after deploy; compile/build confirms routes are registered, but production auth may return 401 without session tokens.
+
+Final acceptance checklist:
+
+- Discover uses Shopify-like composition while preserving eBay candidate scoring, fees, quota, policy risk, and approve/reject/defer drawer.
+- Productos CJ prioritizes the CJ search -> variant -> preview -> evaluate -> draft lifecycle, with advanced pricing/config moved behind secondary panels.
+- Listings keeps the eBay drawer and lifecycle line, adds conservative multi-select actions, and never performs bulk publish.
+- Orders uses Shopify-like toolbar, chips, density, and local pagination while keeping manual eBay order import.
+- Order Detail keeps eBay evidence/refunds/flow but opens with a compact status hero and quick actions.
+- Profit and Alerts match Shopify density and explicitly name eBay final value fee, payment fee, promoted allowance, quota exposure, and policy/account blockers.
