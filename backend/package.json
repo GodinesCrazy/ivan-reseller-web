@@ -19,6 +19,7 @@
     "cj-ebay:3e4:export-evidence": "tsx ../scripts/export-evidence.ts",
     "cj-api:sync-from-apis2": "tsx scripts/sync-cj-api-key-from-apis2.ts",
     "cj-api:smoke": "tsx scripts/cj-api-smoke.ts",
+    "cj-ebay:cycle-smoke": "tsx scripts/cj-ebay-cycle-smoke.ts",
     "cj-ebay:operational-validation": "tsx scripts/cj-ebay-operational-validation.ts",
     "cj-api:deep-quote-smoke": "tsx scripts/cj-deep-quote-smoke.ts",
     "cj-api:phase-d-smoke": "tsx scripts/cj-phase-d-postsale-smoke.ts",

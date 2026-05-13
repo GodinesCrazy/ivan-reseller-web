@@ -75,6 +75,49 @@ const RESEARCH_SEEDS: Array<{ keyword: string; category: string; productConcept:
   },
 ];
 
+const PET_RESEARCH_SEEDS: Array<{ keyword: string; category: string; productConcept: string }> = [
+  {
+    keyword: 'dog grooming brush self cleaning',
+    category: 'Pet Supplies > Dog Grooming',
+    productConcept: 'Self-cleaning slicker brush for dogs/cats, push-button hair release',
+  },
+  {
+    keyword: 'cat water fountain filter',
+    category: 'Pet Supplies > Cat Supplies',
+    productConcept: 'Replacement filters or compact fountain accessories for cats',
+  },
+  {
+    keyword: 'dog poop bag holder leash',
+    category: 'Pet Supplies > Dog Supplies',
+    productConcept: 'Clip-on dog waste bag dispenser for leash walking',
+  },
+  {
+    keyword: 'cat toy interactive wand',
+    category: 'Pet Supplies > Cat Toys',
+    productConcept: 'Interactive teaser wand or feather toy for indoor cats',
+  },
+  {
+    keyword: 'pet hair remover laundry',
+    category: 'Pet Supplies > Cleaning & Odor Removal',
+    productConcept: 'Reusable pet hair remover for laundry, furniture, or clothing',
+  },
+  {
+    keyword: 'dog training clicker',
+    category: 'Pet Supplies > Dog Training',
+    productConcept: 'Small dog training clicker with wrist strap',
+  },
+  {
+    keyword: 'slow feeder dog bowl insert',
+    category: 'Pet Supplies > Dog Bowls & Feeders',
+    productConcept: 'Slow-feeder insert or puzzle bowl for dogs',
+  },
+  {
+    keyword: 'pet nail grinder replacement',
+    category: 'Pet Supplies > Grooming',
+    productConcept: 'Pet nail grinder accessory or low-voltage grooming replacement',
+  },
+];
+
 // ====================================
 // PROVIDER
 // ====================================
@@ -97,11 +140,15 @@ export class EbayResearchProvider implements IMarketTrendProvider {
     }
 
     const wantedSeeds = settings.maxSeedsPerRun ?? 8;
+    const seedPool =
+      settings.marketNiche === 'PET_SUPPLIES' || settings.requirePetCategory
+        ? PET_RESEARCH_SEEDS
+        : RESEARCH_SEEDS;
     // Probe a few extra so we can sort and trim to the top N by confidence
-    const probeCount = Math.min(wantedSeeds + 2, RESEARCH_SEEDS.length);
+    const probeCount = Math.min(wantedSeeds + 2, seedPool.length);
     const seeds: TrendSeed[] = [];
 
-    for (const def of RESEARCH_SEEDS.slice(0, probeCount)) {
+    for (const def of seedPool.slice(0, probeCount)) {
       try {
         const searchResult = await client.searchItems(def.keyword, 50);
         const signal = cjEbayDemandSignalService.computeFromBrowseResult(searchResult);
