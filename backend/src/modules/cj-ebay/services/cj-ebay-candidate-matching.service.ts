@@ -30,13 +30,14 @@ class CjEbayCandidateMatchingService {
   async matchSeeds(
     seeds: TrendSeed[],
     settings: OpportunityRunSettings,
-    adapter: ICjSupplierAdapter
+    adapter: ICjSupplierAdapter,
+    options?: { requireUsWarehouseOnly?: boolean }
   ): Promise<CjCandidateMatch[]> {
     const allMatches: CjCandidateMatch[] = [];
 
     for (const seed of seeds) {
       try {
-        const matches = await this.matchSingleSeed(seed, settings, adapter);
+        const matches = await this.matchSingleSeed(seed, settings, adapter, options);
         allMatches.push(...matches);
       } catch (err) {
         logger.warn(
@@ -51,7 +52,8 @@ class CjEbayCandidateMatchingService {
   private async matchSingleSeed(
     seed: TrendSeed,
     settings: OpportunityRunSettings,
-    adapter: ICjSupplierAdapter
+    adapter: ICjSupplierAdapter,
+    options?: { requireUsWarehouseOnly?: boolean }
   ): Promise<CjCandidateMatch[]> {
     logger.info(`[CandidateMatching] Searching CJ for seed: "${seed.keyword}"`);
 
@@ -82,7 +84,7 @@ class CjEbayCandidateMatchingService {
 
     for (const summary of topSummaries) {
       try {
-        const match = await this.buildCandidateMatch(seed, summary.cjProductId, settings, adapter);
+        const match = await this.buildCandidateMatch(seed, summary.cjProductId, settings, adapter, options);
         if (match) matches.push(match);
       } catch (err) {
         logger.warn(
@@ -98,7 +100,8 @@ class CjEbayCandidateMatchingService {
     seed: TrendSeed,
     cjProductId: string,
     settings: OpportunityRunSettings,
-    adapter: ICjSupplierAdapter
+    adapter: ICjSupplierAdapter,
+    options?: { requireUsWarehouseOnly?: boolean }
   ): Promise<CjCandidateMatch | null> {
     const detail = await adapter.getProductById(cjProductId);
 
@@ -143,6 +146,12 @@ class CjEbayCandidateMatchingService {
       );
       return null;
     }
+    if (options?.requireUsWarehouseOnly && shipping?.fulfillmentOrigin !== 'US') {
+      logger.info(
+        `[CandidateMatching] Product ${cjProductId} skipped: US warehouse required but origin=${shipping?.fulfillmentOrigin ?? 'UNKNOWN'}`
+      );
+      return null;
+    }
 
     return {
       seed,
@@ -164,6 +173,7 @@ class CjEbayCandidateMatchingService {
             daysMin: shipping.daysMin,
             daysMax: shipping.daysMax,
             serviceName: shipping.serviceName,
+            fulfillmentOrigin: shipping.fulfillmentOrigin,
           }
         : null,
       shippingViable: true,
@@ -193,22 +203,24 @@ class CjEbayCandidateMatchingService {
     daysMin?: number;
     daysMax?: number;
     serviceName?: string;
+    fulfillmentOrigin?: 'US' | 'CN';
   } | null> {
     try {
       const quoteInput = variant.cjVid
-        ? { variantId: variant.cjVid, quantity: 1, destCountry: 'US' as const }
-        : { productId: cjProductId, quantity: 1, destCountry: 'US' as const };
+        ? { variantId: variant.cjVid, quantity: 1 }
+        : { productId: cjProductId, quantity: 1 };
 
-      const result = await adapter.quoteShippingToUs(quoteInput);
+      const result = await adapter.quoteShippingToUsWarehouseAware(quoteInput);
 
-      if (!Number.isFinite(result.amountUsd) || result.amountUsd < 0) return null;
+      if (!Number.isFinite(result.quote.cost) || result.quote.cost < 0) return null;
 
       return {
-        amountUsd: result.amountUsd,
-        confidence: result.confidence === 'known' ? 'KNOWN' : 'ESTIMATED',
-        daysMin: result.estimatedMinDays,
-        daysMax: result.estimatedMaxDays,
-        serviceName: result.serviceName,
+        amountUsd: result.quote.cost,
+        confidence: result.quote.estimatedDays != null ? 'KNOWN' : 'ESTIMATED',
+        daysMin: result.quote.estimatedDays ?? undefined,
+        daysMax: result.quote.estimatedDays ?? undefined,
+        serviceName: result.quote.method,
+        fulfillmentOrigin: result.fulfillmentOrigin,
       };
     } catch (err) {
       if (err instanceof CjSupplierError && err.code === 'CJ_SHIPPING_UNAVAILABLE') {

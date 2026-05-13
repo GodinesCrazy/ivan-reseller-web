@@ -158,6 +158,39 @@ export const cjEbayEbayFacadeService = {
     }
   },
 
+  async listRecentFulfillmentOrders(
+    userId: number,
+    params: { limit?: number; offset?: number; creationDateFrom?: string }
+  ): Promise<{
+    orders: Array<{
+      orderId: string;
+      buyerName?: string;
+      buyerUsername?: string;
+      buyerEmail?: string;
+      shippingAddress?: Record<string, string>;
+      lineItems: Array<{
+        lineItemId: string;
+        sku?: string;
+        itemId?: string;
+        title?: string;
+        quantity: number;
+        price?: number;
+      }>;
+      total?: number;
+      orderDate?: string;
+      fulfillmentStatus?: string;
+    }>;
+    total?: number;
+    next?: string;
+  }> {
+    const { ebay } = await buildEbayServiceForUser(userId);
+    return ebay.getOrders({
+      limit: params.limit ?? 50,
+      offset: params.offset ?? 0,
+      creationDateFrom: params.creationDateFrom,
+    });
+  },
+
   /** Subir tracking a eBay (Sell Fulfillment) — sin usar fulfillment-tracking-sync legacy. */
   async submitOrderShippingFulfillment(
     userId: number,

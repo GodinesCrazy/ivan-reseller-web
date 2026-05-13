@@ -18,6 +18,15 @@ export const cjEbayUpdateConfigSchema = z
     monthlyListingLimit: z.number().int().min(1).max(1_000_000).nullable().optional(),
     monthlyAmountLimitUsd: z.number().min(0.01).nullable().optional(),
     cjPostCreateCheckoutMode: z.enum(['MANUAL', 'AUTO_CONFIRM_PAY']).optional(),
+    autopilotEnabled: z.boolean().optional(),
+    autopilotState: z.enum(['RUNNING', 'PAUSED', 'STOPPED', 'ERROR']).optional(),
+    autopilotIntervalMinutes: z.number().int().min(5).max(1440).optional(),
+    maxPublishesPerRun: z.number().int().min(0).max(100).optional(),
+    maxOrdersPerRun: z.number().int().min(1).max(500).optional(),
+    requireUsWarehouseOnly: z.boolean().optional(),
+    autoPayCjOrders: z.boolean().optional(),
+    orderPollingLookbackHours: z.number().int().min(1).max(720).optional(),
+    minDataConfidenceScore: z.number().int().min(0).max(100).optional(),
   })
   .strict();
 

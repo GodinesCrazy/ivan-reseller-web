@@ -538,6 +538,16 @@ export const cjEbayListingService = {
     if (!evaluation?.shippingQuote) {
       throw new AppError('Linked evaluation or shipping quote missing.', 400);
     }
+    const settings = await prisma.cjEbayAccountSettings.findUnique({ where: { userId: input.userId } });
+    const requireUsWarehouseOnly = settings?.requireUsWarehouseOnly ?? true;
+    const quoteOrigin = String(evaluation.shippingQuote.originCountryCode || 'CN').toUpperCase();
+    if (requireUsWarehouseOnly && quoteOrigin !== 'US') {
+      throw new AppError(
+        `Publish bloqueado: CJ no confirmó warehouse USA para este listing (origin=${quoteOrigin || 'UNKNOWN'}). ` +
+          'Reevaluar con freight USA confirmado antes de publicar en eBay USA.',
+        423
+      );
+    }
     if (isEvalStale(evaluation.evaluatedAt) || isQuoteStale(evaluation.shippingQuote)) {
       throw new AppError('Evaluation or quote became stale — recreate draft.', 400);
     }

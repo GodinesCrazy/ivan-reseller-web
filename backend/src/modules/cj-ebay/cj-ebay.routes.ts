@@ -47,6 +47,8 @@ import { cjEbayRefundService } from './services/cj-ebay-refund.service';
 import { cjEbayAlertsService } from './services/cj-ebay-alerts.service';
 import { cjEbayProfitService } from './services/cj-ebay-profit.service';
 import { cjEbaySellingLimitsService } from './services/cj-ebay-selling-limits.service';
+import { cjEbayAutopilotService } from './services/cj-ebay-autopilot.service';
+import { cjEbayOrderPollingService } from './services/cj-ebay-order-polling.service';
 
 const router = Router();
 
@@ -806,28 +808,9 @@ router.post('/analytics/profit-guard/run', async (req: Request, res: Response, n
 router.get('/automation/status', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const [readiness, limits, traces, settings] = await Promise.all([
-      cjEbaySystemReadinessService.evaluateForUser(userId),
-      cjEbaySellingLimitsService.getMonthlySnapshot(userId),
-      prisma.cjEbayExecutionTrace.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 20 }),
-      cjEbayConfigService.getOrCreateSettings(userId),
-    ]);
+    const status = await cjEbayAutopilotService.getStatus(userId);
     await traceComplete(req, userId, 'GET /automation/status', { statusCode: 200 });
-    res.json({
-      ok: true,
-      status: readiness.ready && limits.configured ? 'READY' : 'LIMITED',
-      running: false,
-      paused: true,
-      readiness,
-      sellingLimits: limits,
-      config: {
-        maxPublishPerRun: Math.min(limits.remainingListings ?? 5, 5),
-        requireQuota: true,
-        requirePolicyClear: true,
-        checkoutMode: settings.cjPostCreateCheckoutMode,
-      },
-      recentEvents: traces.map((t) => ({ id: t.id, step: t.step, message: t.message, createdAt: t.createdAt.toISOString() })),
-    });
+    res.json({ ok: true, ...status });
   } catch (e) {
     next(e);
   }
@@ -837,8 +820,13 @@ for (const command of ['start', 'pause', 'resume', 'stop', 'run-now'] as const) 
   router.post(`/automation/${command}`, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.userId;
+      let out: unknown;
+      if (command === 'start' || command === 'resume') out = await cjEbayAutopilotService.start(userId);
+      else if (command === 'pause') out = await cjEbayAutopilotService.pause(userId);
+      else if (command === 'stop') out = await cjEbayAutopilotService.stop(userId);
+      else out = await cjEbayAutopilotService.runNow(userId, 'MANUAL');
       await traceComplete(req, userId, `POST /automation/${command}`, { statusCode: 200 });
-      res.json({ ok: true, command, status: command === 'pause' || command === 'stop' ? 'PAUSED' : 'READY', message: `Automation ${command} accepted for CJ-eBay guarded cockpit.` });
+      res.json({ ok: true, command, message: `Automation ${command} ejecutado para CJ-eBay autopilot.`, result: out });
     } catch (e) {
       next(e);
     }
@@ -848,8 +836,9 @@ for (const command of ['start', 'pause', 'resume', 'stop', 'run-now'] as const) 
 router.post('/automation/config', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
+    const config = await cjEbayAutopilotService.configure(userId, req.body ?? {});
     await traceComplete(req, userId, 'POST /automation/config', { statusCode: 200, body: req.body ?? {} });
-    res.json({ ok: true, config: req.body ?? {}, message: 'Configuración de automatización registrada para la consola; los límites reales viven en Configuración eBay.' });
+    res.json({ ok: true, config, message: 'Configuración de autopilot CJ-eBay guardada.' });
   } catch (e) {
     next(e);
   }
@@ -858,7 +847,7 @@ router.post('/automation/config', async (req: Request, res: Response, next: Next
 router.get('/sales-agent', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const [overviewCounts, limits, recommendations, optimizer, profit] = await Promise.all([
+    const [overviewCounts, limits, recommendations, optimizer, profit, autopilot] = await Promise.all([
       Promise.all([
         prisma.cjEbayProduct.count({ where: { userId } }),
         prisma.cjEbayProductEvaluation.count({ where: { userId, decision: 'APPROVED' } }),
@@ -870,6 +859,7 @@ router.get('/sales-agent', async (req: Request, res: Response, next: NextFunctio
       prisma.cjEbayOpportunityCandidate.findMany({ where: { userId }, orderBy: [{ totalScore: 'desc' }, { updatedAt: 'desc' }], take: 12 }),
       prisma.cjEbayListing.findMany({ where: { userId, status: { in: [CJ_EBAY_LISTING_STATUS.FAILED, CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK, CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING] } }, include: { product: { select: { title: true } } }, take: 12 }),
       cjEbayProfitService.getFinancials(userId),
+      cjEbayAutopilotService.getStatus(userId),
     ]);
     const [products, approved, listings, activeListings, orders] = overviewCounts;
     const overallScore = Math.round(
@@ -879,8 +869,15 @@ router.get('/sales-agent', async (req: Request, res: Response, next: NextFunctio
     res.json({
       ok: true,
       scheduler: {
-        status: 'PAUSED',
-        config: { intervalMinutes: 60, maxPublishesPerRun: Math.min(limits.remainingListings ?? 5, 5), respectMonthlyQuota: true, blockPolicyRisks: true },
+        status: autopilot.status,
+        config: {
+          intervalMinutes: autopilot.config.intervalMinutes,
+          maxPublishesPerRun: autopilot.config.maxPublishPerRun,
+          respectMonthlyQuota: true,
+          blockPolicyRisks: true,
+          requireUsWarehouseOnly: autopilot.config.requireUsWarehouseOnly,
+          autoPayCjOrders: autopilot.config.autoPayCjOrders,
+        },
       },
       pipeline: {
         overallScore,
@@ -906,14 +903,32 @@ router.get('/sales-agent', async (req: Request, res: Response, next: NextFunctio
         netProfitUsd: null,
         netMarginPct: null,
       })),
-      actions: optimizer.map((l) => ({
-        id: `listing-${l.id}`,
-        listingId: l.id,
-        title: l.product.title,
-        severity: l.status === CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK ? 'critical' : 'warning',
-        recommendation: l.status === CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING ? 'Reconciliar offer/listing eBay' : 'Resolver bloqueo de publicación',
-        reason: l.lastError ?? l.status,
-      })),
+      actions: [
+        {
+          id: 'run-autopilot',
+          listingId: 0,
+          title: 'CJ USA → eBay USA',
+          severity: 'info',
+          recommendation: 'Ejecutar ciclo autopilot completo',
+          reason: 'Descubre, filtra warehouse USA, publica, importa órdenes y procesa postventa según guardrails.',
+        },
+        {
+          id: 'poll-orders',
+          listingId: 0,
+          title: 'eBay Fulfillment API',
+          severity: 'info',
+          recommendation: 'Buscar ventas nuevas en eBay',
+          reason: 'Polling seguro de órdenes recientes para alimentar el ciclo postventa.',
+        },
+        ...optimizer.map((l) => ({
+          id: `listing-${l.id}`,
+          listingId: l.id,
+          title: l.product.title,
+          severity: l.status === CJ_EBAY_LISTING_STATUS.ACCOUNT_POLICY_BLOCK ? 'critical' : 'warning',
+          recommendation: l.status === CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING ? 'Reconciliar offer/listing eBay' : 'Resolver bloqueo de publicación',
+          reason: l.lastError ?? l.status,
+        })),
+      ],
     });
   } catch (e) {
     next(e);
@@ -923,8 +938,34 @@ router.get('/sales-agent', async (req: Request, res: Response, next: NextFunctio
 router.post('/sales-agent/actions', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
+    const rawId = String((req.body ?? {}).id || '').trim();
+    let result: unknown;
+    if (rawId === 'run-discovery' || rawId === 'publish-next' || rawId === 'run-autopilot') {
+      result = await cjEbayAutopilotService.runNow(userId, 'SALES_AGENT');
+    } else if (rawId === 'poll-orders') {
+      const settings = await cjEbayConfigService.getOrCreateSettings(userId);
+      result = await cjEbayOrderPollingService.pollRecentOrders({
+        userId,
+        lookbackHours: settings.orderPollingLookbackHours,
+        limit: settings.maxOrdersPerRun,
+        route: 'cj-ebay.sales-agent',
+      });
+    } else if (rawId.startsWith('listing-')) {
+      const listingId = Number(rawId.replace('listing-', ''));
+      const listing = await prisma.cjEbayListing.findFirst({ where: { id: listingId, userId } });
+      if (listing?.status === CJ_EBAY_LISTING_STATUS.RECONCILE_PENDING || listing?.status === CJ_EBAY_LISTING_STATUS.OFFER_ALREADY_EXISTS) {
+        result = await cjEbayListingService.reconcile({ userId, listingDbId: listingId, route: 'cj-ebay.sales-agent' });
+      } else if (listing?.status === CJ_EBAY_LISTING_STATUS.ACTIVE) {
+        await cjEbayListingService.pause({ userId, listingDbId: listingId, route: 'cj-ebay.sales-agent' });
+        result = { status: 'PAUSED', listingId };
+      } else {
+        result = { status: 'NO_ACTION', message: 'Listing action is not executable in current status.' };
+      }
+    } else {
+      result = { status: 'NO_ACTION', message: 'Unknown sales-agent action.' };
+    }
     await traceComplete(req, userId, 'POST /sales-agent/actions', { statusCode: 200, body: req.body ?? {} });
-    res.json({ ok: true, accepted: true, result: { status: 'QUEUED_FOR_OPERATOR', message: 'Acción registrada. Ejecutar publicación/reconcile desde la pantalla especializada para conservar guardrails eBay.' } });
+    res.json({ ok: true, accepted: true, result });
   } catch (e) {
     next(e);
   }
@@ -933,8 +974,8 @@ router.post('/sales-agent/actions', async (req: Request, res: Response, next: Ne
 router.get('/sales-agent/scheduler', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const limits = await cjEbaySellingLimitsService.getMonthlySnapshot(userId);
-    res.json({ ok: true, scheduler: { status: 'PAUSED', config: { intervalMinutes: 60, maxPublishesPerRun: Math.min(limits.remainingListings ?? 5, 5), respectMonthlyQuota: true, blockPolicyRisks: true } } });
+    const status = await cjEbayAutopilotService.getStatus(userId);
+    res.json({ ok: true, scheduler: { status: status.status, config: status.config } });
   } catch (e) {
     next(e);
   }
@@ -943,8 +984,9 @@ router.get('/sales-agent/scheduler', async (req: Request, res: Response, next: N
 router.patch('/sales-agent/scheduler/config', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
+    const config = await cjEbayAutopilotService.configure(userId, req.body ?? {});
     await traceComplete(req, userId, 'PATCH /sales-agent/scheduler/config', { statusCode: 200, body: req.body ?? {} });
-    res.json({ ok: true, scheduler: { status: 'PAUSED', config: req.body ?? {} } });
+    res.json({ ok: true, scheduler: { status: config.autopilotState, config } });
   } catch (e) {
     next(e);
   }
@@ -954,8 +996,16 @@ for (const command of ['start', 'pause', 'stop', 'run-now'] as const) {
   router.post(`/sales-agent/scheduler/${command}`, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.userId;
+      const result =
+        command === 'start'
+          ? await cjEbayAutopilotService.start(userId)
+          : command === 'pause'
+            ? await cjEbayAutopilotService.pause(userId)
+            : command === 'stop'
+              ? await cjEbayAutopilotService.stop(userId)
+              : await cjEbayAutopilotService.runNow(userId, 'SALES_AGENT');
       await traceComplete(req, userId, `POST /sales-agent/scheduler/${command}`, { statusCode: 200 });
-      res.json({ ok: true, command, scheduler: { status: command === 'start' || command === 'run-now' ? 'RUNNING_ON_DEMAND' : 'PAUSED' } });
+      res.json({ ok: true, command, scheduler: result });
     } catch (e) {
       next(e);
     }

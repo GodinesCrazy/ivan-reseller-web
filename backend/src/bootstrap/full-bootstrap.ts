@@ -496,6 +496,19 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       });
     }
 
+    // CJ eBay USA Autopilot: resume persisted scheduler after deploy/restart.
+    if (process.env.ENABLE_CJ_EBAY_MODULE === 'true') {
+      setImmediate(async () => {
+        try {
+          const { cjEbayAutopilotService } = await import('../modules/cj-ebay/services/cj-ebay-autopilot.service');
+          const status = await cjEbayAutopilotService.startIfEnabled();
+          console.log('[BOOT] ✅ CJ eBay USA autopilot startup check:', status.users, 'enabled scheduler(s)');
+        } catch (err: any) {
+          console.warn('[BOOT] ⚠️  CJ eBay USA autopilot auto-start failed (non-fatal):', err?.message);
+        }
+      });
+    }
+
     const totalInitTime = Date.now() - startTime;
     logMilestone(`Full bootstrap completed (total: ${totalInitTime}ms)`);
     console.log('');

@@ -166,6 +166,7 @@ export interface CjCandidateMatch {
     daysMin?: number;
     daysMax?: number;
     serviceName?: string;
+    fulfillmentOrigin?: 'US' | 'CN';
   } | null;
   /** Null means shipping was not available — candidate may be discarded. */
   shippingViable: boolean;

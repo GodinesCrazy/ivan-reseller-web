@@ -61,6 +61,17 @@ export interface CjEbayConfigResponse {
     monthlyAmountLimitUsd: number | null;
     /** Tras createOrder (payType=3): `MANUAL` o `AUTO_CONFIRM_PAY`. */
     cjPostCreateCheckoutMode: 'MANUAL' | 'AUTO_CONFIRM_PAY';
+    autopilotEnabled: boolean;
+    autopilotState: string;
+    autopilotIntervalMinutes: number;
+    maxPublishesPerRun: number;
+    maxOrdersPerRun: number;
+    requireUsWarehouseOnly: boolean;
+    autoPayCjOrders: boolean;
+    orderPollingLookbackHours: number;
+    minDataConfidenceScore: number;
+    autopilotLastRunAt: string | null;
+    autopilotNextRunAt: string | null;
   };
 }
 

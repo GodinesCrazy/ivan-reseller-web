@@ -308,7 +308,10 @@ class CjEbayOpportunityShortlistService {
 
       // Step 2: CJ candidate matching.
       const adapter = createCjSupplierAdapter(userId);
-      const matches = await cjEbayCandidateMatchingService.matchSeeds(seeds, settings, adapter);
+      const settingsRow = await cjEbayConfigService.getOrCreateSettings(userId);
+      const matches = await cjEbayCandidateMatchingService.matchSeeds(seeds, settings, adapter, {
+        requireUsWarehouseOnly: settingsRow.requireUsWarehouseOnly,
+      });
 
       logger.info(`[OpportunityShortlist] Run ${runId}: ${matches.length} CJ matches found`);
 
@@ -330,7 +333,6 @@ class CjEbayOpportunityShortlistService {
       }
 
       // Step 3 + 4: Pricing + Scoring for each match (with real market prices).
-      const settingsRow = await cjEbayConfigService.getOrCreateSettings(userId);
       const scored = await this.scoreCandidates(matches, settings, settingsRow, userId);
 
       // Step 5: Build shortlist (top N by score, above minimum threshold).

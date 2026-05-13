@@ -20,6 +20,17 @@ function toSettingsDto(row: {
   monthlyListingLimit: number | null;
   monthlyAmountLimitUsd: Prisma.Decimal | null;
   cjPostCreateCheckoutMode: string;
+  autopilotEnabled: boolean;
+  autopilotState: string;
+  autopilotIntervalMinutes: number;
+  maxPublishesPerRun: number;
+  maxOrdersPerRun: number;
+  requireUsWarehouseOnly: boolean;
+  autoPayCjOrders: boolean;
+  orderPollingLookbackHours: number;
+  minDataConfidenceScore: number;
+  autopilotLastRunAt: Date | null;
+  autopilotNextRunAt: Date | null;
 }): CjEbayConfigResponse['settings'] {
   return {
     minMarginPct: row.minMarginPct != null ? Number(row.minMarginPct) : null,
@@ -44,6 +55,17 @@ function toSettingsDto(row: {
       row.cjPostCreateCheckoutMode === CJ_EBAY_POST_CREATE_CHECKOUT_MODE.AUTO_CONFIRM_PAY
         ? CJ_EBAY_POST_CREATE_CHECKOUT_MODE.AUTO_CONFIRM_PAY
         : CJ_EBAY_POST_CREATE_CHECKOUT_MODE.MANUAL,
+    autopilotEnabled: row.autopilotEnabled,
+    autopilotState: row.autopilotState,
+    autopilotIntervalMinutes: row.autopilotIntervalMinutes,
+    maxPublishesPerRun: row.maxPublishesPerRun,
+    maxOrdersPerRun: row.maxOrdersPerRun,
+    requireUsWarehouseOnly: row.requireUsWarehouseOnly,
+    autoPayCjOrders: row.autoPayCjOrders,
+    orderPollingLookbackHours: row.orderPollingLookbackHours,
+    minDataConfidenceScore: row.minDataConfidenceScore,
+    autopilotLastRunAt: row.autopilotLastRunAt?.toISOString() ?? null,
+    autopilotNextRunAt: row.autopilotNextRunAt?.toISOString() ?? null,
   };
 }
 
@@ -119,6 +141,15 @@ export const cjEbayConfigService = {
           ? CJ_EBAY_POST_CREATE_CHECKOUT_MODE.AUTO_CONFIRM_PAY
           : CJ_EBAY_POST_CREATE_CHECKOUT_MODE.MANUAL;
     }
+    if (body.autopilotEnabled !== undefined) data.autopilotEnabled = body.autopilotEnabled;
+    if (body.autopilotState !== undefined) data.autopilotState = body.autopilotState;
+    if (body.autopilotIntervalMinutes !== undefined) data.autopilotIntervalMinutes = body.autopilotIntervalMinutes;
+    if (body.maxPublishesPerRun !== undefined) data.maxPublishesPerRun = body.maxPublishesPerRun;
+    if (body.maxOrdersPerRun !== undefined) data.maxOrdersPerRun = body.maxOrdersPerRun;
+    if (body.requireUsWarehouseOnly !== undefined) data.requireUsWarehouseOnly = body.requireUsWarehouseOnly;
+    if (body.autoPayCjOrders !== undefined) data.autoPayCjOrders = body.autoPayCjOrders;
+    if (body.orderPollingLookbackHours !== undefined) data.orderPollingLookbackHours = body.orderPollingLookbackHours;
+    if (body.minDataConfidenceScore !== undefined) data.minDataConfidenceScore = body.minDataConfidenceScore;
     const row = await prisma.cjEbayAccountSettings.update({
       where: { userId },
       data,

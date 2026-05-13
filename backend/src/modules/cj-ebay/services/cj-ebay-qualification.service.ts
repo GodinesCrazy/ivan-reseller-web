@@ -193,6 +193,7 @@ function decideQualification(params: {
     maxShippingUsd: number | null;
     rejectOnUnknownShipping: boolean;
     maxRiskScore: number | null;
+    requireUsWarehouseOnly: boolean;
   };
   unitCostUsd: number | null;
   stockLive: number;
@@ -200,6 +201,7 @@ function decideQualification(params: {
   shippingEstimatedDays: number | null;
   breakdown: CjPricingBreakdown;
   riskScore: number;
+  fulfillmentOrigin: 'US' | 'CN';
 }): { decision: 'APPROVED' | 'REJECTED' | 'PENDING'; reasons: QualificationReason[] } {
   const reasons: QualificationReason[] = [];
 
@@ -239,6 +241,15 @@ function decideQualification(params: {
       rule: 'P2',
       code: 'SHIPPING_TIME_UNKNOWN',
       message: 'CJ did not return parseable transit window; rejectOnUnknownShipping is true.',
+      severity: 'block',
+    });
+  }
+
+  if (params.settings.requireUsWarehouseOnly && params.fulfillmentOrigin !== 'US') {
+    reasons.push({
+      rule: 'P2',
+      code: 'US_WAREHOUSE_REQUIRED',
+      message: 'CJ did not confirm US warehouse fulfillment; autopilot/eBay USA requires origin US.',
       severity: 'block',
     });
   }
@@ -545,14 +556,16 @@ export const cjEbayQualificationService = {
           maxShippingUsd:
             settingsRow.maxShippingUsd != null ? Number(settingsRow.maxShippingUsd) : null,
           rejectOnUnknownShipping: settingsRow.rejectOnUnknownShipping,
-          maxRiskScore: settingsRow.maxRiskScore,
-        },
+        maxRiskScore: settingsRow.maxRiskScore,
+        requireUsWarehouseOnly: settingsRow.requireUsWarehouseOnly,
+      },
         unitCostUsd: unitCost ?? null,
         stockLive,
         shippingCost: freight.quote.cost,
         shippingEstimatedDays: freight.quote.estimatedDays,
         breakdown,
         riskScore,
+        fulfillmentOrigin,
       });
 
       const evalRow = await prisma.cjEbayProductEvaluation.create({

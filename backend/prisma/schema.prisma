@@ -88,6 +88,7 @@ model User {
   cjEbayAlerts              CjEbayAlert[]
   cjEbayProfitSnapshots     CjEbayProfitSnapshot[]
   cjEbayExecutionTraces     CjEbayExecutionTrace[]
+  cjEbayAutomationRuns      CjEbayAutomationRun[]
   cjEbayOrderRefunds        CjEbayOrderRefund[]
   cjEbayOpportunityRuns     CjEbayOpportunityRun[]
   cjEbayOpportunityCandidates CjEbayOpportunityCandidate[]
@@ -1607,10 +1608,23 @@ model CjEbayAccountSettings {
   monthlyAmountLimitUsd     Decimal? @db.Decimal(18, 2)
   /// Tras `createOrderV2` con payType=3: `MANUAL` (confirm/pay vía API) o `AUTO_CONFIRM_PAY` (servidor llama confirm+payBalance).
   cjPostCreateCheckoutMode  String   @default("MANUAL")
+  /// Autopilot CJ USA → eBay USA: discovery/publish/order polling/fulfillment/tracking.
+  autopilotEnabled          Boolean  @default(false)
+  autopilotState            String   @default("PAUSED")
+  autopilotIntervalMinutes  Int      @default(60)
+  maxPublishesPerRun        Int      @default(1)
+  maxOrdersPerRun           Int      @default(10)
+  requireUsWarehouseOnly    Boolean  @default(true)
+  autoPayCjOrders           Boolean  @default(false)
+  orderPollingLookbackHours Int      @default(24)
+  minDataConfidenceScore    Int      @default(60)
+  autopilotLastRunAt        DateTime?
+  autopilotNextRunAt        DateTime?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  automationRuns CjEbayAutomationRun[]
 
   @@map("cj_ebay_account_settings")
 }
@@ -1923,6 +1937,44 @@ model CjEbayExecutionTrace {
   @@index([userId, createdAt])
   @@index([correlationId])
   @@map("cj_ebay_execution_traces")
+}
+
+model CjEbayAutomationRun {
+  id                  String    @id @default(cuid())
+  userId              Int
+  status              String    @default("RUNNING")
+  trigger             String    @default("SCHEDULED")
+  startedAt           DateTime  @default(now())
+  completedAt         DateTime?
+  durationMs          Int?
+  lockKey             String?
+  discoveryRuns       Int       @default(0)
+  candidatesChecked   Int       @default(0)
+  draftsCreated       Int       @default(0)
+  listingsPublished   Int       @default(0)
+  listingsRejectedUs  Int       @default(0)
+  ordersImported      Int       @default(0)
+  ordersPlaced        Int       @default(0)
+  ordersConfirmed     Int       @default(0)
+  ordersPaid          Int       @default(0)
+  trackingSynced      Int       @default(0)
+  recoveriesRun       Int       @default(0)
+  errorsCount         Int       @default(0)
+  estimatedProfitUsd  Decimal?  @db.Decimal(18, 2)
+  feePctUsed          Decimal?  @db.Decimal(8, 4)
+  shippingUsd         Decimal?  @db.Decimal(18, 2)
+  supplierCostUsd     Decimal?  @db.Decimal(18, 2)
+  summary             Json?
+  lastError           String?   @db.Text
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade, map: "cj_ebay_automation_runs_user_fkey")
+  settings CjEbayAccountSettings? @relation(fields: [userId], references: [userId], onDelete: Cascade, map: "cj_ebay_automation_runs_settings_fkey")
+
+  @@index([userId, startedAt])
+  @@index([userId, status])
+  @@map("cj_ebay_automation_runs")
 }
 
 // ====================================
