@@ -12,6 +12,7 @@ import {
   type CjShopifyUsaWebhookOrderPayload,
   cjShopifyUsaWebhookOrderPayloadSchema,
 } from '../schemas/cj-shopify-usa.schemas';
+import { cjApiRateLimiterService } from '../../../services/cj-api-rate-limiter.service';
 
 // Non-retryable statuses — processing from these is a no-op (idempotency guard)
 const NON_RETRYABLE_STATUSES = new Set([
@@ -40,6 +41,7 @@ const PAID_FINANCIAL_STATUSES = new Set(['PAID']);
 async function getCjToken(): Promise<string | null> {
   const apiKey = env.CJ_API_KEY;
   if (!apiKey) return null;
+  await cjApiRateLimiterService.waitTurn('CJ-Shopify token');
   const res = await fetch('https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -754,6 +756,7 @@ export const cjShopifyUsaOrderIngestService = {
         payType: 1, // 1 = CJ balance
       };
 
+      await cjApiRateLimiterService.waitTurn('CJ-Shopify createOrderV2');
       const res = await fetch('https://developers.cjdropshipping.com/api2.0/v1/shopping/order/createOrderV2', {
         method: 'POST',
         headers: { 'CJ-Access-Token': cjToken, 'Content-Type': 'application/json' },
@@ -833,6 +836,7 @@ export const cjShopifyUsaOrderIngestService = {
     let synced = 0;
     for (const order of shippedOrders) {
       try {
+        await cjApiRateLimiterService.waitTurn('CJ-Shopify getOrderDetail');
         const res = await fetch(
           `https://developers.cjdropshipping.com/api2.0/v1/shopping/order/getOrderDetail?orderId=${order.cjOrderId}`,
           { headers: { 'CJ-Access-Token': cjToken } },

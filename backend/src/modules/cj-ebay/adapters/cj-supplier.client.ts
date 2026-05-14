@@ -7,6 +7,7 @@
  */
 
 import { logger } from '../../../config/logger';
+import { cjApiRateLimiterService } from '../../../services/cj-api-rate-limiter.service';
 import { CjSupplierError, type CjSupplierErrorCode } from './cj-supplier.errors';
 
 /** Documented production base for API 2.0 v1. */
@@ -124,6 +125,7 @@ export class CjSupplierHttpClient {
     const bodyStr = JSON.stringify(body);
     let res: Response;
     try {
+      await cjApiRateLimiterService.waitTurn(`POST ${subPath}`);
       res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -171,6 +173,7 @@ export class CjSupplierHttpClient {
     const headers = { 'CJ-Access-Token': accessToken };
     let res: Response;
     try {
+      await cjApiRateLimiterService.waitTurn(`GET ${subPathWithQuery.split('?')[0]}`);
       res = await fetch(url, {
         method: 'GET',
         headers,
@@ -224,6 +227,7 @@ export class CjSupplierHttpClient {
     const bodyStr = JSON.stringify(body);
     let res: Response;
     try {
+      await cjApiRateLimiterService.waitTurn(`PATCH ${subPath}`);
       res = await fetch(url, {
         method: 'PATCH',
         headers: headerObj,
@@ -279,6 +283,7 @@ export class CjSupplierHttpClient {
     const bodyStr = JSON.stringify(body);
     let res: Response;
     try {
+      await cjApiRateLimiterService.waitTurn(`POST ${subPath}`);
       res = await fetch(url, {
         method: 'POST',
         headers: headerObj,

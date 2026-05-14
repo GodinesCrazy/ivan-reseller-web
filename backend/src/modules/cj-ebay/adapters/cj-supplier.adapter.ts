@@ -667,10 +667,24 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
       throw new CjSupplierError('cjProductId required', { code: 'CJ_INVALID_SKU' });
     }
 
-    const listData = await this.authedGet(`product/query?pid=${encodeURIComponent(pid)}`);
+    let listData: unknown;
+    try {
+      listData = await this.authedGet(`product/query?pid=${encodeURIComponent(pid)}`);
+    } catch (e) {
+      if (!(e instanceof CjSupplierError) || e.code !== 'CJ_RATE_LIMIT') {
+        throw e;
+      }
+      logger.warn('[cj-supplier.adapter] product/query rate-limited; trying listV2 pid fallback', {
+        productIdLen: pid.length,
+      });
+      listData = await this.authedGet(`product/listV2?page=1&size=1&pid=${encodeURIComponent(pid)}`);
+    }
     let mainRow = asRecord(listData);
     if (!mainRow || !String(mainRow.pid || mainRow.id || '').trim()) {
       mainRow = readListOrArray(listData)[0] ?? null;
+    }
+    if (!mainRow || !String(mainRow.pid || mainRow.id || '').trim()) {
+      mainRow = readListV2ProductRows(listData)[0] ?? null;
     }
     if (!mainRow) {
       throw new CjSupplierError(`No product for pid ${pid}`, { code: 'CJ_INVALID_SKU' });

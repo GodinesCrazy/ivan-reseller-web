@@ -216,6 +216,24 @@ Closure update 2026-05-13:
   - Blocker: CJ returned repeated HTTP 429 on `product/query` detail calls for every candidate, so the script could not reach freight/evaluation/draft.
   - Result: the system is clean and guarded, but a real publish proof is still pending because CJ is rate-limiting product detail calls.
 
+Platform CJ API orchestration update 2026-05-14:
+
+- The CJ 429 diagnosis is now treated as a platform-level bottleneck, not a CJ-eBay-only issue.
+- Added `cjApiRateLimiterService`, a shared CJ API turn scheduler:
+  - Uses Redis (`cj:api:global:*`) when `REDIS_URL` is available so Railway workers/modules coordinate globally.
+  - Falls back to an in-process queue locally.
+  - Default spacing is 1600 ms; can be tuned with `CJ_API_GLOBAL_MIN_INTERVAL_MS`.
+- Wired the limiter into the common CJ Open API client used by CJ-eBay and CJ-ML Chile style flows.
+- Wired the limiter into CJ-Shopify USA direct CJ calls for token exchange, create order, and tracking detail polling.
+- Added `product/query` fallback to `product/listV2?pid=...` when CJ rate-limits product detail, without relaxing publish guardrails.
+- Re-ran bounded CJ-eBay smoke after limiter:
+  - Repeated 429s stopped.
+  - CJ returned product details, variants, stock checks, freight/evaluation writes.
+  - Candidates were rejected by guardrails, so no draft/listing was created. This is correct behavior: no publish if stock/warehouse/margin are not safe.
+- Reset CJ-eBay operational truth again after the smoke so production starts clean:
+  - Deleted 5 products, 5 evaluations, 5 shipping quotes, 4 automation runs, and 14 traces from the smoke.
+  - Listings and orders remained at zero.
+
 Page-by-page parity status after current pass:
 
 - Overview: Shopify-style hero, readiness ring, pipeline, quota and quick actions are present. Needs reset to show true zero state.

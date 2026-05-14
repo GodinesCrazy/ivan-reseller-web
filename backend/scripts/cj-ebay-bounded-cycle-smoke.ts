@@ -71,9 +71,11 @@ async function main() {
         });
         continue;
       }
-      const variant = detail.variants.find((v) => Number(v.stock || 0) > 0 && String(v.cjVid || v.cjSku || '').trim());
+      const variant =
+        detail.variants.find((v) => Number(v.stock || 0) > 0 && String(v.cjVid || v.cjSku || '').trim()) ||
+        detail.variants.find((v) => String(v.cjVid || v.cjSku || '').trim());
       if (!variant) {
-        console.log('[cj-ebay-bounded-smoke] skip no-stock variant', { productId });
+        console.log('[cj-ebay-bounded-smoke] skip no usable variant', { productId });
         continue;
       }
       console.log('[cj-ebay-bounded-smoke] candidate', {
