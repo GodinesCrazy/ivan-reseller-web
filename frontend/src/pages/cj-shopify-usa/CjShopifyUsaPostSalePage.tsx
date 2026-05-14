@@ -15,6 +15,13 @@ import {
   Wallet,
 } from 'lucide-react';
 import { api } from '@/services/api';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+  RiskActionQueue,
+} from './components/CommercialCockpit';
 
 type Stage = {
   id: string;
@@ -253,6 +260,47 @@ export default function CjShopifyUsaPostSalePage() {
 
   return (
     <div className="space-y-6 text-slate-100">
+      <CommercialPageHeader
+        title="Post venta segura"
+        description="Cola ejecutiva para pagos CJ, tracking, saldo, refunds y cierre sin dañar reputacion ni margen."
+      />
+
+      <ActionPriorityBand
+        tone={(data?.totals.needsAttention ?? 0) > 0 || (data?.totals.waitingPayment ?? 0) > 0 ? 'amber' : (data?.totals.activeQueue ?? 0) > 0 ? 'cyan' : 'emerald'}
+        title={data?.recommendedAction?.description ?? 'Sin acciones urgentes de postventa.'}
+        description="Ejecuta solo la accion prioritaria cuando exista una cola segura; el resto queda visible para supervision."
+        primaryLabel={data?.recommendedAction?.label ?? 'Ejecutar cola segura'}
+        onPrimary={() => void runAction(primaryAction)}
+        secondaryLabel="Actualizar"
+        onSecondary={() => void load(true)}
+        disabled={!!running || refreshing}
+        meta={[
+          `${data?.totals.orders ?? 0} ordenes`,
+          `${data?.totals.waitingPayment ?? 0} esperando pago`,
+          `${data?.totals.activeQueue ?? 0} cola activa`,
+          `${data?.totals.needsAttention ?? 0} atencion`,
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CommercialMetricCard label="Ordenes" value={data?.totals.orders ?? 0} detail="ciclo postventa" tone="cyan" />
+        <CommercialMetricCard label="Pago CJ pendiente" value={data?.totals.waitingPayment ?? 0} detail="riesgo de demora" tone={(data?.totals.waitingPayment ?? 0) > 0 ? 'amber' : 'slate'} />
+        <CommercialMetricCard label="Cola activa" value={data?.totals.activeQueue ?? 0} detail="acciones ejecutables" tone="emerald" />
+        <CommercialMetricCard label="Atencion" value={data?.totals.needsAttention ?? 0} detail="requiere intervencion" tone={(data?.totals.needsAttention ?? 0) > 0 ? 'rose' : 'slate'} />
+      </div>
+
+      <RiskActionQueue
+        title="Que hacer ahora"
+        items={[
+          ...((data?.totals.waitingPayment ?? 0) > 0 ? [{ id: 'pay', title: 'Pagar o liberar ordenes CJ pendientes', detail: 'Evita atraso SLA y reclamos del comprador.', tone: 'amber' as const, actionLabel: 'Ejecutar', onAction: () => void runAction(primaryAction) }] : []),
+          ...((data?.totals.needsAttention ?? 0) > 0 ? [{ id: 'blocked', title: 'Resolver estados con atencion', detail: 'Revisa saldo CJ, tracking, validacion o error de proveedor.', tone: 'rose' as const }] : []),
+          ...((data?.health.lastTracking ? 1 : 0) > 0 ? [{ id: 'tracking', title: 'Sincronizar tracking pendiente', detail: 'Protege experiencia del comprador y reduce consultas.', tone: 'cyan' as const, actionLabel: 'Sincronizar', onAction: () => void runAction('tracking') }] : []),
+        ]}
+        emptyLabel="No hay cola critica de postventa."
+      />
+
+      <CycleNarrativeStrip active="optimize" />
+
       <section className="rounded-lg border border-cyan-500/40 bg-slate-950/40 p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>

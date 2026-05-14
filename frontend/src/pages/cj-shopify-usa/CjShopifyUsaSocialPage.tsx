@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/services/api';
 import { Share2, Instagram, MessageCircle, RefreshCw, PenTool, Calendar, Link as LinkIcon, CheckCircle2, Zap } from 'lucide-react';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+} from './components/CommercialCockpit';
 
 interface SocialCandidate {
   listingId: number;
@@ -83,6 +89,34 @@ export default function CjShopifyUsaSocialPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 p-6 text-white space-y-6">
+      <CommercialPageHeader
+        title="Promocion organica"
+        description="Convierte productos publicados en contenido Pinterest/social para generar trafico sin ads pagados."
+      />
+
+      <ActionPriorityBand
+        tone={(data?.candidates.length ?? 0) > 0 ? 'violet' : 'cyan'}
+        title={(data?.candidates.length ?? 0) > 0 ? 'Hay productos listos para generar contenido organico.' : 'No hay candidatos sociales en este momento.'}
+        description="Social queda integrado al ciclo comercial: promocionar productos con margen, medir respuesta y repetir ganadores."
+        primaryLabel="Actualizar"
+        onPrimary={() => void loadData()}
+        secondaryLabel={(data?.candidates.length ?? 0) > 0 ? 'Abrir agente' : undefined}
+        onSecondary={(data?.candidates.length ?? 0) > 0 ? () => window.location.assign('/cj-shopify-usa/sales-agent') : undefined}
+        meta={[
+          `${data?.candidates.length ?? 0} candidatos`,
+          `instagram ${data?.platforms.instagram.canAutoPublishNow ? 'auto' : 'manual'}`,
+          `tiktok ${data?.platforms.tiktok.canAutoPublishNow ? 'auto' : 'manual'}`,
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <CommercialMetricCard label="Candidatos" value={data?.candidates.length ?? 0} detail="para contenido organico" tone="violet" />
+        <CommercialMetricCard label="Instagram" value={data?.platforms.instagram.canAutoPublishNow ? 'auto' : 'manual'} detail="estado publicacion" tone="cyan" />
+        <CommercialMetricCard label="TikTok" value={data?.platforms.tiktok.canAutoPublishNow ? 'auto' : 'manual'} detail="estado publicacion" tone="cyan" />
+      </div>
+
+      <CycleNarrativeStrip active="promote" />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">

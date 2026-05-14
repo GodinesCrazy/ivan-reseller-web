@@ -2,6 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+} from './components/CommercialCockpit';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -302,6 +308,36 @@ export default function CjShopifyUsaOrdersPage() {
 
   return (
     <div className="space-y-4">
+      <CommercialPageHeader
+        title="Ordenes y reputacion"
+        description="Prioriza pagos CJ, tracking pendiente, riesgo SLA e intervenciones que pueden afectar dinero o confianza del comprador."
+      />
+
+      <ActionPriorityBand
+        tone={attention > 0 ? 'amber' : allCount > 0 ? 'emerald' : 'slate'}
+        title={attention > 0 ? 'Hay ordenes que requieren accion para proteger reputacion.' : allCount > 0 ? 'Ordenes bajo control: mantén tracking y pagos al dia.' : 'Sin ordenes abiertas por ahora.'}
+        description="La cola postventa se ordena por impacto: pago CJ, tracking, SLA, errores y estados manuales."
+        primaryLabel={attention > 0 ? 'Ver atencion' : 'Actualizar'}
+        onPrimary={attention > 0 ? applyAttention : () => void load()}
+        secondaryLabel="Post venta"
+        onSecondary={() => navigate('/cj-shopify-usa/post-sale')}
+        meta={[
+          `${allCount} ordenes`,
+          `${attention} requieren atencion`,
+          `${meta.statusCounts.CJ_SHIPPED ?? 0} enviadas`,
+          `${meta.statusCounts.FAILED ?? 0} errores`,
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CommercialMetricCard label="Total ordenes" value={allCount} detail="en el periodo visible" tone="cyan" />
+        <CommercialMetricCard label="Atencion" value={attention} detail="riesgo dinero/SLA" tone={attention > 0 ? 'amber' : 'slate'} />
+        <CommercialMetricCard label="Tracking" value={meta.statusCounts.CJ_SHIPPED ?? 0} detail="ordenes enviadas" tone="emerald" />
+        <CommercialMetricCard label="Fallidas" value={meta.statusCounts.FAILED ?? 0} detail="intervencion necesaria" tone={(meta.statusCounts.FAILED ?? 0) > 0 ? 'rose' : 'slate'} />
+      </div>
+
+      <CycleNarrativeStrip active="optimize" />
+
       {actionMsg && (
         <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2 text-sm text-emerald-800 dark:text-emerald-200">
           {actionMsg}

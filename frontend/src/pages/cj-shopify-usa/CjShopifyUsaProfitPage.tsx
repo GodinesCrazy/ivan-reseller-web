@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+  RiskActionQueue,
+} from './components/CommercialCockpit';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -114,6 +121,45 @@ export default function CjShopifyUsaProfitPage() {
 
   return (
     <div className="space-y-6">
+      <CommercialPageHeader
+        title="Profit Guard comercial"
+        description="Lee margen operativo, costos CJ, fees Shopify/pago y cola de acciones para no vender con perdida."
+      />
+
+      <ActionPriorityBand
+        tone={kpis.totalProfitUsd < 0 || kpis.failedOrders > 0 ? 'amber' : kpis.totalOrders > 0 ? 'emerald' : 'cyan'}
+        title={kpis.totalProfitUsd < 0 ? 'El periodo muestra perdida estimada: revisa precio y shipping.' : kpis.failedOrders > 0 ? 'Hay ordenes fallidas que pueden esconder costo real.' : 'Margen operativo bajo control con los datos actuales.'}
+        description="Los valores son estimaciones operativas para decidir subir precio, pausar, revisar shipping o mantener."
+        primaryLabel="Aplicar periodo"
+        onPrimary={() => void load(from, to)}
+        secondaryLabel="Store Products"
+        onSecondary={() => window.location.assign('/cj-shopify-usa/listings')}
+        meta={[
+          `profit ${usd(kpis.totalProfitUsd)}`,
+          `${kpis.totalOrders} ordenes`,
+          `${kpis.openOrders} abiertas`,
+          `${kpis.failedOrders} fallidas`,
+        ]}
+      />
+
+      <RiskActionQueue
+        title="Cola de decisiones de margen"
+        items={[
+          ...(kpis.totalProfitUsd < 0 ? [{ id: 'raise-price', title: 'Subir precio o pausar productos con perdida', detail: 'El profit neto estimado del periodo esta bajo cero.', tone: 'rose' as const }] : []),
+          ...(kpis.failedOrders > 0 ? [{ id: 'failed', title: 'Revisar ordenes fallidas', detail: 'Pueden indicar costo real, pago CJ o tracking incompleto.', tone: 'amber' as const }] : []),
+          ...(kpis.openOrders > 0 ? [{ id: 'open', title: 'Verificar margen de ordenes abiertas', detail: 'No escalar productos hasta confirmar costo final.', tone: 'cyan' as const }] : []),
+        ]}
+        emptyLabel="Sin decisiones urgentes de margen en este periodo."
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CommercialMetricCard label="Revenue" value={usd(kpis.totalRevenueUsd)} detail="ingreso estimado" tone="cyan" />
+        <CommercialMetricCard label="Costo CJ" value={usd(kpis.totalCjCostUsd)} detail="producto + envio" tone="amber" />
+        <CommercialMetricCard label="Fees" value={usd(kpis.totalFeesUsd)} detail="Shopify/pagos estimados" tone="violet" />
+        <CommercialMetricCard label="Profit neto" value={usd(kpis.totalProfitUsd)} detail="estimado operativo" tone={kpis.totalProfitUsd >= 0 ? 'emerald' : 'rose'} />
+      </div>
+
+      <CycleNarrativeStrip active="optimize" />
 
       {/* Date range filter */}
       <div className="flex flex-wrap items-center gap-3">

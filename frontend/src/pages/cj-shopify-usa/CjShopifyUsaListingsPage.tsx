@@ -15,6 +15,12 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+} from './components/CommercialCockpit';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 import { ListingDetailDrawer } from './components/ListingDetailDrawer';
 
@@ -691,6 +697,37 @@ export default function CjShopifyUsaListingsPage() {
 
   return (
     <div className="space-y-4">
+      <CommercialPageHeader
+        title="Store Products comerciales"
+        description="Controla productos publicados, drafts, buyer-ready truth, Profit Guard y acciones seguras para escalar o proteger margen."
+      />
+
+      <ActionPriorityBand
+        tone={publishableListings.length > 0 ? 'emerald' : audit.needsReview > 0 ? 'amber' : 'cyan'}
+        title={publishableListings.length > 0 ? 'Hay drafts listos para publicar con controles seguros.' : audit.needsReview > 0 ? 'Hay listings que necesitan reconciliacion o Profit Guard.' : 'Listings estables: mide ventas y escala ganadores.'}
+        description="Las acciones masivas mantienen control de riesgo: publicar pendientes permitidos, reconciliar Shopify y despublicar solo seleccionados."
+        primaryLabel={publishableListings.length > 0 ? `Publicar pendientes (${publishableListings.length})` : 'Re-sync Shopify'}
+        onPrimary={() => publishableListings.length > 0 ? void publishAllDrafts() : void resyncReconcile()}
+        secondaryLabel={selectedIds.length > 0 ? `${selectedIds.length} seleccionados` : 'Agente vendedor'}
+        onSecondary={selectedIds.length > 0 ? undefined : () => window.location.assign('/cj-shopify-usa/sales-agent')}
+        disabled={bulkPublishing || resyncing}
+        meta={[
+          `${filteredListings.length} visibles`,
+          `${selectedIds.length} seleccionados`,
+          `${publishableListings.length} publicables`,
+          `${audit.buyerReady} buyer-ready`,
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CommercialMetricCard label="Publicables" value={publishableListings.length} detail="drafts seguros disponibles" tone="emerald" />
+        <CommercialMetricCard label="Buyer-ready" value={audit.buyerReady} detail="productos en venta" tone="cyan" />
+        <CommercialMetricCard label="Requieren accion" value={audit.needsReview} detail="reconciliar, pausar o revisar" tone={audit.needsReview > 0 ? 'amber' : 'slate'} />
+        <CommercialMetricCard label="Seleccionados" value={selectedIds.length} detail="acciones masivas visibles" tone="violet" />
+      </div>
+
+      <CycleNarrativeStrip active="publish" />
+
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <p className="text-sm font-medium text-slate-800 dark:text-slate-100">

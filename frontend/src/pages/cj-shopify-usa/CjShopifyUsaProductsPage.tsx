@@ -3,6 +3,12 @@ import axios from 'axios';
 import { api } from '@/services/api';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, ExternalLink, Eye, FileText, RefreshCw, Send, ShieldAlert, Trash2 } from 'lucide-react';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+} from './components/CommercialCockpit';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -526,6 +532,36 @@ export default function CjShopifyUsaProductsPage() {
 
   return (
     <div className="space-y-4">
+      <CommercialPageHeader
+        title="Productos CJ evaluados"
+        description="Convierte busquedas PET en decisiones claras: apto, revisar shipping, proteger margen o preparar draft."
+      />
+
+      <ActionPriorityBand
+        tone={readinessTotals.ready > 0 ? 'emerald' : readinessTotals.review > 0 || readinessTotals.blocked > 0 ? 'amber' : 'cyan'}
+        title={readinessTotals.ready > 0 ? 'Hay productos listos para preparar draft.' : readinessTotals.review > 0 ? 'Revisa costo, stock o margen antes de publicar.' : 'Siguiente accion: evaluar productos descubiertos.'}
+        description="Esta pantalla prioriza la decision comercial sobre el dato tecnico: stock, envio, margen, calidad de imagen y estado de listing."
+        primaryLabel={readinessTotals.ready > 0 ? 'Filtrar listos' : 'Ver pendientes'}
+        onPrimary={() => setFilterDecision(readinessTotals.ready > 0 ? 'APPROVED' : 'PENDING')}
+        secondaryLabel={totals.rejected > 0 ? 'Recalcular rechazados' : undefined}
+        onSecondary={totals.rejected > 0 ? () => void reEvaluateAllRejected() : undefined}
+        meta={[
+          `${totals.approved} aprobados`,
+          `${readinessTotals.ready} listos`,
+          `${readinessTotals.review} revisar`,
+          `${readinessTotals.blocked} bloqueados`,
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CommercialMetricCard label="Posibles ganadores" value={readinessTotals.ready} detail="cumplen señales para draft" tone="emerald" />
+        <CommercialMetricCard label="Margen/stock a revisar" value={readinessTotals.review} detail="requieren validacion" tone="amber" />
+        <CommercialMetricCard label="Bloqueados" value={readinessTotals.blocked} detail="no aptos para publicar" tone={readinessTotals.blocked > 0 ? 'rose' : 'slate'} />
+        <CommercialMetricCard label="Publicados OK" value={readinessTotals.active} detail="buyer-ready confirmado" tone="cyan" />
+      </div>
+
+      <CycleNarrativeStrip active="evaluate" />
+
       {/* Summary bar */}
       <div className="flex flex-wrap gap-3 text-sm">
         {[

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/services/api';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+} from './components/CommercialCockpit';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -416,6 +422,37 @@ export default function CjShopifyUsaAutomationPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6 space-y-6">
+      <CommercialPageHeader
+        title="Automatizacion comercial"
+        description="Coordina publicacion automatica, Profit Guard, postventa, marketing organico y aprendizaje sin activar riesgos por defecto."
+      />
+
+      <ActionPriorityBand
+        tone={state === 'ERROR' ? 'rose' : state === 'RUNNING' ? 'emerald' : state === 'PAUSED' ? 'amber' : 'cyan'}
+        title={state === 'RUNNING' ? 'El ciclo esta corriendo: supervisa fase, margen y errores.' : state === 'PAUSED' ? 'Automatizacion pausada: puedes reanudar cuando el ciclo este listo.' : 'Automatizacion lista para ejecutar un ciclo controlado.'}
+        description="Los subciclos quedan separados para ver que parte publica, protege margen, gestiona postventa, promociona y aprende."
+        primaryLabel={state === 'RUNNING' ? 'Pausar' : 'Ejecutar ahora'}
+        onPrimary={() => state === 'RUNNING' ? void call('pause') : void call('run-now')}
+        secondaryLabel="Guardar config"
+        onSecondary={() => void saveConfig()}
+        disabled={busy}
+        meta={[
+          `estado ${state}`,
+          `publicados hoy ${status?.dailyPublishCount ?? 0}`,
+          `max diario ${localConfig?.maxDailyPublish ?? status?.config.maxDailyPublish ?? 0}`,
+          `margen min ${localConfig?.minMarginPct ?? status?.config.minMarginPct ?? 0}%`,
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <CommercialMetricCard label="Publicacion" value={state === 'RUNNING' ? 'activa' : 'lista'} detail={`${localConfig?.maxPerCycle ?? status?.config.maxPerCycle ?? 0} max/ciclo`} tone={state === 'RUNNING' ? 'emerald' : 'cyan'} />
+        <CommercialMetricCard label="Profit Guard" value={`${localConfig?.minMarginPct ?? status?.config.minMarginPct ?? 0}%`} detail="margen minimo" tone="emerald" />
+        <CommercialMetricCard label="Postventa" value={cycle?.phase === 'post-sale' ? 'activa' : 'vigila'} detail="pagos y tracking" tone="cyan" />
+        <CommercialMetricCard label="Marketing" value="organico" detail="Pinterest/social" tone="violet" />
+        <CommercialMetricCard label="Aprendizaje" value={status?.cycleHistory.length ?? 0} detail="ciclos registrados" tone="slate" />
+      </div>
+
+      <CycleNarrativeStrip active="optimize" />
 
       {/* Header */}
       <div className="flex items-center justify-between">

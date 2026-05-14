@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+} from './components/CommercialCockpit';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -86,6 +91,28 @@ export default function CjShopifyUsaLogsPage() {
 
   return (
     <div className="space-y-4">
+      <CommercialPageHeader
+        title="Trazas del ciclo"
+        description="Logs tecnicos filtrables para auditar publicacion, ordenes, tracking, errores CJ y salud del cockpit comercial."
+      />
+
+      <ActionPriorityBand
+        tone={errorSteps > 0 ? 'amber' : 'cyan'}
+        title={errorSteps > 0 ? 'Hay errores recientes en trazas: revisa antes de ejecutar mas acciones.' : 'Trazas sin errores visibles en el filtro actual.'}
+        description="Los logs no reemplazan decisiones comerciales, pero explican por que una accion fallo o quedo bloqueada."
+        primaryLabel="Recargar"
+        onPrimary={() => void load()}
+        secondaryLabel={errorSteps > 0 ? 'Filtrar errores' : undefined}
+        onSecondary={errorSteps > 0 ? () => setFilterStep('error') : undefined}
+        meta={[`${traces.length} trazas`, `${errorSteps} errores`, `limite ${limit}`]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <CommercialMetricCard label="Trazas" value={traces.length} detail="segun filtro" tone="cyan" />
+        <CommercialMetricCard label="Errores" value={errorSteps} detail="requieren inspeccion" tone={errorSteps > 0 ? 'amber' : 'slate'} />
+        <CommercialMetricCard label="Limite" value={limit} detail="filas consultadas" tone="slate" />
+      </div>
+
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
         <select

@@ -30,6 +30,13 @@ import {
   Pie,
 } from 'recharts';
 import { api } from '@/services/api';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+  RiskActionQueue,
+} from './components/CommercialCockpit';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
 type Priority = 'critical' | 'high' | 'medium' | 'low';
@@ -82,6 +89,8 @@ type PromotionCandidate = {
   handle: string | null;
   priceUsd: number;
   marginPct: number;
+  orders30?: number;
+  revenue30Usd?: number;
   imageCount: number;
   score: number;
   url: string;
@@ -96,6 +105,8 @@ type CommercialScore = {
   grade: 'A' | 'B' | 'C' | 'D';
   priceUsd: number;
   marginPct: number;
+  orders30: number;
+  revenue30Usd: number;
   imageCount: number;
   shippingKnown: boolean;
   duplicateRisk: boolean;
@@ -618,6 +629,54 @@ export default function CjShopifyUsaSalesAgentPage() {
 
   return (
     <div className="space-y-5">
+      <CommercialPageHeader
+        title="Centro de mando comercial"
+        description="Decide que escalar, corregir, proteger o retirar usando ventas reales 30d, margen, trafico, Profit Guard y memoria del agente."
+      />
+
+      <ActionPriorityBand
+        tone={(data?.actions ?? []).some((action) => action.priority === 'critical' || action.priority === 'high') ? 'amber' : (data?.commercialScores.top.length ?? 0) > 0 ? 'emerald' : 'cyan'}
+        title={(data?.actions ?? [])[0]?.title ?? 'Siguiente accion: buscar el mejor producto rentable para escalar.'}
+        description={(data?.actions ?? [])[0]?.rationale ?? data?.mission ?? 'El agente prioriza ventas rentables, calidad de producto, confianza de tienda y proteccion de margen.'}
+        primaryLabel={(data?.actions ?? [])[0]?.canExecute ? 'Ejecutar accion' : 'Actualizar lectura'}
+        onPrimary={() => {
+          const first = (data?.actions ?? [])[0];
+          if (first?.canExecute) void execute(first);
+          else void load();
+        }}
+        secondaryLabel="Run agente"
+        onSecondary={() => void schedulerCommand('run-now')}
+        disabled={!!running}
+        meta={[
+          `${data?.commercialScores.top.length ?? 0} a escalar`,
+          `${data?.commercialScores.needsWork.length ?? 0} a corregir`,
+          `${data?.promotionCandidates.length ?? 0} promocionables`,
+          `${data?.actions.length ?? 0} acciones`,
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CommercialMetricCard label="Productos a escalar" value={data?.commercialScores.top.length ?? 0} detail="score comercial alto" tone="emerald" />
+        <CommercialMetricCard label="Productos a corregir" value={data?.commercialScores.needsWork.length ?? 0} detail="margen, confianza o conversion" tone="amber" />
+        <CommercialMetricCard label="Promocion organica" value={data?.promotionCandidates.length ?? 0} detail="candidatos Pinterest/social" tone="violet" />
+        <CommercialMetricCard label="Acciones ejecutables" value={(data?.actions ?? []).filter((action) => action.canExecute).length} detail="con guardrails" tone="cyan" />
+      </div>
+
+      <RiskActionQueue
+        title="Que hago ahora"
+        items={(data?.actions ?? []).slice(0, 4).map((action) => ({
+          id: action.id,
+          title: action.title,
+          detail: action.expectedImpact,
+          tone: action.priority === 'critical' ? 'rose' : action.priority === 'high' ? 'amber' : action.priority === 'medium' ? 'cyan' : 'slate',
+          actionLabel: action.canExecute ? 'Ejecutar' : undefined,
+          onAction: action.canExecute ? () => void execute(action) : undefined,
+        }))}
+        emptyLabel="Sin acciones comerciales urgentes."
+      />
+
+      <CycleNarrativeStrip active="optimize" />
+
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -1176,8 +1235,13 @@ export default function CjShopifyUsaSalesAgentPage() {
                           <span className={`rounded-full border px-2 py-1 text-xs font-bold ${gradeClass(item.grade)}`}>{item.grade} {item.score}</span>
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
-                          {money(item.priceUsd)} · margen {pct(item.marginPct)} · {item.imageCount} img · {actionLabel(item.recommendedAction)}
+                          {money(item.priceUsd)} · margen {pct(item.marginPct)} · {item.imageCount} img · {item.orders30} ventas 30d · {actionLabel(item.recommendedAction)}
                         </p>
+                        {item.revenue30Usd > 0 && (
+                          <p className="mt-1 text-[11px] font-semibold text-emerald-200">
+                            Señal real: {money(item.revenue30Usd)} vendido en 30 días
+                          </p>
+                        )}
                         <ProductLifecycleLine steps={commercialLifecycleSteps(item)} compact className="mt-2" />
                       </div>
                     ))}
@@ -1193,6 +1257,11 @@ export default function CjShopifyUsaSalesAgentPage() {
                           <span className={`rounded-full border px-2 py-1 text-xs font-bold ${gradeClass(item.grade)}`}>{item.grade} {item.score}</span>
                         </div>
                         <p className="mt-1 text-xs text-amber-200">{item.issues.slice(0, 2).join(' · ') || actionLabel(item.recommendedAction)}</p>
+                        {item.orders30 > 0 && (
+                          <p className="mt-1 text-[11px] text-emerald-200">
+                            Tiene ventas recientes: revisar antes de pausar o fusionar.
+                          </p>
+                        )}
                         <ProductLifecycleLine steps={commercialLifecycleSteps(item)} compact className="mt-2" />
                       </div>
                     ))}

@@ -97,6 +97,8 @@ type CommercialScore = {
   grade: 'A' | 'B' | 'C' | 'D';
   priceUsd: number;
   marginPct: number;
+  orders30: number;
+  revenue30Usd: number;
   imageCount: number;
   shippingKnown: boolean;
   duplicateRisk: boolean;
@@ -296,12 +298,15 @@ function buildCommercialScore(input: {
   listing: any;
   duplicateCount: number;
   profitIssue?: { action?: string; reason?: string } | null;
+  salesStats?: { orders30: number; revenue30Usd: number };
 }): CommercialScore {
   const title = buyerTitle(input.listing);
   const quality = titleQuality(title);
   const imageCount = extractImageCount(input.listing.draftPayload);
   const marginPct = n(input.listing.evaluation?.estimatedMarginPct);
   const priceUsd = n(input.listing.listedPriceUsd);
+  const orders30 = n(input.salesStats?.orders30);
+  const revenue30Usd = Math.round(n(input.salesStats?.revenue30Usd) * 100) / 100;
   const shippingKnown = Boolean(input.listing.shippingQuote);
   const duplicateRisk = input.duplicateCount > 1;
   const profitRisk = Boolean(input.profitIssue);
@@ -319,6 +324,8 @@ function buildCommercialScore(input: {
   score += shippingKnown ? 8 : -10;
   score += priceUsd > 0 && priceUsd <= 35 ? 5 : priceUsd > 45 ? -4 : 0;
   score += promoted ? 3 : 0;
+  score += orders30 > 0 ? Math.min(12, 5 + orders30 * 2) : 0;
+  score += revenue30Usd > 0 ? Math.min(6, revenue30Usd / 50) : 0;
   score -= duplicateRisk ? 14 : 0;
   score -= profitRisk ? 22 : 0;
 
@@ -331,6 +338,7 @@ function buildCommercialScore(input: {
 
   if (marginPct >= 15) opportunities.push('margen promocionable');
   if (imageCount >= 4) opportunities.push('buena base visual');
+  if (orders30 > 0) opportunities.push('senal real de venta reciente');
   if (!promoted && !profitRisk && !duplicateRisk && quality.score >= 80 && imageCount > 0) {
     opportunities.push('candidato a trafico organico');
   }
@@ -352,6 +360,8 @@ function buildCommercialScore(input: {
     grade: scoreGrade(roundedScore),
     priceUsd,
     marginPct,
+    orders30,
+    revenue30Usd,
     imageCount,
     shippingKnown,
     duplicateRisk,
@@ -360,7 +370,7 @@ function buildCommercialScore(input: {
     conversionSignals: {
       promoted,
       socialPosts,
-      hasSalesSignal: false,
+      hasSalesSignal: orders30 > 0,
     },
     issues: Array.from(new Set(issues)).slice(0, 5),
     opportunities: Array.from(new Set(opportunities)).slice(0, 5),
@@ -915,7 +925,7 @@ export const cjShopifyUsaSalesAgentService = {
       }),
       prisma.cjShopifyUsaOrder.findMany({
         where: { userId, createdAt: { gte: since30 } },
-        select: { totalUsd: true, status: true, createdAt: true },
+        select: { totalUsd: true, status: true, listingId: true, createdAt: true },
       }),
       prisma.cjShopifyUsaSocialPost.groupBy({
         by: ['status'],
@@ -1043,6 +1053,23 @@ export const cjShopifyUsaSalesAgentService = {
       limit: 350,
     });
 
+    const paidOrderStatuses = new Set([
+      'CJ_ORDER_CREATED',
+      'CJ_PAYMENT_COMPLETED',
+      'CJ_FULFILLING',
+      'CJ_SHIPPED',
+      'TRACKING_ON_SHOPIFY',
+      'COMPLETED',
+    ]);
+    const paidListingSales = new Map<number, { orders30: number; revenue30Usd: number }>();
+    for (const order of orders30) {
+      if (!order.listingId || !paidOrderStatuses.has(order.status)) continue;
+      const current = paidListingSales.get(order.listingId) ?? { orders30: 0, revenue30Usd: 0 };
+      current.orders30 += 1;
+      current.revenue30Usd += n(order.totalUsd);
+      paidListingSales.set(order.listingId, current);
+    }
+
     const profitGuardIssueByListing = new Map(profitGuard.issues.map((issue) => [issue.listingId, issue]));
     const commercialScores = activeListings
       .map((listing) =>
@@ -1050,6 +1077,7 @@ export const cjShopifyUsaSalesAgentService = {
           listing,
           duplicateCount: titleGroups.get(normalizeTitle(buyerTitle(listing)))?.length ?? 0,
           profitIssue: profitGuardIssueByListing.get(listing.id) ?? null,
+          salesStats: paidListingSales.get(listing.id),
         }),
       )
       .sort((a, b) => b.score - a.score);
@@ -1094,11 +1122,16 @@ export const cjShopifyUsaSalesAgentService = {
         const quality = titleQuality(listing.product.title);
         const marginPct = n(listing.evaluation?.estimatedMarginPct);
         const imageCount = extractImageCount(listing.draftPayload);
+        const salesStats = paidListingSales.get(listing.id);
+        const ordersForListing = n(salesStats?.orders30);
+        const revenueForListing = n(salesStats?.revenue30Usd);
         const score =
           40 +
           Math.min(25, Math.max(0, marginPct)) +
           Math.min(20, quality.score / 5) +
-          Math.min(10, imageCount * 2) -
+          Math.min(10, imageCount * 2) +
+          (ordersForListing > 0 ? Math.min(12, 6 + ordersForListing * 2) : 0) +
+          (revenueForListing > 0 ? Math.min(6, revenueForListing / 50) : 0) -
           (listing.shippingQuote ? 0 : 8);
         return {
           listingId: listing.id,
@@ -1106,6 +1139,8 @@ export const cjShopifyUsaSalesAgentService = {
           handle: listing.shopifyHandle,
           priceUsd: n(listing.listedPriceUsd),
           marginPct,
+          orders30: ordersForListing,
+          revenue30Usd: Math.round(revenueForListing * 100) / 100,
           imageCount,
           score: Math.round(score),
           url: `https://shop.ivanreseller.com/products/${listing.shopifyHandle}`,
@@ -1125,9 +1160,7 @@ export const cjShopifyUsaSalesAgentService = {
     const checkoutRatePct = pct(funnelMeta.checkoutRatePct);
     const purchaseRatePct = pct(funnelMeta.purchaseRatePct);
     const revenue30 = orders30.reduce((sum, order) => sum + n(order.totalUsd), 0);
-    const paidOrders30 = orders30.filter((order) =>
-      ['CJ_ORDER_CREATED', 'CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING', 'CJ_SHIPPED', 'TRACKING_ON_SHOPIFY', 'COMPLETED'].includes(order.status),
-    ).length;
+    const paidOrders30 = orders30.filter((order) => paidOrderStatuses.has(order.status)).length;
     const learningMemory = buildLearningMemory({
       traces: recentAgentTraces,
       visitors,

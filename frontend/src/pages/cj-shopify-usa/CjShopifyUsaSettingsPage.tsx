@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
 import { Loader2, Save, SlidersHorizontal, Info } from 'lucide-react';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+} from './components/CommercialCockpit';
 
 type SettingsPayload = {
   minMarginPct: number;
@@ -110,7 +115,36 @@ export default function CjShopifyUsaSettingsPage() {
   }
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4 max-w-5xl">
+      <CommercialPageHeader
+        title="Configuracion comercial"
+        description="Ajusta pricing, shipping maximo, utilidad minima y revisa impacto antes de cambiar reglas de publicacion."
+      />
+
+      <ActionPriorityBand
+        tone={impactPreview && impactPreview.rejected > 0 ? 'amber' : 'cyan'}
+        title={impactPreview ? `${impactPreview.approved} productos quedarian aprobados y ${impactPreview.rejected} rechazados.` : 'Primero previsualiza impacto antes de guardar cambios.'}
+        description="El preview evita que una regla de margen o shipping bloquee productos buenos o deje pasar productos con riesgo."
+        primaryLabel="Preview impacto"
+        onPrimary={() => void previewImpact()}
+        secondaryLabel="Guardar"
+        onSecondary={() => void saveSettings()}
+        disabled={saving || loadingPreview}
+        meta={[
+          `margen ${values.minMarginPct}%`,
+          `profit min $${values.minProfitUsd}`,
+          `shipping max $${values.maxShippingUsd}`,
+          `precio max $${values.maxSellPriceUsd}`,
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CommercialMetricCard label="Aprobados preview" value={impactPreview?.approved ?? '-'} detail="pasarian reglas actuales" tone="emerald" />
+        <CommercialMetricCard label="Rechazados preview" value={impactPreview?.rejected ?? '-'} detail="requieren revisar" tone={impactPreview && impactPreview.rejected > 0 ? 'amber' : 'slate'} />
+        <CommercialMetricCard label="Total analizado" value={impactPreview?.total ?? '-'} detail="evaluaciones existentes" tone="cyan" />
+        <CommercialMetricCard label="Utilidad minima" value={`$${values.minProfitUsd}`} detail="guardrail por producto" tone="violet" />
+      </div>
+
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
         <div className="flex items-center gap-2 mb-3">
           <SlidersHorizontal className="w-4 h-4 text-slate-500" />

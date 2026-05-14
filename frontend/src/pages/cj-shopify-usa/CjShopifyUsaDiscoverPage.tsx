@@ -14,6 +14,11 @@ import {
   Brain,
   Tags,
 } from 'lucide-react';
+import {
+  ActionPriorityBand,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+} from './components/CommercialCockpit';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -590,28 +595,32 @@ export default function CjShopifyUsaDiscoverPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Descubrir Productos</h2>
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">🐾 Pet Store</span>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              Busca en el catálogo CJ para Shopify USA. <span className="text-amber-600 dark:text-amber-400 font-medium">PET</span> preseleccionado por defecto — puedes buscar cualquier otro nicho.
-            </p>
-          </div>
-        </div>
-        {lastDraft && (
-          <button
-            onClick={() => navigate('/cj-shopify-usa/listings')}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-          >
-            Ver Listings <ArrowRight className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      <CommercialPageHeader
+        title="Descubrir productos PET ganadores"
+        description="Busca en CJ con foco PET USA, valida stock, shipping y margen antes de crear drafts para Shopify."
+      >
+        <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-200">
+          Pet Store por defecto
+        </span>
+      </CommercialPageHeader>
+
+      <ActionPriorityBand
+        tone={lastDraft ? 'emerald' : cjRateLimitUntil ? 'amber' : searchState.kind === 'results' ? 'cyan' : 'violet'}
+        title={lastDraft ? 'Draft creado: revisa y publica desde Store Products.' : cjRateLimitUntil ? 'CJ esta limitando consultas; conviene esperar antes de insistir.' : 'Siguiente accion: encontrar un producto PET con stock y margen real.'}
+        description="El descubrimiento separa busqueda, evaluacion, draft y publicacion para evitar subir productos sin margen o sin stock confiable."
+        primaryLabel={lastDraft ? 'Ver Store Products' : 'Buscar PET supplies'}
+        onPrimary={() => lastDraft ? navigate('/cj-shopify-usa/listings') : doSearch(keyword || 'pet supplies', 1)}
+        secondaryLabel="Sugerencia IA"
+        onSecondary={handleAiSuggestions}
+        disabled={searchState.kind === 'loading' || aiLoading}
+        meta={[
+          `keyword: ${keyword || 'pet supplies'}`,
+          `${aiSuggestions.length} sugerencias IA`,
+          searchState.kind === 'results' ? `${searchState.items.length} resultados visibles` : 'listo para buscar',
+        ]}
+      />
+
+      <CycleNarrativeStrip active="discover" />
 
       {/* Draft success banner */}
       {lastDraft && (

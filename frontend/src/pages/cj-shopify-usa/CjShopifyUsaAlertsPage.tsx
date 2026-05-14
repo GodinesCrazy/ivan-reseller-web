@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { api } from '@/services/api';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  RiskActionQueue,
+} from './components/CommercialCockpit';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -114,6 +120,39 @@ export default function CjShopifyUsaAlertsPage() {
 
   return (
     <div className="space-y-4">
+      <CommercialPageHeader
+        title="Alertas por impacto"
+        description="Agrupa riesgos de dinero, reputacion, publicacion e integracion para resolver primero lo que frena ventas."
+      />
+
+      <ActionPriorityBand
+        tone={openCount > 0 ? 'amber' : 'emerald'}
+        title={openCount > 0 ? 'Hay alertas abiertas que conviene resolver antes de escalar.' : 'Sin alertas abiertas: el ciclo puede seguir operando.'}
+        description="Usa filtros por estado y severidad para separar incidentes reales de informacion operacional."
+        primaryLabel={openCount > 0 ? 'Ver abiertas' : 'Actualizar'}
+        onPrimary={openCount > 0 ? () => setFilterStatus('OPEN') : () => void load()}
+        secondaryLabel={ackCount > 0 ? 'Ver vistas' : undefined}
+        onSecondary={ackCount > 0 ? () => setFilterStatus('ACKNOWLEDGED') : undefined}
+        meta={[`${alerts.length} total`, `${openCount} abiertas`, `${ackCount} vistas`]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <CommercialMetricCard label="Abiertas" value={openCount} detail="resolver primero" tone={openCount > 0 ? 'amber' : 'slate'} />
+        <CommercialMetricCard label="Vistas" value={ackCount} detail="requieren cierre" tone="cyan" />
+        <CommercialMetricCard label="Total" value={alerts.length} detail="historial filtrado" tone="slate" />
+      </div>
+
+      <RiskActionQueue
+        title="Impacto comercial"
+        items={alerts.filter((alert) => alert.status === 'OPEN').slice(0, 3).map((alert) => ({
+          id: String(alert.id),
+          title: alert.meta.label || alert.type,
+          detail: alert.meta.description,
+          tone: alert.severity === 'error' ? 'rose' : alert.severity === 'warning' ? 'amber' : 'cyan',
+        }))}
+        emptyLabel="No hay alertas abiertas con impacto comercial."
+      />
+
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
         {[

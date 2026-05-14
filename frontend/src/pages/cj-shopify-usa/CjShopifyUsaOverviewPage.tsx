@@ -20,6 +20,12 @@ import {
   Eye,
   Zap,
 } from 'lucide-react';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+} from './components/CommercialCockpit';
 
 interface ReadinessCheck {
   id: string;
@@ -174,6 +180,69 @@ export default function CjShopifyUsaOverviewPage() {
 
   return (
     <div className="space-y-6 ir-fade-in">
+      <CommercialPageHeader
+        title="Cockpit comercial PawVault"
+        description="Vista ejecutiva del ciclo PET: descubrir productos, publicar con margen, proteger postventa y repetir ganadores."
+      >
+        <button
+          type="button"
+          onClick={() => void load(true)}
+          disabled={refreshing}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-cyan-400 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          Actualizar
+        </button>
+      </CommercialPageHeader>
+
+      <ActionPriorityBand
+        tone={failCount > 0 || (counts?.alertsOpen ?? 0) > 0 ? 'amber' : (counts?.listingsActive ?? 0) > 0 ? 'emerald' : 'cyan'}
+        title={
+          failCount > 0
+            ? 'Primero corrige la integración antes de publicar.'
+            : (counts?.alertsOpen ?? 0) > 0
+              ? 'Hay alertas que pueden afectar ventas, margen o reputación.'
+              : (counts?.evaluationsApproved ?? 0) > (counts?.listings ?? 0)
+                ? 'Tienes productos aprobados listos para convertir en listings.'
+                : 'Siguiente paso: alimentar el ciclo con nuevos productos PET.'
+        }
+        description="La prioridad se calcula desde readiness, alertas, aprobados, listings activos y actividad reciente."
+        primaryLabel={
+          failCount > 0
+            ? 'Ver configuración'
+            : (counts?.alertsOpen ?? 0) > 0
+              ? 'Revisar alertas'
+              : (counts?.evaluationsApproved ?? 0) > (counts?.listings ?? 0)
+                ? 'Publicar seguros'
+                : 'Descubrir PET'
+        }
+        onPrimary={() => navigate(
+          failCount > 0
+            ? '/cj-shopify-usa/settings'
+            : (counts?.alertsOpen ?? 0) > 0
+              ? '/cj-shopify-usa/alerts'
+              : (counts?.evaluationsApproved ?? 0) > (counts?.listings ?? 0)
+                ? '/cj-shopify-usa/listings'
+                : '/cj-shopify-usa/discover',
+        )}
+        secondaryLabel="Agente vendedor"
+        onSecondary={() => navigate('/cj-shopify-usa/sales-agent')}
+        meta={[
+          `${counts?.evaluationsApproved ?? 0} aprobados`,
+          `${counts?.listingsActive ?? 0} activos`,
+          `${counts?.ordersOpen ?? 0} ordenes abiertas`,
+          `${counts?.alertsOpen ?? 0} alertas`,
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CommercialMetricCard label="Potencial publicable" value={counts?.evaluationsApproved ?? 0} detail={`${counts?.evaluationsPending ?? 0} pendientes de decision`} tone="violet" />
+        <CommercialMetricCard label="Listings activos" value={counts?.listingsActive ?? 0} detail={`${counts?.listings ?? 0} listings totales`} tone="emerald" />
+        <CommercialMetricCard label="Postventa abierta" value={counts?.ordersOpen ?? 0} detail={`${counts?.ordersWithTracking ?? 0} con tracking`} tone={(counts?.ordersOpen ?? 0) > 0 ? 'amber' : 'slate'} />
+        <CommercialMetricCard label="Actividad 24h" value={counts?.tracesLast24h ?? 0} detail="senales operativas recientes" tone="cyan" />
+      </div>
+
+      <CycleNarrativeStrip active="measure" />
 
       {/* ── Hero Section ───────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-700/50">

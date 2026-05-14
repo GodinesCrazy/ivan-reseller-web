@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '@/services/api';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+} from './components/CommercialCockpit';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -164,7 +169,35 @@ export default function CjShopifyUsaOrderDetailPage() {
   if (!order) return null;
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-5xl">
+      <CommercialPageHeader
+        title={`Detalle de orden ${order.shopifyOrderId.replace('gid://shopify/Order/', '#')}`}
+        description="Estado operativo, evidencia Shopify/CJ, tracking y acciones rapidas para proteger dinero y reputacion."
+      />
+
+      <ActionPriorityBand
+        tone={['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED', 'CJ_PAYMENT_PENDING'].includes(order.status) ? 'amber' : order.status === 'COMPLETED' ? 'emerald' : 'cyan'}
+        title={['FAILED', 'NEEDS_MANUAL', 'SUPPLIER_PAYMENT_BLOCKED'].includes(order.status) ? 'Esta orden requiere intervencion antes de avanzar.' : order.tracking?.trackingNumber ? 'Tracking disponible: confirma que este enviado a Shopify.' : 'Siguiente accion: mantener la orden avanzando por pago, fulfillment y tracking.'}
+        description={order.lastError || trackingEmptyMessage(order)}
+        primaryLabel="Sincronizar tracking"
+        onPrimary={() => void syncTracking()}
+        secondaryLabel="Volver a ordenes"
+        onSecondary={() => navigate('/cj-shopify-usa/orders')}
+        disabled={syncingTracking}
+        meta={[
+          STATUS_LABEL[order.status] ?? order.status,
+          `total ${usd(order.totalUsd)}`,
+          order.cjOrderId ? `CJ ${order.cjOrderId}` : 'sin CJ order',
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CommercialMetricCard label="Estado" value={STATUS_LABEL[order.status] ?? order.status} detail="flujo postventa" tone="cyan" />
+        <CommercialMetricCard label="Total" value={usd(order.totalUsd)} detail="venta Shopify" tone="emerald" />
+        <CommercialMetricCard label="Tracking" value={order.tracking?.trackingNumber ?? 'pendiente'} detail={order.tracking?.carrierCode ?? 'CJ pendiente'} tone={order.tracking?.trackingNumber ? 'emerald' : 'amber'} />
+        <CommercialMetricCard label="Refunds" value={order.refunds.length} detail="solicitudes registradas" tone={order.refunds.length > 0 ? 'rose' : 'slate'} />
+      </div>
+
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
         <button type="button" onClick={() => navigate('/cj-shopify-usa/orders')} className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">

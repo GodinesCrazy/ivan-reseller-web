@@ -2,6 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Activity, AlertTriangle, CheckCircle2, CreditCard, Megaphone, Save, ShieldCheck, TrendingUp } from 'lucide-react';
 import { api } from '@/services/api';
+import {
+  ActionPriorityBand,
+  CommercialMetricCard,
+  CommercialPageHeader,
+  CycleNarrativeStrip,
+  RiskActionQueue,
+} from './components/CommercialCockpit';
 
 type FunnelStage = {
   key: string;
@@ -285,6 +292,44 @@ export default function CjShopifyUsaAnalyticsPage() {
 
   return (
     <div className="space-y-6">
+      <CommercialPageHeader
+        title="Analitica comercial"
+        description="Conecta visitas, carrito, checkout, compras, Profit Guard y promocion organica con decisiones de venta."
+      />
+
+      <ActionPriorityBand
+        tone={funnel?.interpretation.checkoutDropRisk || funnel?.interpretation.paymentRisk ? 'amber' : (funnel?.localOrders ?? 0) > 0 ? 'emerald' : 'cyan'}
+        title={funnel?.interpretation.checkoutDropRisk ? 'Hay friccion en checkout: corrige antes de escalar trafico.' : funnel?.interpretation.paymentRisk ? 'Revisa medios de pago antes de empujar nuevos productos.' : 'Mide, aprende y escala productos con senales reales.'}
+        description="La lectura comercial prioriza conversion, riesgo de checkout, Profit Guard y productos que merecen promocion."
+        primaryLabel="Actualizar snapshot"
+        onPrimary={() => void save()}
+        secondaryLabel="Agente vendedor"
+        onSecondary={() => window.location.assign('/cj-shopify-usa/sales-agent')}
+        meta={[
+          `${funnel?.localOrders ?? 0} ordenes locales`,
+          `${funnel?.stages?.length ?? 0} etapas funnel`,
+          readiness?.checkoutProbe.ok ? 'checkout OK' : 'checkout pendiente',
+        ]}
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {(funnel?.stages || []).slice(0, 4).map((stage) => (
+          <CommercialMetricCard key={stage.key} label={stage.label} value={pct(stage.ratePct)} detail={`${stage.count} eventos`} tone="cyan" />
+        ))}
+      </div>
+
+      <RiskActionQueue
+        title="Decisiones desde analitica"
+        items={[
+          ...(funnel?.interpretation.checkoutDropRisk ? [{ id: 'checkout', title: 'Reducir friccion de checkout', detail: 'Corrige caida antes de promocionar mas productos.', tone: 'amber' as const }] : []),
+          ...(funnel?.interpretation.paymentRisk ? [{ id: 'payment', title: 'Revisar pagos Shopify', detail: 'Medios de pago debiles reducen conversion.', tone: 'rose' as const }] : []),
+          ...((funnel?.localOrders ?? 0) > 0 ? [{ id: 'scale', title: 'Escalar productos con compra real', detail: 'Enviar al agente vendedor para priorizar ganadores.', tone: 'emerald' as const, actionLabel: 'Abrir agente', onAction: () => window.location.assign('/cj-shopify-usa/sales-agent') }] : []),
+        ]}
+        emptyLabel="Sin riesgos de conversion detectados con los datos actuales."
+      />
+
+      <CycleNarrativeStrip active="measure" />
+
       {error && (
         <div className="rounded-lg border border-rose-500/40 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">
           {error}
