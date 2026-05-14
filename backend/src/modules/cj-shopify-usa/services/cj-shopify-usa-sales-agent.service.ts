@@ -11,6 +11,7 @@ import { cjShopifyUsaAdminService } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
 import { cjShopifyUsaOperationLockService } from './cj-shopify-usa-operation-lock.service';
 import { buildDraftTitle, buildDraftDescription } from './cj-shopify-usa-title-builder.service';
+import { cjShopifyUsaCleanupService } from './cj-shopify-usa-cleanup.service';
 
 type SalesAgentPriority = 'critical' | 'high' | 'medium' | 'low';
 type SalesAgentActionType =
@@ -22,6 +23,7 @@ type SalesAgentActionType =
   | 'DISCOVER_NEW_PRODUCTS'
   | 'PUBLISH_APPROVED_BACKLOG'
   | 'UNPUBLISH_UNSAFE_LISTINGS'
+  | 'RUN_COMMERCIAL_CLEANUP'
   | 'FIX_CATALOG_QUALITY'
   | 'BUILD_SALES_CAMPAIGN'
   | 'RUN_SALES_PIPELINE_REVIEW';
@@ -500,6 +502,7 @@ const ACTION_TRACE_MAP: Partial<Record<SalesAgentActionType, string>> = {
   CURATE_SIMILAR_PRODUCTS: 'curate_similar_products',
   PUBLISH_APPROVED_BACKLOG: 'publish_approved_backlog',
   UNPUBLISH_UNSAFE_LISTINGS: 'unpublish_unsafe_listings',
+  RUN_COMMERCIAL_CLEANUP: 'run_commercial_cleanup',
   FIX_CATALOG_QUALITY: 'fix_catalog_quality',
   BUILD_SALES_CAMPAIGN: 'build_sales_campaign',
   RUN_SALES_PIPELINE_REVIEW: 'run_sales_pipeline_review',
@@ -1363,6 +1366,11 @@ export const cjShopifyUsaSalesAgentService = {
       commercialScores,
       campaign,
     });
+    const cleanupPreview = await cjShopifyUsaCleanupService.preview(userId, {
+      thresholdDays: 14,
+      failedDraftGraceDays: 7,
+      limit: 200,
+    });
 
     const actions: SalesAgentAction[] = [];
 
@@ -1407,6 +1415,26 @@ export const cjShopifyUsaSalesAgentService = {
         canExecute: true,
         guardrails: ['Solo PAUSE_UNSAFE', 'Archiva en Shopify', 'Registra trazabilidad', 'No elimina datos locales'],
         payload: { limit: Math.min(5, unsafeUnpublishCandidates.length), candidates: unsafeUnpublishCandidates.slice(0, 5) },
+      });
+    }
+
+    if (cleanupPreview.totals.rotate > 0 || cleanupPreview.totals.archiveCandidates > 0 || cleanupPreview.totals.optimize > 0) {
+      const cleanupPriority: SalesAgentPriority =
+        cleanupPreview.totals.rotate + cleanupPreview.totals.archiveCandidates > 0 ? 'high' : 'medium';
+      actions.push({
+        id: 'run-commercial-cleanup',
+        type: 'RUN_COMMERCIAL_CLEANUP',
+        priority: cleanupPriority,
+        title: 'Rotar / optimizar productos sin traccion',
+        rationale: `${cleanupPreview.totals.rotate} para rotar, ${cleanupPreview.totals.optimize} para optimizar y ${cleanupPreview.totals.archiveCandidates} candidatos a archivo conservador.`,
+        expectedImpact: 'Liberar foco operativo, pausar productos sin senal y conservar aprendizaje sin borrar historial.',
+        risk: 'approval_required',
+        canExecute: cleanupPreview.totals.actionable > 0,
+        guardrails: ['No borra datos', 'No toca productos con ordenes', 'Pausa solo sin ventas/senales', 'Archiva solo fallidos/rechazados sin Shopify ID'],
+        payload: {
+          limit: Math.min(10, cleanupPreview.totals.actionable),
+          candidates: cleanupPreview.candidates.slice(0, 8),
+        },
       });
     }
 
@@ -1694,6 +1722,13 @@ export const cjShopifyUsaSalesAgentService = {
         reviewRequired: profitGuard.reviewRequired,
         sampleIssues: profitGuard.issues.slice(0, 8),
       },
+      cleanup: {
+        generatedAt: cleanupPreview.generatedAt,
+        thresholdDays: cleanupPreview.thresholdDays,
+        failedDraftGraceDays: cleanupPreview.failedDraftGraceDays,
+        totals: cleanupPreview.totals,
+        candidates: cleanupPreview.candidates.slice(0, 12),
+      },
       catalog: {
         duplicateExactGroups,
         crowdedFamilies,
@@ -1704,7 +1739,7 @@ export const cjShopifyUsaSalesAgentService = {
   },
 
   async executeAction(userId: number, input: { actionType: SalesAgentActionType; limit?: number }) {
-    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'CURATE_SIMILAR_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'FIX_CATALOG_QUALITY', 'BUILD_SALES_CAMPAIGN', 'RUN_SALES_PIPELINE_REVIEW'].includes(input.actionType)) {
+    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'CURATE_SIMILAR_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'RUN_COMMERCIAL_CLEANUP', 'FIX_CATALOG_QUALITY', 'BUILD_SALES_CAMPAIGN', 'RUN_SALES_PIPELINE_REVIEW'].includes(input.actionType)) {
       await recordSalesAgentTrace(userId, 'sales_agent.action.blocked', {
         actionType: input.actionType,
         reason: 'This action requires explicit per-item approval in the current controlled mode.',
@@ -2003,6 +2038,35 @@ export const cjShopifyUsaSalesAgentService = {
         failed: results.filter((result) => !result.ok).length,
         results,
         message: `Despublicacion controlada: ${results.filter((result) => result.ok).length} OK, ${results.filter((result) => !result.ok).length} fallidos.`,
+      };
+    }
+
+    if (input.actionType === 'RUN_COMMERCIAL_CLEANUP') {
+      const result = await withCatalogLock(async () =>
+        cjShopifyUsaCleanupService.run(userId, {
+          thresholdDays: 14,
+          failedDraftGraceDays: 7,
+          limit,
+        }),
+      );
+      const appliedOk = result.applied.filter((item) => item.ok).length;
+      const appliedFailed = result.applied.filter((item) => !item.ok).length;
+      await recordSalesAgentTrace(userId, 'sales_agent.action.run_commercial_cleanup', {
+        ok: true,
+        totals: result.totals,
+        applied: result.applied,
+        skipped: result.skipped,
+      } as unknown as Prisma.InputJsonValue);
+      return {
+        ok: true,
+        executed: true,
+        actionType: input.actionType,
+        fixed: result.totals.optimize,
+        unpublished: appliedOk,
+        failed: appliedFailed,
+        reviewRequired: result.totals.protect,
+        result,
+        message: `Higiene comercial: ${appliedOk} acciones aplicadas, ${result.totals.optimize} para optimizar, ${result.totals.protect} protegidos, ${appliedFailed} fallidos.`,
       };
     }
 

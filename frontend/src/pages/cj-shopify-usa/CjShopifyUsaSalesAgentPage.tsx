@@ -319,6 +319,31 @@ type SalesAgentDashboard = {
     reviewRequired: number;
     sampleIssues: Array<{ listingId: number; title: string; reason: string; action: string }>;
   };
+  cleanup: {
+    generatedAt: string;
+    thresholdDays: number;
+    failedDraftGraceDays: number;
+    totals: {
+      total: number;
+      scale: number;
+      optimize: number;
+      protect: number;
+      rotate: number;
+      archiveCandidates: number;
+      learning: number;
+      actionable: number;
+    };
+    candidates: Array<{
+      listingId: number | null;
+      productId: number | null;
+      title: string;
+      action: string;
+      commercialClass: 'SCALE' | 'OPTIMIZE' | 'PROTECT' | 'ROTATE' | 'ARCHIVE_CANDIDATE' | 'LEARNING';
+      reason: string;
+      ageDays: number | null;
+      safeToApply: boolean;
+    }>;
+  };
   catalog: {
     duplicateExactGroups: Array<{ key: string; count: number; titles: string[] }>;
     crowdedFamilies: Array<{ family: string; count: number }>;
@@ -674,15 +699,15 @@ export default function CjShopifyUsaSalesAgentPage() {
         meta={[
           `${data?.commercialScores.top.length ?? 0} a escalar`,
           `${data?.commercialScores.needsWork.length ?? 0} a corregir`,
+          `${data?.cleanup?.totals.rotate ?? 0} a rotar`,
           `${data?.promotionCandidates.length ?? 0} promocionables`,
-          `${data?.actions.length ?? 0} acciones`,
         ]}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CommercialMetricCard label="Productos a escalar" value={data?.commercialScores.top.length ?? 0} detail="score comercial alto" tone="emerald" />
-        <CommercialMetricCard label="Productos a corregir" value={data?.commercialScores.needsWork.length ?? 0} detail="margen, confianza o conversion" tone="amber" />
-        <CommercialMetricCard label="Promocion organica" value={data?.promotionCandidates.length ?? 0} detail="candidatos Pinterest/social" tone="violet" />
+        <CommercialMetricCard label="Optimizar" value={(data?.cleanup?.totals.optimize ?? 0) + (data?.commercialScores.needsWork.length ?? 0)} detail="senal debil, ficha o margen" tone="amber" />
+        <CommercialMetricCard label="Rotar sin traccion" value={data?.cleanup?.totals.rotate ?? 0} detail={`${data?.cleanup?.thresholdDays ?? 14}+ dias sin venta/senal`} tone="rose" />
         <CommercialMetricCard label="Acciones ejecutables" value={(data?.actions ?? []).filter((action) => action.canExecute).length} detail="con guardrails" tone="cyan" />
       </div>
 
@@ -698,6 +723,38 @@ export default function CjShopifyUsaSalesAgentPage() {
         }))}
         emptyLabel="Sin acciones comerciales urgentes."
       />
+
+      {data?.cleanup && (
+        <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">Higiene comercial</p>
+              <h3 className="mt-1 text-base font-bold text-white">Rotar, optimizar y proteger sin borrar aprendizaje</h3>
+              <p className="mt-1 text-xs text-slate-400">
+                Regla conservadora: {data.cleanup.thresholdDays}+ dias sin ventas ni senales pasa a rotacion; con senal social pasa a optimizacion.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <span className="rounded border border-rose-500/25 bg-rose-950/20 p-2 text-rose-100">Rotar <b>{data.cleanup.totals.rotate}</b></span>
+              <span className="rounded border border-amber-500/25 bg-amber-950/20 p-2 text-amber-100">Optimizar <b>{data.cleanup.totals.optimize}</b></span>
+              <span className="rounded border border-cyan-500/25 bg-cyan-950/20 p-2 text-cyan-100">Proteger <b>{data.cleanup.totals.protect}</b></span>
+            </div>
+          </div>
+          {data.cleanup.candidates.length > 0 && (
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {data.cleanup.candidates.slice(0, 6).map((item, idx) => (
+                <div key={`${item.listingId ?? item.productId}-${idx}`} className="rounded border border-slate-800 bg-slate-900/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-semibold text-slate-100" title={item.title}>{item.title}</p>
+                    <span className="rounded bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-300">{item.commercialClass}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400 line-clamp-2">{item.reason}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <CycleNarrativeStrip active="optimize" />
 

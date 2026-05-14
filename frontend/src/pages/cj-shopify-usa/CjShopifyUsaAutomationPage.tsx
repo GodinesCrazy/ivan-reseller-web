@@ -55,6 +55,17 @@ interface StatusResponse {
   cycleHistory: CycleResult[];
 }
 
+interface CleanupPreview {
+  ok: boolean;
+  totals: {
+    optimize: number;
+    protect: number;
+    rotate: number;
+    archiveCandidates: number;
+    actionable: number;
+  };
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function fmt(iso: string | null): string {
@@ -139,6 +150,7 @@ const PHASE_LABELS: Record<string, string> = {
   discovery: 'Discovery',
   post_sale: 'Post venta',
   profit_guard: 'Profit Guard',
+  cleanup: 'Higiene',
   backlog_eval: 'Backlog',
   candidate_scan: 'Candidatos',
   draft_backlog: 'Drafts',
@@ -355,13 +367,18 @@ export default function CjShopifyUsaAutomationPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [countdown_, setCountdown] = useState('—');
+  const [cleanup, setCleanup] = useState<CleanupPreview | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const res = await api.get<StatusResponse>('/api/cj-shopify-usa/automation/status');
+      const [res, cleanupRes] = await Promise.all([
+        api.get<StatusResponse>('/api/cj-shopify-usa/automation/status'),
+        api.get<CleanupPreview>('/api/cj-shopify-usa/cleanup/preview'),
+      ]);
       setStatus(res.data);
       if (!localConfig) setLocalConfig(res.data.config);
+      if (cleanupRes.data?.ok) setCleanup(cleanupRes.data);
     } catch { /* ignore */ }
   }, [localConfig]);
 
@@ -415,6 +432,21 @@ export default function CjShopifyUsaAutomationPage() {
     progress = 100;
   }
 
+  async function runCleanup() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await api.post('/api/cj-shopify-usa/cleanup/run', { thresholdDays: 14, failedDraftGraceDays: 7 });
+      const totals = res.data?.totals ?? {};
+      setMsg(`Higiene comercial lista: ${res.data?.applied?.filter?.((item: { ok?: boolean }) => item.ok).length ?? 0} aplicados; ${totals.optimize ?? 0} optimizar, ${totals.rotate ?? 0} rotar.`);
+      await load();
+    } catch {
+      setMsg('Error al ejecutar higiene comercial.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const history = status?.cycleHistory ?? [];
   const lastCycle = history[history.length - 1];
   const nextSchedule = scheduleProgress({
@@ -451,8 +483,8 @@ export default function CjShopifyUsaAutomationPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <CommercialMetricCard label="Publicacion" value={state === 'RUNNING' ? 'activa' : 'lista'} detail={`${localConfig?.maxPerCycle ?? status?.config.maxPerCycle ?? 0} max/ciclo`} tone={state === 'RUNNING' ? 'emerald' : 'cyan'} />
         <CommercialMetricCard label="Profit Guard" value={`${localConfig?.minMarginPct ?? status?.config.minMarginPct ?? 0}%`} detail="margen minimo" tone="emerald" />
-        <CommercialMetricCard label="Postventa" value={cycle?.phase === 'post-sale' ? 'activa' : 'vigila'} detail="pagos y tracking" tone="cyan" />
-        <CommercialMetricCard label="Marketing" value="organico" detail="Pinterest/social" tone="violet" />
+        <CommercialMetricCard label="Higiene" value={cleanup?.totals.rotate ?? 0} detail={`${cleanup?.totals.optimize ?? 0} optimizar`} tone={(cleanup?.totals.rotate ?? 0) > 0 ? 'rose' : 'slate'} />
+        <CommercialMetricCard label="Postventa" value={cycle?.phase === 'post_sale' ? 'activa' : 'vigila'} detail="pagos y tracking" tone="cyan" />
         <CommercialMetricCard label="Aprendizaje" value={status?.cycleHistory.length ?? 0} detail="ciclos registrados" tone="slate" />
       </div>
 
@@ -593,6 +625,31 @@ export default function CjShopifyUsaAutomationPage() {
                     </div>
                   </div>
                 )}
+
+                <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Subciclo higiene comercial</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Pausa sin venta/senal, optimiza senal debil y archiva fallidos sin Shopify ID.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void runCleanup()}
+                      className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-100 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                    >
+                      Run higiene
+                    </button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-4 gap-2 text-center text-[11px]">
+                    <span className="rounded bg-slate-900 p-2 text-amber-200">Optimizar <b>{cleanup?.totals.optimize ?? 0}</b></span>
+                    <span className="rounded bg-slate-900 p-2 text-cyan-200">Proteger <b>{cleanup?.totals.protect ?? 0}</b></span>
+                    <span className="rounded bg-slate-900 p-2 text-rose-200">Rotar <b>{cleanup?.totals.rotate ?? 0}</b></span>
+                    <span className="rounded bg-slate-900 p-2 text-slate-200">Archivar <b>{cleanup?.totals.archiveCandidates ?? 0}</b></span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -691,6 +748,7 @@ export default function CjShopifyUsaAutomationPage() {
                 ['🚫', 'Filtra los que ya tienen listing activo/draft'],
                 ['📝', 'Crea drafts automáticamente (hasta máx. por ciclo)'],
                 ['🚀', 'Si auto-publicar ON → publica directo a Shopify'],
+                ['♻️', 'Ejecuta higiene comercial: rota productos sin tracción antes de sumar nuevos'],
                 ['⏰', 'Repite cada N horas configurado'],
                 ['♻️', 'Mantiene el estado activo aunque Railway reinicie'],
                 ['📈', 'Registra estadísticas de cada ciclo para análisis'],

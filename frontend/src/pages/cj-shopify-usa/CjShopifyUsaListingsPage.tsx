@@ -113,6 +113,28 @@ type StatusFilter =
   | 'ARCHIVED'
   | 'NEEDS_REVIEW';
 
+type CommercialClass = 'ALL' | 'SCALE' | 'OPTIMIZE' | 'PROTECT' | 'ROTATE' | 'ARCHIVE_CANDIDATE' | 'LEARNING';
+
+type CleanupPreview = {
+  ok: boolean;
+  totals: {
+    scale: number;
+    optimize: number;
+    protect: number;
+    rotate: number;
+    archiveCandidates: number;
+    learning: number;
+    actionable: number;
+  };
+  classifications: Array<{
+    listingId: number | null;
+    commercialClass: Exclude<CommercialClass, 'ALL'>;
+    action: string;
+    reason: string;
+    ageDays: number | null;
+  }>;
+};
+
 type SortKey = 'updatedDesc' | 'updatedAsc' | 'publishedDesc' | 'priceDesc' | 'priceAsc' | 'status' | 'idDesc';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -327,6 +349,25 @@ function primaryIssue(row: ListingRow): string {
   return statusLabel(row);
 }
 
+function commercialClassLabel(value?: CommercialClass): string {
+  if (value === 'SCALE') return 'Escalar';
+  if (value === 'OPTIMIZE') return 'Optimizar';
+  if (value === 'PROTECT') return 'Proteger';
+  if (value === 'ROTATE') return 'Rotar';
+  if (value === 'ARCHIVE_CANDIDATE') return 'Archivar';
+  if (value === 'LEARNING') return 'Aprendiendo';
+  return 'Sin clasificar';
+}
+
+function commercialClassChip(value?: CommercialClass): string {
+  if (value === 'SCALE') return 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200';
+  if (value === 'OPTIMIZE') return 'border-amber-400/30 bg-amber-500/10 text-amber-200';
+  if (value === 'PROTECT') return 'border-cyan-400/30 bg-cyan-500/10 text-cyan-200';
+  if (value === 'ROTATE') return 'border-rose-400/30 bg-rose-500/10 text-rose-200';
+  if (value === 'ARCHIVE_CANDIDATE') return 'border-slate-500/30 bg-slate-700/40 text-slate-200';
+  return 'border-slate-700 bg-slate-900 text-slate-400';
+}
+
 function lifecycleSteps(row: ListingRow): ProductLifecycleStep[] {
   const pricing = row.draftPayload?.pricingSnapshot;
   const margin = Number(pricing?.netMarginPct ?? 0);
@@ -377,6 +418,8 @@ export default function CjShopifyUsaListingsPage() {
   const [maxSellPriceUsd, setMaxSellPriceUsd] = useState(45);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [commercialFilter, setCommercialFilter] = useState<CommercialClass>('ALL');
+  const [cleanupPreview, setCleanupPreview] = useState<CleanupPreview | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('updatedDesc');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkPublishing, setBulkPublishing] = useState(false);
@@ -389,9 +432,10 @@ export default function CjShopifyUsaListingsPage() {
     setError(null);
     setLoading(true);
     try {
-      const [res, configRes] = await Promise.all([
+      const [res, configRes, cleanupRes] = await Promise.all([
         api.get<{ ok: boolean; listings: ListingRow[]; meta?: { total: number; returned: number; shopifyProductsInSoftware: number } }>('/api/cj-shopify-usa/listings'),
         api.get<{ ok: boolean; settings?: { maxSellPriceUsd?: number | string | null } }>('/api/cj-shopify-usa/config'),
+        api.get<CleanupPreview>('/api/cj-shopify-usa/cleanup/preview'),
       ]);
       if (res.data?.ok && Array.isArray(res.data.listings)) {
         setListings(res.data.listings);
@@ -400,6 +444,7 @@ export default function CjShopifyUsaListingsPage() {
       if (configRes.data?.settings) {
         setMaxSellPriceUsd(Number(configRes.data.settings.maxSellPriceUsd ?? 45));
       }
+      if (cleanupRes.data?.ok) setCleanupPreview(cleanupRes.data);
     } catch (e) {
       setError(axiosMsg(e, 'No se pudieron cargar los listings.'));
     } finally {
@@ -510,6 +555,14 @@ export default function CjShopifyUsaListingsPage() {
     [listings, selectedIds],
   );
 
+  const cleanupByListing = useMemo(() => {
+    const map = new Map<number, CleanupPreview['classifications'][number]>();
+    for (const item of cleanupPreview?.classifications ?? []) {
+      if (item.listingId != null) map.set(item.listingId, item);
+    }
+    return map;
+  }, [cleanupPreview]);
+
   const audit = useMemo(() => ({
     total: listings.length,
     buyerReady: listings.filter(isBuyerReady).length,
@@ -522,7 +575,12 @@ export default function CjShopifyUsaListingsPage() {
     reconcilePending: listings.filter((l) => l.status === 'RECONCILE_PENDING').length,
     reconcileFailed: listings.filter((l) => l.status === 'RECONCILE_FAILED').length,
     correctedByTruth: listings.filter((l) => l.publishTruth?.localStatusBefore && l.publishTruth.localStatusBefore !== l.publishTruth.localStatusAfter).length,
-  }), [listings, publishableListings.length]);
+    scale: cleanupPreview?.totals.scale ?? 0,
+    optimize: cleanupPreview?.totals.optimize ?? 0,
+    protect: cleanupPreview?.totals.protect ?? 0,
+    rotate: cleanupPreview?.totals.rotate ?? 0,
+    archiveCandidates: cleanupPreview?.totals.archiveCandidates ?? 0,
+  }), [cleanupPreview, listings, publishableListings.length]);
 
   const filteredListings = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -535,6 +593,13 @@ export default function CjShopifyUsaListingsPage() {
         if (statusFilter === 'PAUSED') return row.status === 'PAUSED';
         if (statusFilter === 'ARCHIVED') return row.status === 'ARCHIVED';
         if (statusFilter === 'NEEDS_REVIEW') return needsReview(row);
+        return true;
+      })
+      .filter((row) => {
+        if (commercialFilter !== 'ALL') {
+          const classification = cleanupByListing.get(row.id)?.commercialClass;
+          if (classification !== commercialFilter) return false;
+        }
         return true;
       })
       .filter((row) => {
@@ -560,7 +625,7 @@ export default function CjShopifyUsaListingsPage() {
         if (sortKey === 'idDesc') return b.id - a.id;
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       });
-  }, [listings, maxSellPriceUsd, query, sortKey, statusFilter]);
+  }, [cleanupByListing, commercialFilter, listings, maxSellPriceUsd, query, sortKey, statusFilter]);
 
   const visibleSelectedCount = filteredListings.filter((row) => selectedIds.includes(row.id)).length;
   const allVisibleSelected = filteredListings.length > 0 && visibleSelectedCount === filteredListings.length;
@@ -722,8 +787,8 @@ export default function CjShopifyUsaListingsPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CommercialMetricCard label="Publicables" value={publishableListings.length} detail="drafts seguros disponibles" tone="emerald" />
         <CommercialMetricCard label="Buyer-ready" value={audit.buyerReady} detail="productos en venta" tone="cyan" />
-        <CommercialMetricCard label="Requieren accion" value={audit.needsReview} detail="reconciliar, pausar o revisar" tone={audit.needsReview > 0 ? 'amber' : 'slate'} />
-        <CommercialMetricCard label="Seleccionados" value={selectedIds.length} detail="acciones masivas visibles" tone="violet" />
+        <CommercialMetricCard label="Rotar / pausar" value={audit.rotate} detail="14+ dias sin venta/senal" tone={audit.rotate > 0 ? 'rose' : 'slate'} />
+        <CommercialMetricCard label="Optimizar" value={audit.optimize + audit.protect} detail="senal debil o margen" tone={(audit.optimize + audit.protect) > 0 ? 'amber' : 'slate'} />
       </div>
 
       <CycleNarrativeStrip active="publish" />
@@ -783,6 +848,30 @@ export default function CjShopifyUsaListingsPage() {
             </button>
           );
         })}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {([
+          ['ALL', 'Todos ciclo', listings.length],
+          ['SCALE', 'Escalar', audit.scale],
+          ['OPTIMIZE', 'Optimizar', audit.optimize],
+          ['PROTECT', 'Proteger', audit.protect],
+          ['ROTATE', 'Rotar', audit.rotate],
+          ['ARCHIVE_CANDIDATE', 'Archivar', audit.archiveCandidates],
+        ] as Array<[CommercialClass, string, number]>).map(([filter, label, value]) => (
+          <button
+            key={filter}
+            type="button"
+            onClick={() => setCommercialFilter(filter)}
+            className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+              commercialFilter === filter
+                ? 'border-cyan-400 bg-cyan-950/40 text-cyan-100'
+                : 'border-slate-800 bg-slate-950/50 text-slate-400 hover:text-slate-100'
+            }`}
+          >
+            {label} <span className="ml-1 tabular-nums">{value}</span>
+          </button>
+        ))}
       </div>
 
       {listingsMeta && (
@@ -943,6 +1032,7 @@ export default function CjShopifyUsaListingsPage() {
                 const expandReason = expandBlockReason(row, maxSellPriceUsd);
                 const storefrontReason = storefrontBlockReason(row);
                 const selected = selectedIds.includes(row.id);
+                const commercial = cleanupByListing.get(row.id);
                 const publishLabel =
                   row.status === 'RECONCILE_PENDING' && isShopifyLinked(row)
                     ? 'Ya publicado'
@@ -977,7 +1067,17 @@ export default function CjShopifyUsaListingsPage() {
                       <p className="truncate font-medium text-slate-900 dark:text-slate-100 text-xs" title={row.product?.title}>
                         {row.product?.title ?? '—'}
                       </p>
-                      <p className="text-xs text-slate-400 font-mono">{row.product?.cjProductId ?? ''}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <p className="text-xs text-slate-400 font-mono">{row.product?.cjProductId ?? ''}</p>
+                        {commercial && (
+                          <span
+                            className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${commercialClassChip(commercial.commercialClass)}`}
+                            title={commercial.reason}
+                          >
+                            {commercialClassLabel(commercial.commercialClass)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-2 tabular-nums text-xs">{usd(row.listedPriceUsd)}</td>
                     <td className="px-3 py-2 font-mono text-xs">{row.variant?.cjSku ?? '—'}</td>

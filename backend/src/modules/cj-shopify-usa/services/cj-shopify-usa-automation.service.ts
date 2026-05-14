@@ -18,6 +18,7 @@ import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-u
 import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service.js';
 import { cjShopifyUsaProfitGuardService } from './cj-shopify-usa-profit-guard.service.js';
 import { cjShopifyUsaOperationLockService } from './cj-shopify-usa-operation-lock.service.js';
+import { cjShopifyUsaCleanupService } from './cj-shopify-usa-cleanup.service.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -665,6 +666,25 @@ class CjShopifyUsaAutomationService {
         }
       } catch (err) {
         log('warn', `Price sync step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+      }
+
+      // ── Step 0.85: Commercial hygiene before adding more products ──
+      setPhase('cleanup', 'Higiene comercial conservadora', 44);
+      log('info', 'Step 0.85: Running commercial cleanup preview/apply for rotation and stale failures...');
+      try {
+        const cleanup = await cjShopifyUsaCleanupService.run(userId, {
+          thresholdDays: 14,
+          failedDraftGraceDays: 7,
+          limit: 200,
+        });
+        const appliedOk = cleanup.applied.filter((item) => item.ok).length;
+        const appliedFailed = cleanup.applied.filter((item) => !item.ok).length;
+        log(
+          appliedOk > 0 ? 'success' : 'info',
+          `Commercial hygiene: ${cleanup.totals.rotate} rotate, ${cleanup.totals.optimize} optimize, ${cleanup.totals.protect} protect, ${appliedOk} applied${appliedFailed ? `, ${appliedFailed} failed` : ''}.`,
+        );
+      } catch (err) {
+        log('warn', `Commercial hygiene step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
 
       // ── Step 0.9: Turn eligible catalog backlog into fresh evaluations ──

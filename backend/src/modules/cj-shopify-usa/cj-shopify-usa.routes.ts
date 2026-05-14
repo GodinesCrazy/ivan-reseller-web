@@ -16,6 +16,7 @@ import { cjShopifyUsaTrackingService } from './services/cj-shopify-usa-tracking.
 import { automationService } from './services/cj-shopify-usa-automation.service';
 import { cjShopifyUsaProfitGuardService } from './services/cj-shopify-usa-profit-guard.service';
 import { cjShopifyUsaSalesAgentService } from './services/cj-shopify-usa-sales-agent.service';
+import { cjShopifyUsaCleanupService } from './services/cj-shopify-usa-cleanup.service';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './services/cj-shopify-usa-policy.service';
 import {
   cjShopifyUsaListingDraftBodySchema,
@@ -2164,6 +2165,50 @@ router.post('/collections/assign', async (req: Request, res: Response, next: Nex
         shopifyProductId: listing.shopifyProductId,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── GET /cleanup/preview — Conservative commercial hygiene dry-run ──────────
+
+router.get('/cleanup/preview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const thresholdDays = req.query.thresholdDays ? Number(req.query.thresholdDays) : undefined;
+    const failedDraftGraceDays = req.query.failedDraftGraceDays ? Number(req.query.failedDraftGraceDays) : undefined;
+    const result = await cjShopifyUsaCleanupService.preview(userId, { thresholdDays, failedDraftGraceDays });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── POST /cleanup/run — Apply conservative commercial hygiene ───────────────
+
+router.post('/cleanup/run', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const body = (req.body ?? {}) as { dryRun?: boolean; thresholdDays?: number; failedDraftGraceDays?: number };
+    const result = await cjShopifyUsaCleanupService.run(userId, {
+      dryRun: body.dryRun === true,
+      thresholdDays: body.thresholdDays,
+      failedDraftGraceDays: body.failedDraftGraceDays,
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── GET /cleanup/history — Commercial hygiene trace history ─────────────────
+
+router.get('/cleanup/history', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const result = await cjShopifyUsaCleanupService.history(userId, limit);
+    res.json(result);
   } catch (error) {
     next(error);
   }
