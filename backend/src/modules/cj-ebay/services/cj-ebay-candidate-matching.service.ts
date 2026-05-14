@@ -115,20 +115,11 @@ class CjEbayCandidateMatchingService {
       return null;
     }
 
-    // STARTER mode: enforce max variant count.
-    if (
-      settings.mode === 'STARTER' &&
-      settings.starterModeConfig &&
-      detail.variants.length > settings.starterModeConfig.maxVariants
-    ) {
-      logger.info(
-        `[CandidateMatching] Product ${cjProductId} has ${detail.variants.length} variants > starter max ${settings.starterModeConfig.maxVariants} — skip`
-      );
-      return null;
-    }
+    const variants = await this.enrichVariantsWithLiveStock(detail.variants, adapter);
 
-    // Pick best variant: highest stock, then lowest cost (most marketable entry).
-    const bestVariant = this.pickBestVariant(detail.variants);
+    // Pick best variant: highest confirmed stock, then lowest cost (most marketable entry).
+    // Variant count is scored later; it should not eliminate otherwise safe PET items.
+    const bestVariant = this.pickBestVariant(variants);
     if (!bestVariant) return null;
 
     if (!Number.isFinite(bestVariant.unitCostUsd) || bestVariant.unitCostUsd <= 0) {
@@ -191,6 +182,30 @@ class CjEbayCandidateMatchingService {
       if (b.stock !== a.stock) return b.stock - a.stock;
       return a.unitCostUsd - b.unitCostUsd;
     })[0];
+  }
+
+  private async enrichVariantsWithLiveStock(
+    variants: CjVariantDetail[],
+    adapter: ICjSupplierAdapter
+  ): Promise<CjVariantDetail[]> {
+    const probeable = variants
+      .filter((v) => String(v.cjVid || '').trim())
+      .sort((a, b) => a.unitCostUsd - b.unitCostUsd)
+      .slice(0, 12);
+    if (probeable.length === 0) return variants;
+
+    try {
+      const stockMap = await adapter.getStockForSkus(probeable.map((v) => String(v.cjVid).trim()));
+      if (stockMap.size === 0) return variants;
+      return variants.map((variant) => {
+        const key = String(variant.cjVid || '').trim();
+        const liveStock = key ? stockMap.get(key) : undefined;
+        return liveStock === undefined ? variant : { ...variant, stock: liveStock };
+      });
+    } catch (err) {
+      logger.warn(`[CandidateMatching] Live stock enrichment failed: ${(err as Error).message}`);
+      return variants;
+    }
   }
 
   private async fetchShippingQuote(

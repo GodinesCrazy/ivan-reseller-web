@@ -234,6 +234,18 @@ Platform CJ API orchestration update 2026-05-14:
   - Deleted 5 products, 5 evaluations, 5 shipping quotes, 4 automation runs, and 14 traces from the smoke.
   - Listings and orders remained at zero.
 
+Candidate funnel tuning update 2026-05-14:
+
+- Diagnosis: the PET discovery funnel was stricter than the publish safety rules required.
+- Fixed three early-elimination points that could hide valid CJ inventory before evaluation:
+  - Discovery now inspects 8 CJ summaries per seed instead of only 3.
+  - Starter mode no longer discards products only because they have more than 5 variants; PET items commonly have size/color variants, so variant complexity is handled by scoring/risk instead of hard skip.
+  - Candidate matching and the autopilot direct fallback now probe live CJ stock for up to 12 low-cost variants before deciding that a product has no usable variant.
+- Guardrails unchanged:
+  - USA warehouse confirmation is still required.
+  - Zero live stock still blocks publication.
+  - Margin, profit, shipping cap, eBay policy, monthly stock limit and monthly amount limit remain hard checks.
+
 Page-by-page parity status after current pass:
 
 - Overview: Shopify-style hero, readiness ring, pipeline, quota and quick actions are present. Needs reset to show true zero state.

@@ -409,7 +409,17 @@ export const cjEbayAutopilotService = {
           if (product.fulfillmentOrigin === 'CN' || product.inventoryTotal === 0) continue;
           try {
             const detail = await adapter.getProductById(productId);
-            const variant = detail.variants.find((v) => Number(v.stock || 0) > 0 && String(v.cjVid || v.cjSku || '').trim());
+            const probeable = detail.variants
+              .filter((v) => String(v.cjVid || '').trim())
+              .sort((a, b) => a.unitCostUsd - b.unitCostUsd)
+              .slice(0, 12);
+            const stockMap = await adapter.getStockForSkus(probeable.map((v) => String(v.cjVid).trim()));
+            const variants = detail.variants.map((variant) => {
+              const key = String(variant.cjVid || '').trim();
+              const liveStock = key ? stockMap.get(key) : undefined;
+              return liveStock === undefined ? variant : { ...variant, stock: liveStock };
+            });
+            const variant = variants.find((v) => Number(v.stock || 0) > 0 && String(v.cjVid || v.cjSku || '').trim());
             if (!variant) continue;
             out.push({
               cjProductId: productId,

@@ -128,7 +128,7 @@ export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
 };
 
 export const DEFAULT_STARTER_CONFIG: StarterModeConfig = {
-  maxVariants: 5,
+  maxVariants: 20,
   maxRiskScore: 30,
   minMarginPctStarter: 18,
   riskyCategoyPenalty: 0.6,
@@ -138,7 +138,7 @@ export const DEFAULT_STARTER_CONFIG: StarterModeConfig = {
 export const DEFAULT_RUN_SETTINGS: OpportunityRunSettings = {
   mode: 'STARTER',
   maxSeedsPerRun: 8,
-  maxCandidatesPerSeed: 3,
+  maxCandidatesPerSeed: 8,
   shortlistSize: 10,
   minScoreForShortlist: 35,
   minMarginPctFilter: 15,
