@@ -173,6 +173,31 @@ type SalesPipeline = {
   };
 };
 
+type MorningBrief = {
+  generatedAt: string;
+  headline: string;
+  confidence: 'early' | 'medium' | 'high';
+  focus: 'protect_margin' | 'fix_checkout' | 'publish' | 'promote' | 'discover';
+  tasks: Array<{
+    id: string;
+    priority: SalesAgentPriority;
+    label: string;
+    page: string;
+    actionType?: SalesAgentActionType;
+    count: number;
+    rationale: string;
+    expectedOutcome: string;
+    sampleTitles: string[];
+  }>;
+  watchlist: Array<{
+    id: string;
+    label: string;
+    count: number;
+    severity: 'info' | 'warning' | 'critical';
+    page: string;
+  }>;
+};
+
 const DEFAULT_SALES_AGENT_CONFIG: SalesAgentSchedulerConfig = {
   enabled: false,
   intervalHours: 24,
@@ -881,6 +906,151 @@ function pushSalesCycleHistory(cycle: SalesAgentCycleResult) {
   salesCycleHistory = salesCycleHistory.slice(0, 12);
 }
 
+function buildMorningBrief(input: {
+  actions: SalesAgentAction[];
+  salesPipeline: SalesPipeline;
+  topScores: CommercialScore[];
+  needsWork: CommercialScore[];
+  promotionCandidates: Array<{ title: string }>;
+  publishableDrafts: Array<{ title: string }>;
+  unsafeUnpublishCandidates: Array<{ title: string }>;
+  checkoutRisk: boolean;
+  profitGuard: { reviewRequired: number; priceIncreases: number; pausedUnsafe: number };
+  kpis: { paidOrders30: number; visitors: number; purchaseRatePct: number };
+}): MorningBrief {
+  const tasks: MorningBrief['tasks'] = [];
+
+  if (input.profitGuard.reviewRequired > 0 || input.profitGuard.pausedUnsafe > 0 || input.unsafeUnpublishCandidates.length > 0) {
+    tasks.push({
+      id: 'protect-margin',
+      priority: input.profitGuard.pausedUnsafe > 0 ? 'critical' : 'high',
+      label: 'Proteger margen antes de empujar trafico',
+      page: '/cj-shopify-usa/profit',
+      actionType: 'RUN_PROFIT_GUARD',
+      count: input.profitGuard.reviewRequired + input.profitGuard.pausedUnsafe + input.unsafeUnpublishCandidates.length,
+      rationale: 'Hay senales de precio, costo o shipping que pueden convertir una venta en perdida.',
+      expectedOutcome: 'Subir precio, pausar inseguros o confirmar que el margen sigue siendo viable.',
+      sampleTitles: input.unsafeUnpublishCandidates.slice(0, 3).map((item) => item.title),
+    });
+  }
+
+  if (input.checkoutRisk) {
+    tasks.push({
+      id: 'fix-checkout',
+      priority: 'critical',
+      label: 'Validar checkout real antes de escalar',
+      page: '/cj-shopify-usa/analytics',
+      actionType: 'VERIFY_CHECKOUT',
+      count: 1,
+      rationale: 'Hay intencion de compra llegando a checkout, pero el sistema no ve compras cerradas.',
+      expectedOutcome: 'Confirmar que PayPal/metodos de pago permiten convertir trafico en venta.',
+      sampleTitles: [],
+    });
+  }
+
+  if (input.publishableDrafts.length > 0) {
+    tasks.push({
+      id: 'publish-safe-backlog',
+      priority: 'high',
+      label: 'Publicar backlog aprobado con control',
+      page: '/cj-shopify-usa/listings',
+      actionType: 'PUBLISH_APPROVED_BACKLOG',
+      count: input.publishableDrafts.length,
+      rationale: 'Hay drafts con evaluacion aprobada que pueden aumentar catalogo sin bajar calidad.',
+      expectedOutcome: 'Sumar productos PET publicables manteniendo guardrails de margen, imagen y duplicados.',
+      sampleTitles: input.publishableDrafts.slice(0, 3).map((item) => item.title),
+    });
+  }
+
+  if (input.needsWork.length > 0) {
+    tasks.push({
+      id: 'fix-product-trust',
+      priority: 'medium',
+      label: 'Corregir fichas antes de enviar trafico',
+      page: '/cj-shopify-usa/sales-agent',
+      actionType: 'FIX_CATALOG_QUALITY',
+      count: input.needsWork.length,
+      rationale: 'Productos con score bajo o senales de ficha debil reducen confianza y conversion.',
+      expectedOutcome: 'Mejorar titulo, media, duplicados o evidencia antes de promocionar.',
+      sampleTitles: input.needsWork.slice(0, 3).map((item) => item.title),
+    });
+  }
+
+  if (input.promotionCandidates.length > 0) {
+    tasks.push({
+      id: 'promote-organic-winners',
+      priority: input.kpis.paidOrders30 > 0 ? 'high' : 'medium',
+      label: 'Promocionar candidatos organicos',
+      page: '/cj-shopify-usa/social',
+      actionType: 'PROMOTE_TOP_PRODUCTS',
+      count: input.promotionCandidates.length,
+      rationale: 'Hay productos activos con margen y ficha suficiente para generar trafico organico.',
+      expectedOutcome: 'Aumentar visitas medibles sin ads pagados hacia productos con mejor probabilidad.',
+      sampleTitles: input.promotionCandidates.slice(0, 3).map((item) => item.title),
+    });
+  }
+
+  if (tasks.length === 0) {
+    tasks.push({
+      id: 'discover-next-tests',
+      priority: 'medium',
+      label: 'Buscar nuevos productos PET para testear',
+      page: '/cj-shopify-usa/discover',
+      actionType: 'DISCOVER_NEW_PRODUCTS',
+      count: 1,
+      rationale: 'No hay bloqueos urgentes; conviene alimentar el pipeline con nuevos candidatos controlados.',
+      expectedOutcome: 'Crear nuevas oportunidades con stock, shipping y margen validables.',
+      sampleTitles: [],
+    });
+  }
+
+  const sortedTasks = tasks.sort((a, b) => {
+    const weight: Record<SalesAgentPriority, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+    return weight[b.priority] - weight[a.priority];
+  }).slice(0, 5);
+
+  const focus = sortedTasks[0]?.id === 'protect-margin'
+    ? 'protect_margin'
+    : sortedTasks[0]?.id === 'fix-checkout'
+      ? 'fix_checkout'
+      : sortedTasks[0]?.id === 'publish-safe-backlog'
+        ? 'publish'
+        : sortedTasks[0]?.id === 'promote-organic-winners'
+          ? 'promote'
+          : 'discover';
+
+  return {
+    generatedAt: new Date().toISOString(),
+    headline: sortedTasks[0]?.label ?? 'Operar ciclo comercial controlado',
+    confidence: input.kpis.paidOrders30 > 0 ? 'high' : input.kpis.visitors > 0 || input.kpis.purchaseRatePct > 0 ? 'medium' : 'early',
+    focus,
+    tasks: sortedTasks,
+    watchlist: [
+      {
+        id: 'pipeline-bottleneck',
+        label: `Cuello de botella: ${input.salesPipeline.bottleneck.label}`,
+        count: input.salesPipeline.bottleneck.score,
+        severity: input.salesPipeline.bottleneck.status === 'blocked' ? 'critical' : input.salesPipeline.bottleneck.status === 'watch' ? 'warning' : 'info',
+        page: input.salesPipeline.bottleneck.page,
+      },
+      {
+        id: 'scale-products',
+        label: 'Productos con senal para escalar',
+        count: input.topScores.length,
+        severity: input.topScores.length > 0 ? 'info' : 'warning',
+        page: '/cj-shopify-usa/sales-agent',
+      },
+      {
+        id: 'needs-work',
+        label: 'Productos que requieren correccion',
+        count: input.needsWork.length,
+        severity: input.needsWork.length > 0 ? 'warning' : 'info',
+        page: '/cj-shopify-usa/sales-agent',
+      },
+    ],
+  };
+}
+
 function scheduleSalesAgent(userId: number, runCycle: (userId: number) => Promise<SalesAgentCycleResult | null>) {
   if (schedulerTimer) clearInterval(schedulerTimer);
   if (schedulerState !== 'RUNNING' || !schedulerConfig.enabled) {
@@ -1384,6 +1554,31 @@ export const cjShopifyUsaSalesAgentService = {
         createdAt: trace.createdAt,
       })),
     });
+    const topCommercialScores = commercialScores.slice(0, 10);
+    const needsWorkScores = [...commercialScores]
+      .filter((item) => item.score < 72 || item.recommendedAction !== 'WATCH')
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 12);
+    const morningBrief = buildMorningBrief({
+      actions: actionsWithExecution,
+      salesPipeline,
+      topScores: topCommercialScores,
+      needsWork: needsWorkScores,
+      promotionCandidates,
+      publishableDrafts,
+      unsafeUnpublishCandidates,
+      checkoutRisk: checkoutRatePct > 0 && purchaseRatePct === 0,
+      profitGuard: {
+        reviewRequired: profitGuard.reviewRequired,
+        priceIncreases: profitGuard.priceIncreases,
+        pausedUnsafe: profitGuard.pausedUnsafe,
+      },
+      kpis: {
+        paidOrders30,
+        visitors,
+        purchaseRatePct,
+      },
+    });
 
     return {
       ok: true,
@@ -1478,13 +1673,11 @@ export const cjShopifyUsaSalesAgentService = {
             : 'Aun no hay publicaciones sociales exitosas registradas; empezar con lote pequeno controlado.',
         ],
       },
+      morningBrief,
       commercialScores: {
         distribution: scoreDistribution,
-        top: commercialScores.slice(0, 10),
-        needsWork: [...commercialScores]
-          .filter((item) => item.score < 72 || item.recommendedAction !== 'WATCH')
-          .sort((a, b) => a.score - b.score)
-          .slice(0, 12),
+        top: topCommercialScores,
+        needsWork: needsWorkScores,
       },
       campaign,
       salesPipeline,

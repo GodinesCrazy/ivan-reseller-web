@@ -227,6 +227,30 @@ type SalesAgentDashboard = {
     };
     summary: string[];
   };
+  morningBrief: {
+    generatedAt: string;
+    headline: string;
+    confidence: 'early' | 'medium' | 'high';
+    focus: 'protect_margin' | 'fix_checkout' | 'publish' | 'promote' | 'discover';
+    tasks: Array<{
+      id: string;
+      priority: Priority;
+      label: string;
+      page: string;
+      actionType?: SalesAction['type'];
+      count: number;
+      rationale: string;
+      expectedOutcome: string;
+      sampleTitles: string[];
+    }>;
+    watchlist: Array<{
+      id: string;
+      label: string;
+      count: number;
+      severity: 'info' | 'warning' | 'critical';
+      page: string;
+    }>;
+  };
   commercialScores: {
     distribution: { excellent: number; good: number; watch: number; risk: number };
     top: CommercialScore[];
@@ -676,6 +700,99 @@ export default function CjShopifyUsaSalesAgentPage() {
       />
 
       <CycleNarrativeStrip active="optimize" />
+
+      {data?.morningBrief && (
+        <section className="rounded-lg border border-emerald-500/25 bg-emerald-950/10 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-300">
+                Manana operativa · confianza {data.morningBrief.confidence}
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-white">{data.morningBrief.headline}</h3>
+              <p className="mt-1 text-sm text-slate-300">
+                Agenda priorizada por margen, checkout, publicaciones, promocion organica y aprendizaje real del ciclo.
+              </p>
+            </div>
+            <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-200">
+              foco: {data.morningBrief.focus.replace('_', ' ')}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="space-y-2">
+              {data.morningBrief.tasks.map((task, index) => (
+                <div key={task.id} className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-200">{index + 1}</span>
+                        <span className={`rounded-full border px-2 py-1 text-[11px] font-bold ${priorityClass(task.priority)}`}>
+                          {task.priority}
+                        </span>
+                        <span className="text-xs text-slate-500">{task.count} item(s)</span>
+                      </div>
+                      <p className="mt-2 text-sm font-bold text-slate-100">{task.label}</p>
+                      <p className="mt-1 text-xs text-slate-400">{task.rationale}</p>
+                      <p className="mt-1 text-xs text-emerald-200">{task.expectedOutcome}</p>
+                      {task.sampleTitles.length > 0 && (
+                        <p className="mt-2 line-clamp-2 text-[11px] text-slate-500">
+                          Ejemplos: {task.sampleTitles.join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      {task.actionType && (data.actions ?? []).some((action) => action.type === task.actionType && action.canExecute) && (
+                        <button
+                          type="button"
+                          disabled={!!running}
+                          onClick={() => {
+                            const action = (data.actions ?? []).find((item) => item.type === task.actionType && item.canExecute);
+                            if (action) void execute(action);
+                          }}
+                          className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+                        >
+                          Ejecutar
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => window.location.assign(task.page)}
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-cyan-400"
+                      >
+                        Abrir
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+              <p className="text-sm font-bold text-white">Watchlist</p>
+              <div className="mt-3 space-y-2">
+                {data.morningBrief.watchlist.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => window.location.assign(item.page)}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-left hover:border-slate-600"
+                  >
+                    <span>
+                      <span className="block text-xs font-semibold text-slate-200">{item.label}</span>
+                      <span className={`mt-1 block text-[11px] ${
+                        item.severity === 'critical' ? 'text-red-300' : item.severity === 'warning' ? 'text-amber-300' : 'text-cyan-300'
+                      }`}>
+                        {item.severity}
+                      </span>
+                    </span>
+                    <span className="rounded bg-slate-950 px-2 py-1 text-xs font-bold text-white">{item.count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
