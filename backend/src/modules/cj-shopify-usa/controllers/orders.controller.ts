@@ -276,7 +276,7 @@ router.get('/post-sale/dashboard', async (req: Request, res: Response, next: Nex
         ok: sumStatuses(countsByStatus, ['CJ_PAYMENT_COMPLETED', 'CJ_FULFILLING', 'CJ_SHIPPED', 'TRACKING_ON_SHOPIFY', 'COMPLETED']),
         pending: sumStatuses(countsByStatus, ['CJ_PAYMENT_PENDING']),
         blocked: sumStatuses(countsByStatus, ['SUPPLIER_PAYMENT_BLOCKED']),
-        next: 'Recargar balance CJ; el ciclo retoma automáticamente.',
+        next: 'Recargar balance CJ; el ciclo reintenta con cooldown para evitar llamadas repetidas.',
       },
       {
         id: 'tracking',

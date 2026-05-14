@@ -283,6 +283,10 @@ function ConfigPanel({ config, onChange, onSave }: {
   return (
     <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 p-5 space-y-4">
       <h3 className="text-sm font-bold text-slate-200 tracking-wide">⚙ Configuración del Ciclo</h3>
+      <div className="rounded-lg border border-emerald-500/25 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-100">
+        Guardrail activo: cada ciclo ejecuta Profit Guard antes de publicar o promocionar. Si no puede probar costo,
+        shipping y margen, el producto se pausa para evitar ventas con perdida.
+      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <label>
@@ -316,7 +320,7 @@ function ConfigPanel({ config, onChange, onSave }: {
           onClick={() => {
             if (!config.autoPublish) {
               const confirmed = window.confirm(
-                '⚠️ ¿Activar auto-publicación?\n\nTodos los productos aprobados en cada ciclo se publicarán DIRECTAMENTE en Shopify sin revisión manual.\n\nAsegúrate de que el margen mínimo y filtros estén configurados correctamente antes de activar.'
+                '⚠️ ¿Activar auto-publicación?\n\nLos productos aprobados se publicarán DIRECTAMENTE en Shopify. El ciclo ejecuta Profit Guard y pausa productos inseguros, pero igual debes validar margen mínimo, shipping máximo y capital CJ antes de escalar.\n\nRecomendado: empezar con límites bajos y subirlos solo cuando veas conversiones reales.'
               );
               if (!confirmed) return;
             }

@@ -25,8 +25,8 @@ export type AutomationState = 'IDLE' | 'RUNNING' | 'PAUSED' | 'ERROR';
 
 export interface AutomationConfig {
   intervalHours: number;          // How often to run (default 3h)
-  maxDailyPublish: number;        // Max articles published per day (default 200)
-  maxPerCycle: number;            // Max per single cycle (default 40)
+  maxDailyPublish: number;        // Max articles published per day
+  maxPerCycle: number;            // Max per single cycle
   minMarginPct: number;           // Min margin to auto-publish (default 15%)
   categories: string[];           // CJ category filters
   autoPublish: boolean;           // Auto-publish or just draft
@@ -87,8 +87,8 @@ interface EvaluationBacklogStats {
 
 const DEFAULT_CONFIG: AutomationConfig = {
   intervalHours: 2,
-  maxDailyPublish: 500,
-  maxPerCycle: 80,
+  maxDailyPublish: 20,
+  maxPerCycle: 5,
   minMarginPct: 12,
   categories: [
     'pet supplies', 'dog accessories', 'cat accessories',
@@ -96,7 +96,7 @@ const DEFAULT_CONFIG: AutomationConfig = {
     'pet carriers', 'pet bowls', 'pet collars', 'pet harness',
     'pet training', 'pet health', 'aquarium', 'bird supplies',
   ],
-  autoPublish: true,
+  autoPublish: false,
   enabled: false,
 };
 
@@ -580,14 +580,36 @@ class CjShopifyUsaAutomationService {
       setPhase('post_sale', 'Procesando cola post venta', 24);
       log('info', 'Step 0.5: Processing post-sale queue (paid orders, CJ balance waits, tracking)...');
       try {
-        const postSaleOrders = await prisma.cjShopifyUsaOrder.findMany({
-          where: { userId, status: { in: ['VALIDATED', 'SUPPLIER_PAYMENT_BLOCKED'] } },
+        const validatedOrders = await prisma.cjShopifyUsaOrder.findMany({
+          where: { userId, status: 'VALIDATED' },
           orderBy: { createdAt: 'asc' },
           take: 10,
         });
+        const supplierBalanceRetryCooldown = new Date(Date.now() - 30 * 60 * 1000);
+        const balanceBlockedOrders = validatedOrders.length < 10
+          ? await prisma.cjShopifyUsaOrder.findMany({
+              where: {
+                userId,
+                status: 'SUPPLIER_PAYMENT_BLOCKED',
+                updatedAt: { lt: supplierBalanceRetryCooldown },
+              },
+              orderBy: { updatedAt: 'asc' },
+              take: 1,
+            })
+          : [];
+        const blockedWaiting = await prisma.cjShopifyUsaOrder.count({
+          where: { userId, status: 'SUPPLIER_PAYMENT_BLOCKED' },
+        });
+        const postSaleOrders = [...validatedOrders, ...balanceBlockedOrders];
 
         if (postSaleOrders.length > 0) {
           log('info', `Found ${postSaleOrders.length} post-sale orders ready for safe supplier processing/retry.`);
+          if (blockedWaiting > balanceBlockedOrders.length) {
+            log(
+              'warn',
+              `CJ balance guard: ${blockedWaiting - balanceBlockedOrders.length} supplier-payment-blocked order(s) remain on cooldown; retrying at most one blocked order per cycle.`,
+            );
+          }
           const { cjShopifyUsaOrderIngestService } = await import('./cj-shopify-usa-order-ingest.service');
           
           let postSaleSuccess = 0;
@@ -632,14 +654,14 @@ class CjShopifyUsaAutomationService {
         const guard = await cjShopifyUsaProfitGuardService.run(userId, {
           dryRun: false,
           limit: 500,
-          pauseUnsafe: false,
+          pauseUnsafe: true,
           minIncreaseUsd: 0.5,
         });
         if (guard.priceIncreases > 0) {
           log('success', `Profit Guard increased ${guard.priceIncreases} Shopify prices to protect margin.`);
         }
         if (guard.reviewRequired > 0) {
-          log('warn', `Profit Guard flagged ${guard.reviewRequired} active listings for pricing review; missing cost/shipping data is not auto-paused.`);
+          log('warn', `Profit Guard flagged ${guard.reviewRequired} active listings for pricing review; unsafe listings are paused when they cannot prove margin.`);
         }
       } catch (err) {
         log('warn', `Price sync step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
