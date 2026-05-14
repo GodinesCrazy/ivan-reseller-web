@@ -738,6 +738,7 @@ export class CjSupplierAdapter implements ICjSupplierAdapter {
       description: desc,
       imageUrls,
       variants,
+      destinationInventories: extractDestinationInventories(mainRow),
     };
   }
 

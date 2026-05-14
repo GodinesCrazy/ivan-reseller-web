@@ -78,6 +78,7 @@ export interface CjProductDetail {
   description?: string;
   imageUrls: string[];
   variants: CjVariantDetail[];
+  destinationInventories?: CjDestinationInventorySummary[];
 }
 
 export interface CjShippingQuoteInput {

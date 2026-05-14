@@ -14,13 +14,14 @@
  */
 
 import { logger } from '../../../config/logger';
-import type { ICjSupplierAdapter, CjVariantDetail } from '../adapters/cj-supplier.adapter.interface';
+import type { ICjSupplierAdapter, CjProductDetail, CjVariantDetail } from '../adapters/cj-supplier.adapter.interface';
 import { CjSupplierError } from '../adapters/cj-supplier.errors';
 import type {
   TrendSeed,
   CjCandidateMatch,
   OpportunityRunSettings,
 } from './cj-ebay-opportunity.types';
+import { cjEbayUsWarehouseEvidenceService } from './cj-ebay-us-warehouse-evidence.service';
 
 class CjEbayCandidateMatchingService {
   /**
@@ -128,7 +129,7 @@ class CjEbayCandidateMatchingService {
     }
 
     // Fetch shipping quote.
-    const shipping = await this.fetchShippingQuote(cjProductId, bestVariant, adapter);
+    const shipping = await this.fetchShippingQuote(cjProductId, bestVariant, adapter, detail);
 
     const shippingViable = this.isShippingViable(shipping, settings);
     if (!shippingViable) {
@@ -139,7 +140,7 @@ class CjEbayCandidateMatchingService {
     }
     if (options?.requireUsWarehouseOnly && shipping?.fulfillmentOrigin !== 'US') {
       logger.info(
-        `[CandidateMatching] Product ${cjProductId} skipped: US warehouse required but origin=${shipping?.fulfillmentOrigin ?? 'UNKNOWN'}`
+        `[CandidateMatching] Product ${cjProductId} skipped: US warehouse required but origin=${shipping?.fulfillmentOrigin ?? 'UNKNOWN'} status=${shipping?.usWarehouseStatus ?? 'UNKNOWN'}`
       );
       return null;
     }
@@ -211,7 +212,8 @@ class CjEbayCandidateMatchingService {
   private async fetchShippingQuote(
     cjProductId: string,
     variant: CjVariantDetail,
-    adapter: ICjSupplierAdapter
+    adapter: ICjSupplierAdapter,
+    detail?: Pick<CjProductDetail, 'destinationInventories'>
   ): Promise<{
     amountUsd: number;
     confidence: 'KNOWN' | 'ESTIMATED' | 'UNKNOWN';
@@ -219,23 +221,31 @@ class CjEbayCandidateMatchingService {
     daysMax?: number;
     serviceName?: string;
     fulfillmentOrigin?: 'US' | 'CN';
+    usWarehouseStatus?: string;
   } | null> {
     try {
       const quoteInput = variant.cjVid
         ? { variantId: variant.cjVid, quantity: 1 }
         : { productId: cjProductId, quantity: 1 };
 
-      const result = await adapter.quoteShippingToUsWarehouseAware(quoteInput);
+      const result = await cjEbayUsWarehouseEvidenceService.resolve({
+        adapter,
+        product: detail,
+        freightInput: quoteInput,
+      });
+      const freight = result.freight;
+      if (!freight) return null;
 
-      if (!Number.isFinite(result.quote.cost) || result.quote.cost < 0) return null;
+      if (!Number.isFinite(freight.quote.cost) || freight.quote.cost < 0) return null;
 
       return {
-        amountUsd: result.quote.cost,
-        confidence: result.quote.estimatedDays != null ? 'KNOWN' : 'ESTIMATED',
-        daysMin: result.quote.estimatedDays ?? undefined,
-        daysMax: result.quote.estimatedDays ?? undefined,
-        serviceName: result.quote.method,
-        fulfillmentOrigin: result.fulfillmentOrigin,
+        amountUsd: freight.quote.cost,
+        confidence: freight.quote.estimatedDays != null ? 'KNOWN' : 'ESTIMATED',
+        daysMin: freight.quote.estimatedDays ?? undefined,
+        daysMax: freight.quote.estimatedDays ?? undefined,
+        serviceName: freight.quote.method,
+        fulfillmentOrigin: freight.fulfillmentOrigin,
+        usWarehouseStatus: result.status,
       };
     } catch (err) {
       if (err instanceof CjSupplierError && err.code === 'CJ_SHIPPING_UNAVAILABLE') {

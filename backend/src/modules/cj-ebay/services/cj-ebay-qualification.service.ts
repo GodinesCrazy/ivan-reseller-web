@@ -18,6 +18,11 @@ import {
   type CjPricingBreakdown,
 } from './cj-ebay-pricing.service';
 import { createCjSupplierAdapter } from '../adapters/cj-supplier.adapter';
+import {
+  cjEbayUsWarehouseEvidenceService,
+  type CjEbayUsWarehouseEvidence,
+  type CjEbayUsWarehouseStatus,
+} from './cj-ebay-us-warehouse-evidence.service';
 
 export interface CjEvaluateRequestBody {
   productId: string;
@@ -142,13 +147,15 @@ async function persistProductSnapshot(userId: number, detail: CjProductDetail) {
 async function runCjDataAndShipping(
   userId: number,
   body: CjEvaluateRequestBody,
-  adapter: ICjSupplierAdapter
+  adapter: ICjSupplierAdapter,
+  options?: { requireUsWarehouseOnly?: boolean }
 ): Promise<{
   detail: CjProductDetail;
   variant: CjVariantDetail;
   stockLive: number;
   freight: Awaited<ReturnType<ICjSupplierAdapter['quoteShippingToUsReal']>>;
   fulfillmentOrigin: 'US' | 'CN';
+  usWarehouseEvidence: CjEbayUsWarehouseEvidence;
 }> {
   const detail = await adapter.getProductById(String(body.productId).trim());
   const variant = pickVariant(detail, body.variantId);
@@ -168,21 +175,41 @@ async function runCjDataAndShipping(
     destPostalCode: body.destPostalCode,
   };
 
-  // WAREHOUSE-AWARE: when flag is on, probe US first and fall back to CN.
-  // When off, use the standard China-first path (no behavioral change).
+  // Publication safety: when USA warehouse is required, always probe warehouse-aware.
+  // The env flag only controls optional search enrichment; it must not bypass this guardrail.
   let freight: Awaited<ReturnType<ICjSupplierAdapter['quoteShippingToUsReal']>>;
   let fulfillmentOrigin: 'US' | 'CN';
+  let usWarehouseEvidence: CjEbayUsWarehouseEvidence;
 
-  if (env.CJ_EBAY_WAREHOUSE_AWARE) {
-    const waResult = await adapter.quoteShippingToUsWarehouseAware(freightInput);
-    freight = { quote: waResult.quote, requestPayload: waResult.requestPayload, responseRaw: waResult.responseRaw };
-    fulfillmentOrigin = waResult.fulfillmentOrigin;
+  if (options?.requireUsWarehouseOnly || env.CJ_EBAY_WAREHOUSE_AWARE) {
+    usWarehouseEvidence = await cjEbayUsWarehouseEvidenceService.resolve({
+      adapter,
+      product: detail,
+      freightInput,
+    });
+    if (usWarehouseEvidence.freight) {
+      freight = {
+        quote: usWarehouseEvidence.freight.quote,
+        requestPayload: usWarehouseEvidence.freight.requestPayload,
+        responseRaw: usWarehouseEvidence.freight.responseRaw,
+      };
+      fulfillmentOrigin = usWarehouseEvidence.freight.fulfillmentOrigin;
+    } else {
+      freight = await adapter.quoteShippingToUsReal(freightInput);
+      fulfillmentOrigin = 'CN';
+    }
   } else {
     freight = await adapter.quoteShippingToUsReal(freightInput);
     fulfillmentOrigin = 'CN';
+    usWarehouseEvidence = {
+      status: 'UNKNOWN',
+      source: 'none',
+      confidenceScore: 0,
+      reasons: ['Warehouse-aware probing is disabled for this non-USA-required evaluation.'],
+    };
   }
 
-  return { detail, variant, stockLive, freight, fulfillmentOrigin };
+  return { detail, variant, stockLive, freight, fulfillmentOrigin, usWarehouseEvidence };
 }
 
 function decideQualification(params: {
@@ -202,6 +229,8 @@ function decideQualification(params: {
   breakdown: CjPricingBreakdown;
   riskScore: number;
   fulfillmentOrigin: 'US' | 'CN';
+  usWarehouseStatus: CjEbayUsWarehouseStatus;
+  usWarehouseReasons: string[];
 }): { decision: 'APPROVED' | 'REJECTED' | 'PENDING'; reasons: QualificationReason[] } {
   const reasons: QualificationReason[] = [];
 
@@ -245,11 +274,11 @@ function decideQualification(params: {
     });
   }
 
-  if (params.settings.requireUsWarehouseOnly && params.fulfillmentOrigin !== 'US') {
+  if (params.settings.requireUsWarehouseOnly && params.usWarehouseStatus !== 'US_CONFIRMED') {
     reasons.push({
       rule: 'P2',
       code: 'US_WAREHOUSE_REQUIRED',
-      message: 'CJ did not confirm US warehouse fulfillment; autopilot/eBay USA requires origin US.',
+      message: `CJ did not confirm US warehouse fulfillment (${params.usWarehouseStatus}); autopilot/eBay USA requires US_CONFIRMED. ${params.usWarehouseReasons.join(' ')}`,
       severity: 'block',
     });
   }
@@ -332,6 +361,7 @@ export const cjEbayQualificationService = {
     riskScore: number;
     fulfillmentOrigin: 'US' | 'CN';
     warehouseAwareEnabled: boolean;
+    usWarehouseEvidence: CjEbayUsWarehouseEvidence;
   }> {
     const adapter = createCjSupplierAdapter(input.userId);
     const settingsRow = await prisma.cjEbayAccountSettings.findUnique({
@@ -354,10 +384,11 @@ export const cjEbayQualificationService = {
     });
 
     try {
-      const { detail, variant, stockLive, freight, fulfillmentOrigin } = await runCjDataAndShipping(
+      const { detail, variant, stockLive, freight, fulfillmentOrigin, usWarehouseEvidence } = await runCjDataAndShipping(
         input.userId,
         input.body,
-        adapter
+        adapter,
+        { requireUsWarehouseOnly: row.requireUsWarehouseOnly }
       );
       const unitCost = variant.unitCostUsd;
       const supplierLineCost =
@@ -400,6 +431,7 @@ export const cjEbayQualificationService = {
           netMarginPct: breakdown.netMarginPct,
           netProfitUsd: breakdown.netProfitUsd,
           fulfillmentOrigin,
+          usWarehouseStatus: usWarehouseEvidence.status,
         },
       });
 
@@ -419,7 +451,8 @@ export const cjEbayQualificationService = {
         },
         riskScore,
         fulfillmentOrigin,
-        warehouseAwareEnabled: env.CJ_EBAY_WAREHOUSE_AWARE,
+        warehouseAwareEnabled: row.requireUsWarehouseOnly || env.CJ_EBAY_WAREHOUSE_AWARE,
+        usWarehouseEvidence,
       };
     } catch (e) {
       await cjEbayTraceService.record({
@@ -447,6 +480,7 @@ export const cjEbayQualificationService = {
     riskScore: number;
     fulfillmentOrigin: 'US' | 'CN';
     warehouseAwareEnabled: boolean;
+    usWarehouseEvidence: CjEbayUsWarehouseEvidence;
     ids: {
       productDbId: number;
       variantDbId: number;
@@ -478,10 +512,11 @@ export const cjEbayQualificationService = {
     });
 
     try {
-      const { detail, variant, stockLive, freight, fulfillmentOrigin } = await runCjDataAndShipping(
+      const { detail, variant, stockLive, freight, fulfillmentOrigin, usWarehouseEvidence } = await runCjDataAndShipping(
         input.userId,
         input.body,
-        adapter
+        adapter,
+        { requireUsWarehouseOnly: settingsRow.requireUsWarehouseOnly }
       );
 
       const persisted = await persistProductSnapshot(input.userId, detail);
@@ -566,6 +601,8 @@ export const cjEbayQualificationService = {
         breakdown,
         riskScore,
         fulfillmentOrigin,
+        usWarehouseStatus: usWarehouseEvidence.status,
+        usWarehouseReasons: usWarehouseEvidence.reasons,
       });
 
       const evalRow = await prisma.cjEbayProductEvaluation.create({
@@ -596,6 +633,9 @@ export const cjEbayQualificationService = {
           reasonCodes: reasons.map((r) => r.code),
           fulfillmentOrigin,
           warehouseEvidence: freight.quote.warehouseEvidence,
+          usWarehouseStatus: usWarehouseEvidence.status,
+          usWarehouseSource: usWarehouseEvidence.source,
+          usWarehouseConfidenceScore: usWarehouseEvidence.confidenceScore,
         },
       });
 
@@ -610,7 +650,8 @@ export const cjEbayQualificationService = {
         reasons,
         riskScore,
         fulfillmentOrigin,
-        warehouseAwareEnabled: env.CJ_EBAY_WAREHOUSE_AWARE,
+        warehouseAwareEnabled: settingsRow.requireUsWarehouseOnly || env.CJ_EBAY_WAREHOUSE_AWARE,
+        usWarehouseEvidence,
         ids: {
           productDbId: persisted.id,
           variantDbId: vRow.id,

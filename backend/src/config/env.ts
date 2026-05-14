@@ -495,20 +495,18 @@ const envSchema = z.object({
     return Number.isFinite(n) && n >= 0 && n <= 10 ? n : 3;
   }),
   /**
-   * FASE 3G+ — Warehouse-aware fulfillment: when true, the CJ-eBay module probes US freight
-   * (`startCountryCode=US`) before falling back to CN. This is the only reliable signal for
-   * US warehouse availability (CJ catalog does not expose warehouse fields in listV2 / product/query).
-   * Additive improvement — default false until verified with real CJ account on live products.
-   * Set to true only after confirming CJ has US warehouse stock for products you actively list.
+   * FASE 3G+ — Warehouse-aware fulfillment: when true, search enrichment probes US freight
+   * (`startCountryCode=US`) before falling back to CN. Evaluation/publication always probes
+   * warehouse-aware when requireUsWarehouseOnly=true, regardless of this enrichment flag.
    */
-  CJ_EBAY_WAREHOUSE_AWARE: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  CJ_EBAY_WAREHOUSE_AWARE: z.enum(['true', 'false']).default('true').transform((val) => val === 'true'),
   /**
    * Max CJ search results (operable items) that receive a US warehouse freight probe when
-   * CJ_EBAY_WAREHOUSE_AWARE=true. Limits CJ QPS in search. Default 3.
+   * CJ_EBAY_WAREHOUSE_AWARE=true. Limits CJ QPS in search. Default 8.
    */
-  CJ_EBAY_WAREHOUSE_PROBE_LIMIT: z.string().default('3').transform((v) => {
+  CJ_EBAY_WAREHOUSE_PROBE_LIMIT: z.string().default('8').transform((v) => {
     const n = parseInt(v, 10);
-    return Number.isFinite(n) && n >= 0 && n <= 10 ? n : 3;
+    return Number.isFinite(n) && n >= 0 && n <= 20 ? n : 8;
   }),
 
   /**

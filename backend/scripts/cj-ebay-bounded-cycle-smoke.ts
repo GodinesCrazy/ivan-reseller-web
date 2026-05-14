@@ -110,7 +110,7 @@ async function main() {
         include: {
           product: { select: { title: true, cjProductId: true } },
           variant: { select: { cjSku: true, cjVid: true, stockLastKnown: true } },
-          evaluation: { select: { decision: true, estimatedMarginPct: true, estimatedProfitUsd: true, evaluatedAt: true } },
+          evaluation: { select: { decision: true, reasons: true, estimatedMarginPct: true, evaluatedAt: true } },
           shippingQuote: { select: { amountUsd: true, originCountryCode: true, confidence: true, createdAt: true } },
         },
       });

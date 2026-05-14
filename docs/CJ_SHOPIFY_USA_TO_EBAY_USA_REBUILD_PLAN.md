@@ -246,6 +246,21 @@ Candidate funnel tuning update 2026-05-14:
   - Zero live stock still blocks publication.
   - Margin, profit, shipping cap, eBay policy, monthly stock limit and monthly amount limit remain hard checks.
 
+USA warehouse evidence fix 2026-05-14:
+
+- Root cause confirmed: CJ-eBay evaluation was gated by `CJ_EBAY_WAREHOUSE_AWARE`; when false, evaluation used the China/default freight path and marked `fulfillmentOrigin=CN` even when account settings required USA-only.
+- Added `cj-ebay-us-warehouse-evidence.service.ts` to classify supplier evidence as `US_CONFIRMED`, `US_PROBABLE`, `CN_CONFIRMED`, `UNKNOWN`, or `CONFLICTING`.
+- Product detail snapshots now preserve CJ `destinationInventories` so USA destination inventory can be considered as evidence instead of relying only on freight fallback.
+- Evaluation/publication now always runs warehouse-aware evidence when `requireUsWarehouseOnly=true`, regardless of search-enrichment env flags.
+- Search enrichment default changed to warehouse-aware with a probe limit of 8, still protected by the global CJ API rate limiter.
+- Guardrail remains strict: automatic approval/publication requires `US_CONFIRMED`; probable/conflicting/unknown evidence remains blocked for autopublish.
+- Live bounded smoke after fix:
+  - CJ confirmed `startCountryCode=US` freight for `Warm pet house pet supplies`.
+  - Stock live updated to 20,000 units.
+  - Shipping quote: US origin, 8 days, $12.13.
+  - Evaluation: APPROVED, estimated margin 18.84%.
+  - Local eBay draft created with price $26.54 and SKU `CJE1P65V639`; publish was intentionally disabled (`DRAFT_ONLY`).
+
 Page-by-page parity status after current pass:
 
 - Overview: Shopify-style hero, readiness ring, pipeline, quota and quick actions are present. Needs reset to show true zero state.
