@@ -18,6 +18,9 @@ import {
   ActionPriorityBand,
   CommercialPageHeader,
   CycleNarrativeStrip,
+  EmptyCommercialState,
+  PremiumSectionHeader,
+  SignalBadge,
 } from './components/CommercialCockpit';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
@@ -836,15 +839,12 @@ export default function CjShopifyUsaDiscoverPage() {
       )}
 
       {searchState.kind === 'no_results' && (
-        <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 py-14 flex flex-col items-center gap-3 text-center">
-          <Package className="w-8 h-8 text-slate-300 dark:text-slate-600" />
-          <div>
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-              Sin resultados para "{searchState.keyword}"
-            </p>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Prueba con otro término o en inglés.</p>
-          </div>
-        </div>
+        <EmptyCommercialState
+          title={`Sin resultados para "${searchState.keyword}"`}
+          description="Prueba otra intención PET en inglés. El buscador prioriza productos que puedan avanzar a evaluación, shipping USA y margen antes de crear drafts."
+          actionLabel="Buscar Pet Supplies"
+          onAction={() => doSearch('pet supplies', 1)}
+        />
       )}
 
       {searchState.kind === 'results' && (
@@ -860,12 +860,19 @@ export default function CjShopifyUsaDiscoverPage() {
               </div>
             </div>
           )}
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {searchState.items.length} resultados para "{searchState.keyword}"
-              {searchState.page > 1 && ` · página ${searchState.page}`}
-            </p>
-          </div>
+          <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
+            <PremiumSectionHeader
+              eyebrow="Mesa de oportunidades"
+              title={`${searchState.items.length} candidatos CJ para evaluar`}
+              description={`Keyword "${searchState.keyword}"${searchState.page > 1 ? ` · pagina ${searchState.page}` : ''}. La secuencia correcta es buscar, validar stock/envio USA, evaluar margen y crear draft seguro.`}
+            >
+              <div className="flex flex-wrap gap-2">
+                <SignalBadge tone="violet">PET por defecto</SignalBadge>
+                <SignalBadge tone="cyan">Stock USA primero</SignalBadge>
+                <SignalBadge tone="emerald">Draft solo si margen OK</SignalBadge>
+              </div>
+            </PremiumSectionHeader>
+          </section>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {searchState.items.map((product) => (

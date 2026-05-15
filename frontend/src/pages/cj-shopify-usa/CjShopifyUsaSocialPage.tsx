@@ -6,6 +6,9 @@ import {
   CommercialMetricCard,
   CommercialPageHeader,
   CycleNarrativeStrip,
+  EmptyCommercialState,
+  PremiumSectionHeader,
+  SignalBadge,
 } from './components/CommercialCockpit';
 
 interface SocialCandidate {
@@ -117,17 +120,28 @@ export default function CjShopifyUsaSocialPage() {
 
       <CycleNarrativeStrip active="promote" />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-            <Share2 className="h-6 w-6 text-fuchsia-400" />
-            Social Autopilot
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Motor de contenido orgánico y distribución en redes (Fase 5)
-          </p>
-        </div>
-      </div>
+      <section className="rounded-lg border border-fuchsia-500/20 bg-slate-950/70 p-4">
+        <PremiumSectionHeader
+          eyebrow="Motor social orgánico"
+          title="Campañas conectadas al ciclo comercial"
+          description="Promociona solo productos publicados con margen y señales, mide respuesta y devuelve aprendizaje al Agente Vendedor."
+          tone="violet"
+        >
+          <div className="flex flex-wrap gap-2">
+            <SignalBadge tone="violet">Pinterest primero</SignalBadge>
+            <SignalBadge tone="cyan">Sin ads pagados</SignalBadge>
+            <SignalBadge tone="emerald">Repetir ganadores</SignalBadge>
+          </div>
+        </PremiumSectionHeader>
+        {(data?.candidates.length ?? 0) === 0 && (
+          <EmptyCommercialState
+            title="Sin candidatos sociales listos"
+            description="Publica o estabiliza productos con margen antes de generar campañas orgánicas. El agente priorizará los mejores cuando existan señales."
+            actionLabel="Abrir Store Products"
+            onAction={() => window.location.assign('/cj-shopify-usa/listings')}
+          />
+        )}
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         

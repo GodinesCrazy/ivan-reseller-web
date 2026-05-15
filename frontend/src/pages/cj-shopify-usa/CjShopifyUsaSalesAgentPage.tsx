@@ -35,6 +35,8 @@ import {
   CommercialMetricCard,
   CommercialPageHeader,
   CycleNarrativeStrip,
+  DecisionTabs,
+  ProductSignalRow,
   RiskActionQueue,
 } from './components/CommercialCockpit';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
@@ -584,6 +586,7 @@ function trafficQualitySignal(data: SalesAgentDashboard): { label: string; detai
 
 export default function CjShopifyUsaSalesAgentPage() {
   const [data, setData] = useState<SalesAgentDashboard | null>(null);
+  const [commandTab, setCommandTab] = useState<'ahora' | 'escalar' | 'corregir' | 'proteger' | 'aprendizaje'>('ahora');
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -736,6 +739,71 @@ export default function CjShopifyUsaSalesAgentPage() {
         <CommercialMetricCard label="Rotar sin traccion" value={data?.salesIntelligence?.totals.rotate ?? data?.cleanup?.totals.rotate ?? 0} detail={`${data?.cleanup?.thresholdDays ?? 14}+ dias sin venta/senal`} tone="rose" />
         <CommercialMetricCard label="Acciones ejecutables" value={(data?.actions ?? []).filter((action) => action.canExecute).length} detail="con guardrails" tone="cyan" />
       </div>
+
+      <DecisionTabs
+        value={commandTab}
+        onChange={setCommandTab}
+        tabs={[
+          { value: 'ahora', label: 'Ahora', count: actionGroups.needsDecision.length, tone: 'cyan' },
+          { value: 'escalar', label: 'Escalar', count: data?.salesIntelligence?.totals.scale ?? data?.commercialScores.top.length ?? 0, tone: 'emerald' },
+          { value: 'corregir', label: 'Corregir', count: data?.salesIntelligence?.totals.optimize ?? data?.commercialScores.needsWork.length ?? 0, tone: 'amber' },
+          { value: 'proteger', label: 'Proteger', count: (data?.salesIntelligence?.totals.protect ?? 0) + (data?.profitGuard.reviewRequired ?? 0), tone: 'rose' },
+          { value: 'aprendizaje', label: 'Aprendizaje', count: data?.learning.recentActions.length ?? 0, tone: 'violet' },
+        ]}
+      />
+
+      {commandTab !== 'ahora' && (
+        <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
+          <div className="mb-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">Vista premium filtrada</p>
+            <h2 className="mt-1 text-base font-bold text-white">
+              {commandTab === 'escalar' ? 'Productos que merecen trafico y repetición'
+                : commandTab === 'corregir' ? 'Productos con señal débil que pueden mejorar'
+                  : commandTab === 'proteger' ? 'Riesgos de margen, ficha o operación'
+                    : 'Memoria, trazas y aprendizaje del agente'}
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">El detalle operativo completo queda debajo; esta vista resume la decisión comercial sin saturar la primera pantalla.</p>
+          </div>
+          <div className="space-y-2">
+            {(commandTab === 'escalar' ? data?.salesIntelligence?.topProducts.filter((item) => item.decision === 'SCALE')
+              : commandTab === 'corregir' ? data?.salesIntelligence?.topProducts.filter((item) => item.decision === 'OPTIMIZE')
+                : commandTab === 'proteger' ? data?.salesIntelligence?.topProducts.filter((item) => item.decision === 'PROTECT' || item.decision === 'ROTATE')
+                  : [])?.slice(0, 6).map((item, idx) => (
+                    <ProductSignalRow
+                      key={`${item.listingId ?? 'signal'}-${idx}`}
+                      title={item.title}
+                      decision={item.decision}
+                      tone={item.decision === 'SCALE' ? 'emerald' : item.decision === 'OPTIMIZE' ? 'amber' : item.decision === 'PROTECT' ? 'rose' : 'slate'}
+                      reason={item.reasons[0] ?? 'Recolectando evidencia'}
+                      metrics={[
+                        { label: 'score', value: item.score },
+                        { label: 'vistas', value: item.signal.views },
+                        { label: 'carrito', value: item.signal.addToCarts },
+                        { label: 'compras', value: item.signal.purchases },
+                      ]}
+                    />
+                  ))}
+            {commandTab === 'aprendizaje' && (data?.learning.recentActions ?? []).slice(0, 6).map((item) => (
+              <ProductSignalRow
+                key={item.id}
+                title={item.message}
+                decision="MEMORIA"
+                tone="violet"
+                reason={new Date(item.createdAt).toLocaleString()}
+                metrics={[{ label: 'origen', value: 'trace' }]}
+              />
+            ))}
+            {commandTab !== 'aprendizaje' && !(data?.salesIntelligence?.topProducts ?? []).some((item) => (
+              commandTab === 'escalar' ? item.decision === 'SCALE'
+                : commandTab === 'corregir' ? item.decision === 'OPTIMIZE'
+                  : commandTab === 'proteger' ? item.decision === 'PROTECT' || item.decision === 'ROTATE'
+                    : false
+            )) && (
+              <p className="rounded-lg border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">Sin productos en esta decisión por ahora.</p>
+            )}
+          </div>
+        </section>
+      )}
 
       <RiskActionQueue
         title="Que hago ahora"

@@ -8,6 +8,9 @@ import {
   CommercialMetricCard,
   CommercialPageHeader,
   CycleNarrativeStrip,
+  EmptyCommercialState,
+  PremiumSectionHeader,
+  SignalBadge,
 } from './components/CommercialCockpit';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 
@@ -620,9 +623,20 @@ export default function CjShopifyUsaProductsPage() {
         ))}
       </div>
 
-      <div className="rounded-lg border border-sky-800/70 bg-sky-950/25 px-4 py-3 text-xs text-sky-100">
-        Ciclo manual recomendado: <strong>1. Recalcular</strong> confirma costo, stock, envio y margen; <strong>2. Preparar draft</strong> solo si pasa calidad comercial; <strong>3. Publicar draft</strong> envia a Shopify y canales; <strong>4. Store Products</strong> confirma buyer-ready. Los bloqueos de calidad son intencionales para evitar productos duplicados, sin imagenes, no-pet o con titulos que generen desconfianza.
-      </div>
+      <section className="rounded-lg border border-sky-800/70 bg-slate-950/70 p-4">
+        <PremiumSectionHeader
+          eyebrow="Flujo de evaluación"
+          title="De producto CJ a ficha publicable"
+          description="Recalcula costo, stock, envio y margen; prepara draft solo si pasa calidad comercial; publica y luego confirma buyer-ready en Store Products."
+        >
+          <div className="flex flex-wrap gap-2">
+            <SignalBadge tone="cyan">Recalcular</SignalBadge>
+            <SignalBadge tone="emerald">Draft seguro</SignalBadge>
+            <SignalBadge tone="violet">Publicar</SignalBadge>
+            <SignalBadge tone="amber">Confirmar buyer-ready</SignalBadge>
+          </div>
+        </PremiumSectionHeader>
+      </section>
 
       {/* Conflict banner: products in Shopify with rejected margin */}
       {(() => {
@@ -646,13 +660,14 @@ export default function CjShopifyUsaProductsPage() {
       })()}
 
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-6 py-10 text-center">
-          <p className="text-slate-500 dark:text-slate-400 text-sm">
-            {products.length === 0
-              ? 'No hay productos CJ importados. Usa la sección Descubrir para añadir productos.'
-              : 'No hay productos con ese filtro.'}
-          </p>
-        </div>
+        <EmptyCommercialState
+          title={products.length === 0 ? 'Aun no hay productos CJ importados' : 'No hay productos con ese filtro'}
+          description={products.length === 0
+            ? 'Comienza en Descubrir para buscar productos PET, validar stock/envio USA y traer candidatos a evaluación.'
+            : 'Cambia el filtro o vuelve a la vista general para revisar todos los estados comerciales.'}
+          actionLabel={products.length === 0 ? 'Ir a Descubrir' : 'Ver todos'}
+          onAction={() => products.length === 0 ? window.location.assign('/cj-shopify-usa/discover') : setFilterDecision('ALL')}
+        />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
           <table className="min-w-full text-sm">

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/services/api';
 import {
   ActionPriorityBand,
+  CompactDataPanel,
   CommercialMetricCard,
   CommercialPageHeader,
   CycleNarrativeStrip,
+  PremiumSectionHeader,
 } from './components/CommercialCockpit';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -490,6 +492,24 @@ export default function CjShopifyUsaAutomationPage() {
       </div>
 
       <CycleNarrativeStrip active="optimize" />
+
+      <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
+        <PremiumSectionHeader
+          eyebrow="Subciclos de automatización"
+          title="Control premium por etapa"
+          description="Cada subciclo se mantiene visible para supervisar qué publica, qué protege margen, qué limpia, qué promociona y qué aprende."
+        />
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <CompactDataPanel title="Publicación" value={state === 'RUNNING' ? 'vigilada' : 'manual'} detail={`${localConfig?.maxPerCycle ?? status?.config.maxPerCycle ?? 0} max/ciclo`} tone="cyan" />
+          <CompactDataPanel title="Profit Guard" value={`${localConfig?.minMarginPct ?? status?.config.minMarginPct ?? 0}%`} detail="mínimo antes de escalar" tone="emerald" />
+          <CompactDataPanel title="Higiene" value={cleanup?.totals.rotate ?? 0} detail={`${cleanup?.totals.optimize ?? 0} optimizar · ${cleanup?.totals.protect ?? 0} proteger`} tone={(cleanup?.totals.rotate ?? 0) > 0 ? 'amber' : 'slate'} />
+          <CompactDataPanel title="Postventa" value={cycle?.phase === 'post_sale' ? 'activa' : 'standby'} detail="pagos CJ, tracking y reputación" tone="violet" />
+          <CompactDataPanel title="Social orgánico" value="seguro" detail="sin ads automáticos" tone="cyan" />
+          <CompactDataPanel title="Experimentos" value={cycle?.phase === 'experiments' ? 'activos' : 'pasivo'} detail="sin aplicar ganadores sin muestra" tone="amber" />
+          <CompactDataPanel title="Aprendizaje" value={status?.cycleHistory.length ?? 0} detail="ciclos registrados" tone="slate" />
+          <CompactDataPanel title="Estado worker" value={state} detail={msg ?? 'listo para supervisión'} tone={state === 'ERROR' ? 'rose' : state === 'RUNNING' ? 'emerald' : 'slate'} />
+        </div>
+      </section>
 
       {/* Header */}
       <div className="flex items-center justify-between">

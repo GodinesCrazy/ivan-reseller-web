@@ -7,6 +7,8 @@ import {
   CommercialMetricCard,
   CommercialPageHeader,
   CycleNarrativeStrip,
+  PremiumSectionHeader,
+  ProductSignalRow,
   RiskActionQueue,
 } from './components/CommercialCockpit';
 
@@ -363,16 +365,38 @@ export default function CjShopifyUsaAnalyticsPage() {
       <CycleNarrativeStrip active="measure" />
 
       <section className="rounded-lg border border-cyan-500/25 bg-slate-900/70 p-4">
-        <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">Sales Intelligence por producto</p>
-            <h2 className="text-lg font-semibold text-white">Qué escalar, optimizar, proteger o rotar</h2>
-          </div>
+        <PremiumSectionHeader
+          eyebrow="Sales Intelligence por producto"
+          title="Qué escalar, optimizar, proteger o rotar"
+          description="Ranking accionable conectado al Agente Vendedor: combina visitas, carrito, checkout, compra, margen y señales sociales."
+        >
           <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-300">
             ventana {salesIntel?.days ?? 30} dias
           </span>
+        </PremiumSectionHeader>
+        <div className="mb-4 space-y-2">
+          {(salesIntel?.products ?? []).slice(0, 5).map((item) => (
+            <ProductSignalRow
+              key={`signal-${item.listingId}`}
+              title={item.title}
+              decision={item.decision}
+              tone={item.decision === 'SCALE' ? 'emerald' : item.decision === 'OPTIMIZE' ? 'amber' : item.decision === 'PROTECT' ? 'rose' : item.decision === 'ROTATE' ? 'slate' : 'cyan'}
+              reason={item.reasons[0] ?? 'Aprendiendo'}
+              metrics={[
+                { label: 'score', value: item.score },
+                { label: 'vistas', value: item.signal.views },
+                { label: 'carrito', value: item.signal.addToCarts },
+                { label: 'compra', value: item.signal.purchases },
+                { label: 'margen', value: pct(item.marginPct) },
+              ]}
+              actionLabel="Agente"
+              onAction={() => window.location.assign('/cj-shopify-usa/sales-agent')}
+            />
+          ))}
         </div>
-        <div className="overflow-x-auto rounded-lg border border-slate-800">
+        <details className="rounded-lg border border-slate-800 bg-slate-950/40">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-300">Ver tabla completa de señales</summary>
+          <div className="overflow-x-auto border-t border-slate-800">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-950 text-left text-xs uppercase text-slate-500">
               <tr>
@@ -413,7 +437,8 @@ export default function CjShopifyUsaAnalyticsPage() {
               )}
             </tbody>
           </table>
-        </div>
+          </div>
+        </details>
       </section>
 
       {error && (

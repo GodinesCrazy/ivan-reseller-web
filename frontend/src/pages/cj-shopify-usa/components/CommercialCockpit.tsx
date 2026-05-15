@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, CircleDot, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, CircleDot, Search, Sparkles } from 'lucide-react';
 
 type Tone = 'cyan' | 'emerald' | 'amber' | 'rose' | 'violet' | 'slate';
 
@@ -164,6 +164,175 @@ export function CommercialMetricCard({ label, value, detail, tone = 'slate' }: C
       <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
       <div className="mt-2 text-2xl font-bold text-white">{value}</div>
       {detail ? <p className={`mt-1 text-xs ${styles.accent}`}>{detail}</p> : null}
+    </div>
+  );
+}
+
+type PremiumSectionHeaderProps = {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  tone?: Tone;
+  children?: ReactNode;
+};
+
+export function PremiumSectionHeader({ eyebrow, title, description, tone = 'cyan', children }: PremiumSectionHeaderProps) {
+  const styles = toneClass[tone];
+  return (
+    <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="min-w-0">
+        {eyebrow ? <p className={`text-[11px] font-bold uppercase tracking-wide ${styles.accent}`}>{eyebrow}</p> : null}
+        <h2 className="mt-1 text-base font-bold text-white">{title}</h2>
+        {description ? <p className="mt-1 max-w-3xl text-sm text-slate-400">{description}</p> : null}
+      </div>
+      {children ? <div className="shrink-0">{children}</div> : null}
+    </div>
+  );
+}
+
+type DecisionTabsProps<T extends string> = {
+  value: T;
+  onChange: (value: T) => void;
+  tabs: Array<{ value: T; label: string; count?: number; tone?: Tone }>;
+};
+
+export function DecisionTabs<T extends string>({ value, onChange, tabs }: DecisionTabsProps<T>) {
+  return (
+    <div className="flex flex-wrap gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2">
+      {tabs.map((tab) => {
+        const active = tab.value === value;
+        const styles = toneClass[tab.tone ?? 'cyan'];
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => onChange(tab.value)}
+            className={`rounded-md border px-3 py-2 text-xs font-bold transition ${
+              active
+                ? `${styles.border} ${styles.bg} ${styles.text}`
+                : 'border-transparent text-slate-400 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-100'
+            }`}
+          >
+            {tab.label}
+            {tab.count !== undefined ? <span className="ml-2 rounded bg-black/20 px-1.5 py-0.5 tabular-nums">{tab.count}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+type CompactDataPanelProps = {
+  title: string;
+  value?: string | number;
+  detail?: string;
+  tone?: Tone;
+  children?: ReactNode;
+};
+
+export function CompactDataPanel({ title, value, detail, tone = 'slate', children }: CompactDataPanelProps) {
+  const styles = toneClass[tone];
+  return (
+    <section className={`rounded-lg border ${styles.border} bg-slate-950/65 p-4`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{title}</p>
+          {value !== undefined ? <p className="mt-2 text-2xl font-bold text-white">{value}</p> : null}
+          {detail ? <p className={`mt-1 text-xs ${styles.accent}`}>{detail}</p> : null}
+        </div>
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${styles.border} ${styles.bg}`}>
+          <CircleDot className={`h-4 w-4 ${styles.accent}`} />
+        </div>
+      </div>
+      {children ? <div className="mt-3">{children}</div> : null}
+    </section>
+  );
+}
+
+type SignalBadgeProps = {
+  children: ReactNode;
+  tone?: Tone;
+};
+
+export function SignalBadge({ children, tone = 'slate' }: SignalBadgeProps) {
+  const styles = toneClass[tone];
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold ${styles.chip}`}>
+      {children}
+    </span>
+  );
+}
+
+type ProductSignalRowProps = {
+  title: string;
+  decision: string;
+  tone?: Tone;
+  metrics: Array<{ label: string; value: string | number }>;
+  reason?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
+export function ProductSignalRow({ title, decision, tone = 'cyan', metrics, reason, actionLabel, onAction }: ProductSignalRowProps) {
+  const styles = toneClass[tone];
+  return (
+    <div className={`rounded-lg border ${styles.border} bg-slate-950/70 p-3`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="max-w-xl truncate text-sm font-bold text-white" title={title}>{title}</h3>
+            <SignalBadge tone={tone}>{decision}</SignalBadge>
+          </div>
+          {reason ? <p className="mt-1 text-xs text-slate-400 line-clamp-2">{reason}</p> : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {metrics.map((metric) => (
+            <span key={metric.label} className="rounded border border-slate-800 bg-slate-900 px-2.5 py-1 text-[11px] text-slate-300">
+              {metric.label}: <b className="text-slate-100">{metric.value}</b>
+            </span>
+          ))}
+          {actionLabel ? (
+            <button
+              type="button"
+              onClick={onAction}
+              disabled={!onAction}
+              className="rounded border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-slate-100 hover:border-cyan-400 disabled:opacity-50"
+            >
+              {actionLabel}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type EmptyCommercialStateProps = {
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
+export function EmptyCommercialState({ title, description, actionLabel, onAction }: EmptyCommercialStateProps) {
+  return (
+    <div className="rounded-lg border border-dashed border-slate-700 bg-slate-950/50 px-6 py-10 text-center">
+      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-900">
+        <Search className="h-4 w-4 text-cyan-300" />
+      </div>
+      <h3 className="mt-4 text-sm font-bold text-white">{title}</h3>
+      <p className="mx-auto mt-2 max-w-xl text-sm text-slate-400">{description}</p>
+      {actionLabel ? (
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={!onAction}
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+        >
+          {actionLabel}
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      ) : null}
     </div>
   );
 }

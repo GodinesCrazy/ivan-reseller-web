@@ -5,6 +5,7 @@ import {
   ActionPriorityBand,
   CommercialMetricCard,
   CommercialPageHeader,
+  EmptyCommercialState,
   RiskActionQueue,
 } from './components/CommercialCockpit';
 
@@ -179,11 +180,14 @@ export default function CjShopifyUsaAlertsPage() {
       )}
 
       {alerts.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 px-6 py-10 text-center">
-          <p className="text-slate-500 dark:text-slate-400 text-sm">
-            {filterStatus === 'OPEN' ? 'Sin alertas abiertas. Todo en orden.' : 'Sin alertas en esta categoría.'}
-          </p>
-        </div>
+        <EmptyCommercialState
+          title={filterStatus === 'OPEN' ? 'Sin alertas abiertas' : 'Sin alertas en esta categoría'}
+          description={filterStatus === 'OPEN'
+            ? 'El ciclo no reporta riesgos abiertos de dinero, reputación, publicación o integración.'
+            : 'Cambia el filtro para revisar historial o vuelve a las alertas abiertas.'}
+          actionLabel="Actualizar"
+          onAction={() => void load()}
+        />
       ) : (
         <div className="space-y-3">
           {alerts.map((alert) => (

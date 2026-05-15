@@ -20,6 +20,9 @@ import {
   CommercialMetricCard,
   CommercialPageHeader,
   CycleNarrativeStrip,
+  DecisionTabs,
+  PremiumSectionHeader,
+  SignalBadge,
 } from './components/CommercialCockpit';
 import { ProductLifecycleLine, type ProductLifecycleStep } from './components/ProductLifecycleLine';
 import { ListingDetailDrawer } from './components/ListingDetailDrawer';
@@ -793,15 +796,13 @@ export default function CjShopifyUsaListingsPage() {
 
       <CycleNarrativeStrip active="publish" />
 
+      <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-            Store Products
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {filteredListings.length} visibles de {listings.length} listings · {selectedIds.length} seleccionados
-          </p>
-        </div>
+        <PremiumSectionHeader
+          eyebrow="Mesa de trading comercial"
+          title="Store Products"
+          description={`${filteredListings.length} visibles de ${listings.length} listings · ${selectedIds.length} seleccionados. Prioriza productos para escalar, optimizar, proteger o rotar.`}
+        />
         <div className="flex gap-2 flex-wrap justify-end">
           <button
             type="button"
@@ -850,29 +851,26 @@ export default function CjShopifyUsaListingsPage() {
         })}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {([
-          ['ALL', 'Todos ciclo', listings.length],
-          ['SCALE', 'Escalar', audit.scale],
-          ['OPTIMIZE', 'Optimizar', audit.optimize],
-          ['PROTECT', 'Proteger', audit.protect],
-          ['ROTATE', 'Rotar', audit.rotate],
-          ['ARCHIVE_CANDIDATE', 'Archivar', audit.archiveCandidates],
-        ] as Array<[CommercialClass, string, number]>).map(([filter, label, value]) => (
-          <button
-            key={filter}
-            type="button"
-            onClick={() => setCommercialFilter(filter)}
-            className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
-              commercialFilter === filter
-                ? 'border-cyan-400 bg-cyan-950/40 text-cyan-100'
-                : 'border-slate-800 bg-slate-950/50 text-slate-400 hover:text-slate-100'
-            }`}
-          >
-            {label} <span className="ml-1 tabular-nums">{value}</span>
-          </button>
-        ))}
+      <DecisionTabs
+        value={commercialFilter}
+        onChange={setCommercialFilter}
+        tabs={[
+          { value: 'ALL', label: 'Todos ciclo', count: listings.length, tone: 'cyan' },
+          { value: 'SCALE', label: 'Escalar', count: audit.scale, tone: 'emerald' },
+          { value: 'OPTIMIZE', label: 'Optimizar', count: audit.optimize, tone: 'amber' },
+          { value: 'PROTECT', label: 'Proteger', count: audit.protect, tone: 'rose' },
+          { value: 'ROTATE', label: 'Rotar', count: audit.rotate, tone: 'violet' },
+          { value: 'ARCHIVE_CANDIDATE', label: 'Archivar', count: audit.archiveCandidates, tone: 'slate' },
+        ]}
+      />
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <SignalBadge tone="emerald">Escalar = venta/señal fuerte</SignalBadge>
+        <SignalBadge tone="amber">Optimizar = señal sin conversión</SignalBadge>
+        <SignalBadge tone="rose">Proteger = margen o costo</SignalBadge>
+        <SignalBadge tone="violet">Rotar = sin tracción</SignalBadge>
       </div>
+      </section>
 
       {listingsMeta && (
         <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-300">

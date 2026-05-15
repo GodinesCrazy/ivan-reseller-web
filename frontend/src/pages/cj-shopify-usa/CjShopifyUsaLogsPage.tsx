@@ -5,6 +5,8 @@ import {
   ActionPriorityBand,
   CommercialMetricCard,
   CommercialPageHeader,
+  PremiumSectionHeader,
+  SignalBadge,
 } from './components/CommercialCockpit';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -113,7 +115,17 @@ export default function CjShopifyUsaLogsPage() {
         <CommercialMetricCard label="Limite" value={limit} detail="filas consultadas" tone="slate" />
       </div>
 
-      {/* Controls */}
+      <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
+      <PremiumSectionHeader
+        eyebrow="Filtros técnicos"
+        title="Auditoría densa sin perder lectura comercial"
+        description="Filtra por errores, publicación, órdenes, CJ, tracking o qualification para entender bloqueos sin mezclarlo con decisiones de venta."
+      >
+        <div className="flex flex-wrap gap-2">
+          <SignalBadge tone={errorSteps > 0 ? 'rose' : 'slate'}>{errorSteps} errores</SignalBadge>
+          <SignalBadge tone="cyan">{traces.length} trazas</SignalBadge>
+        </div>
+      </PremiumSectionHeader>
       <div className="flex flex-wrap items-center gap-3">
         <select
           value={filterStep}
@@ -180,6 +192,7 @@ export default function CjShopifyUsaLogsPage() {
           </button>
         )}
       </div>
+      </section>
 
       {error && (
         <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 px-4 py-3 text-sm text-rose-900 dark:text-rose-100">
