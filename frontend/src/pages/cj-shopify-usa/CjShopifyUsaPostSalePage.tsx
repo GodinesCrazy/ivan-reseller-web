@@ -118,6 +118,29 @@ type Dashboard = {
   openAlerts: OpenAlert[];
 };
 
+type RiskDashboard = {
+  ok: boolean;
+  generatedAt: string;
+  totals: {
+    risks: number;
+    critical: number;
+    warning: number;
+    info: number;
+  };
+  risks: Array<{
+    id: string;
+    orderId: string;
+    shopifyOrderId: string;
+    severity: 'critical' | 'warning' | 'info';
+    type: string;
+    title: string;
+    detail: string;
+    recommendedAction: string;
+    ageHours: number;
+    status: string;
+  }>;
+};
+
 const stageIcons: Record<string, ComponentType<{ className?: string }>> = {
   payment: CreditCard,
   guardrails: ShieldCheck,
@@ -185,6 +208,7 @@ function stageTone(stage: Stage): string {
 export default function CjShopifyUsaPostSalePage() {
   const navigate = useNavigate();
   const [data, setData] = useState<Dashboard | null>(null);
+  const [risk, setRisk] = useState<RiskDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
@@ -196,8 +220,12 @@ export default function CjShopifyUsaPostSalePage() {
     else setLoading(true);
     setError(null);
     try {
-      const res = await api.get<Dashboard>('/api/cj-shopify-usa/post-sale/dashboard');
+      const [res, riskRes] = await Promise.all([
+        api.get<Dashboard>('/api/cj-shopify-usa/post-sale/dashboard'),
+        api.get<RiskDashboard>('/api/cj-shopify-usa/post-sale/risk-dashboard'),
+      ]);
       setData(res.data);
+      if (riskRes.data?.ok) setRisk(riskRes.data);
     } catch (e) {
       setError(axiosMsg(e, 'No se pudo cargar el panel post venta.'));
     } finally {
@@ -266,9 +294,9 @@ export default function CjShopifyUsaPostSalePage() {
       />
 
       <ActionPriorityBand
-        tone={(data?.totals.needsAttention ?? 0) > 0 || (data?.totals.waitingPayment ?? 0) > 0 ? 'amber' : (data?.totals.activeQueue ?? 0) > 0 ? 'cyan' : 'emerald'}
-        title={data?.recommendedAction?.description ?? 'Sin acciones urgentes de postventa.'}
-        description="Ejecuta solo la accion prioritaria cuando exista una cola segura; el resto queda visible para supervision."
+        tone={(risk?.totals.critical ?? 0) > 0 ? 'rose' : (data?.totals.needsAttention ?? 0) > 0 || (data?.totals.waitingPayment ?? 0) > 0 ? 'amber' : (data?.totals.activeQueue ?? 0) > 0 ? 'cyan' : 'emerald'}
+        title={(risk?.totals.critical ?? 0) > 0 ? 'Hay riesgo postventa critico: atiende antes de escalar publicaciones.' : data?.recommendedAction?.description ?? 'Sin acciones urgentes de postventa.'}
+        description="Ejecuta solo la accion prioritaria cuando exista una cola segura; los riesgos predictivos quedan arriba para proteger dinero y reputacion."
         primaryLabel={data?.recommendedAction?.label ?? 'Ejecutar cola segura'}
         onPrimary={() => void runAction(primaryAction)}
         secondaryLabel="Actualizar"
@@ -279,6 +307,7 @@ export default function CjShopifyUsaPostSalePage() {
           `${data?.totals.waitingPayment ?? 0} esperando pago`,
           `${data?.totals.activeQueue ?? 0} cola activa`,
           `${data?.totals.needsAttention ?? 0} atencion`,
+          `${risk?.totals.risks ?? 0} riesgos`,
         ]}
       />
 
@@ -286,7 +315,7 @@ export default function CjShopifyUsaPostSalePage() {
         <CommercialMetricCard label="Ordenes" value={data?.totals.orders ?? 0} detail="ciclo postventa" tone="cyan" />
         <CommercialMetricCard label="Pago CJ pendiente" value={data?.totals.waitingPayment ?? 0} detail="riesgo de demora" tone={(data?.totals.waitingPayment ?? 0) > 0 ? 'amber' : 'slate'} />
         <CommercialMetricCard label="Cola activa" value={data?.totals.activeQueue ?? 0} detail="acciones ejecutables" tone="emerald" />
-        <CommercialMetricCard label="Atencion" value={data?.totals.needsAttention ?? 0} detail="requiere intervencion" tone={(data?.totals.needsAttention ?? 0) > 0 ? 'rose' : 'slate'} />
+        <CommercialMetricCard label="Riesgo predictivo" value={risk?.totals.risks ?? data?.totals.needsAttention ?? 0} detail={`${risk?.totals.critical ?? 0} criticos`} tone={(risk?.totals.critical ?? 0) > 0 || (data?.totals.needsAttention ?? 0) > 0 ? 'rose' : 'slate'} />
       </div>
 
       <RiskActionQueue
@@ -300,6 +329,39 @@ export default function CjShopifyUsaPostSalePage() {
       />
 
       <CycleNarrativeStrip active="optimize" />
+
+      {risk && (
+        <section className="rounded-lg border border-amber-500/25 bg-slate-950/70 p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-amber-300">Riesgo postventa predictivo</p>
+              <h3 className="mt-1 text-base font-bold text-white">SLA, tracking, pago CJ y refunds bajo vigilancia</h3>
+              <p className="mt-1 text-xs text-slate-400">El ciclo marca lo que puede afectar reputacion, capital o margen antes de convertirse en reclamo.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <span className="rounded border border-rose-500/25 bg-rose-950/20 p-2 text-rose-100">Criticos <b>{risk.totals.critical}</b></span>
+              <span className="rounded border border-amber-500/25 bg-amber-950/20 p-2 text-amber-100">Warning <b>{risk.totals.warning}</b></span>
+              <span className="rounded border border-cyan-500/25 bg-cyan-950/20 p-2 text-cyan-100">Info <b>{risk.totals.info}</b></span>
+            </div>
+          </div>
+          {risk.risks.length > 0 ? (
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {risk.risks.slice(0, 6).map((item) => (
+                <div key={item.id} className="rounded border border-slate-800 bg-slate-900/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-100">{item.title}</p>
+                    <span className="rounded bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-300">{item.severity}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">{item.detail}</p>
+                  <p className="mt-2 text-xs text-cyan-200">Accion: {item.recommendedAction}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 rounded border border-emerald-500/25 bg-emerald-950/20 p-3 text-sm text-emerald-100">Sin riesgos predictivos abiertos.</p>
+          )}
+        </section>
+      )}
 
       <section className="rounded-lg border border-cyan-500/40 bg-slate-950/40 p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

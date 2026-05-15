@@ -151,6 +151,7 @@ const PHASE_LABELS: Record<string, string> = {
   post_sale: 'Post venta',
   profit_guard: 'Profit Guard',
   cleanup: 'Higiene',
+  experiments: 'Experimentos',
   backlog_eval: 'Backlog',
   candidate_scan: 'Candidatos',
   draft_backlog: 'Drafts',

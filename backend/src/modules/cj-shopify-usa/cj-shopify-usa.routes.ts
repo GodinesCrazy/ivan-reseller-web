@@ -17,6 +17,9 @@ import { automationService } from './services/cj-shopify-usa-automation.service'
 import { cjShopifyUsaProfitGuardService } from './services/cj-shopify-usa-profit-guard.service';
 import { cjShopifyUsaSalesAgentService } from './services/cj-shopify-usa-sales-agent.service';
 import { cjShopifyUsaCleanupService } from './services/cj-shopify-usa-cleanup.service';
+import { cjShopifyUsaSalesIntelligenceService } from './services/cj-shopify-usa-sales-intelligence.service';
+import { cjShopifyUsaExperimentsService } from './services/cj-shopify-usa-experiments.service';
+import { cjShopifyUsaRiskDashboardService } from './services/cj-shopify-usa-risk-dashboard.service';
 import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './services/cj-shopify-usa-policy.service';
 import {
   cjShopifyUsaListingDraftBodySchema,
@@ -1082,6 +1085,16 @@ router.get('/post-sale/dashboard', async (req: Request, res: Response, next: Nex
   }
 });
 
+router.get('/post-sale/risk-dashboard', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaRiskDashboardService.postSaleRisk(userId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/post-sale/run-safe-queue', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
@@ -1309,6 +1322,55 @@ router.post('/analytics/funnel', async (req: Request, res: Response, next: NextF
   }
 });
 
+router.post('/analytics/track', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesIntelligenceService.track(userId, req.body ?? {});
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/analytics/product-signals', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const signals = await cjShopifyUsaSalesIntelligenceService.productSignals(userId, {
+      days: Number(req.query.days ?? 30),
+      limit: Number(req.query.limit ?? 160),
+    });
+    res.json({ ok: true, days: Number(req.query.days ?? 30), signals });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/analytics/sales-intelligence', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesIntelligenceService.salesIntelligence(userId, {
+      days: Number(req.query.days ?? 30),
+      limit: Number(req.query.limit ?? 160),
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/analytics/import-snapshot', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaSalesIntelligenceService.importSnapshot(userId, {
+      rows: Array.isArray(req.body?.rows) ? req.body.rows : [],
+      source: String(req.body?.source || 'manual_import'),
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/analytics/checkout-readiness', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
@@ -1434,6 +1496,26 @@ router.post('/analytics/profit-guard/enrich-shipping', async (req: Request, res:
       dryRun: req.body?.dryRun !== false,
       limit: Number(req.body?.limit ?? 25),
     });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/profit/price-risk', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaRiskDashboardService.priceRisk(userId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/profit/refresh-costs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaRiskDashboardService.refreshCosts(userId);
     res.json(result);
   } catch (error) {
     next(error);
@@ -2208,6 +2290,76 @@ router.get('/cleanup/history', async (req: Request, res: Response, next: NextFun
     const userId = req.user!.userId;
     const limit = req.query.limit ? Number(req.query.limit) : 20;
     const result = await cjShopifyUsaCleanupService.history(userId, limit);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/cleanup/config', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaCleanupService.getConfig(userId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/cleanup/config', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaCleanupService.updateConfig(userId, req.body ?? {});
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/experiments', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaExperimentsService.list(userId, req.query.status ? String(req.query.status) : undefined);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/experiments', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaExperimentsService.create(userId, req.body ?? {});
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/experiments/:id/start', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaExperimentsService.start(userId, req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/experiments/:id/stop', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaExperimentsService.stop(userId, req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/experiments/:id/apply-winner', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const result = await cjShopifyUsaExperimentsService.applyWinner(userId, req.params.id, req.body?.variantId);
     res.json(result);
   } catch (error) {
     next(error);

@@ -6,6 +6,7 @@ import {
   CJ_SHOPIFY_USA_SOCIAL_POST_STATUS,
 } from '../cj-shopify-usa.constants';
 import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
+import { cjShopifyUsaSalesIntelligenceService } from './cj-shopify-usa-sales-intelligence.service';
 
 export type CjShopifyUsaCleanupAction =
   | 'ARCHIVE_REJECTED'
@@ -32,10 +33,12 @@ export type CjShopifyUsaCleanupCandidate = {
   reason: string;
   ageDays: number | null;
   orders30: number;
-  socialSuccess: number;
-  socialFailed: number;
-  hasShopifyId: boolean;
-  safeToApply: boolean;
+      socialSuccess: number;
+      socialFailed: number;
+      views?: number;
+      addToCarts?: number;
+      hasShopifyId: boolean;
+      safeToApply: boolean;
 };
 
 type CleanupOptions = {
@@ -237,13 +240,77 @@ export const cjShopifyUsaCleanupService = {
     return { ok: true, traces };
   },
 
+  async getConfig(userId: number) {
+    const settings = await prisma.cjShopifyUsaAccountSettings.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+    return {
+      ok: true,
+      config: {
+        noTractionDays: settings.cleanupNoTractionDays,
+        minViewsToDecide: settings.cleanupMinViewsToDecide,
+        minAddToCart: settings.cleanupMinAddToCart,
+        autoPauseEnabled: settings.cleanupAutoPauseEnabled,
+        archiveEnabled: settings.cleanupArchiveEnabled,
+      },
+    };
+  },
+
+  async updateConfig(userId: number, input: Record<string, unknown>) {
+    const clamp = (value: unknown, fallback: number, min: number, max: number) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : fallback;
+    };
+    const current = await this.getConfig(userId);
+    const config = current.config;
+    const updated = await prisma.cjShopifyUsaAccountSettings.upsert({
+      where: { userId },
+      update: {
+        cleanupNoTractionDays: clamp(input.noTractionDays, config.noTractionDays, 3, 90),
+        cleanupMinViewsToDecide: clamp(input.minViewsToDecide, config.minViewsToDecide, 0, 10000),
+        cleanupMinAddToCart: clamp(input.minAddToCart, config.minAddToCart, 0, 1000),
+        cleanupAutoPauseEnabled: input.autoPauseEnabled === true,
+        cleanupArchiveEnabled: input.archiveEnabled !== false,
+      },
+      create: {
+        userId,
+        cleanupNoTractionDays: clamp(input.noTractionDays, config.noTractionDays, 3, 90),
+        cleanupMinViewsToDecide: clamp(input.minViewsToDecide, config.minViewsToDecide, 0, 10000),
+        cleanupMinAddToCart: clamp(input.minAddToCart, config.minAddToCart, 0, 1000),
+        cleanupAutoPauseEnabled: input.autoPauseEnabled === true,
+        cleanupArchiveEnabled: input.archiveEnabled !== false,
+      },
+    });
+    return {
+      ok: true,
+      config: {
+        noTractionDays: updated.cleanupNoTractionDays,
+        minViewsToDecide: updated.cleanupMinViewsToDecide,
+        minAddToCart: updated.cleanupMinAddToCart,
+        autoPauseEnabled: updated.cleanupAutoPauseEnabled,
+        archiveEnabled: updated.cleanupArchiveEnabled,
+      },
+    };
+  },
+
   async buildPlan(userId: number, options: CleanupOptions = {}) {
     const now = new Date();
-    const thresholdDays = clampDays(options.thresholdDays, DEFAULT_THRESHOLD_DAYS);
+    const settings = await prisma.cjShopifyUsaAccountSettings.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+    const thresholdDays = clampDays(options.thresholdDays, settings.cleanupNoTractionDays || DEFAULT_THRESHOLD_DAYS);
     const failedDraftGraceDays = clampDays(options.failedDraftGraceDays, DEFAULT_FAILED_DRAFT_GRACE_DAYS);
+    const minViewsToDecide = Math.max(0, Number(settings.cleanupMinViewsToDecide ?? 20));
+    const minAddToCart = Math.max(0, Number(settings.cleanupMinAddToCart ?? 1));
     const thresholdDate = new Date(now.getTime() - thresholdDays * 86_400_000);
     const failedDraftDate = new Date(now.getTime() - failedDraftGraceDays * 86_400_000);
     const candidates: CjShopifyUsaCleanupCandidate[] = [];
+    const signals = await cjShopifyUsaSalesIntelligenceService.productSignals(userId, { days: Math.max(30, thresholdDays), limit: 500 });
+    const signalByListing = new Map(signals.filter((item) => item.listingId != null).map((item) => [Number(item.listingId), item]));
 
     const activeListings = await prisma.cjShopifyUsaListing.findMany({
       where: { userId, status: CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE },
@@ -267,6 +334,9 @@ export const cjShopifyUsaCleanupService = {
       const totalOrders = listing.orders.length;
       const socialSuccess = listing.socialPosts.filter((post) => post.status === CJ_SHOPIFY_USA_SOCIAL_POST_STATUS.SUCCESS).length;
       const socialFailed = listing.socialPosts.filter((post) => post.status === CJ_SHOPIFY_USA_SOCIAL_POST_STATUS.FAILED).length;
+      const signal = signalByListing.get(listing.id);
+      const views = Number(signal?.views ?? 0);
+      const addToCarts = Number(signal?.addToCarts ?? 0);
       const marginPct = moneyNumber(listing.evaluation?.estimatedMarginPct);
       const hasShopifyId = Boolean(listing.shopifyProductId);
       const title = textFromDraft(listing.draftPayload, listing.product.title);
@@ -285,6 +355,8 @@ export const cjShopifyUsaCleanupService = {
           orders30,
           socialSuccess,
           socialFailed,
+          views,
+          addToCarts,
           hasShopifyId,
           safeToApply: false,
         });
@@ -304,13 +376,15 @@ export const cjShopifyUsaCleanupService = {
           orders30,
           socialSuccess,
           socialFailed,
+          views,
+          addToCarts,
           hasShopifyId,
           safeToApply: false,
         });
         continue;
       }
 
-      if (socialSuccess > 0) {
+      if (socialSuccess > 0 || addToCarts >= minAddToCart || Number(signal?.checkoutStarted ?? 0) > 0 || Number(signal?.socialClicks ?? 0) > 0) {
         candidates.push({
           listingId: listing.id,
           productId: listing.productId,
@@ -318,18 +392,20 @@ export const cjShopifyUsaCleanupService = {
           currentStatus: listing.status,
           action: 'OPTIMIZE_WEAK_SIGNAL',
           commercialClass: 'OPTIMIZE',
-          reason: 'Tiene senal social o trafico, pero aun no convierte; optimizar ficha antes de pausar.',
+          reason: 'Tiene senal social, carrito o trafico, pero aun no convierte; optimizar ficha antes de pausar.',
           ageDays,
           orders30,
           socialSuccess,
           socialFailed,
+          views,
+          addToCarts,
           hasShopifyId,
           safeToApply: false,
         });
         continue;
       }
 
-      if ((ageDays ?? 0) >= thresholdDays) {
+      if ((ageDays ?? 0) >= thresholdDays && views <= minViewsToDecide && addToCarts < minAddToCart) {
         candidates.push({
           listingId: listing.id,
           productId: listing.productId,
@@ -342,8 +418,10 @@ export const cjShopifyUsaCleanupService = {
           orders30,
           socialSuccess,
           socialFailed,
+          views,
+          addToCarts,
           hasShopifyId,
-          safeToApply: hasShopifyId,
+          safeToApply: hasShopifyId && settings.cleanupAutoPauseEnabled,
         });
         continue;
       }
@@ -360,6 +438,8 @@ export const cjShopifyUsaCleanupService = {
         orders30,
         socialSuccess,
         socialFailed,
+        views,
+        addToCarts,
         hasShopifyId,
         safeToApply: false,
       });
@@ -392,7 +472,7 @@ export const cjShopifyUsaCleanupService = {
         socialSuccess: 0,
         socialFailed: 0,
         hasShopifyId: false,
-        safeToApply: true,
+        safeToApply: settings.cleanupArchiveEnabled,
       });
     }
 
@@ -436,7 +516,7 @@ export const cjShopifyUsaCleanupService = {
         socialSuccess: 0,
         socialFailed: 0,
         hasShopifyId: false,
-        safeToApply: true,
+        safeToApply: settings.cleanupArchiveEnabled,
       });
     }
 

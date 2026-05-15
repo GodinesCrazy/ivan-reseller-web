@@ -72,6 +72,17 @@ interface CleanupPreview {
   };
 }
 
+interface SalesIntelligenceSummary {
+  ok: boolean;
+  totals: {
+    scale: number;
+    optimize: number;
+    protect: number;
+    rotate: number;
+    learning: number;
+  };
+}
+
 // ── Pipeline stage component ─────────────────────────────────────────────────
 
 function PipelineStage({
@@ -128,6 +139,7 @@ export default function CjShopifyUsaOverviewPage() {
   const [counts, setCounts] = useState<OverviewCounts | null>(null);
   const [webhookHealth, setWebhookHealth] = useState<WebhookHealth | null>(null);
   const [cleanup, setCleanup] = useState<CleanupPreview | null>(null);
+  const [salesIntel, setSalesIntel] = useState<SalesIntelligenceSummary | null>(null);
   const [readiness, setReadiness] = useState<{ ready: boolean; checks: ReadinessCheck[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,15 +149,17 @@ export default function CjShopifyUsaOverviewPage() {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const [resParams, resOverview, resCleanup] = await Promise.all([
+      const [resParams, resOverview, resCleanup, resSalesIntel] = await Promise.all([
         api.get('/api/cj-shopify-usa/system-readiness'),
         api.get('/api/cj-shopify-usa/overview'),
         api.get('/api/cj-shopify-usa/cleanup/preview'),
+        api.get('/api/cj-shopify-usa/analytics/sales-intelligence'),
       ]);
       if (resParams.data) setReadiness(resParams.data);
       if (resOverview.data?.ok && resOverview.data.counts) setCounts(resOverview.data.counts);
       if (resOverview.data?.webhookHealth) setWebhookHealth(resOverview.data.webhookHealth);
       if (resCleanup.data?.ok) setCleanup(resCleanup.data);
+      if (resSalesIntel.data?.ok) setSalesIntel(resSalesIntel.data);
       setError(null);
     } catch (e: unknown) {
       let msg = 'No se pudo cargar el resumen.';
@@ -251,7 +265,8 @@ export default function CjShopifyUsaOverviewPage() {
         meta={[
           `${counts?.evaluationsApproved ?? 0} aprobados`,
           `${counts?.listingsActive ?? 0} activos`,
-          `${cleanup?.totals.rotate ?? 0} a rotar`,
+          `${salesIntel?.totals.scale ?? 0} escalar`,
+          `${salesIntel?.totals.rotate ?? cleanup?.totals.rotate ?? 0} a rotar`,
           `${counts?.ordersOpen ?? 0} ordenes abiertas`,
         ]}
       />
@@ -259,8 +274,9 @@ export default function CjShopifyUsaOverviewPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CommercialMetricCard label="Potencial publicable" value={counts?.evaluationsApproved ?? 0} detail={`${counts?.evaluationsPending ?? 0} pendientes de decision`} tone="violet" />
         <CommercialMetricCard label="Listings activos" value={counts?.listingsActive ?? 0} detail={`${counts?.listings ?? 0} listings totales`} tone="emerald" />
-        <CommercialMetricCard label="Rotar sin traccion" value={cleanup?.totals.rotate ?? 0} detail={`${cleanup?.totals.archiveCandidates ?? 0} archivables conservadores`} tone={(cleanup?.totals.rotate ?? 0) > 0 ? 'rose' : 'slate'} />
-        <CommercialMetricCard label="Optimizar / proteger" value={(cleanup?.totals.optimize ?? 0) + (cleanup?.totals.protect ?? 0)} detail="senal debil o riesgo de margen" tone={(cleanup?.totals.optimize ?? 0) + (cleanup?.totals.protect ?? 0) > 0 ? 'amber' : 'slate'} />
+        <CommercialMetricCard label="Escalar ganadores" value={salesIntel?.totals.scale ?? 0} detail="senales comerciales reales" tone={(salesIntel?.totals.scale ?? 0) > 0 ? 'emerald' : 'slate'} />
+        <CommercialMetricCard label="Rotar sin traccion" value={salesIntel?.totals.rotate ?? cleanup?.totals.rotate ?? 0} detail={`${cleanup?.totals.archiveCandidates ?? 0} archivables conservadores`} tone={(salesIntel?.totals.rotate ?? cleanup?.totals.rotate ?? 0) > 0 ? 'rose' : 'slate'} />
+        <CommercialMetricCard label="Optimizar / proteger" value={(salesIntel?.totals.optimize ?? cleanup?.totals.optimize ?? 0) + (salesIntel?.totals.protect ?? cleanup?.totals.protect ?? 0)} detail="senal debil o riesgo de margen" tone={(salesIntel?.totals.optimize ?? cleanup?.totals.optimize ?? 0) + (salesIntel?.totals.protect ?? cleanup?.totals.protect ?? 0) > 0 ? 'amber' : 'slate'} />
         <CommercialMetricCard label="Postventa abierta" value={counts?.ordersOpen ?? 0} detail={`${counts?.ordersWithTracking ?? 0} con tracking`} tone={(counts?.ordersOpen ?? 0) > 0 ? 'amber' : 'slate'} />
         <CommercialMetricCard label="Actividad 24h" value={counts?.tracesLast24h ?? 0} detail="senales operativas recientes" tone="cyan" />
       </div>

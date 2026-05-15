@@ -50,6 +50,30 @@ type ProfitData = {
   period: { from: string | null; to: string | null };
 };
 
+type PriceRisk = {
+  ok: boolean;
+  generatedAt: string;
+  totals: {
+    listings: number;
+    protect: number;
+    reprice: number;
+    pause: number;
+    review: number;
+    keep: number;
+  };
+  items: Array<{
+    listingId: number;
+    title: string;
+    action: 'KEEP' | 'REVIEW' | 'REPRICE' | 'PAUSE';
+    reason: string;
+    listedPriceUsd: number;
+    currentSupplierCostUsd: number | null;
+    currentShippingUsd: number | null;
+    currentNetMarginPct: number | null;
+    publishedNetMarginPct: number | null;
+  }>;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function usd(n: number | null | undefined): string {
@@ -83,17 +107,23 @@ export default function CjShopifyUsaProfitPage() {
   const [error, setError]   = useState<string | null>(null);
   const [from, setFrom]     = useState(defaultFrom());
   const [to, setTo]         = useState(defaultTo());
+  const [priceRisk, setPriceRisk] = useState<PriceRisk | null>(null);
+  const [refreshingCosts, setRefreshingCosts] = useState(false);
 
   const load = useCallback(async (f = from, t = to) => {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.get<{ ok: boolean } & ProfitData>('/api/cj-shopify-usa/profit', {
-        params: { from: f, to: t },
-      });
+      const [res, riskRes] = await Promise.all([
+        api.get<{ ok: boolean } & ProfitData>('/api/cj-shopify-usa/profit', {
+          params: { from: f, to: t },
+        }),
+        api.get<PriceRisk>('/api/cj-shopify-usa/profit/price-risk'),
+      ]);
       if (res.data?.ok) {
         setData({ kpis: res.data.kpis, snapshots: res.data.snapshots, orders: res.data.orders, period: res.data.period });
       }
+      if (riskRes.data?.ok) setPriceRisk(riskRes.data);
     } catch (e) {
       setError(axiosMsg(e, 'No se pudieron cargar los datos de profit.'));
     } finally {
@@ -102,6 +132,19 @@ export default function CjShopifyUsaProfitPage() {
   }, [from, to]);
 
   useEffect(() => { void load(); }, [load]);
+
+  async function refreshCosts() {
+    setRefreshingCosts(true);
+    setError(null);
+    try {
+      await api.post('/api/cj-shopify-usa/profit/refresh-costs');
+      await load(from, to);
+    } catch (e) {
+      setError(axiosMsg(e, 'No se pudo refrescar costos CJ y Profit Guard.'));
+    } finally {
+      setRefreshingCosts(false);
+    }
+  }
 
   if (loading) return <p className="text-sm text-slate-500">Cargando datos financieros…</p>;
 
@@ -127,18 +170,19 @@ export default function CjShopifyUsaProfitPage() {
       />
 
       <ActionPriorityBand
-        tone={kpis.totalProfitUsd < 0 || kpis.failedOrders > 0 ? 'amber' : kpis.totalOrders > 0 ? 'emerald' : 'cyan'}
-        title={kpis.totalProfitUsd < 0 ? 'El periodo muestra perdida estimada: revisa precio y shipping.' : kpis.failedOrders > 0 ? 'Hay ordenes fallidas que pueden esconder costo real.' : 'Margen operativo bajo control con los datos actuales.'}
-        description="Los valores son estimaciones operativas para decidir subir precio, pausar, revisar shipping o mantener."
+        tone={(priceRisk?.totals.pause ?? 0) > 0 ? 'rose' : kpis.totalProfitUsd < 0 || kpis.failedOrders > 0 || (priceRisk?.totals.protect ?? 0) > 0 ? 'amber' : kpis.totalOrders > 0 ? 'emerald' : 'cyan'}
+        title={(priceRisk?.totals.pause ?? 0) > 0 ? 'Hay productos con riesgo de precio publicado: pausar o repricing antes de escalar.' : kpis.totalProfitUsd < 0 ? 'El periodo muestra perdida estimada: revisa precio y shipping.' : kpis.failedOrders > 0 ? 'Hay ordenes fallidas que pueden esconder costo real.' : 'Margen operativo bajo control con los datos actuales.'}
+        description="Compara precio publicado contra costo CJ/shipping actual y evita vender con perdida por alzas de proveedor."
         primaryLabel="Aplicar periodo"
         onPrimary={() => void load(from, to)}
-        secondaryLabel="Store Products"
-        onSecondary={() => window.location.assign('/cj-shopify-usa/listings')}
+        secondaryLabel={refreshingCosts ? 'Refrescando...' : 'Refrescar costos'}
+        onSecondary={() => void refreshCosts()}
+        disabled={refreshingCosts}
         meta={[
           `profit ${usd(kpis.totalProfitUsd)}`,
           `${kpis.totalOrders} ordenes`,
-          `${kpis.openOrders} abiertas`,
-          `${kpis.failedOrders} fallidas`,
+          `${priceRisk?.totals.protect ?? 0} proteger`,
+          `${priceRisk?.totals.pause ?? 0} pausar`,
         ]}
       />
 
@@ -146,6 +190,8 @@ export default function CjShopifyUsaProfitPage() {
         title="Cola de decisiones de margen"
         items={[
           ...(kpis.totalProfitUsd < 0 ? [{ id: 'raise-price', title: 'Subir precio o pausar productos con perdida', detail: 'El profit neto estimado del periodo esta bajo cero.', tone: 'rose' as const }] : []),
+          ...((priceRisk?.totals.reprice ?? 0) > 0 ? [{ id: 'reprice', title: 'Recalcular precios publicados', detail: 'Costo CJ o shipping actual cambiaron respecto a la publicacion.', tone: 'amber' as const, actionLabel: 'Refrescar costos', onAction: () => void refreshCosts() }] : []),
+          ...((priceRisk?.totals.pause ?? 0) > 0 ? [{ id: 'pause-risk', title: 'Pausar productos con margen inseguro', detail: 'Profit Guard detecta riesgo real si se vende al precio publicado.', tone: 'rose' as const }] : []),
           ...(kpis.failedOrders > 0 ? [{ id: 'failed', title: 'Revisar ordenes fallidas', detail: 'Pueden indicar costo real, pago CJ o tracking incompleto.', tone: 'amber' as const }] : []),
           ...(kpis.openOrders > 0 ? [{ id: 'open', title: 'Verificar margen de ordenes abiertas', detail: 'No escalar productos hasta confirmar costo final.', tone: 'cyan' as const }] : []),
         ]}
@@ -156,10 +202,56 @@ export default function CjShopifyUsaProfitPage() {
         <CommercialMetricCard label="Revenue" value={usd(kpis.totalRevenueUsd)} detail="ingreso estimado" tone="cyan" />
         <CommercialMetricCard label="Costo CJ" value={usd(kpis.totalCjCostUsd)} detail="producto + envio" tone="amber" />
         <CommercialMetricCard label="Fees" value={usd(kpis.totalFeesUsd)} detail="Shopify/pagos estimados" tone="violet" />
-        <CommercialMetricCard label="Profit neto" value={usd(kpis.totalProfitUsd)} detail="estimado operativo" tone={kpis.totalProfitUsd >= 0 ? 'emerald' : 'rose'} />
+        <CommercialMetricCard label="Riesgo precio" value={priceRisk?.totals.protect ?? 0} detail={`${priceRisk?.totals.reprice ?? 0} repricing · ${priceRisk?.totals.pause ?? 0} pausar`} tone={(priceRisk?.totals.protect ?? 0) > 0 ? 'amber' : 'emerald'} />
       </div>
 
       <CycleNarrativeStrip active="optimize" />
+
+      {priceRisk && (
+        <section className="rounded-lg border border-amber-500/25 bg-slate-950/70 p-4 text-slate-100">
+          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-amber-300">Precio publicado vs costo actual</p>
+              <h3 className="mt-1 text-base font-bold text-white">Cola de protección de margen por producto</h3>
+              <p className="mt-1 text-xs text-slate-400">Compara margen al publicar contra costo CJ y shipping actual; no promete fee liquidado, es estimación operativa.</p>
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-center text-xs">
+              <span className="rounded border border-emerald-500/25 bg-emerald-950/20 p-2 text-emerald-100">Mantener <b>{priceRisk.totals.keep}</b></span>
+              <span className="rounded border border-amber-500/25 bg-amber-950/20 p-2 text-amber-100">Reprice <b>{priceRisk.totals.reprice}</b></span>
+              <span className="rounded border border-rose-500/25 bg-rose-950/20 p-2 text-rose-100">Pausar <b>{priceRisk.totals.pause}</b></span>
+              <span className="rounded border border-cyan-500/25 bg-cyan-950/20 p-2 text-cyan-100">Revisar <b>{priceRisk.totals.review}</b></span>
+            </div>
+          </div>
+          <div className="mt-3 overflow-x-auto rounded border border-slate-800">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-slate-900 text-slate-400">
+                <tr>
+                  <th className="px-3 py-2">Producto</th>
+                  <th className="px-3 py-2">Acción</th>
+                  <th className="px-3 py-2">Precio</th>
+                  <th className="px-3 py-2">Costo actual</th>
+                  <th className="px-3 py-2">Shipping</th>
+                  <th className="px-3 py-2">Margen actual</th>
+                  <th className="px-3 py-2">Motivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {priceRisk.items.slice(0, 10).map((item) => (
+                  <tr key={item.listingId} className="border-t border-slate-800">
+                    <td className="max-w-xs truncate px-3 py-2 text-slate-100" title={item.title}>{item.title}</td>
+                    <td className="px-3 py-2 font-bold text-cyan-200">{item.action}</td>
+                    <td className="px-3 py-2 tabular-nums">{usd(item.listedPriceUsd)}</td>
+                    <td className="px-3 py-2 tabular-nums">{usd(item.currentSupplierCostUsd)}</td>
+                    <td className="px-3 py-2 tabular-nums">{usd(item.currentShippingUsd)}</td>
+                    <td className="px-3 py-2 tabular-nums">{item.currentNetMarginPct == null ? 'N/D' : `${item.currentNetMarginPct.toFixed(1)}%`}</td>
+                    <td className="max-w-sm px-3 py-2 text-slate-400">{item.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* Date range filter */}
       <div className="flex flex-wrap items-center gap-3">

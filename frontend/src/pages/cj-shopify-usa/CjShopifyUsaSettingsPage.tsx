@@ -16,6 +16,14 @@ type SettingsPayload = {
   minCostUsd: number;
 };
 
+type CleanupConfig = {
+  noTractionDays: number;
+  minViewsToDecide: number;
+  minAddToCart: number;
+  autoPauseEnabled: boolean;
+  archiveEnabled: boolean;
+};
+
 /** Parse a number from user input supporting both dot and comma as decimal separator */
 function parseNumericInput(raw: string, fallback: number): number {
   const normalized = raw.trim().replace(',', '.');
@@ -45,13 +53,23 @@ export default function CjShopifyUsaSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [impactPreview, setImpactPreview] = useState<{ approved: number; rejected: number; total: number } | null>(null);
+  const [cleanupConfig, setCleanupConfig] = useState<CleanupConfig>({
+    noTractionDays: 14,
+    minViewsToDecide: 20,
+    minAddToCart: 1,
+    autoPauseEnabled: false,
+    archiveEnabled: true,
+  });
   const [loadingPreview, setLoadingPreview] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.get('/api/cj-shopify-usa/config');
+        const [res, cleanupRes] = await Promise.all([
+          api.get('/api/cj-shopify-usa/config'),
+          api.get('/api/cj-shopify-usa/cleanup/config'),
+        ]);
         const settings = res.data?.settings as Partial<SettingsPayload> | undefined;
         if (!cancelled && settings) {
           setValues({
@@ -61,6 +79,9 @@ export default function CjShopifyUsaSettingsPage() {
             maxSellPriceUsd: Number(settings.maxSellPriceUsd ?? 45),
             minCostUsd: Number(settings.minCostUsd ?? 2),
           });
+        }
+        if (!cancelled && cleanupRes.data?.config) {
+          setCleanupConfig(cleanupRes.data.config as CleanupConfig);
         }
       } catch (e) {
         if (!cancelled) setError(`No se pudo cargar configuración: ${toErrorMessage(e)}`);
@@ -97,6 +118,7 @@ export default function CjShopifyUsaSettingsPage() {
     setSuccess(null);
     try {
       await api.post('/api/cj-shopify-usa/config', values);
+      await api.patch('/api/cj-shopify-usa/cleanup/config', cleanupConfig);
       setSuccess('Configuración guardada correctamente.');
     } catch (e) {
       setError(`No se pudo guardar: ${toErrorMessage(e)}`);
@@ -134,7 +156,7 @@ export default function CjShopifyUsaSettingsPage() {
           `margen ${values.minMarginPct}%`,
           `profit min $${values.minProfitUsd}`,
           `shipping max $${values.maxShippingUsd}`,
-          `precio max $${values.maxSellPriceUsd}`,
+          `rotacion ${cleanupConfig.noTractionDays}d`,
         ]}
       />
 
@@ -143,6 +165,65 @@ export default function CjShopifyUsaSettingsPage() {
         <CommercialMetricCard label="Rechazados preview" value={impactPreview?.rejected ?? '-'} detail="requieren revisar" tone={impactPreview && impactPreview.rejected > 0 ? 'amber' : 'slate'} />
         <CommercialMetricCard label="Total analizado" value={impactPreview?.total ?? '-'} detail="evaluaciones existentes" tone="cyan" />
         <CommercialMetricCard label="Utilidad minima" value={`$${values.minProfitUsd}`} detail="guardrail por producto" tone="violet" />
+      </div>
+
+      <div className="rounded-xl border border-cyan-500/25 bg-slate-950/60 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <SlidersHorizontal className="h-4 w-4 text-cyan-300" />
+          <h2 className="text-sm font-semibold text-slate-100">Higiene comercial y Sales Intelligence</h2>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="block">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Días sin tracción</span>
+            <input
+              type="number"
+              min={3}
+              max={90}
+              value={cleanupConfig.noTractionDays}
+              onChange={(e) => setCleanupConfig((prev) => ({ ...prev, noTractionDays: parseNumericInput(e.target.value, prev.noTractionDays) }))}
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Mín. vistas para decidir</span>
+            <input
+              type="number"
+              min={0}
+              value={cleanupConfig.minViewsToDecide}
+              onChange={(e) => setCleanupConfig((prev) => ({ ...prev, minViewsToDecide: parseNumericInput(e.target.value, prev.minViewsToDecide) }))}
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Mín. add-to-cart</span>
+            <input
+              type="number"
+              min={0}
+              value={cleanupConfig.minAddToCart}
+              onChange={(e) => setCleanupConfig((prev) => ({ ...prev, minAddToCart: parseNumericInput(e.target.value, prev.minAddToCart) }))}
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              checked={cleanupConfig.autoPauseEnabled}
+              onChange={(e) => setCleanupConfig((prev) => ({ ...prev, autoPauseEnabled: e.target.checked }))}
+            />
+            Auto-pausar sin tracción
+          </label>
+          <label className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              checked={cleanupConfig.archiveEnabled}
+              onChange={(e) => setCleanupConfig((prev) => ({ ...prev, archiveEnabled: e.target.checked }))}
+            />
+            Archivo conservador
+          </label>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          El modo profesional mide primero. Auto-pausar queda apagado por defecto; al activarlo solo pausa productos sin venta, sin señales y fuera de la ventana de aprendizaje.
+        </p>
       </div>
 
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">

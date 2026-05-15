@@ -113,6 +113,33 @@ type ShippingEnrichment = {
   errors: Array<{ listingId: number; title: string; reason: string }>;
 };
 
+type SalesIntelligence = {
+  ok: boolean;
+  days: number;
+  totals: { products: number; scale: number; optimize: number; protect: number; rotate: number; learning: number };
+  products: Array<{
+    listingId: number;
+    title: string;
+    status: string;
+    priceUsd: number;
+    marginPct: number;
+    decision: 'SCALE' | 'OPTIMIZE' | 'PROTECT' | 'ROTATE' | 'LEARNING';
+    score: number;
+    reasons: string[];
+    signal: {
+      views: number;
+      addToCarts: number;
+      checkoutStarted: number;
+      purchases: number;
+      socialClicks: number;
+      revenueUsd: number;
+      addToCartRatePct: number;
+      checkoutRatePct: number;
+      purchaseRatePct: number;
+    };
+  }>;
+};
+
 function axiosMsg(e: unknown, fallback: string): string {
   if (axios.isAxiosError(e) && e.response?.data && typeof e.response.data === 'object') {
     const d = e.response.data as { message?: string; error?: string };
@@ -166,6 +193,7 @@ export default function CjShopifyUsaAnalyticsPage() {
   const [readiness, setReadiness] = useState<CheckoutReadiness | null>(null);
   const [profitGuard, setProfitGuard] = useState<ProfitGuard | null>(null);
   const [social, setSocial] = useState<SocialAutopilot | null>(null);
+  const [salesIntel, setSalesIntel] = useState<SalesIntelligence | null>(null);
   const [shippingEnrichment, setShippingEnrichment] = useState<ShippingEnrichment | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -183,16 +211,18 @@ export default function CjShopifyUsaAnalyticsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [funnelRes, readinessRes, profitRes, socialRes] = await Promise.all([
+      const [funnelRes, readinessRes, profitRes, socialRes, salesIntelRes] = await Promise.all([
         api.get<FunnelResponse>('/api/cj-shopify-usa/analytics/funnel'),
         api.get<CheckoutReadiness>('/api/cj-shopify-usa/analytics/checkout-readiness'),
         api.get<ProfitGuard>('/api/cj-shopify-usa/analytics/profit-guard'),
         api.get<SocialAutopilot>('/api/cj-shopify-usa/analytics/social-autopilot'),
+        api.get<SalesIntelligence>('/api/cj-shopify-usa/analytics/sales-intelligence'),
       ]);
       setFunnel(funnelRes.data);
       setReadiness(readinessRes.data);
       setProfitGuard(profitRes.data);
       setSocial(socialRes.data);
+      setSalesIntel(salesIntelRes.data);
       if (funnelRes.data.snapshot) {
         setForm((current) => ({
           ...current,
@@ -307,15 +337,17 @@ export default function CjShopifyUsaAnalyticsPage() {
         onSecondary={() => window.location.assign('/cj-shopify-usa/sales-agent')}
         meta={[
           `${funnel?.localOrders ?? 0} ordenes locales`,
-          `${funnel?.stages?.length ?? 0} etapas funnel`,
+          `${salesIntel?.totals.scale ?? 0} escalar`,
+          `${salesIntel?.totals.optimize ?? 0} optimizar`,
           readiness?.checkoutProbe.ok ? 'checkout OK' : 'checkout pendiente',
         ]}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {(funnel?.stages || []).slice(0, 4).map((stage) => (
-          <CommercialMetricCard key={stage.key} label={stage.label} value={pct(stage.ratePct)} detail={`${stage.count} eventos`} tone="cyan" />
-        ))}
+        <CommercialMetricCard label="Escalar" value={salesIntel?.totals.scale ?? 0} detail="ventas o compras reales" tone="emerald" />
+        <CommercialMetricCard label="Optimizar" value={salesIntel?.totals.optimize ?? 0} detail="visitas/senales sin venta" tone="amber" />
+        <CommercialMetricCard label="Proteger" value={salesIntel?.totals.protect ?? 0} detail="margen/costo/shipping" tone="rose" />
+        <CommercialMetricCard label="Rotar" value={salesIntel?.totals.rotate ?? 0} detail="sin traccion" tone="slate" />
       </div>
 
       <RiskActionQueue
@@ -329,6 +361,60 @@ export default function CjShopifyUsaAnalyticsPage() {
       />
 
       <CycleNarrativeStrip active="measure" />
+
+      <section className="rounded-lg border border-cyan-500/25 bg-slate-900/70 p-4">
+        <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">Sales Intelligence por producto</p>
+            <h2 className="text-lg font-semibold text-white">Qué escalar, optimizar, proteger o rotar</h2>
+          </div>
+          <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-300">
+            ventana {salesIntel?.days ?? 30} dias
+          </span>
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-slate-800">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-950 text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Producto</th>
+                <th className="px-3 py-2">Decision</th>
+                <th className="px-3 py-2">Score</th>
+                <th className="px-3 py-2">Vistas</th>
+                <th className="px-3 py-2">Carrito</th>
+                <th className="px-3 py-2">Compra</th>
+                <th className="px-3 py-2">Motivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(salesIntel?.products ?? []).slice(0, 14).map((item) => (
+                <tr key={item.listingId} className="border-t border-slate-800">
+                  <td className="px-3 py-2 text-slate-100">
+                    <p className="max-w-[280px] truncate font-medium" title={item.title}>{item.title}</p>
+                    <p className="text-xs text-slate-500">${item.priceUsd.toFixed(2)} · margen {pct(item.marginPct)}</p>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`rounded px-2 py-1 text-xs font-bold ${
+                      item.decision === 'SCALE' ? 'bg-emerald-500/15 text-emerald-200' :
+                      item.decision === 'OPTIMIZE' ? 'bg-amber-500/15 text-amber-200' :
+                      item.decision === 'PROTECT' ? 'bg-rose-500/15 text-rose-200' :
+                      item.decision === 'ROTATE' ? 'bg-slate-700 text-slate-200' :
+                      'bg-cyan-500/15 text-cyan-200'
+                    }`}>{item.decision}</span>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-slate-300">{item.score}</td>
+                  <td className="px-3 py-2 font-mono text-slate-300">{item.signal.views}</td>
+                  <td className="px-3 py-2 text-slate-300">{item.signal.addToCarts} · {pct(item.signal.addToCartRatePct)}</td>
+                  <td className="px-3 py-2 text-slate-300">{item.signal.purchases} · ${item.signal.revenueUsd.toFixed(2)}</td>
+                  <td className="px-3 py-2 max-w-[260px] text-xs text-slate-400">{item.reasons[0] ?? 'Aprendiendo'}</td>
+                </tr>
+              ))}
+              {(salesIntel?.products.length ?? 0) === 0 && (
+                <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">Sin señales por producto todavía.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {error && (
         <div className="rounded-lg border border-rose-500/40 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">

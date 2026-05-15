@@ -687,6 +687,19 @@ class CjShopifyUsaAutomationService {
         log('warn', `Commercial hygiene step failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
       }
 
+      // ── Step 0.87: Sales experiments are measured, not auto-mutated ──
+      setPhase('experiments', 'Midiendo experimentos comerciales', 47);
+      try {
+        const runningExperiments = await prisma.cjShopifyUsaProductExperiment.count({
+          where: { userId, status: 'RUNNING' },
+        });
+        if (runningExperiments > 0) {
+          log('info', `Experiments monitor: ${runningExperiments} running A/B experiments measured passively.`);
+        }
+      } catch (err) {
+        log('warn', `Experiments monitor failed: ${err instanceof Error ? err.message.slice(0, 80) : String(err)}`);
+      }
+
       // ── Step 0.9: Turn eligible catalog backlog into fresh evaluations ──
       setPhase('backlog_eval', 'Evaluando backlog CJ no listado', 50);
       log('info', 'Step 0.9: Evaluating unlisted catalog backlog...');

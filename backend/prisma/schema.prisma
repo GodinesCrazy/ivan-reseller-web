@@ -132,6 +132,9 @@ model User {
   cjShopifyUsaOpportunityRuns   CjShopifyUsaOpportunityRun[]
   cjShopifyUsaOpportunityCandidates CjShopifyUsaOpportunityCandidate[]
   cjShopifyUsaSocialPosts       CjShopifyUsaSocialPost[]
+  cjShopifyUsaProductMetricDaily CjShopifyUsaProductMetricDaily[]
+  cjShopifyUsaProductExperiments CjShopifyUsaProductExperiment[]
+  cjShopifyUsaProductExperimentVariants CjShopifyUsaProductExperimentVariant[]
 
   // TopDawg → Shopify USA vertical (isolated module)
   topDawgShopifyUsaAccountSettings   TopDawgShopifyUsaAccountSettings?
@@ -2821,6 +2824,13 @@ model CjShopifyUsaAccountSettings {
   automationLastRunAt        DateTime?
   automationNextRunAt        DateTime?
 
+  // Commercial hygiene / sales intelligence configuration.
+  cleanupNoTractionDays      Int      @default(14)
+  cleanupMinViewsToDecide    Int      @default(20)
+  cleanupMinAddToCart        Int      @default(1)
+  cleanupAutoPauseEnabled    Boolean  @default(false)
+  cleanupArchiveEnabled      Boolean  @default(true)
+
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 
@@ -2848,6 +2858,7 @@ model CjShopifyUsaProduct {
   evaluations      CjShopifyUsaProductEvaluation[]
   listings         CjShopifyUsaListing[]
   orders           CjShopifyUsaOrder[]
+  metricsDaily     CjShopifyUsaProductMetricDaily[]
 
   @@unique([userId, cjProductId])
   @@index([userId])
@@ -2966,6 +2977,8 @@ model CjShopifyUsaListing {
   shippingQuote CjShopifyUsaShippingQuote?     @relation(fields: [shippingQuoteId], references: [id], onDelete: SetNull)
   orders        CjShopifyUsaOrder[]
   socialPosts   CjShopifyUsaSocialPost[]
+  metricsDaily  CjShopifyUsaProductMetricDaily[]
+  experiments   CjShopifyUsaProductExperiment[]
 
   @@index([userId])
   @@index([userId, status])
@@ -3239,6 +3252,81 @@ model CjShopifyUsaSocialPost {
   @@index([listingId])
   @@index([userId, status])
   @@map("cj_shopify_usa_social_posts")
+}
+
+model CjShopifyUsaProductMetricDaily {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  listingId       Int?
+  productId       Int?
+  metricDate      DateTime @db.Date
+  source          String   @default("collector")
+  productViews    Int      @default(0)
+  addToCarts      Int      @default(0)
+  checkoutStarted Int      @default(0)
+  purchases       Int      @default(0)
+  socialClicks    Int      @default(0)
+  revenueUsd      Decimal  @default(0) @db.Decimal(18, 2)
+  meta            Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing CjShopifyUsaListing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  product CjShopifyUsaProduct?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, metricDate, listingId, productId, source])
+  @@index([userId, metricDate])
+  @@index([listingId])
+  @@index([productId])
+  @@map("cj_shopify_usa_product_metric_daily")
+}
+
+model CjShopifyUsaProductExperiment {
+  id             String    @id @default(cuid())
+  userId         Int
+  listingId      Int
+  type           String
+  status         String    @default("DRAFT")
+  hypothesis     String?   @db.Text
+  baseline       Json?
+  guardrails     Json?
+  startedAt      DateTime?
+  stoppedAt      DateTime?
+  winnerVariantId String?
+  decisionReason String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user     User                                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing  CjShopifyUsaListing                     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  variants CjShopifyUsaProductExperimentVariant[]
+
+  @@index([userId, status])
+  @@index([listingId])
+  @@map("cj_shopify_usa_product_experiments")
+}
+
+model CjShopifyUsaProductExperimentVariant {
+  id           String   @id @default(cuid())
+  userId       Int
+  experimentId String
+  label        String
+  payload      Json
+  appliedAt    DateTime?
+  views        Int      @default(0)
+  addToCarts   Int      @default(0)
+  purchases    Int      @default(0)
+  revenueUsd   Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experiment CjShopifyUsaProductExperiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([experimentId])
+  @@map("cj_shopify_usa_product_experiment_variants")
 }
 
 // ── TopDawg → Shopify USA ─────────────────────────────────────────────────────

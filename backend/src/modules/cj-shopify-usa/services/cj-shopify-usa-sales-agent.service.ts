@@ -12,6 +12,7 @@ import { cjShopifyUsaPublishService } from './cj-shopify-usa-publish.service';
 import { cjShopifyUsaOperationLockService } from './cj-shopify-usa-operation-lock.service';
 import { buildDraftTitle, buildDraftDescription } from './cj-shopify-usa-title-builder.service';
 import { cjShopifyUsaCleanupService } from './cj-shopify-usa-cleanup.service';
+import { cjShopifyUsaSalesIntelligenceService } from './cj-shopify-usa-sales-intelligence.service';
 
 type SalesAgentPriority = 'critical' | 'high' | 'medium' | 'low';
 type SalesAgentActionType =
@@ -1371,6 +1372,10 @@ export const cjShopifyUsaSalesAgentService = {
       failedDraftGraceDays: 7,
       limit: 200,
     });
+    const salesIntelligence = await cjShopifyUsaSalesIntelligenceService.salesIntelligence(userId, {
+      days: 30,
+      limit: 120,
+    });
 
     const actions: SalesAgentAction[] = [];
 
@@ -1709,6 +1714,12 @@ export const cjShopifyUsaSalesAgentService = {
       },
       campaign,
       salesPipeline,
+      salesIntelligence: {
+        generatedAt: salesIntelligence.generatedAt,
+        days: salesIntelligence.days,
+        totals: salesIntelligence.totals,
+        topProducts: salesIntelligence.products.slice(0, 12),
+      },
       decisionTimeline,
       promotionCandidates,
       publishableDrafts,

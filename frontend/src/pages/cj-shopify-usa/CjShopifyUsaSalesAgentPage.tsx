@@ -292,6 +292,32 @@ type SalesAgentDashboard = {
       missing: string[];
     };
   };
+  salesIntelligence?: {
+    generatedAt: string;
+    days: number;
+    totals: {
+      products: number;
+      scale: number;
+      optimize: number;
+      protect: number;
+      rotate: number;
+      learning: number;
+    };
+    topProducts: Array<{
+      listingId: number | null;
+      title: string;
+      decision: 'SCALE' | 'OPTIMIZE' | 'PROTECT' | 'ROTATE' | 'LEARNING';
+      score: number;
+      signal: {
+        views: number;
+        addToCarts: number;
+        checkoutStarted: number;
+        purchases: number;
+        socialClicks: number;
+      };
+      reasons: string[];
+    }>;
+  };
   decisionTimeline: Array<{
     id: string;
     ts: string;
@@ -697,17 +723,17 @@ export default function CjShopifyUsaSalesAgentPage() {
         onSecondary={() => void schedulerCommand('run-now')}
         disabled={!!running}
         meta={[
-          `${data?.commercialScores.top.length ?? 0} a escalar`,
-          `${data?.commercialScores.needsWork.length ?? 0} a corregir`,
-          `${data?.cleanup?.totals.rotate ?? 0} a rotar`,
+          `${data?.salesIntelligence?.totals.scale ?? data?.commercialScores.top.length ?? 0} a escalar`,
+          `${data?.salesIntelligence?.totals.optimize ?? data?.commercialScores.needsWork.length ?? 0} a corregir`,
+          `${data?.salesIntelligence?.totals.rotate ?? data?.cleanup?.totals.rotate ?? 0} a rotar`,
           `${data?.promotionCandidates.length ?? 0} promocionables`,
         ]}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <CommercialMetricCard label="Productos a escalar" value={data?.commercialScores.top.length ?? 0} detail="score comercial alto" tone="emerald" />
-        <CommercialMetricCard label="Optimizar" value={(data?.cleanup?.totals.optimize ?? 0) + (data?.commercialScores.needsWork.length ?? 0)} detail="senal debil, ficha o margen" tone="amber" />
-        <CommercialMetricCard label="Rotar sin traccion" value={data?.cleanup?.totals.rotate ?? 0} detail={`${data?.cleanup?.thresholdDays ?? 14}+ dias sin venta/senal`} tone="rose" />
+        <CommercialMetricCard label="Productos a escalar" value={data?.salesIntelligence?.totals.scale ?? data?.commercialScores.top.length ?? 0} detail="ventas o senales fuertes" tone="emerald" />
+        <CommercialMetricCard label="Optimizar" value={data?.salesIntelligence?.totals.optimize ?? ((data?.cleanup?.totals.optimize ?? 0) + (data?.commercialScores.needsWork.length ?? 0))} detail="visitas sin conversion" tone="amber" />
+        <CommercialMetricCard label="Rotar sin traccion" value={data?.salesIntelligence?.totals.rotate ?? data?.cleanup?.totals.rotate ?? 0} detail={`${data?.cleanup?.thresholdDays ?? 14}+ dias sin venta/senal`} tone="rose" />
         <CommercialMetricCard label="Acciones ejecutables" value={(data?.actions ?? []).filter((action) => action.canExecute).length} detail="con guardrails" tone="cyan" />
       </div>
 
@@ -753,6 +779,55 @@ export default function CjShopifyUsaSalesAgentPage() {
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {data?.salesIntelligence && (
+        <section className="rounded-lg border border-cyan-500/25 bg-slate-950/70 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">Sales Intelligence 30d</p>
+              <h3 className="mt-1 text-base font-bold text-white">Decisión por producto basada en señales reales</h3>
+              <p className="mt-1 text-xs text-slate-400">
+                Usa vistas, carrito, checkout, compra, clicks sociales, margen y Profit Guard para decidir escala, optimización, protección o rotación.
+              </p>
+            </div>
+            <div className="grid grid-cols-5 gap-2 text-center text-xs">
+              <span className="rounded border border-emerald-500/25 bg-emerald-950/20 p-2 text-emerald-100">Escalar <b>{data.salesIntelligence.totals.scale}</b></span>
+              <span className="rounded border border-amber-500/25 bg-amber-950/20 p-2 text-amber-100">Optimizar <b>{data.salesIntelligence.totals.optimize}</b></span>
+              <span className="rounded border border-cyan-500/25 bg-cyan-950/20 p-2 text-cyan-100">Proteger <b>{data.salesIntelligence.totals.protect}</b></span>
+              <span className="rounded border border-rose-500/25 bg-rose-950/20 p-2 text-rose-100">Rotar <b>{data.salesIntelligence.totals.rotate}</b></span>
+              <span className="rounded border border-slate-600 bg-slate-900 p-2 text-slate-200">Aprender <b>{data.salesIntelligence.totals.learning}</b></span>
+            </div>
+          </div>
+          <div className="mt-3 overflow-x-auto rounded border border-slate-800">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-slate-900 text-slate-400">
+                <tr>
+                  <th className="px-3 py-2">Producto</th>
+                  <th className="px-3 py-2">Decisión</th>
+                  <th className="px-3 py-2">Score</th>
+                  <th className="px-3 py-2">Vistas</th>
+                  <th className="px-3 py-2">Carrito</th>
+                  <th className="px-3 py-2">Compra</th>
+                  <th className="px-3 py-2">Motivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.salesIntelligence.topProducts.slice(0, 8).map((item, idx) => (
+                  <tr key={`${item.listingId ?? 'p'}-${idx}`} className="border-t border-slate-800">
+                    <td className="max-w-xs truncate px-3 py-2 text-slate-100" title={item.title}>{item.title}</td>
+                    <td className="px-3 py-2 font-bold text-cyan-200">{item.decision}</td>
+                    <td className="px-3 py-2 tabular-nums text-slate-200">{item.score}</td>
+                    <td className="px-3 py-2 tabular-nums text-slate-300">{item.signal.views}</td>
+                    <td className="px-3 py-2 tabular-nums text-slate-300">{item.signal.addToCarts}</td>
+                    <td className="px-3 py-2 tabular-nums text-slate-300">{item.signal.purchases}</td>
+                    <td className="max-w-sm px-3 py-2 text-slate-400">{item.reasons[0] ?? 'Recolectando evidencia'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
