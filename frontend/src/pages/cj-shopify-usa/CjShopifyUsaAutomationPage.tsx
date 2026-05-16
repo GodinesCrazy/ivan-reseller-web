@@ -6,6 +6,7 @@ import {
   CommercialMetricCard,
   CommercialPageHeader,
   CycleNarrativeStrip,
+  DecisionTabs,
   PremiumSectionHeader,
 } from './components/CommercialCockpit';
 
@@ -458,6 +459,7 @@ export default function CjShopifyUsaAutomationPage() {
     intervalHours: status?.config.intervalHours,
   });
   const runningCycleNow = cycle?.status === 'RUNNING';
+  const [autoTab, setAutoTab] = useState<'motor' | 'historial' | 'config'>('motor');
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6 space-y-6">
@@ -493,6 +495,17 @@ export default function CjShopifyUsaAutomationPage() {
 
       <CycleNarrativeStrip active="optimize" />
 
+      <DecisionTabs
+        value={autoTab}
+        onChange={setAutoTab}
+        tabs={[
+          { value: 'motor' as const, label: 'Motor & Control', count: cycle ? 1 : 0, tone: 'cyan' },
+          { value: 'historial' as const, label: 'Historial & Logs', count: history.length, tone: 'emerald' },
+          { value: 'config' as const, label: 'Configuración', tone: 'slate' },
+        ]}
+      />
+
+      {autoTab === 'motor' && (<>
       <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
         <PremiumSectionHeader
           eyebrow="Subciclos de automatización"
@@ -510,23 +523,6 @@ export default function CjShopifyUsaAutomationPage() {
           <CompactDataPanel title="Estado worker" value={state} detail={msg ?? 'listo para supervisión'} tone={state === 'ERROR' ? 'rose' : state === 'RUNNING' ? 'emerald' : 'slate'} />
         </div>
       </section>
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-black tracking-tight">
-            <span className="text-emerald-400">⚡</span> Automatización CJ → Shopify
-          </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Ciclo autónomo de descubrimiento, evaluación y publicación de productos pet
-          </p>
-        </div>
-        {msg && (
-          <div className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-300">
-            {msg}
-          </div>
-        )}
-      </div>
 
       {/* Main layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
@@ -732,24 +728,66 @@ export default function CjShopifyUsaAutomationPage() {
             </div>
           )}
 
-          {/* Live log */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Log en vivo</p>
-            <CycleLog events={cycle?.events ?? lastCycle?.events ?? []} />
-          </div>
-
-          {/* History */}
-          {history.length > 0 && (
-            <div className="rounded-xl bg-slate-900/80 border border-slate-700/60 p-4 space-y-2">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Historial de ciclos</p>
-              <div className="space-y-2">
-                {[...history].reverse().slice(0, 8).map((c) => <HistoryRow key={c.cycleId} c={c} />)}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* RIGHT — Config */}
+        {/* RIGHT — Config (motor tab) */}
+        <div className="space-y-4">
+          <div className="rounded-xl border border-amber-800/40 bg-amber-950/30 p-4 space-y-1.5 text-xs text-amber-300/80">
+            <p className="font-bold text-amber-300">💡 Tips rápidos</p>
+            <p>El motor se ejecuta cada N horas configurado. Si Railway reinicia, se reanuda automáticamente.</p>
+          </div>
+        </div>
+      </div>
+      </>)}
+
+      {autoTab === 'historial' && (<>
+        {/* Live log */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Log en vivo</p>
+          <CycleLog events={cycle?.events ?? lastCycle?.events ?? []} />
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard
+            label="Publicados último ciclo"
+            value={Math.max(status?.dailyPublishCount ?? 0, cycle?.published ?? lastCycle?.published ?? 0)}
+            sub={`límite: ${status?.config.maxDailyPublish ?? '—'}`}
+            accent={((status?.dailyPublishCount ?? 0) >= (status?.config.maxDailyPublish ?? 999)) ? 'text-red-400' : 'text-emerald-400'}
+          />
+          <StatCard
+            label="Drafts creados"
+            value={cycle?.draftsCreated ?? lastCycle?.draftsCreated ?? 0}
+            sub="drafts este ciclo"
+            accent="text-sky-400"
+          />
+          <StatCard
+            label="Aprobados"
+            value={cycle?.productsApproved ?? lastCycle?.productsApproved ?? 0}
+            sub="candidatos encontrados"
+          />
+          <StatCard
+            label="Errores"
+            value={cycle?.errors ?? lastCycle?.errors ?? 0}
+            sub={`${fmtDuration(cycle?.duration ?? lastCycle?.duration)} duración`}
+            accent={((cycle?.errors ?? 0) > 0) ? 'text-red-400' : 'text-slate-300'}
+          />
+        </div>
+
+        {/* History */}
+        {history.length > 0 && (
+          <div className="rounded-xl bg-slate-900/80 border border-slate-700/60 p-4 space-y-2">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Historial de ciclos</p>
+            <div className="space-y-2">
+              {[...history].reverse().slice(0, 8).map((c) => <HistoryRow key={c.cycleId} c={c} />)}
+            </div>
+          </div>
+        )}
+      </>)}
+
+      {autoTab === 'config' && (<>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
           {localConfig && (
             <ConfigPanel
@@ -758,7 +796,9 @@ export default function CjShopifyUsaAutomationPage() {
               onSave={saveConfig}
             />
           )}
+        </div>
 
+        <div className="space-y-4">
           {/* How it works */}
           <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 p-5 space-y-3">
             <h3 className="text-sm font-bold text-slate-200">¿Cómo funciona?</h3>
@@ -791,6 +831,7 @@ export default function CjShopifyUsaAutomationPage() {
           </div>
         </div>
       </div>
+      </>)}
     </div>
   );
 }
