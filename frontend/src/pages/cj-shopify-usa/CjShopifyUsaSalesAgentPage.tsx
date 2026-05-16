@@ -805,6 +805,7 @@ export default function CjShopifyUsaSalesAgentPage() {
         </section>
       )}
 
+      {commandTab === 'ahora' && (
       <RiskActionQueue
         title="Que hago ahora"
         items={(data?.actions ?? []).slice(0, 4).map((action) => ({
@@ -817,8 +818,9 @@ export default function CjShopifyUsaSalesAgentPage() {
         }))}
         emptyLabel="Sin acciones comerciales urgentes."
       />
+      )}
 
-      {data?.cleanup && (
+      {commandTab === 'corregir' && data?.cleanup && (
         <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -850,7 +852,7 @@ export default function CjShopifyUsaSalesAgentPage() {
         </section>
       )}
 
-      {data?.salesIntelligence && (
+      {commandTab === 'escalar' && data?.salesIntelligence && (
         <section className="rounded-lg border border-cyan-500/25 bg-slate-950/70 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -899,9 +901,9 @@ export default function CjShopifyUsaSalesAgentPage() {
         </section>
       )}
 
-      <CycleNarrativeStrip active="optimize" />
+      {commandTab === 'ahora' && <CycleNarrativeStrip active="optimize" />}
 
-      {data?.morningBrief && (
+      {commandTab === 'ahora' && data?.morningBrief && (
         <section className="rounded-lg border border-emerald-500/25 bg-emerald-950/10 p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -1033,6 +1035,7 @@ export default function CjShopifyUsaSalesAgentPage() {
 
       {data && (
         <>
+          {commandTab === 'ahora' && (<>
           <section className="rounded-lg border border-cyan-500/30 bg-slate-950 p-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div>
@@ -1176,8 +1179,9 @@ export default function CjShopifyUsaSalesAgentPage() {
               )}
             </div>
           </section>
+          </>)}
 
-          {scheduler && (
+          {commandTab === 'aprendizaje' && scheduler && (
             <section className="rounded-lg border border-cyan-500/25 bg-slate-950 p-4">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div>
@@ -1318,6 +1322,7 @@ export default function CjShopifyUsaSalesAgentPage() {
             </section>
           )}
 
+          {commandTab === 'proteger' && (<>
           <section className="rounded-lg border border-cyan-500/25 bg-slate-950 p-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div>
@@ -1482,7 +1487,9 @@ export default function CjShopifyUsaSalesAgentPage() {
               </div>
             </div>
           </section>
+          </>)}
 
+          {commandTab === 'escalar' && (
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-lg border border-cyan-500/25 bg-slate-950 p-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1654,7 +1661,9 @@ export default function CjShopifyUsaSalesAgentPage() {
             </div>
           </div>
           </section>
+          )}
 
+          {commandTab === 'aprendizaje' && (
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div className="rounded-lg border border-violet-500/25 bg-violet-950/10 p-4">
               <h3 className="flex items-center gap-2 text-base font-semibold text-violet-100">
@@ -1709,7 +1718,9 @@ export default function CjShopifyUsaSalesAgentPage() {
               </div>
             </div>
           </section>
+          )}
 
+          {commandTab === 'corregir' && (
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
             <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -1919,7 +1930,9 @@ export default function CjShopifyUsaSalesAgentPage() {
               </div>
             </aside>
           </section>
+          )}
 
+          {commandTab === 'proteger' && (
           <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
               <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
@@ -2011,6 +2024,7 @@ export default function CjShopifyUsaSalesAgentPage() {
               </div>
             </div>
           </section>
+          )}
 
           {(data.health.checkoutRisk || data.health.marginRisk || data.health.catalogTrustRisk) && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-950/25 p-4 text-sm text-amber-100">
