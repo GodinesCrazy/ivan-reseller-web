@@ -198,27 +198,70 @@ type DecisionTabsProps<T extends string> = {
 
 export function DecisionTabs<T extends string>({ value, onChange, tabs }: DecisionTabsProps<T>) {
   return (
-    <div className="flex flex-wrap gap-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2">
-      {tabs.map((tab) => {
-        const active = tab.value === value;
-        const styles = toneClass[tab.tone ?? 'cyan'];
-        return (
-          <button
-            key={tab.value}
-            type="button"
-            onClick={() => onChange(tab.value)}
-            className={`rounded-md border px-3 py-2 text-xs font-bold transition ${
-              active
-                ? `${styles.border} ${styles.bg} ${styles.text}`
-                : 'border-transparent text-slate-400 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-100'
-            }`}
-          >
-            {tab.label}
-            {tab.count !== undefined ? <span className="ml-2 rounded bg-black/20 px-1.5 py-0.5 tabular-nums">{tab.count}</span> : null}
-          </button>
-        );
-      })}
-    </div>
+    <nav className="relative rounded-xl border-2 border-cyan-500/20 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 p-1.5 shadow-lg shadow-cyan-500/5">
+      {/* Glow accent line */}
+      <div className="absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
+      <div className="flex gap-1.5 overflow-x-auto">
+        {tabs.map((tab) => {
+          const active = tab.value === value;
+          const tone = tab.tone ?? 'cyan';
+          const styles = toneClass[tone];
+          const activeGlow: Record<string, string> = {
+            cyan: 'shadow-cyan-500/25',
+            emerald: 'shadow-emerald-500/25',
+            amber: 'shadow-amber-500/25',
+            rose: 'shadow-rose-500/25',
+            violet: 'shadow-violet-500/25',
+            slate: 'shadow-slate-500/15',
+          };
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => onChange(tab.value)}
+              className={`group relative flex-1 min-w-[120px] rounded-lg px-4 py-3 text-sm font-bold tracking-wide transition-all duration-300 ${
+                active
+                  ? `${styles.bg} ${styles.text} border-2 ${styles.border} shadow-lg ${activeGlow[tone] ?? ''}`
+                  : 'border-2 border-transparent text-slate-500 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              {/* Active bottom glow bar */}
+              {active && (
+                <span className={`absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-gradient-to-r ${
+                  tone === 'cyan' ? 'from-cyan-400 to-cyan-600' :
+                  tone === 'emerald' ? 'from-emerald-400 to-emerald-600' :
+                  tone === 'amber' ? 'from-amber-400 to-amber-600' :
+                  tone === 'rose' ? 'from-rose-400 to-rose-600' :
+                  tone === 'violet' ? 'from-violet-400 to-violet-600' :
+                  'from-slate-400 to-slate-600'
+                }`} />
+              )}
+              <span className="flex items-center justify-center gap-2">
+                {/* Active dot indicator */}
+                {active && <span className={`h-2 w-2 rounded-full ${
+                  tone === 'cyan' ? 'bg-cyan-400 shadow-[0_0_6px] shadow-cyan-400' :
+                  tone === 'emerald' ? 'bg-emerald-400 shadow-[0_0_6px] shadow-emerald-400' :
+                  tone === 'amber' ? 'bg-amber-400 shadow-[0_0_6px] shadow-amber-400' :
+                  tone === 'rose' ? 'bg-rose-400 shadow-[0_0_6px] shadow-rose-400' :
+                  tone === 'violet' ? 'bg-violet-400 shadow-[0_0_6px] shadow-violet-400' :
+                  'bg-slate-400'
+                }`} />}
+                <span>{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span className={`ml-1 rounded-full px-2 py-0.5 text-xs tabular-nums font-bold ${
+                    active
+                      ? 'bg-white/15 text-white'
+                      : 'bg-slate-800 text-slate-500 group-hover:bg-slate-700 group-hover:text-slate-300'
+                  }`}>
+                    {tab.count}
+                  </span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
   );
 }
 
