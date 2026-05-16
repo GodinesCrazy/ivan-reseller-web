@@ -660,9 +660,16 @@ function buildSalesPipeline(input: {
   commercialScores: CommercialScore[];
   campaign: SalesCampaignPlan;
 }): SalesPipeline {
+  // Catalog quality: base proportional to active listings with diminishing penalties
+  const hasActiveProducts = input.activeListings > 0;
+  const baseQuality = hasActiveProducts ? 65 : 30;
+  const copyPenalty = Math.min(25, input.copyIssues * 3);
+  const dupPenalty = Math.min(20, input.duplicateGroups * 6);
+  const mediaPenalty = Math.min(15, input.noMedia * 2);
+  const qualityBonus = hasActiveProducts && input.copyIssues === 0 && input.duplicateGroups === 0 ? 20 : 0;
   const catalogQualityScore = Math.max(
-    0,
-    Math.min(100, 88 - input.copyIssues * 4 - input.duplicateGroups * 8 - input.noMedia * 3),
+    hasActiveProducts ? 15 : 0,
+    Math.min(100, baseQuality + qualityBonus - copyPenalty - dupPenalty - mediaPenalty),
   );
   const profitScore = Math.max(
     0,
@@ -2300,6 +2307,44 @@ export const cjShopifyUsaSalesAgentService = {
         cycle.errors += n((result as any).failed);
       } else {
         log('optimization', 'info', 'Sin fichas corregibles automaticamente');
+      }
+
+      // ── Auto-cleanup: deduplicate and rotate stale products ──────────────
+      const cleanupAction = dashboard.actions.find((action) => action.type === 'RUN_COMMERCIAL_CLEANUP' && action.canExecute);
+      if (cleanupAction || (dashboard.cleanup?.totals.rotate ?? 0) > 0 || (dashboard.catalog?.duplicateExactGroups?.length ?? 0) > 0) {
+        try {
+          const result = await this.executeAction(userId, { actionType: 'RUN_COMMERCIAL_CLEANUP', limit: 5 });
+          log('optimization', n((result as any).fixed) > 0 ? 'success' : 'info', 'Higiene comercial ejecutada: deduplicacion y rotacion', {
+            fixed: n((result as any).fixed),
+            failed: n((result as any).failed),
+            rotate: dashboard.cleanup?.totals.rotate ?? 0,
+            duplicateGroups: dashboard.catalog?.duplicateExactGroups?.length ?? 0,
+          });
+          cycle.errors += n((result as any).failed);
+          dashboard = await this.dashboard(userId);
+        } catch (e) {
+          log('optimization', 'warn', 'Higiene comercial no disponible o saltada: ' + (e instanceof Error ? e.message : String(e)));
+        }
+      } else {
+        log('optimization', 'info', 'Sin candidatos para higiene comercial (sin duplicados ni productos sin traccion)');
+      }
+
+      // ── Loss watchdog: scan active listings for price risk ──────────────
+      try {
+        const riskScan = await (await import('../../../services/active-listings-risk-scan.service')).runActiveListingsRiskScan({ userId, dryRun: true });
+        if (riskScan && typeof riskScan === 'object') {
+          const riskyCount = Array.isArray((riskScan as any).dangerous) ? (riskScan as any).dangerous.length : 0;
+          if (riskyCount > 0) {
+            log('optimization', 'warn', 'Vigilante de perdida: productos con riesgo de perdida detectados', {
+              riskyCount,
+              action: 'Se ejecutara Profit Guard para proteger margen',
+            });
+          } else {
+            log('optimization', 'info', 'Vigilante de perdida: sin productos con riesgo de perdida activo');
+          }
+        }
+      } catch (e) {
+        log('optimization', 'info', 'Vigilante de perdida: servicio no disponible, Profit Guard ya cubre proteccion basica');
       }
 
       if (schedulerConfig.autoPublishApprovedDrafts && dashboard.publishableDrafts.length > 0) {

@@ -114,16 +114,26 @@ export default function CjShopifyUsaProfitPage() {
     setError(null);
     setLoading(true);
     try {
-      const [res, riskRes] = await Promise.all([
+      // Load profit data and price risk independently to avoid one failure breaking both
+      const [profitResult, riskResult] = await Promise.allSettled([
         api.get<{ ok: boolean } & ProfitData>('/api/cj-shopify-usa/profit', {
           params: { from: f, to: t },
         }),
         api.get<PriceRisk>('/api/cj-shopify-usa/profit/price-risk'),
       ]);
-      if (res.data?.ok) {
-        setData({ kpis: res.data.kpis, snapshots: res.data.snapshots, orders: res.data.orders, period: res.data.period });
+      if (profitResult.status === 'fulfilled' && profitResult.value.data?.ok) {
+        const d = profitResult.value.data;
+        setData({ kpis: d.kpis, snapshots: d.snapshots ?? [], orders: d.orders ?? [], period: d.period ?? { from: f, to: t } });
+      } else if (profitResult.status === 'fulfilled' && !profitResult.value.data?.ok) {
+        // API returned but no data - show empty state instead of error
+        setData({ kpis: { totalRevenueUsd: 0, totalCjCostUsd: 0, totalFeesUsd: 0, totalProfitUsd: 0, snapshotCount: 0, totalOrders: 0, completedOrders: 0, openOrders: 0, failedOrders: 0, dataNote: 'Sin datos de profit para este periodo.' }, snapshots: [], orders: [], period: { from: f, to: t } });
       }
-      if (riskRes.data?.ok) setPriceRisk(riskRes.data);
+      if (profitResult.status === 'rejected') {
+        setError('No se pudieron cargar los datos de profit: ' + (profitResult.reason?.message ?? 'Error de red'));
+      }
+      if (riskResult.status === 'fulfilled' && riskResult.value.data?.ok) {
+        setPriceRisk(riskResult.value.data);
+      }
     } catch (e) {
       setError(axiosMsg(e, 'No se pudieron cargar los datos de profit.'));
     } finally {

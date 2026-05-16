@@ -477,7 +477,7 @@ export default function CjShopifyUsaAutomationPage() {
         disabled={busy}
         meta={[
           `estado ${state}`,
-          `publicados hoy ${status?.dailyPublishCount ?? 0}`,
+          `total publicados ${Math.max(status?.dailyPublishCount ?? 0, cycle?.published ?? lastCycle?.published ?? 0)}`,
           `max diario ${localConfig?.maxDailyPublish ?? status?.config.maxDailyPublish ?? 0}`,
           `margen min ${localConfig?.minMarginPct ?? status?.config.minMarginPct ?? 0}%`,
         ]}
@@ -678,15 +678,15 @@ export default function CjShopifyUsaAutomationPage() {
           {/* Stats row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard
-              label="Publicados hoy"
-              value={status?.dailyPublishCount ?? 0}
+              label="Publicados último ciclo"
+              value={Math.max(status?.dailyPublishCount ?? 0, cycle?.published ?? lastCycle?.published ?? 0)}
               sub={`límite: ${status?.config.maxDailyPublish ?? '—'}`}
               accent={((status?.dailyPublishCount ?? 0) >= (status?.config.maxDailyPublish ?? 999)) ? 'text-red-400' : 'text-emerald-400'}
             />
             <StatCard
-              label="En ciclo actual"
-              value={cycle?.published ?? lastCycle?.published ?? 0}
-              sub="publicados"
+              label="Drafts creados"
+              value={cycle?.draftsCreated ?? lastCycle?.draftsCreated ?? 0}
+              sub="drafts este ciclo"
               accent="text-sky-400"
             />
             <StatCard
