@@ -246,10 +246,10 @@ export default function CjShopifyUsaProfitPage() {
                 </tr>
               </thead>
               <tbody>
-                {priceRisk.items.slice(0, 10).map((item) => (
-                  <tr key={item.listingId} className="border-t border-slate-800">
-                    <td className="max-w-xs truncate px-3 py-2 text-slate-100" title={item.title}>{item.title}</td>
-                    <td className="px-3 py-2 font-bold text-cyan-200">{item.action}</td>
+                {(priceRisk.items || []).slice(0, 10).map((item) => (
+                  <tr key={item.listingId} className="border-t border-slate-800/60 hover:bg-slate-800/30 transition-colors">
+                    <td className="max-w-xs truncate px-3 py-3 text-slate-100 font-medium" title={item.title}>{item.title}</td>
+                    <td className="px-3 py-3 font-bold text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">{item.action}</td>
                     <td className="px-3 py-2 tabular-nums">{usd(item.listedPriceUsd)}</td>
                     <td className="px-3 py-2 tabular-nums">{usd(item.currentSupplierCostUsd)}</td>
                     <td className="px-3 py-2 tabular-nums">{usd(item.currentShippingUsd)}</td>

@@ -1234,6 +1234,37 @@ export const cjShopifyUsaPublishService = {
       title: product.title,
       variantAttributes: (variant.attributes ?? null) as Record<string, unknown> | null,
     });
+
+    // ── Semantic Duplicate Guard ──
+    // Prevent drafting multiple different CJ products that end up having the EXACT same semantic title
+    const semanticKey = normalizedTitleKey(draftTitle);
+    const existingListings = await prisma.cjShopifyUsaListing.findMany({
+      where: {
+        userId: input.userId,
+        status: { in: ['ACTIVE', 'PUBLISHING', 'DRAFT', 'RECONCILE_PENDING'] },
+      },
+      select: {
+        id: true,
+        productId: true,
+        draftPayload: true,
+        product: { select: { title: true } }
+      }
+    });
+
+    const semanticDuplicate = existingListings.find(l => {
+      if (l.productId === product.id) return false; // Handled by variant duplicate guard
+      const payload = (l.draftPayload || {}) as any;
+      const lTitle = payload.title || l.product.title;
+      return normalizedTitleKey(lTitle) === semanticKey;
+    });
+
+    if (semanticDuplicate) {
+      throw new AppError(
+        `Semantic duplicate detected: A listing (#${semanticDuplicate.id}) with the identical semantic title "${draftTitle}" already exists.`,
+        409,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
     await assertCommercialQuality({
       userId: input.userId,
       title: draftTitle,
