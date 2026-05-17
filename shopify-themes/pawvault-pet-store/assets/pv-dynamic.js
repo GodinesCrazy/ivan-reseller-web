@@ -20,7 +20,7 @@
 
   const ANNOUNCEMENT_MESSAGES = [
     '🐾 Free shipping on orders over $50 across the USA',
-    '⭐ Rated 4.8 / 5 &nbsp;·&nbsp; Trusted by 2,000+ pet families',
+    '⭐ Loved by dogs & cats across the USA',
     '🔄 30-day easy returns — no questions asked',
     '🐕 New pet essentials added every week',
     `✨ Use code <strong>${DISCOUNT_CODE}</strong> for 10% off your first order`,

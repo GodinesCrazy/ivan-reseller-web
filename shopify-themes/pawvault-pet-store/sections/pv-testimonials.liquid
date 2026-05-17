@@ -22,9 +22,7 @@
           {%- endfor -%}
         </div>
         <span class="pv-revs__agg-text">
-          <strong>{{ section.settings.rating | default: '4.8' }}</strong> out of 5
-          &nbsp;·&nbsp;
-          {{ section.settings.review_count | default: '2,000+' }} happy pet families
+          Loved by pets and their humans
         </span>
       </div>
     </header>
@@ -242,9 +240,7 @@
   "tag": "section",
   "settings": [
     { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "What pet parents say" },
-    { "type": "text", "id": "title", "label": "Title", "default": "Loved by thousands of dogs and cats." },
-    { "type": "text", "id": "rating", "label": "Rating (e.g. 4.8)", "default": "4.8" },
-    { "type": "text", "id": "review_count", "label": "Review count (e.g. 2,000+)", "default": "2,000+" }
+    { "type": "text", "id": "title", "label": "Title", "default": "Loved by dogs and cats everywhere." }
   ],
   "blocks": [
     {

@@ -25,6 +25,7 @@ type SalesAgentActionType =
   | 'PUBLISH_APPROVED_BACKLOG'
   | 'UNPUBLISH_UNSAFE_LISTINGS'
   | 'RUN_COMMERCIAL_CLEANUP'
+  | 'STOREFRONT_GUARD'
   | 'FIX_CATALOG_QUALITY'
   | 'BUILD_SALES_CAMPAIGN'
   | 'RUN_SALES_PIPELINE_REVIEW';
@@ -1427,6 +1428,23 @@ export const cjShopifyUsaSalesAgentService = {
         canExecute: true,
         guardrails: ['Solo PAUSE_UNSAFE', 'Archiva en Shopify', 'Registra trazabilidad', 'No elimina datos locales'],
         payload: { limit: Math.min(5, unsafeUnpublishCandidates.length), candidates: unsafeUnpublishCandidates.slice(0, 5) },
+      });
+      });
+    }
+
+    // Always run StorefrontGuard checks if there are active listings
+    if (activeListings.length > 0) {
+      actions.push({
+        id: 'storefront-guard',
+        type: 'STOREFRONT_GUARD',
+        priority: 'critical',
+        title: 'Auditar calidad comercial (Storefront Guard)',
+        rationale: 'Asegurar que no haya productos fuera de marca, descripciones con URLs de proveedores, ni duplicados.',
+        expectedImpact: 'Mantiene la coherencia de la marca y evita filtraciones de CJDropshipping al comprador.',
+        risk: 'safe',
+        canExecute: true,
+        guardrails: ['Revisa filtro de nicho', 'Detecta URLs de proveedores', 'Sugiere archivar listings inseguros'],
+        payload: { activeCount: activeListings.length },
       });
     }
 

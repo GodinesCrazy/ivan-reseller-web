@@ -6,7 +6,7 @@ import { cjShopifyUsaAdminService } from './cj-shopify-usa-admin.service';
 import { cjShopifyUsaQualificationService } from './cj-shopify-usa-qualification.service';
 import { cjShopifyUsaConfigService } from './cj-shopify-usa-config.service';
 import { cjShopifyUsaCategorizationService } from './cj-shopify-usa-categorization.service';
-import { isCjShopifyUsaPetProduct, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service';
+import { isCjShopifyUsaPetProduct, isCjShopifyUsaDogsCatsOnly, hasSupplierUrlLeak, resolveMaxSellPriceUsd } from './cj-shopify-usa-policy.service';
 import { cjShopifyUsaSocialService } from './cj-shopify-usa-social.service';
 import {
   CJ_SHOPIFY_USA_LISTING_STATUS,
@@ -569,14 +569,22 @@ async function assertCommercialQuality(input: {
     );
   }
 
-  if (!isCjShopifyUsaPetProduct({
+  if (!isCjShopifyUsaDogsCatsOnly({
     title: input.title,
     description: input.description,
     productType: input.productType,
     attributes: input.attributes,
   })) {
     throw new AppError(
-      'Only clearly pet-related, buyer-safe products can be published to PawVault.',
+      'Only dog and cat products can be published to PawVault. Aquarium, fish, bird, reptile, electronics, and other off-brand products are blocked.',
+      400,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  if (hasSupplierUrlLeak(input.description)) {
+    throw new AppError(
+      'Product description contains a supplier URL (cjdropshipping.com, aliexpress.com, etc). Remove supplier references before publishing.',
       400,
       ErrorCode.VALIDATION_ERROR,
     );
