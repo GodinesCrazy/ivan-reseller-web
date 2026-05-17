@@ -1429,7 +1429,6 @@ export const cjShopifyUsaSalesAgentService = {
         guardrails: ['Solo PAUSE_UNSAFE', 'Archiva en Shopify', 'Registra trazabilidad', 'No elimina datos locales'],
         payload: { limit: Math.min(5, unsafeUnpublishCandidates.length), candidates: unsafeUnpublishCandidates.slice(0, 5) },
       });
-      });
     }
 
     // Always run StorefrontGuard checks if there are active listings
