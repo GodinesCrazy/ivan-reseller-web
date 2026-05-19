@@ -7,7 +7,8 @@ import { PrismaClient } from '@prisma/client';
 function getEffectiveDatabaseUrl(): string | undefined {
   const url = process.env.DATABASE_URL;
   if (!url) return undefined;
-  const limit = process.env.PRISMA_CONNECTION_LIMIT?.trim();
+  const explicitLimit = process.env.PRISMA_CONNECTION_LIMIT?.trim();
+  const limit = explicitLimit || (process.env.NODE_ENV === 'production' ? '3' : '');
   if (!limit) return url;
   if (/connection_limit=/i.test(url)) return url;
   if (url.startsWith('prisma+') || url.toLowerCase().includes('accelerate')) return url;

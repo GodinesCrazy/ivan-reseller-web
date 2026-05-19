@@ -9,6 +9,8 @@
 buildCommand = "npm ci && npm run build"
 
 [deploy]
+# Railway V2 uses preDeployCommand; releaseCommand is kept for older project settings.
+preDeployCommand = "node scripts/railway-migrate-deploy.js"
 releaseCommand = "node scripts/railway-migrate-deploy.js"
 startCommand = "npm run start"
 healthcheckPath = "/health"

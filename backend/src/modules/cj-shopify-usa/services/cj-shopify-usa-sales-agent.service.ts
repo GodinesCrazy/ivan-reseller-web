@@ -13,6 +13,7 @@ import { cjShopifyUsaOperationLockService } from './cj-shopify-usa-operation-loc
 import { buildDraftTitle, buildDraftDescription } from './cj-shopify-usa-title-builder.service';
 import { cjShopifyUsaCleanupService } from './cj-shopify-usa-cleanup.service';
 import { cjShopifyUsaSalesIntelligenceService } from './cj-shopify-usa-sales-intelligence.service';
+import { cjShopifyUsaPicoService } from './cj-shopify-usa-pico.service';
 
 type SalesAgentPriority = 'critical' | 'high' | 'medium' | 'low';
 type SalesAgentActionType =
@@ -28,7 +29,10 @@ type SalesAgentActionType =
   | 'STOREFRONT_GUARD'
   | 'FIX_CATALOG_QUALITY'
   | 'BUILD_SALES_CAMPAIGN'
-  | 'RUN_SALES_PIPELINE_REVIEW';
+  | 'RUN_SALES_PIPELINE_REVIEW'
+  | 'PROMOTE_VIA_BLOG'
+  | 'EVALUATE_STAGNANT_LISTINGS'
+  | 'PROMOTE_VIA_VIDEO';
 
 type SalesAgentAction = {
   id: string;
@@ -65,9 +69,15 @@ type SalesAgentSchedulerConfig = {
   autoPublishApprovedDrafts: boolean;
   autoUnpublishUnsafeListings: boolean;
   autoPromoteOrganic: boolean;
+  autoPromoteViaBlog: boolean;
+  autoEvaluateStagnantSeo: boolean;
+  autoPromoteViaVideo: boolean;
   maxPublishPerCycle: number;
   maxUnpublishPerCycle: number;
   maxPromotionsPerCycle: number;
+  maxBlogPostsPerCycle: number;
+  maxSeoUpdatesPerCycle: number;
+  maxVideoRendersPerCycle: number;
 };
 
 type SalesAgentCycleEvent = {
@@ -209,9 +219,15 @@ const DEFAULT_SALES_AGENT_CONFIG: SalesAgentSchedulerConfig = {
   autoPublishApprovedDrafts: true,
   autoUnpublishUnsafeListings: true,
   autoPromoteOrganic: true,
+  autoPromoteViaBlog: true,
+  autoEvaluateStagnantSeo: true,
+  autoPromoteViaVideo: false,
   maxPublishPerCycle: 2,
   maxUnpublishPerCycle: 3,
   maxPromotionsPerCycle: 5,
+  maxBlogPostsPerCycle: 2,
+  maxSeoUpdatesPerCycle: 3,
+  maxVideoRendersPerCycle: 1,
 };
 
 let schedulerState: SalesAgentSchedulerState = 'IDLE';
@@ -508,6 +524,9 @@ const ACTION_TRACE_MAP: Partial<Record<SalesAgentActionType, string>> = {
   FIX_CATALOG_QUALITY: 'fix_catalog_quality',
   BUILD_SALES_CAMPAIGN: 'build_sales_campaign',
   RUN_SALES_PIPELINE_REVIEW: 'run_sales_pipeline_review',
+  PROMOTE_VIA_BLOG: 'promote_via_blog',
+  EVALUATE_STAGNANT_LISTINGS: 'evaluate_stagnant_listings',
+  PROMOTE_VIA_VIDEO: 'promote_via_video',
 };
 
 function actionTraceLabel(type: SalesAgentActionType): string {
@@ -548,6 +567,15 @@ function actionExecutionSteps(action: SalesAgentAction): string[] {
   }
   if (action.type === 'PROMOTE_TOP_PRODUCTS') {
     return ['Elegir productos activos rentables', 'Generar post organico', 'Encolar publicacion', 'Aprender de respuesta'];
+  }
+  if (action.type === 'PROMOTE_VIA_BLOG') {
+    return ['Elegir ganadores sin blog previo', 'Generar articulo SEO con LLM', 'Publicar en Shopify Blog', 'Registrar keyword y articulo'];
+  }
+  if (action.type === 'EVALUATE_STAGNANT_LISTINGS') {
+    return ['Detectar listings >30 dias sin ventas', 'Reescribir titulo y descripcion', 'Actualizar Shopify y lastSeoUpdate', 'Registrar intent en trazas'];
+  }
+  if (action.type === 'PROMOTE_VIA_VIDEO') {
+    return ['Recolectar 3-5 imagenes CJ', 'Render cloud Creatomate', 'Publicar TikTok e Instagram Reels', 'Registrar trazas sin FFmpeg local'];
   }
   if (action.type === 'BUILD_SALES_CAMPAIGN') {
     return ['Leer scores comerciales', 'Separar promover/corregir/proteger', 'Registrar campana semanal', 'Programar revision'];
@@ -867,9 +895,24 @@ function clampConfig(input: Partial<SalesAgentSchedulerConfig>): SalesAgentSched
       typeof input.autoPromoteOrganic === 'boolean'
         ? input.autoPromoteOrganic
         : schedulerConfig.autoPromoteOrganic,
+    autoPromoteViaBlog:
+      typeof input.autoPromoteViaBlog === 'boolean'
+        ? input.autoPromoteViaBlog
+        : schedulerConfig.autoPromoteViaBlog,
+    autoEvaluateStagnantSeo:
+      typeof input.autoEvaluateStagnantSeo === 'boolean'
+        ? input.autoEvaluateStagnantSeo
+        : schedulerConfig.autoEvaluateStagnantSeo,
+    autoPromoteViaVideo:
+      typeof input.autoPromoteViaVideo === 'boolean'
+        ? input.autoPromoteViaVideo
+        : schedulerConfig.autoPromoteViaVideo,
     maxPublishPerCycle: clampNumber(input.maxPublishPerCycle, 0, 5, schedulerConfig.maxPublishPerCycle),
     maxUnpublishPerCycle: clampNumber(input.maxUnpublishPerCycle, 0, 10, schedulerConfig.maxUnpublishPerCycle),
     maxPromotionsPerCycle: clampNumber(input.maxPromotionsPerCycle, 0, 20, schedulerConfig.maxPromotionsPerCycle),
+    maxBlogPostsPerCycle: clampNumber(input.maxBlogPostsPerCycle, 0, 5, schedulerConfig.maxBlogPostsPerCycle),
+    maxSeoUpdatesPerCycle: clampNumber(input.maxSeoUpdatesPerCycle, 0, 10, schedulerConfig.maxSeoUpdatesPerCycle),
+    maxVideoRendersPerCycle: clampNumber(input.maxVideoRendersPerCycle, 0, 3, schedulerConfig.maxVideoRendersPerCycle),
   };
 }
 
@@ -1336,6 +1379,10 @@ export const cjShopifyUsaSalesAgentService = {
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
 
+    const blogCandidates = await cjShopifyUsaPicoService.getBlogCandidates(userId, 8);
+    const stagnantSeoCandidates = await cjShopifyUsaPicoService.getStagnantCandidates(userId, 8);
+    const videoCandidates = await cjShopifyUsaPicoService.getVideoCandidates(userId, 8);
+
     const funnelMeta = safeMeta(latestFunnel?.meta);
     const visitors = n(funnelMeta.visitors);
     const addToCartRatePct = pct(funnelMeta.addToCartRatePct);
@@ -1482,6 +1529,51 @@ export const cjShopifyUsaSalesAgentService = {
       });
     }
 
+    if (blogCandidates.length > 0 && process.env.OPENAI_API_KEY) {
+      actions.push({
+        id: 'promote-via-blog',
+        type: 'PROMOTE_VIA_BLOG',
+        priority: 'medium',
+        title: 'Publicar articulos SEO en el blog de Shopify',
+        rationale: `${blogCandidates.length} productos ganadores aun no tienen articulo de blog; PICO generara contenido long-tail.`,
+        expectedImpact: 'Tráfico organico educativo desde Google hacia productos con mejor score comercial.',
+        risk: 'safe',
+        canExecute: true,
+        guardrails: ['Un articulo por producto', 'Requiere OPENAI_API_KEY', 'Publica en blog principal', 'Registra keyword y articleId'],
+        payload: { limit: Math.min(2, blogCandidates.length), candidates: blogCandidates.slice(0, 5) },
+      });
+    }
+
+    if (videoCandidates.length > 0 && process.env.CREATOMATE_API_KEY) {
+      actions.push({
+        id: 'promote-via-video',
+        type: 'PROMOTE_VIA_VIDEO',
+        priority: 'medium',
+        title: 'Generar video y publicar en TikTok / Instagram',
+        rationale: `${videoCandidates.length} productos con imagenes suficientes para slideshow vertical; render en Creatomate (sin FFmpeg en servidor).`,
+        expectedImpact: 'Alcance en short-form video con un solo render compartido por plataforma.',
+        risk: 'approval_required',
+        canExecute: Boolean(process.env.CREATOMATE_API_KEY),
+        guardrails: ['Minimo 3 imagenes', 'Render en nube', 'Requiere tokens TikTok/Instagram para publicar', 'Max 1 render por ciclo en safe mode'],
+        payload: { limit: 1, candidates: videoCandidates.slice(0, 3) },
+      });
+    }
+
+    if (stagnantSeoCandidates.length > 0 && process.env.OPENAI_API_KEY) {
+      actions.push({
+        id: 'evaluate-stagnant-listings',
+        type: 'EVALUATE_STAGNANT_LISTINGS',
+        priority: 'medium',
+        title: 'Reoptimizar SEO de listings estancados (30+ dias)',
+        rationale: `${stagnantSeoCandidates.length} productos activos llevan mas de 30 dias sin ventas y pueden probar un nuevo angulo de compra.`,
+        expectedImpact: 'A/B organico de titulo y descripcion sin gasto en ads; cambios trazados en ExecutionTrace.',
+        risk: 'approval_required',
+        canExecute: true,
+        guardrails: ['Solo sin ventas 30d', 'No toca precio ni inventario', 'Actualiza lastSeoUpdate', 'Maximo por ciclo controlado'],
+        payload: { limit: Math.min(3, stagnantSeoCandidates.length), candidates: stagnantSeoCandidates.slice(0, 5) },
+      });
+    }
+
     if (
       campaign.promote.length > 0 ||
       campaign.fixBeforeTraffic.length > 0 ||
@@ -1616,6 +1708,12 @@ export const cjShopifyUsaSalesAgentService = {
       .filter((item) => item.score < 72 || item.recommendedAction !== 'WATCH')
       .sort((a, b) => a.score - b.score)
       .slice(0, 12);
+    const pico = await cjShopifyUsaPicoService.getDashboardSummary(userId, {
+      blog: blogCandidates,
+      stagnant: stagnantSeoCandidates,
+      video: videoCandidates,
+    });
+
     const morningBrief = buildMorningBrief({
       actions: actionsWithExecution,
       salesPipeline,
@@ -1746,6 +1844,10 @@ export const cjShopifyUsaSalesAgentService = {
       },
       decisionTimeline,
       promotionCandidates,
+      blogCandidates,
+      stagnantSeoCandidates,
+      videoCandidates,
+      pico,
       publishableDrafts,
       unsafeUnpublishCandidates,
       actions: actionsWithExecution,
@@ -1774,7 +1876,7 @@ export const cjShopifyUsaSalesAgentService = {
   },
 
   async executeAction(userId: number, input: { actionType: SalesAgentActionType; limit?: number }) {
-    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'CURATE_SIMILAR_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'RUN_COMMERCIAL_CLEANUP', 'FIX_CATALOG_QUALITY', 'BUILD_SALES_CAMPAIGN', 'RUN_SALES_PIPELINE_REVIEW'].includes(input.actionType)) {
+    if (!['RUN_PROFIT_GUARD', 'PROMOTE_TOP_PRODUCTS', 'PROMOTE_VIA_BLOG', 'PROMOTE_VIA_VIDEO', 'EVALUATE_STAGNANT_LISTINGS', 'CURATE_SIMILAR_PRODUCTS', 'PUBLISH_APPROVED_BACKLOG', 'UNPUBLISH_UNSAFE_LISTINGS', 'RUN_COMMERCIAL_CLEANUP', 'FIX_CATALOG_QUALITY', 'BUILD_SALES_CAMPAIGN', 'RUN_SALES_PIPELINE_REVIEW'].includes(input.actionType)) {
       await recordSalesAgentTrace(userId, 'sales_agent.action.blocked', {
         actionType: input.actionType,
         reason: 'This action requires explicit per-item approval in the current controlled mode.',
@@ -2105,6 +2207,46 @@ export const cjShopifyUsaSalesAgentService = {
       };
     }
 
+    if (input.actionType === 'PROMOTE_VIA_BLOG') {
+      const result = await cjShopifyUsaPicoService.promoteViaBlog(userId, limit);
+      return {
+        ok: result.ok,
+        executed: true,
+        actionType: input.actionType,
+        published: result.published,
+        failed: result.failed,
+        results: result.results,
+        message: result.message,
+      };
+    }
+
+    if (input.actionType === 'EVALUATE_STAGNANT_LISTINGS') {
+      const result = await withCatalogLock(async () =>
+        cjShopifyUsaPicoService.evaluateStagnantListings(userId, limit),
+      );
+      return {
+        ok: result.ok,
+        executed: true,
+        actionType: input.actionType,
+        updated: result.updated,
+        failed: result.failed,
+        results: result.results,
+        message: result.message,
+      };
+    }
+
+    if (input.actionType === 'PROMOTE_VIA_VIDEO') {
+      const result = await cjShopifyUsaPicoService.promoteViaVideo(userId, limit);
+      return {
+        ok: result.ok,
+        executed: Boolean(result.executed),
+        actionType: input.actionType,
+        queued: result.queued,
+        skipped: (result as { skipped?: boolean }).skipped,
+        message: result.message,
+      };
+    }
+
     const selected = dashboard.promotionCandidates.slice(0, limit);
 
     for (const candidate of selected) {
@@ -2395,13 +2537,67 @@ export const cjShopifyUsaSalesAgentService = {
             log('marketing', cycle.promoted > 0 ? 'success' : 'warn', 'Marketing organico encolado', {
               platform: 'Pinterest',
               queued: cycle.promoted,
-              instagram: 'manual_until_oauth',
-              tiktok: 'manual_until_oauth',
             });
           }
         }
       } else {
         log('marketing', 'info', 'Sin candidatos elegibles para marketing organico');
+      }
+
+      if (schedulerConfig.autoPromoteViaVideo && process.env.CREATOMATE_API_KEY && dashboard.videoCandidates.length > 0) {
+        const limit = schedulerConfig.safeMode
+          ? Math.min(schedulerConfig.maxVideoRendersPerCycle, 1)
+          : schedulerConfig.maxVideoRendersPerCycle;
+        if (limit > 0) {
+          const result = await this.executeAction(userId, { actionType: 'PROMOTE_VIA_VIDEO', limit });
+          log('marketing', n((result as { queued?: number }).queued) > 0 ? 'success' : 'warn', 'PICO: videos encolados (Creatomate)', {
+            queued: n((result as { queued?: number }).queued),
+            tiktok: process.env.TIKTOK_ACCESS_TOKEN ? 'configured' : 'missing_token',
+            instagram: process.env.INSTAGRAM_ACCESS_TOKEN ? 'configured' : 'missing_token',
+          });
+        }
+      } else if (!process.env.CREATOMATE_API_KEY) {
+        log('marketing', 'info', 'PICO video omitido: CREATOMATE_API_KEY no configurada');
+      }
+
+      if (schedulerConfig.autoPromoteViaBlog && process.env.OPENAI_API_KEY && dashboard.blogCandidates.length > 0) {
+        const limit = schedulerConfig.safeMode
+          ? Math.min(schedulerConfig.maxBlogPostsPerCycle, 1)
+          : schedulerConfig.maxBlogPostsPerCycle;
+        if (limit > 0) {
+          const result = await this.executeAction(userId, { actionType: 'PROMOTE_VIA_BLOG', limit });
+          log('marketing', n((result as { published?: number }).published) > 0 ? 'success' : 'warn', 'PICO: articulos de blog publicados', {
+            published: n((result as { published?: number }).published),
+            failed: n((result as { failed?: number }).failed),
+          });
+        }
+      } else if (!process.env.OPENAI_API_KEY) {
+        log('marketing', 'info', 'PICO blog omitido: OPENAI_API_KEY no configurada');
+      }
+
+      if (schedulerConfig.autoEvaluateStagnantSeo && process.env.OPENAI_API_KEY && dashboard.stagnantSeoCandidates.length > 0) {
+        const limit = schedulerConfig.safeMode
+          ? Math.min(schedulerConfig.maxSeoUpdatesPerCycle, 2)
+          : schedulerConfig.maxSeoUpdatesPerCycle;
+        if (limit > 0) {
+          const result = await this.executeAction(userId, { actionType: 'EVALUATE_STAGNANT_LISTINGS', limit });
+          cycle.errors += n((result as { failed?: number }).failed);
+          log('learning', n((result as { updated?: number }).updated) > 0 ? 'success' : 'warn', 'PICO: SEO evolutivo en listings estancados', {
+            updated: n((result as { updated?: number }).updated),
+            failed: n((result as { failed?: number }).failed),
+          });
+        }
+      }
+
+      try {
+        const backlog = await cjShopifyUsaPicoService.processVideoBacklog(userId, 8);
+        if (backlog.processed > 0) {
+          log('marketing', 'info', 'PICO: backlog de videos procesado', { processed: backlog.processed });
+        }
+      } catch (backlogErr) {
+        log('marketing', 'warn', 'PICO video backlog no procesado', {
+          error: backlogErr instanceof Error ? backlogErr.message : String(backlogErr),
+        });
       }
 
       const learningSignals = {
@@ -2410,6 +2606,8 @@ export const cjShopifyUsaSalesAgentService = {
         funnelLearningReady: dashboard.kpis.visitors > 0,
         topAction: dashboard.actions[0]?.type ?? null,
         pipelineBottleneck: dashboard.salesPipeline.bottleneck.key,
+        picoBlogsPublished: dashboard.pico?.stats.blogsPublished ?? 0,
+        picoVideosPublished: dashboard.pico?.stats.videosPublished ?? 0,
       };
       log('learning', 'info', 'Aprendizaje actualizado con resultados del ciclo', learningSignals);
       await recordSalesAgentTrace(userId, 'sales_agent.pipeline.snapshot', {

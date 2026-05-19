@@ -795,6 +795,46 @@ export class CjShopifyUsaAdminService {
     ) ?? null;
   }
 
+  async createBlogArticle(userId: number, title: string, contentHtml: string, productTitle: string): Promise<string> {
+    const token = await this.getAccessToken(userId);
+
+    // First find a blog
+    const blogsResponse = await fetch(`https://${token.shopDomain}/admin/api/${env.SHOPIFY_API_VERSION}/blogs.json`, {
+      headers: { 'X-Shopify-Access-Token': token.accessToken }
+    });
+    const blogsData = await blogsResponse.json() as any;
+    const blogId = blogsData.blogs?.[0]?.id;
+
+    if (!blogId) {
+      throw new AppError('No blog found in Shopify store to publish the article.', 404, ErrorCode.EXTERNAL_API_ERROR);
+    }
+
+    // Create article
+    const articleResponse = await fetch(`https://${token.shopDomain}/admin/api/${env.SHOPIFY_API_VERSION}/blogs/${blogId}/articles.json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': token.accessToken
+      },
+      body: JSON.stringify({
+        article: {
+          title,
+          body_html: contentHtml,
+          author: 'PawVault',
+          tags: productTitle,
+          published: true
+        }
+      })
+    });
+
+    const articleData = await articleResponse.json() as any;
+    if (!articleResponse.ok) {
+      throw new AppError(`Shopify API Error: ${JSON.stringify(articleData)}`, 400, ErrorCode.EXTERNAL_API_ERROR);
+    }
+
+    return String(articleData.article.id);
+  }
+
   async listProducts(input: {
     userId: number;
     first?: number;

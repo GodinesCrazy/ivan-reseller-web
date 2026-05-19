@@ -133,9 +133,15 @@ type SalesAgentScheduler = {
     autoPublishApprovedDrafts: boolean;
     autoUnpublishUnsafeListings: boolean;
     autoPromoteOrganic: boolean;
+    autoPromoteViaBlog: boolean;
+    autoEvaluateStagnantSeo: boolean;
+    autoPromoteViaVideo: boolean;
     maxPublishPerCycle: number;
     maxUnpublishPerCycle: number;
     maxPromotionsPerCycle: number;
+    maxBlogPostsPerCycle: number;
+    maxSeoUpdatesPerCycle: number;
+    maxVideoRendersPerCycle: number;
   };
   currentCycle: null | {
     cycleId: string;
@@ -329,6 +335,29 @@ type SalesAgentDashboard = {
     status: 'done' | 'watch' | 'needs_review';
   }>;
   promotionCandidates: PromotionCandidate[];
+  blogCandidates?: Array<{ listingId: number; title: string; score: number; marginPct: number }>;
+  stagnantSeoCandidates?: Array<{ listingId: number; title: string; daysListed: number }>;
+  videoCandidates?: Array<{ listingId: number; title: string; score: number; imageCount: number }>;
+  pico?: {
+    generatedAt: string;
+    readiness: {
+      openai: boolean;
+      creatomate: boolean;
+      tiktok: boolean;
+      instagram: boolean;
+      pinterest: boolean;
+    };
+    stats: {
+      blogsPublished: number;
+      blogsFailed: number;
+      videosPublished: number;
+      videosFailed: number;
+      videosInProgress: number;
+      listingsSeoRefreshed: number;
+    };
+    candidates: { blog: number; stagnantSeo: number; video: number };
+    recentActivity: Array<{ id: string; message: string; createdAt: string }>;
+  };
   publishableDrafts: Array<{ listingId: number; title: string; priceUsd: number; marginPct: number }>;
   unsafeUnpublishCandidates: Array<{
     listingId: number;
@@ -1267,6 +1296,9 @@ export default function CjShopifyUsaSalesAgentPage() {
                       ['Publicar', 'maxPublishPerCycle'],
                       ['Despublicar', 'maxUnpublishPerCycle'],
                       ['Promover', 'maxPromotionsPerCycle'],
+                      ['Blog SEO', 'maxBlogPostsPerCycle'],
+                      ['SEO 30d', 'maxSeoUpdatesPerCycle'],
+                      ['Video', 'maxVideoRendersPerCycle'],
                     ].map(([label, key]) => (
                       <label key={key} className="text-[11px] text-slate-400">
                         {label}
@@ -1289,7 +1321,10 @@ export default function CjShopifyUsaSalesAgentPage() {
                     {[
                       ['autoPublishApprovedDrafts', 'Publicar drafts aprobados'],
                       ['autoUnpublishUnsafeListings', 'Despublicar PAUSE_UNSAFE'],
-                      ['autoPromoteOrganic', 'Marketing organico'],
+                      ['autoPromoteOrganic', 'Pinterest organico'],
+                      ['autoPromoteViaBlog', 'PICO: Blog SEO'],
+                      ['autoEvaluateStagnantSeo', 'PICO: SEO 30 dias'],
+                      ['autoPromoteViaVideo', 'PICO: Video TikTok/IG'],
                       ['safeMode', 'Modo seguro'],
                     ].map(([key, label]) => (
                       <label key={key} className="flex items-center justify-between gap-3 rounded bg-black/20 px-3 py-2">
@@ -1929,6 +1964,44 @@ export default function CjShopifyUsaSalesAgentPage() {
                 </div>
               </div>
             </aside>
+          </section>
+          )}
+
+          {commandTab === 'proteger' && data.pico && (
+          <section className="mb-4 rounded-lg border border-violet-500/30 bg-violet-950/10 p-4">
+            <h3 className="flex items-center gap-2 text-base font-semibold text-violet-100">
+              <Sparkles className="h-4 w-4 text-violet-300" />
+              PICO — Crecimiento organico
+            </h3>
+            <p className="mt-1 text-xs text-violet-200/80">
+              Blog SEO, SEO evolutivo y video TikTok/Instagram (Creatomate en la nube).
+            </p>
+            <motion.div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+              {(
+                [
+                  ['OpenAI', data.pico.readiness.openai],
+                  ['Creatomate', data.pico.readiness.creatomate],
+                  ['TikTok', data.pico.readiness.tiktok],
+                  ['Instagram', data.pico.readiness.instagram],
+                  ['Pinterest', data.pico.readiness.pinterest],
+                ] as const
+              ).map(([label, ready]) => (
+                <span
+                  key={label}
+                  className={`rounded px-2 py-1.5 text-center font-semibold ${ready ? 'bg-emerald-500/15 text-emerald-200' : 'bg-slate-800 text-slate-500'}`}
+                >
+                  {label}: {ready ? 'OK' : 'falta'}
+                </span>
+              ))}
+            </motion.div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-300 sm:grid-cols-4">
+              <span className="rounded bg-black/20 p-2">Blogs: {data.pico.stats.blogsPublished} publicados</span>
+              <span className="rounded bg-black/20 p-2">Videos: {data.pico.stats.videosPublished} · {data.pico.stats.videosInProgress} en curso</span>
+              <span className="rounded bg-black/20 p-2">SEO refresh: {data.pico.stats.listingsSeoRefreshed}</span>
+              <span className="rounded bg-black/20 p-2">
+                Listos: {data.pico.candidates.blog} blog · {data.pico.candidates.stagnantSeo} SEO · {data.pico.candidates.video} video
+              </span>
+            </div>
           </section>
           )}
 

@@ -94,6 +94,11 @@ export const CJ_SHOPIFY_USA_TRACE_STEP = {
   SOCIAL_POST_SUCCESS: 'social.post.success',
   SOCIAL_POST_ERROR: 'social.post.error',
   SOCIAL_POST_RETRY: 'social.post.retry',
+  PICO_VIDEO_START: 'pico.video.start',
+  PICO_VIDEO_RENDER: 'pico.video.render',
+  PICO_VIDEO_PUBLISH: 'pico.video.publish',
+  PICO_VIDEO_SUCCESS: 'pico.video.success',
+  PICO_VIDEO_ERROR: 'pico.video.error',
   SALES_AGENT_ACTION: 'sales.agent.action',
 } as const;
 
@@ -157,12 +162,32 @@ export const CJ_SHOPIFY_USA_ALERT_TYPE = {
 
 export const CJ_SHOPIFY_USA_SOCIAL_POST_PLATFORM = {
   PINTEREST: 'PINTEREST',
+  TIKTOK: 'TIKTOK',
+  INSTAGRAM: 'INSTAGRAM',
+} as const;
+
+export const CJ_SHOPIFY_USA_VIDEO_POST_STATUS = {
+  PENDING: 'PENDING',
+  COLLECTING: 'COLLECTING',
+  RENDERING: 'RENDERING',
+  RENDERED: 'RENDERED',
+  PUBLISHING: 'PUBLISHING',
+  RETRYING: 'RETRYING',
+  SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
 } as const;
 
 export const CJ_SHOPIFY_USA_SOCIAL_POST_STATUS = {
   PENDING: 'PENDING',
   RETRYING: 'RETRYING',
   SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
+} as const;
+
+export const CJ_SHOPIFY_USA_BLOG_ENTRY_STATUS = {
+  PENDING: 'PENDING',
+  GENERATING: 'GENERATING',
+  PUBLISHED: 'PUBLISHED',
   FAILED: 'FAILED',
 } as const;
 

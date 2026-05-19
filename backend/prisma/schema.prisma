@@ -135,6 +135,8 @@ model User {
   cjShopifyUsaProductMetricDaily CjShopifyUsaProductMetricDaily[]
   cjShopifyUsaProductExperiments CjShopifyUsaProductExperiment[]
   cjShopifyUsaProductExperimentVariants CjShopifyUsaProductExperimentVariant[]
+  cjShopifyUsaBlogEntries       CjShopifyUsaBlogEntry[]
+  cjShopifyUsaVideoPosts        CjShopifyUsaVideoPost[]
 
   // TopDawg → Shopify USA vertical (isolated module)
   topDawgShopifyUsaAccountSettings   TopDawgShopifyUsaAccountSettings?
@@ -2859,6 +2861,7 @@ model CjShopifyUsaProduct {
   listings         CjShopifyUsaListing[]
   orders           CjShopifyUsaOrder[]
   metricsDaily     CjShopifyUsaProductMetricDaily[]
+  blogEntries      CjShopifyUsaBlogEntry[]
 
   @@unique([userId, cjProductId])
   @@index([userId])
@@ -2964,6 +2967,7 @@ model CjShopifyUsaListing {
   shippingQuoteId Int?
   handlingTimeDays Int?
   publishedAt     DateTime?
+  lastSeoUpdate   DateTime?
   reconcileAttempts    Int       @default(0)
   reconcileRetryAfter  DateTime?
 
@@ -2977,6 +2981,7 @@ model CjShopifyUsaListing {
   shippingQuote CjShopifyUsaShippingQuote?     @relation(fields: [shippingQuoteId], references: [id], onDelete: SetNull)
   orders        CjShopifyUsaOrder[]
   socialPosts   CjShopifyUsaSocialPost[]
+  videoPosts    CjShopifyUsaVideoPost[]
   metricsDaily  CjShopifyUsaProductMetricDaily[]
   experiments   CjShopifyUsaProductExperiment[]
 
@@ -3549,4 +3554,63 @@ model TopDawgShopifyUsaProfitSnapshot {
 
   @@unique([userId, date])
   @@map("topdawg_shopify_usa_profit_snapshots")
+}
+
+// ====================================
+// PICO ORGANIC GROWTH MODULES
+// ====================================
+
+model CjShopifyUsaBlogEntry {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  productId       Int      // The product this blog post promotes
+  shopifyArticleId String? // ID returned from Shopify API
+  keyword         String   // The target SEO keyword (e.g., "best dog anxiety bed")
+  title           String   // Blog post title
+  contentHtml     String   @db.Text
+  status          String   @default("PENDING") // PENDING, GENERATING, PUBLISHED, FAILED
+  publishedAt     DateTime?
+  error           String?  @db.Text
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product         CjShopifyUsaProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId, status])
+  @@index([productId])
+  @@map("cj_shopify_usa_blog_entries")
+}
+
+model CjShopifyUsaVideoPost {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  listingId      Int
+  renderGroupId  String   // shared across TIKTOK/INSTAGRAM from one Creatomate render
+  platform       String   // TIKTOK | INSTAGRAM
+  status         String   @default("PENDING")
+  title          String   @db.Text
+  caption        String?  @db.Text
+  hashtags       String?  @db.Text
+  imageUrls      Json?
+  renderId       String?
+  videoUrl       String?  @db.Text
+  externalId     String?
+  publishUrl     String?  @db.Text
+  errorMsg       String?  @db.Text
+  attempts       Int      @default(0)
+  publishedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing CjShopifyUsaListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId, platform])
+  @@index([userId, status])
+  @@index([listingId])
+  @@index([renderGroupId])
+  @@map("cj_shopify_usa_video_posts")
 }
