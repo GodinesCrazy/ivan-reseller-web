@@ -4,8 +4,9 @@
  * new connections (too many clients). Typical during rolling deploy.
  *
  * Env:
- *   MIGRATE_MAX_ATTEMPTS (default 18)
- *   MIGRATE_RETRY_DELAY_SEC (default 20)
+ *   MIGRATE_MAX_ATTEMPTS (default 3)
+ *   MIGRATE_RETRY_DELAY_SEC (default 10)
+ *   MIGRATE_COMMAND_TIMEOUT_SEC (default 30)
  *   MIGRATE_FAIL_ON_SATURATION=true to fail deploy if all retries hit only saturation
  */
 const { spawnSync } = require('child_process');
@@ -26,8 +27,9 @@ function isConnectionSaturated(text) {
   );
 }
 
-const maxAttempts = Math.max(1, Number(process.env.MIGRATE_MAX_ATTEMPTS || 18));
-const delaySec = Math.max(5, Number(process.env.MIGRATE_RETRY_DELAY_SEC || 20));
+const maxAttempts = Math.max(1, Number(process.env.MIGRATE_MAX_ATTEMPTS || 3));
+const delaySec = Math.max(5, Number(process.env.MIGRATE_RETRY_DELAY_SEC || 10));
+const commandTimeoutMs = Math.max(10, Number(process.env.MIGRATE_COMMAND_TIMEOUT_SEC || 30)) * 1000;
 const failOnSaturation = String(process.env.MIGRATE_FAIL_ON_SATURATION || '').toLowerCase() === 'true';
 
 const env = {
@@ -41,6 +43,7 @@ async function main() {
       env,
       encoding: 'utf8',
       maxBuffer: 10 * 1024 * 1024,
+      timeout: commandTimeoutMs,
     });
     if (result.stdout) process.stdout.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
@@ -50,7 +53,11 @@ async function main() {
     }
 
     const combined = (result.stdout || '') + (result.stderr || '');
-    if (!isConnectionSaturated(combined)) {
+    if (result.error && result.error.code === 'ETIMEDOUT') {
+      console.error(
+        `[railway-migrate-deploy] Prisma migrate excedio ${commandTimeoutMs / 1000}s en el intento ${attempt}/${maxAttempts}.`
+      );
+    } else if (!isConnectionSaturated(combined)) {
       process.exit(result.status ?? 1);
     }
 
