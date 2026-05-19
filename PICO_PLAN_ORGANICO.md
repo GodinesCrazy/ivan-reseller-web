@@ -45,12 +45,12 @@
 ---
 
 ## 🚀 Fase 4: Despliegue en Producción (Railway)
-**Estado:** `[Casi listo / falta aplicar migración y activar credenciales en Railway]`
+**Estado:** `[Desplegado / falta activar credenciales Creatomate-sociales y primer ciclo supervisado]`
 
 - [x] 4.1 **Actualización de variables `.env`**: `.env.example` incluye `OPENAI_API_KEY`, `CREATOMATE_API_KEY`, `TIKTOK_ACCESS_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `PINTEREST_ACCESS_TOKEN`, `PINTEREST_BOARD_ID`.
 - [x] 4.2 **Sincronización al `SalesAgent`**: Módulo *PICO* conectado al ciclo del Sales Agent y al procesamiento de backlog de video.
 - [x] 4.3 **Monitoreo en Vivo**: Endpoint `GET /api/cj-shopify-usa/pico/status`, acción `POST /api/cj-shopify-usa/pico/video/process-backlog`, panel UI y script `npm run pico:status`.
-- [ ] 4.4 **Migración producción:** Aplicar `backend/prisma/migrations/20260517120000_pico_organic_growth/migration.sql` con `npm run prisma:migrate:deploy`.
+- [x] 4.4 **Migración producción:** `backend/prisma/migrations/20260517120000_pico_organic_growth/migration.sql` aplicada; `npm run pico:status:db` confirma `lastSeoUpdate`, `cj_shopify_usa_blog_entries` y `cj_shopify_usa_video_posts`.
 - [ ] 4.5 **Primer ciclo supervisado:** Ejecutar una acción manual PICO desde el Agente Vendedor y verificar trazas recientes.
 
 ---
