@@ -85,6 +85,13 @@ type ActionExecutionResult = {
   rateLimited?: boolean;
 };
 
+type CommandFeedback = {
+  tone: 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  detail: string;
+  metrics?: string;
+};
+
 type PromotionCandidate = {
   listingId: number;
   title: string;
@@ -613,6 +620,109 @@ function trafficQualitySignal(data: SalesAgentDashboard): { label: string; detai
   };
 }
 
+function schedulerStatusCopy(scheduler: SalesAgentScheduler | undefined): { label: string; detail: string; className: string } {
+  if (!scheduler) {
+    return {
+      label: 'Sin lectura del agente',
+      detail: 'No se pudo leer el estado del scheduler.',
+      className: 'border-slate-700 bg-slate-900 text-slate-300',
+    };
+  }
+  if (scheduler.currentCycle?.status === 'RUNNING') {
+    return {
+      label: 'Trabajando ahora',
+      detail: 'Hay un ciclo activo. La pantalla se actualiza automaticamente cada pocos segundos.',
+      className: 'border-cyan-400/45 bg-cyan-950/25 text-cyan-100',
+    };
+  }
+  if (scheduler.state === 'RUNNING') {
+    return {
+      label: 'Automatico activo',
+      detail: `Ejecuta ciclos cada ${scheduler.config.intervalHours}h con limites y guardrails.`,
+      className: 'border-emerald-500/40 bg-emerald-950/25 text-emerald-100',
+    };
+  }
+  if (scheduler.state === 'PAUSED') {
+    return {
+      label: 'Pausado',
+      detail: 'No corre solo hasta que presiones Iniciar o Ejecutar ahora.',
+      className: 'border-amber-500/45 bg-amber-950/25 text-amber-100',
+    };
+  }
+  if (scheduler.state === 'ERROR') {
+    return {
+      label: 'Requiere revision',
+      detail: 'El ultimo ciclo reporto error. Revisa la linea de eventos antes de reactivar.',
+      className: 'border-red-500/45 bg-red-950/25 text-red-100',
+    };
+  }
+  return {
+    label: scheduler.config.enabled ? 'Listo, esperando ciclo' : 'Automatico apagado',
+    detail: scheduler.config.enabled ? `Proximo ciclo: ${dateTime(scheduler.nextRunAt)}.` : 'Puedes activar el piloto automatico desde Aprendizaje.',
+    className: scheduler.config.enabled
+      ? 'border-cyan-500/35 bg-cyan-950/20 text-cyan-100'
+      : 'border-slate-700 bg-slate-900 text-slate-300',
+  };
+}
+
+function dataTruthSummary(data: SalesAgentDashboard): { label: string; detail: string; className: string } {
+  if (!data.shopifyTruth.ok) {
+    return {
+      label: 'Datos parciales',
+      detail: data.shopifyTruth.error || 'La conciliacion con Shopify no respondio; algunas cifras quedan como lectura local.',
+      className: 'border-amber-500/45 bg-amber-950/25 text-amber-100',
+    };
+  }
+  const missing = data.salesPipeline.dataSources.missing.length;
+  if (missing > 0) {
+    return {
+      label: 'Fidedigno con advertencias',
+      detail: `BD y Shopify estan conciliados; faltan ${missing} fuentes externas para precision total.`,
+      className: 'border-cyan-500/35 bg-cyan-950/20 text-cyan-100',
+    };
+  }
+  return {
+    label: 'Fidedigno',
+    detail: 'La lectura combina BD, Shopify, ventas 30d, Profit Guard y trazas reales del agente.',
+    className: 'border-emerald-500/40 bg-emerald-950/25 text-emerald-100',
+  };
+}
+
+function picoReadinessSummary(data: SalesAgentDashboard): { label: string; detail: string; className: string } {
+  if (!data.pico) {
+    return {
+      label: 'PICO sin lectura',
+      detail: 'El bloque PICO no vino en la respuesta del backend.',
+      className: 'border-slate-700 bg-slate-900 text-slate-300',
+    };
+  }
+  const missing = Object.entries(data.pico.readiness)
+    .filter(([, ready]) => !ready)
+    .map(([name]) => name);
+  if (missing.length === 0) {
+    return {
+      label: 'PICO listo',
+      detail: 'Blog, SEO, video y publishers tienen credenciales disponibles.',
+      className: 'border-emerald-500/40 bg-emerald-950/25 text-emerald-100',
+    };
+  }
+  const coreMissing = missing.filter((name) => name === 'openai' || name === 'creatomate');
+  return {
+    label: coreMissing.length ? 'PICO parcialmente bloqueado' : 'PICO sin publishers sociales',
+    detail: `Falta configurar: ${missing.join(', ')}.`,
+    className: coreMissing.length
+      ? 'border-amber-500/45 bg-amber-950/25 text-amber-100'
+      : 'border-cyan-500/35 bg-cyan-950/20 text-cyan-100',
+  };
+}
+
+function feedbackClass(tone: CommandFeedback['tone']): string {
+  if (tone === 'success') return 'border-emerald-500/40 bg-emerald-950/25 text-emerald-100';
+  if (tone === 'warning') return 'border-amber-500/45 bg-amber-950/25 text-amber-100';
+  if (tone === 'error') return 'border-red-500/45 bg-red-950/25 text-red-100';
+  return 'border-cyan-500/40 bg-cyan-950/25 text-cyan-100';
+}
+
 export default function CjShopifyUsaSalesAgentPage() {
   const [data, setData] = useState<SalesAgentDashboard | null>(null);
   const [commandTab, setCommandTab] = useState<'ahora' | 'escalar' | 'corregir' | 'proteger' | 'aprendizaje'>('ahora');
@@ -620,9 +730,13 @@ export default function CjShopifyUsaSalesAgentPage() {
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<CommandFeedback | null>(null);
   const [actionResults, setActionResults] = useState<Record<string, ActionExecutionResult>>({});
   const scheduler = data?.learning.scheduler;
   const trafficSignal = data ? trafficQualitySignal(data) : null;
+  const schedulerCopy = data ? schedulerStatusCopy(scheduler) : null;
+  const dataTruth = data ? dataTruthSummary(data) : null;
+  const picoTruth = data ? picoReadinessSummary(data) : null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -664,22 +778,46 @@ export default function CjShopifyUsaSalesAgentPage() {
     setRunning(action.id);
     setError(null);
     setMessage(null);
+    setFeedback({
+      tone: 'info',
+      title: 'Accion enviada al agente',
+      detail: `${action.title} esta corriendo con guardrails. Actualizare la lectura al terminar.`,
+    });
     try {
       const res = await api.post('/api/cj-shopify-usa/sales-agent/actions', {
         actionType: action.type,
         limit: 5,
       });
       const result = (res.data ?? {}) as ActionExecutionResult;
+      const metrics = actionResultMetrics(result);
       setActionResults((prev) => ({ ...prev, [action.id]: result }));
       if (result.ok === false) {
         setError(null);
         setMessage(String(result.message || 'La accion no se aplico porque requiere esperar o revisar guardrails.'));
+        setFeedback({
+          tone: 'warning',
+          title: 'Accion no completada automaticamente',
+          detail: String(result.message || 'El agente encontro guardrails, rate limit o revision pendiente.'),
+          metrics,
+        });
       } else {
         setMessage(String(result.message || 'Accion ejecutada.'));
+        setFeedback({
+          tone: actionResolved(result) ? 'success' : 'warning',
+          title: actionResolved(result) ? 'Accion aplicada' : 'Accion ejecutada con pendientes',
+          detail: String(result.message || 'El agente termino la accion y registro trazabilidad.'),
+          metrics,
+        });
       }
       await load();
     } catch (e) {
-      setError(axiosMsg(e, 'No se pudo ejecutar la accion del agente.'));
+      const msg = axiosMsg(e, 'No se pudo ejecutar la accion del agente.');
+      setError(msg);
+      setFeedback({
+        tone: 'error',
+        title: 'Fallo al ejecutar',
+        detail: msg,
+      });
     } finally {
       setRunning(null);
     }
@@ -689,6 +827,13 @@ export default function CjShopifyUsaSalesAgentPage() {
     setRunning(`scheduler-${command}`);
     setError(null);
     setMessage(null);
+    setFeedback({
+      tone: 'info',
+      title: command === 'run-now' ? 'Ciclo manual iniciado' : 'Comando enviado',
+      detail: command === 'run-now'
+        ? 'El agente esta revisando pipeline, guardrails y acciones automaticas permitidas.'
+        : `Aplicando comando ${command} al piloto automatico.`,
+    });
     try {
       const res = await api.post(`/api/cj-shopify-usa/sales-agent/scheduler/${command}`);
       if (command === 'run-now') {
@@ -702,9 +847,20 @@ export default function CjShopifyUsaSalesAgentPage() {
         }));
       }
       setMessage(command === 'run-now' ? 'Ciclo del agente vendedor ejecutado.' : 'Estado del agente vendedor actualizado.');
+      setFeedback({
+        tone: 'success',
+        title: command === 'run-now' ? 'Ciclo solicitado' : 'Estado actualizado',
+        detail: String(res.data?.message || (command === 'run-now' ? 'El ciclo manual fue solicitado correctamente.' : 'El scheduler cambio de estado.')),
+      });
       await load();
     } catch (e) {
-      setError(axiosMsg(e, 'No se pudo controlar el ciclo del agente vendedor.'));
+      const msg = axiosMsg(e, 'No se pudo controlar el ciclo del agente vendedor.');
+      setError(msg);
+      setFeedback({
+        tone: 'error',
+        title: 'No se pudo controlar el agente',
+        detail: msg,
+      });
     } finally {
       setRunning(null);
     }
@@ -714,12 +870,28 @@ export default function CjShopifyUsaSalesAgentPage() {
     setRunning('scheduler-config');
     setError(null);
     setMessage(null);
+    setFeedback({
+      tone: 'info',
+      title: 'Guardando configuracion',
+      detail: 'Estoy actualizando los limites y automatizaciones del agente.',
+    });
     try {
       await api.patch('/api/cj-shopify-usa/sales-agent/scheduler/config', patch);
       setMessage('Configuracion del ciclo vendedor guardada.');
+      setFeedback({
+        tone: 'success',
+        title: 'Configuracion guardada',
+        detail: 'Los proximos ciclos usaran estos limites y permisos.',
+      });
       await load();
     } catch (e) {
-      setError(axiosMsg(e, 'No se pudo guardar la configuracion del agente vendedor.'));
+      const msg = axiosMsg(e, 'No se pudo guardar la configuracion del agente vendedor.');
+      setError(msg);
+      setFeedback({
+        tone: 'error',
+        title: 'No se pudo guardar',
+        detail: msg,
+      });
     } finally {
       setRunning(null);
     }
@@ -738,20 +910,93 @@ export default function CjShopifyUsaSalesAgentPage() {
     <div className="space-y-5">
       <CommercialPageHeader
         title="Centro de mando comercial"
-        description="Decide que escalar, corregir, proteger o retirar usando ventas reales 30d, margen, trafico, Profit Guard y memoria del agente."
+        description="El agente trabaja de forma autonoma con guardrails. Esta pantalla separa trabajo automatico, decisiones humanas, ultimo resultado y confiabilidad de datos."
       />
+
+      {data && (
+        <section className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr]">
+          <div className={`rounded-lg border p-4 ${schedulerCopy?.className ?? 'border-slate-700 bg-slate-900 text-slate-300'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide opacity-80">Piloto automatico</p>
+                <h2 className="mt-1 text-lg font-bold text-white">{schedulerCopy?.label}</h2>
+                <p className="mt-1 text-sm opacity-90">{schedulerCopy?.detail}</p>
+              </div>
+              <Bot className="h-5 w-5 shrink-0 opacity-80" />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <span className="rounded bg-black/20 px-2 py-1">Ultimo: <b>{dateTime(scheduler?.lastRunAt)}</b></span>
+              <span className="rounded bg-black/20 px-2 py-1">Proximo: <b>{dateTime(scheduler?.nextRunAt)}</b></span>
+            </div>
+          </div>
+
+          <div className={`rounded-lg border p-4 ${dataTruth?.className ?? 'border-slate-700 bg-slate-900 text-slate-300'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide opacity-80">Fidelidad de datos</p>
+                <h2 className="mt-1 text-lg font-bold text-white">{dataTruth?.label}</h2>
+                <p className="mt-1 text-sm opacity-90">{dataTruth?.detail}</p>
+              </div>
+              <ShieldCheck className="h-5 w-5 shrink-0 opacity-80" />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+              <span className="rounded bg-black/20 px-2 py-1">Ventas 30d: real</span>
+              <span className="rounded bg-black/20 px-2 py-1">Scores: estimacion</span>
+              <span className="rounded bg-black/20 px-2 py-1">Shopify: {data.shopifyTruth.ok ? 'OK' : 'parcial'}</span>
+            </div>
+          </div>
+
+          <div className={`rounded-lg border p-4 ${picoTruth?.className ?? 'border-slate-700 bg-slate-900 text-slate-300'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide opacity-80">PICO</p>
+                <h2 className="mt-1 text-lg font-bold text-white">{picoTruth?.label}</h2>
+                <p className="mt-1 text-sm opacity-90">{picoTruth?.detail}</p>
+              </div>
+              <Sparkles className="h-5 w-5 shrink-0 opacity-80" />
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+              <span className="rounded bg-black/20 px-2 py-1">Blog <b>{data.pico?.candidates.blog ?? 0}</b></span>
+              <span className="rounded bg-black/20 px-2 py-1">SEO <b>{data.pico?.candidates.stagnantSeo ?? 0}</b></span>
+              <span className="rounded bg-black/20 px-2 py-1">Video <b>{data.pico?.candidates.video ?? 0}</b></span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {(feedback || error || message || running) && (
+        <section className={`rounded-lg border px-4 py-3 text-sm ${feedback ? feedbackClass(feedback.tone) : running ? feedbackClass('info') : error ? feedbackClass('error') : feedbackClass('success')}`}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 gap-3">
+              {running ? <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 animate-spin" /> : feedback?.tone === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : feedback?.tone === 'warning' || error ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />}
+              <div className="min-w-0">
+                <p className="font-bold">{feedback?.title ?? (running ? 'Procesando' : error ? 'Error' : 'Actualizado')}</p>
+                <p className="mt-1 opacity-90">
+                  {feedback?.detail ?? error ?? message ?? 'El agente esta trabajando y la pantalla se actualizara automaticamente.'}
+                </p>
+                {feedback?.metrics ? <p className="mt-1 text-xs opacity-80">{feedback.metrics}</p> : null}
+              </div>
+            </div>
+            {running ? (
+              <span className="shrink-0 rounded-full bg-black/20 px-2 py-1 text-xs font-bold">
+                {running.startsWith('scheduler') ? 'ciclo del agente' : 'accion del agente'}
+              </span>
+            ) : null}
+          </div>
+        </section>
+      )}
 
       <ActionPriorityBand
         tone={(data?.actions ?? []).some((action) => action.priority === 'critical' || action.priority === 'high') ? 'amber' : (data?.commercialScores.top.length ?? 0) > 0 ? 'emerald' : 'cyan'}
         title={(data?.actions ?? [])[0]?.title ?? 'Siguiente accion: buscar el mejor producto rentable para escalar.'}
         description={(data?.actions ?? [])[0]?.rationale ?? data?.mission ?? 'El agente prioriza ventas rentables, calidad de producto, confianza de tienda y proteccion de margen.'}
-        primaryLabel={(data?.actions ?? [])[0]?.canExecute ? 'Ejecutar accion' : 'Actualizar lectura'}
+        primaryLabel={running ? 'Procesando...' : (data?.actions ?? [])[0]?.canExecute ? 'Ejecutar accion prioritaria' : 'Actualizar lectura'}
         onPrimary={() => {
           const first = (data?.actions ?? [])[0];
           if (first?.canExecute) void execute(first);
           else void load();
         }}
-        secondaryLabel="Run agente"
+        secondaryLabel={running === 'scheduler-run-now' ? 'Corriendo ciclo...' : 'Ejecutar ciclo ahora'}
         onSecondary={() => void schedulerCommand('run-now')}
         disabled={!!running}
         meta={[
@@ -842,8 +1087,14 @@ export default function CjShopifyUsaSalesAgentPage() {
           title: action.title,
           detail: action.expectedImpact,
           tone: action.priority === 'critical' ? 'rose' : action.priority === 'high' ? 'amber' : action.priority === 'medium' ? 'cyan' : 'slate',
-          actionLabel: action.canExecute ? 'Ejecutar' : undefined,
+          statusLabel: running === action.id
+            ? 'Ejecutando'
+            : actionResults[action.id]
+              ? executionLabel(currentExecutionStatus(action, actionResults[action.id], false))
+              : actionRoleLabel(action, currentExecutionStatus(action, undefined, false)),
+          actionLabel: action.canExecute ? (running === action.id ? 'Ejecutando...' : 'Ejecutar') : undefined,
           onAction: action.canExecute ? () => void execute(action) : undefined,
+          disabled: !!running,
         }))}
         emptyLabel="Sin acciones comerciales urgentes."
       />
@@ -1044,23 +1295,6 @@ export default function CjShopifyUsaSalesAgentPage() {
           Actualizar
         </button>
       </div>
-
-      {error && (
-        <div className="rounded-lg border border-red-500/40 bg-red-950/30 px-4 py-3 text-sm text-red-100">
-          {error}
-        </div>
-      )}
-      {message && (
-        <div className="rounded-lg border border-emerald-500/40 bg-emerald-950/25 px-4 py-3 text-sm text-emerald-100">
-          {message}
-        </div>
-      )}
-      {running && (
-        <div className="flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-950/30 px-4 py-3 text-sm text-cyan-100">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          Procesando {running.startsWith('scheduler') ? 'ciclo del agente' : 'accion del agente'}... se actualizara automaticamente.
-        </div>
-      )}
 
       {data && (
         <>
@@ -1317,6 +1551,9 @@ export default function CjShopifyUsaSalesAgentPage() {
 
                 <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
                   <p className="text-xs font-bold uppercase text-slate-500">Automatizaciones permitidas</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    ON significa que el agente puede hacerlo solo durante sus ciclos. OFF deja la accion disponible solo como ejecucion manual.
+                  </p>
                   <div className="mt-3 grid gap-2 text-xs text-slate-300">
                     {[
                       ['autoPublishApprovedDrafts', 'Publicar drafts aprobados'],
@@ -1328,12 +1565,22 @@ export default function CjShopifyUsaSalesAgentPage() {
                       ['safeMode', 'Modo seguro'],
                     ].map(([key, label]) => (
                       <label key={key} className="flex items-center justify-between gap-3 rounded bg-black/20 px-3 py-2">
-                        {label}
+                        <span>
+                          <span className="block font-semibold text-slate-200">{label}</span>
+                          <span className="mt-0.5 block text-[11px] text-slate-500">
+                            {Boolean(scheduler.config[key as keyof SalesAgentScheduler['config']]) ? 'Activo en automatico' : 'No corre solo'}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${Boolean(scheduler.config[key as keyof SalesAgentScheduler['config']]) ? 'bg-emerald-500/15 text-emerald-200' : 'bg-slate-800 text-slate-400'}`}>
+                            {Boolean(scheduler.config[key as keyof SalesAgentScheduler['config']]) ? 'ON' : 'OFF'}
+                          </span>
                         <input
                           type="checkbox"
                           checked={Boolean(scheduler.config[key as keyof SalesAgentScheduler['config']])}
                           onChange={(event) => void updateSchedulerConfig({ [key]: event.target.checked })}
                         />
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -1969,31 +2216,40 @@ export default function CjShopifyUsaSalesAgentPage() {
 
           {commandTab === 'proteger' && data.pico && (
           <section className="mb-4 rounded-lg border border-violet-500/30 bg-violet-950/10 p-4">
-            <h3 className="flex items-center gap-2 text-base font-semibold text-violet-100">
-              <Sparkles className="h-4 w-4 text-violet-300" />
-              PICO — Crecimiento organico
-            </h3>
-            <p className="mt-1 text-xs text-violet-200/80">
-              Blog SEO, SEO evolutivo y video TikTok/Instagram (Creatomate en la nube).
-            </p>
-            <motion.div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-semibold text-violet-100">
+                  <Sparkles className="h-4 w-4 text-violet-300" />
+                  PICO - crecimiento organico autonomo
+                </h3>
+                <p className="mt-1 max-w-3xl text-sm text-violet-100/80">
+                  PICO publica blog SEO, refresca fichas estancadas y prepara video. Si una credencial falta, esa parte se omite sin romper el ciclo.
+                </p>
+              </div>
+              <span className={`rounded-lg border px-3 py-2 text-xs font-bold ${picoTruth?.className ?? 'border-slate-700 bg-slate-900 text-slate-300'}`}>
+                {picoTruth?.label}
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
               {(
                 [
-                  ['OpenAI', data.pico.readiness.openai],
-                  ['Creatomate', data.pico.readiness.creatomate],
-                  ['TikTok', data.pico.readiness.tiktok],
-                  ['Instagram', data.pico.readiness.instagram],
-                  ['Pinterest', data.pico.readiness.pinterest],
+                  ['OpenAI', data.pico.readiness.openai, 'Blog SEO y captions'],
+                  ['Creatomate', data.pico.readiness.creatomate, 'Render de video'],
+                  ['TikTok', data.pico.readiness.tiktok, 'Publicacion video'],
+                  ['Instagram', data.pico.readiness.instagram, 'Publicacion reel'],
+                  ['Pinterest', data.pico.readiness.pinterest, 'Promocion organica'],
                 ] as const
-              ).map(([label, ready]) => (
+              ).map(([label, ready, detail]) => (
                 <span
                   key={label}
-                  className={`rounded px-2 py-1.5 text-center font-semibold ${ready ? 'bg-emerald-500/15 text-emerald-200' : 'bg-slate-800 text-slate-500'}`}
+                  className={`rounded border px-2 py-2 text-center font-semibold ${ready ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200' : 'border-amber-500/25 bg-amber-950/20 text-amber-100'}`}
+                  title={detail}
                 >
-                  {label}: {ready ? 'OK' : 'falta'}
+                  <span className="block">{label}</span>
+                  <span className="mt-1 block text-[11px] font-normal opacity-80">{ready ? 'activo' : 'falta credencial'}</span>
                 </span>
               ))}
-            </motion.div>
+            </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-300 sm:grid-cols-4">
               <span className="rounded bg-black/20 p-2">Blogs: {data.pico.stats.blogsPublished} publicados</span>
               <span className="rounded bg-black/20 p-2">Videos: {data.pico.stats.videosPublished} · {data.pico.stats.videosInProgress} en curso</span>
@@ -2001,6 +2257,12 @@ export default function CjShopifyUsaSalesAgentPage() {
               <span className="rounded bg-black/20 p-2">
                 Listos: {data.pico.candidates.blog} blog · {data.pico.candidates.stagnantSeo} SEO · {data.pico.candidates.video} video
               </span>
+            </div>
+            <div className="mt-3 rounded-lg border border-violet-500/20 bg-black/20 p-3 text-xs text-violet-100/85">
+              <p className="font-bold">Que hace solo cuando esta activado</p>
+              <p className="mt-1">
+                Blog y SEO se ejecutan por ciclo si sus toggles estan activos. Video necesita Creatomate; publicar en redes necesita tokens OAuth. Las acciones manuales siguen disponibles solo para forzar una ejecucion puntual.
+              </p>
             </div>
           </section>
           )}
