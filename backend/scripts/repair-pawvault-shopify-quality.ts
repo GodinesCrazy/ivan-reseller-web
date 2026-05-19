@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../src/config/database';
 import { cjShopifyUsaAdminService } from '../src/modules/cj-shopify-usa/services/cj-shopify-usa-admin.service';
-import { isCjShopifyUsaPetProduct } from '../src/modules/cj-shopify-usa/services/cj-shopify-usa-policy.service';
+import { isCjShopifyUsaDogsCatsOnly } from '../src/modules/cj-shopify-usa/services/cj-shopify-usa-policy.service';
 
 const USER_ID = Number(process.argv.find((arg) => arg.startsWith('--user='))?.split('=')[1] || 1);
 const EXECUTE = process.argv.includes('--execute');
@@ -100,6 +100,23 @@ function isGenericTitle(title: string): boolean {
   return GENERIC_TITLES.has(normalizeTitle(title));
 }
 
+function normalizeImageUrl(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!/^https?:\/\//i.test(raw)) return '';
+  try {
+    const url = new URL(raw);
+    url.search = '';
+    url.hash = '';
+    return `${url.hostname.toLowerCase()}${url.pathname.toLowerCase()}`;
+  } catch {
+    return raw.split(/[?#]/)[0]?.toLowerCase() ?? '';
+  }
+}
+
+function firstImageKey(product: ShopifyProduct): string {
+  return normalizeImageUrl(product.featuredMedia?.preview?.image?.url ?? '');
+}
+
 function significantWords(value: string): Set<string> {
   const noise = new Set([
     'pet', 'pets', 'dog', 'dogs', 'cat', 'cats', 'puppy', 'kitten', 'supplies', 'supply',
@@ -127,7 +144,7 @@ function isClearlyUnsafeOrNonPet(product: ShopifyProduct): boolean {
   const haystack = normalizeTitle([product.title, product.handle, product.productType ?? ''].join(' '));
   if (/\b(women|womens|men|mens|adult|erotic|sex|lingerie|fetish|bdsm|slave|bondage)\b/.test(haystack)) return true;
   if (/\bchildren|kids|baby\b/.test(haystack) && !/\bpet|dog|cat|bird|hamster|rabbit|aquarium|fish\b/.test(haystack)) return true;
-  if (!isCjShopifyUsaPetProduct({ title: product.title, productType: product.productType })) return true;
+  if (!isCjShopifyUsaDogsCatsOnly({ title: product.title, productType: product.productType })) return true;
   return false;
 }
 
@@ -146,11 +163,22 @@ function minVariantPrice(product: ShopifyProduct): number {
   return prices.length > 0 ? Math.min(...prices) : Number.POSITIVE_INFINITY;
 }
 
-function duplicateArchiveTargets(products: ShopifyProduct[]): ShopifyProduct[] {
-  if (!ARCHIVE_DUPLICATES) return [];
+function rankDuplicateGroup(group: ShopifyProduct[]): ShopifyProduct[] {
+  return [...group].sort((a, b) => {
+    const aImage = a.featuredMedia?.preview?.image?.url ? 1 : 0;
+    const bImage = b.featuredMedia?.preview?.image?.url ? 1 : 0;
+    if (aImage !== bImage) return bImage - aImage;
+    const aInventory = Number(a.totalInventory ?? 0);
+    const bInventory = Number(b.totalInventory ?? 0);
+    if (aInventory !== bInventory) return bInventory - aInventory;
+    return minVariantPrice(a) - minVariantPrice(b);
+  });
+}
+
+function duplicateTargetsBy(products: ShopifyProduct[], keyFor: (product: ShopifyProduct) => string): ShopifyProduct[] {
   const groups = new Map<string, ShopifyProduct[]>();
   for (const product of products) {
-    const key = normalizeTitle(product.title);
+    const key = keyFor(product);
     if (!key) continue;
     const group = groups.get(key) ?? [];
     group.push(product);
@@ -160,18 +188,27 @@ function duplicateArchiveTargets(products: ShopifyProduct[]): ShopifyProduct[] {
   const targets: ShopifyProduct[] = [];
   for (const group of groups.values()) {
     if (group.length <= 1) continue;
-    const sorted = [...group].sort((a, b) => {
-      const aImage = a.featuredMedia?.preview?.image?.url ? 1 : 0;
-      const bImage = b.featuredMedia?.preview?.image?.url ? 1 : 0;
-      if (aImage !== bImage) return bImage - aImage;
-      const aInventory = Number(a.totalInventory ?? 0);
-      const bInventory = Number(b.totalInventory ?? 0);
-      if (aInventory !== bInventory) return bInventory - aInventory;
-      return minVariantPrice(a) - minVariantPrice(b);
-    });
-    targets.push(...sorted.slice(1));
+    const sorted = rankDuplicateGroup(group);
+    for (const product of sorted.slice(1)) {
+      if (!targets.some((target) => target.id === product.id)) targets.push(product);
+    }
   }
   return targets;
+}
+
+function duplicateArchiveTargets(products: ShopifyProduct[]): ShopifyProduct[] {
+  if (!ARCHIVE_DUPLICATES) return [];
+  const targets = [
+    ...duplicateTargetsBy(products, (product) => {
+      const key = normalizeTitle(product.title);
+      return key ? `title:${key}` : '';
+    }),
+    ...duplicateTargetsBy(products, (product) => {
+      const key = firstImageKey(product);
+      return key ? `image:${key}` : '';
+    }),
+  ];
+  return targets.filter((target, index) => targets.findIndex((item) => item.id === target.id) === index);
 }
 
 async function listActiveProducts(): Promise<ShopifyProduct[]> {
@@ -269,6 +306,19 @@ async function main() {
   const duplicateTargets = duplicateArchiveTargets(
     products.filter((product) => !archiveTargets.some((target) => target.id === product.id)),
   );
+  const duplicatePool = products.filter((product) => !archiveTargets.some((target) => target.id === product.id));
+  const duplicateTitleTargetIds = new Set(
+    duplicateTargetsBy(duplicatePool, (product) => {
+      const key = normalizeTitle(product.title);
+      return key ? `title:${key}` : '';
+    }).map((target) => target.id),
+  );
+  const duplicateImageTargetIds = new Set(
+    duplicateTargetsBy(duplicatePool, (product) => {
+      const key = firstImageKey(product);
+      return key ? `image:${key}` : '';
+    }).map((target) => target.id),
+  );
   const allArchiveTargets = [...archiveTargets, ...duplicateTargets];
   const renameTargets = products
     .map((product) => ({ product, newTitle: chooseBetterTitle(product) }))
@@ -288,7 +338,8 @@ async function main() {
       handle: product.handle,
       noImage: !product.featuredMedia?.preview?.image?.url,
       totalInventory: product.totalInventory,
-      duplicateTitle: duplicateTargets.some((target) => target.id === product.id),
+      duplicateTitle: duplicateTitleTargetIds.has(product.id),
+      duplicateImage: duplicateImageTargetIds.has(product.id),
       genericTitle: isGenericTitle(product.title),
     })),
     renameTargetCount: renameTargets.length,

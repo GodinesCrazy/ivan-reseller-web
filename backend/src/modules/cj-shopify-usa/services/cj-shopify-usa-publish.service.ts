@@ -394,6 +394,19 @@ function usableImageUrls(images: unknown): string[] {
   return uniqueItems(urls);
 }
 
+function normalizedImageKey(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!/^https?:\/\//i.test(raw)) return '';
+  try {
+    const url = new URL(raw);
+    url.search = '';
+    url.hash = '';
+    return `${url.hostname.toLowerCase()}${url.pathname.toLowerCase()}`;
+  } catch {
+    return raw.split(/[?#]/)[0]?.toLowerCase() ?? '';
+  }
+}
+
 function normalizedTitleKey(value: unknown): string {
   return normalizeWhitespace(String(value ?? ''))
     .toLowerCase()
@@ -486,6 +499,56 @@ async function assertNoLocalTitleDuplicate(input: {
   if (duplicate) {
     throw new AppError(
       `A Shopify USA listing with the same buyer-facing title already exists (#${duplicate.id}, ${duplicate.status}). Use a more specific title or merge variants before publishing.`,
+      409,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+}
+
+async function assertNoLocalVisualDuplicate(input: {
+  userId: number;
+  images: unknown;
+  productId: number;
+  listingId?: number | null;
+}) {
+  const imageKeys = new Set(usableImageUrls(input.images).map(normalizedImageKey).filter(Boolean));
+  if (imageKeys.size === 0) return;
+
+  const rows = await prisma.cjShopifyUsaListing.findMany({
+    where: {
+      userId: input.userId,
+      id: input.listingId ? { not: input.listingId } : undefined,
+      status: {
+        in: [
+          CJ_SHOPIFY_USA_LISTING_STATUS.DRAFT,
+          CJ_SHOPIFY_USA_LISTING_STATUS.PUBLISHING,
+          CJ_SHOPIFY_USA_LISTING_STATUS.RECONCILE_PENDING,
+          CJ_SHOPIFY_USA_LISTING_STATUS.ACTIVE,
+        ],
+      },
+    },
+    select: {
+      id: true,
+      productId: true,
+      status: true,
+      draftPayload: true,
+      product: { select: { title: true } },
+    },
+    take: 1000,
+  });
+
+  const duplicate = rows.find((row) => {
+    if (row.productId === input.productId) return false;
+    const draft = (row.draftPayload && typeof row.draftPayload === 'object' && !Array.isArray(row.draftPayload))
+      ? row.draftPayload as Record<string, unknown>
+      : {};
+    const otherKeys = usableImageUrls(draft.images).map(normalizedImageKey).filter(Boolean);
+    return otherKeys.some((key) => imageKeys.has(key));
+  });
+
+  if (duplicate) {
+    throw new AppError(
+      `Visual duplicate detected: listing #${duplicate.id} (${duplicate.status}) already uses the same product image. Publish blocked to avoid repeated-looking products.`,
       409,
       ErrorCode.VALIDATION_ERROR,
     );
@@ -589,6 +652,13 @@ async function assertCommercialQuality(input: {
       ErrorCode.VALIDATION_ERROR,
     );
   }
+
+  await assertNoLocalVisualDuplicate({
+    userId: input.userId,
+    images: input.images,
+    productId: input.productId,
+    listingId: input.listingId,
+  });
 
   await assertNoLocalTitleDuplicate({
     userId: input.userId,

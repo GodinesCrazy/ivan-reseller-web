@@ -258,6 +258,58 @@ function normalizeTitle(value: unknown): string {
     .trim();
 }
 
+function significantTitleWords(value: unknown): string[] {
+  const noise = new Set([
+    'pet', 'pets', 'dog', 'dogs', 'cat', 'cats', 'puppy', 'kitten', 'supplies', 'supply',
+    'product', 'products', 'accessory', 'accessories', 'for', 'and', 'with', 'the', 'new',
+    'outdoor', 'indoor', 'small', 'large', 'portable',
+  ]);
+  return normalizeTitle(value)
+    .split(' ')
+    .filter((word) => word.length >= 4 && !noise.has(word));
+}
+
+function similarFamilyKey(value: unknown): string {
+  const words = significantTitleWords(value);
+  if (words.length < 2) return '';
+  return words.slice(0, 3).join(' ');
+}
+
+function normalizedImageKey(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!/^https?:\/\//i.test(raw)) return '';
+  try {
+    const url = new URL(raw);
+    url.search = '';
+    url.hash = '';
+    return `${url.hostname.toLowerCase()}${url.pathname.toLowerCase()}`;
+  } catch {
+    return raw.split(/[?#]/)[0]?.toLowerCase() ?? '';
+  }
+}
+
+function imageKeysFromPayload(payload: unknown): string[] {
+  const data = draftRecord(payload);
+  const images = data.images;
+  if (!Array.isArray(images)) return [];
+  const keys = images
+    .map((image) => {
+      if (typeof image === 'string') return image;
+      if (image && typeof image === 'object') {
+        const record = image as Record<string, unknown>;
+        return String(record.src ?? record.url ?? '');
+      }
+      return '';
+    })
+    .map(normalizedImageKey)
+    .filter(Boolean);
+  return [...new Set(keys)];
+}
+
+function firstImageKey(payload: unknown): string {
+  return imageKeysFromPayload(payload)[0] ?? '';
+}
+
 function extractImageCount(payload: unknown): number {
   const data = payload as Record<string, unknown> | null;
   const images = data?.images;
@@ -274,6 +326,23 @@ function draftRecord(payload: unknown): Record<string, any> {
 function buyerTitle(listing: { draftPayload: unknown; product: { title: string } }): string {
   const draft = draftRecord(listing.draftPayload);
   return String(draft.title || listing.product.title || '').trim();
+}
+
+function buyerFacingProductKey(listing: { id: number; shopifyProductId?: string | null; shopifyHandle?: string | null }): string {
+  const productId = String(listing.shopifyProductId ?? '').trim();
+  if (productId) return `shopify-product:${productId}`;
+  const handle = String(listing.shopifyHandle ?? '').trim();
+  if (handle) return `shopify-handle:${handle}`;
+  return `listing:${listing.id}`;
+}
+
+function uniqueBuyerFacingListings<T extends { id: number; shopifyProductId?: string | null; shopifyHandle?: string | null }>(rows: T[]): T[] {
+  const byKey = new Map<string, T>();
+  for (const row of rows) {
+    const key = buyerFacingProductKey(row);
+    if (!byKey.has(key)) byKey.set(key, row);
+  }
+  return [...byKey.values()];
 }
 
 function titleCase(value: string): string {
@@ -539,10 +608,18 @@ function actionAffectedEstimate(action: SalesAgentAction): number {
   const issues = payload.issues;
   const publishableDrafts = payload.publishableDrafts;
   const duplicateGroups = payload.duplicateExactGroups;
+  const duplicateVisualGroups = payload.duplicateVisualGroups;
+  const crowdedFamilies = payload.crowdedFamilies;
   if (Array.isArray(candidates)) return candidates.length;
   if (Array.isArray(issues)) return issues.length;
   if (Array.isArray(publishableDrafts)) return publishableDrafts.length;
-  if (Array.isArray(duplicateGroups)) return duplicateGroups.length;
+  if (Array.isArray(duplicateGroups) || Array.isArray(duplicateVisualGroups) || Array.isArray(crowdedFamilies)) {
+    return (
+      (Array.isArray(duplicateGroups) ? duplicateGroups.length : 0) +
+      (Array.isArray(duplicateVisualGroups) ? duplicateVisualGroups.length : 0) +
+      (Array.isArray(crowdedFamilies) ? crowdedFamilies.length : 0)
+    );
+  }
   if (typeof payload.limit === 'number') return payload.limit;
   if (typeof payload.draftCount === 'number') return payload.draftCount;
   if (typeof payload.overallScore === 'number') return 1;
@@ -1196,13 +1273,30 @@ export const cjShopifyUsaSalesAgentService = {
 
     const titleGroups = new Map<string, typeof activeListings>();
     for (const listing of activeListings) {
-      const key = normalizeTitle(listing.product.title);
+      const key = normalizeTitle(buyerTitle(listing));
       if (!key) continue;
       titleGroups.set(key, [...(titleGroups.get(key) ?? []), listing]);
     }
     const duplicateExactGroups = Array.from(titleGroups.entries())
+      .map(([key, rows]) => [key, uniqueBuyerFacingListings(rows)] as const)
       .filter(([, rows]) => rows.length > 1)
-      .map(([key, rows]) => ({ key, count: rows.length, titles: rows.map((row) => row.product.title).slice(0, 5) }));
+      .map(([key, rows]) => ({ key, count: rows.length, titles: rows.map((row) => buyerTitle(row)).slice(0, 5) }));
+
+    const visualGroups = new Map<string, typeof activeListings>();
+    for (const listing of activeListings) {
+      const key = firstImageKey(listing.draftPayload);
+      if (!key) continue;
+      visualGroups.set(key, [...(visualGroups.get(key) ?? []), listing]);
+    }
+    const duplicateVisualGroups = Array.from(visualGroups.entries())
+      .map(([key, rows]) => [key, uniqueBuyerFacingListings(rows)] as const)
+      .filter(([, rows]) => rows.length > 1)
+      .map(([key, rows]) => ({
+        key,
+        count: rows.length,
+        titles: rows.map((row) => buyerTitle(row)).slice(0, 5),
+        handles: rows.map((row) => row.shopifyHandle).filter(Boolean).slice(0, 5),
+      }));
 
     const shopifyActiveProducts = shopifyActiveProductsResult.products;
     const shopifyTitleGroups = new Map<string, typeof shopifyActiveProducts>();
@@ -1231,17 +1325,22 @@ export const cjShopifyUsaSalesAgentService = {
         status: listing.status,
       }));
 
-    const similarFamilies = new Map<string, number>();
+    const similarFamilies = new Map<string, typeof activeListings>();
     for (const listing of activeListings) {
-      const words = normalizeTitle(listing.product.title).split(' ').filter(Boolean);
-      const family = words.slice(0, Math.min(3, words.length)).join(' ');
-      if (family.length >= 8) similarFamilies.set(family, (similarFamilies.get(family) ?? 0) + 1);
+      const family = similarFamilyKey(buyerTitle(listing));
+      if (family.length >= 8) similarFamilies.set(family, [...(similarFamilies.get(family) ?? []), listing]);
     }
     const crowdedFamilies = Array.from(similarFamilies.entries())
-      .filter(([, count]) => count >= 4)
-      .sort((a, b) => b[1] - a[1])
+      .map(([family, rows]) => [family, uniqueBuyerFacingListings(rows)] as const)
+      .filter(([, rows]) => rows.length >= 3)
+      .sort((a, b) => b[1].length - a[1].length)
       .slice(0, 8)
-      .map(([family, count]) => ({ family, count }));
+      .map(([family, rows]) => ({
+        family,
+        count: rows.length,
+        titles: rows.map((row) => buyerTitle(row)).slice(0, 5),
+        handles: rows.map((row) => row.shopifyHandle).filter(Boolean).slice(0, 5),
+      }));
 
     const copyIssues = activeListings
       .map((listing) => {
@@ -1300,7 +1399,7 @@ export const cjShopifyUsaSalesAgentService = {
       .map((listing) =>
         buildCommercialScore({
           listing,
-          duplicateCount: titleGroups.get(normalizeTitle(buyerTitle(listing)))?.length ?? 0,
+          duplicateCount: uniqueBuyerFacingListings(titleGroups.get(normalizeTitle(buyerTitle(listing))) ?? []).length,
           profitIssue: profitGuardIssueByListing.get(listing.id) ?? null,
           salesStats: paidListingSales.get(listing.id),
         }),
@@ -1607,18 +1706,18 @@ export const cjShopifyUsaSalesAgentService = {
       payload: { bottleneck: salesPipeline.bottleneck, overallScore: salesPipeline.overallScore },
     });
 
-    if (crowdedFamilies.length > 0 || duplicateExactGroups.length > 0) {
+    if (crowdedFamilies.length > 0 || duplicateExactGroups.length > 0 || duplicateVisualGroups.length > 0) {
       actions.push({
         id: 'curate-similar-products',
         type: 'CURATE_SIMILAR_PRODUCTS',
-        priority: duplicateExactGroups.length > 0 ? 'high' : 'medium',
+        priority: duplicateExactGroups.length > 0 || duplicateVisualGroups.length > 0 ? 'high' : 'medium',
         title: 'Curar familias de productos similares',
-        rationale: `${duplicateExactGroups.length} duplicados exactos y ${crowdedFamilies.length} familias saturadas detectadas.`,
+        rationale: `${duplicateExactGroups.length} duplicados exactos, ${duplicateVisualGroups.length} duplicados visuales y ${crowdedFamilies.length} familias saturadas detectadas.`,
         expectedImpact: 'Menos confusion, mejor confianza y catalogo mas facil de comprar.',
         risk: 'approval_required',
-        canExecute: duplicateExactGroups.length > 0,
+        canExecute: duplicateExactGroups.length > 0 || duplicateVisualGroups.length > 0 || crowdedFamilies.length > 0,
         guardrails: ['No despublicar ganadores sin evidencia', 'Conservar el producto con mejor margen/imagen', 'Agrupar variantes cuando corresponda'],
-        payload: { duplicateExactGroups, crowdedFamilies },
+        payload: { duplicateExactGroups, duplicateVisualGroups, crowdedFamilies },
       });
     }
 
@@ -1780,7 +1879,7 @@ export const cjShopifyUsaSalesAgentService = {
         ),
         checkoutRisk: checkoutRatePct > 0 && purchaseRatePct === 0,
         marginRisk: profitGuard.reviewRequired > 0 || profitGuard.pausedUnsafe > 0,
-        catalogTrustRisk: copyIssues.length > 0 || duplicateExactGroups.length > 0,
+        catalogTrustRisk: copyIssues.length > 0 || duplicateExactGroups.length > 0 || duplicateVisualGroups.length > 0,
         trafficOpportunity: promotionCandidates.length > 0,
       },
       shopifyTruth: {
@@ -1796,6 +1895,7 @@ export const cjShopifyUsaSalesAgentService = {
         samples: {
           noMedia: shopifyNoMedia.slice(0, 8).map((product) => ({ id: product.id, title: product.title, handle: product.handle })),
           duplicates: shopifyDuplicateExactGroups.slice(0, 5),
+          visualDuplicates: duplicateVisualGroups.slice(0, 5),
           missingLocalActiveInShopify: activeListingsMissingInShopify,
         },
       },
@@ -1868,6 +1968,7 @@ export const cjShopifyUsaSalesAgentService = {
       },
       catalog: {
         duplicateExactGroups,
+        duplicateVisualGroups,
         crowdedFamilies,
         copyIssues,
         fixableCopyIssues,
@@ -1983,40 +2084,76 @@ export const cjShopifyUsaSalesAgentService = {
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
         take: 1000,
       });
+      type CurateGroup = { kind: 'exact_title' | 'same_image' | 'similar_family'; key: string; rows: typeof active; keep: number };
+      const curateGroups: CurateGroup[] = [];
+
       const groups = new Map<string, typeof active>();
       for (const listing of active) {
         const key = normalizeTitle(buyerTitle(listing));
         if (!key) continue;
         groups.set(key, [...(groups.get(key) ?? []), listing]);
       }
-      const duplicateGroups = Array.from(groups.values()).filter((rows) => rows.length > 1);
-      const results: Array<{ listingId: number; title: string; ok: boolean; keptListingId: number; error?: string }> = [];
+      for (const [key, rows] of groups.entries()) {
+        const uniqueRows = uniqueBuyerFacingListings(rows);
+        if (uniqueRows.length > 1) curateGroups.push({ kind: 'exact_title', key, rows: uniqueRows, keep: 1 });
+      }
+
+      const imageGroups = new Map<string, typeof active>();
+      for (const listing of active) {
+        const key = firstImageKey(listing.draftPayload);
+        if (!key) continue;
+        imageGroups.set(key, [...(imageGroups.get(key) ?? []), listing]);
+      }
+      for (const [key, rows] of imageGroups.entries()) {
+        const uniqueRows = uniqueBuyerFacingListings(rows);
+        if (uniqueRows.length > 1) curateGroups.push({ kind: 'same_image', key, rows: uniqueRows, keep: 1 });
+      }
+
+      const familyGroups = new Map<string, typeof active>();
+      for (const listing of active) {
+        const key = similarFamilyKey(buyerTitle(listing));
+        if (!key) continue;
+        familyGroups.set(key, [...(familyGroups.get(key) ?? []), listing]);
+      }
+      for (const [key, rows] of familyGroups.entries()) {
+        const uniqueRows = uniqueBuyerFacingListings(rows);
+        if (uniqueRows.length >= 3) curateGroups.push({ kind: 'similar_family', key, rows: uniqueRows, keep: 2 });
+      }
+
+      const results: Array<{ listingId: number; title: string; ok: boolean; keptListingId: number; reason: string; error?: string }> = [];
       let processedGroups = 0;
+      const alreadyHandled = new Set<number>();
       await withCatalogLock(async () => {
-        for (const rows of duplicateGroups) {
+        for (const group of curateGroups) {
           if (processedGroups >= limit) break;
-          const ranked = [...rows].sort((a, b) => {
+          const ranked = [...group.rows].sort((a, b) => {
             const aScore = extractImageCount(a.draftPayload) * 5 + n(a.evaluation?.estimatedMarginPct) + n(a.listedPriceUsd) / 10;
             const bScore = extractImageCount(b.draftPayload) * 5 + n(b.evaluation?.estimatedMarginPct) + n(b.listedPriceUsd) / 10;
             return bScore - aScore;
           });
-          const keeper = ranked[0];
-          const losers = ranked.slice(1).slice(0, Math.max(0, limit - results.length));
+          const keepers = ranked.slice(0, group.keep);
+          const keeper = keepers[0];
+          const losers = ranked
+            .slice(group.keep)
+            .filter((listing) => !alreadyHandled.has(listing.id))
+            .slice(0, Math.max(0, limit - results.length));
           for (const loser of losers) {
             try {
               await cjShopifyUsaPublishService.unpublishListing({ userId, listingId: loser.id });
-              results.push({ listingId: loser.id, title: buyerTitle(loser), ok: true, keptListingId: keeper.id });
+              alreadyHandled.add(loser.id);
+              results.push({ listingId: loser.id, title: buyerTitle(loser), ok: true, keptListingId: keeper.id, reason: group.kind });
             } catch (error) {
               results.push({
                 listingId: loser.id,
                 title: buyerTitle(loser),
                 ok: false,
                 keptListingId: keeper.id,
+                reason: group.kind,
                 error: error instanceof Error ? error.message : String(error),
               });
             }
           }
-          processedGroups++;
+          if (losers.length > 0) processedGroups++;
           if (results.length >= limit) break;
         }
       });
@@ -2468,9 +2605,30 @@ export const cjShopifyUsaSalesAgentService = {
         log('optimization', 'info', 'Sin fichas corregibles automaticamente');
       }
 
+      const curateAction = dashboard.actions.find((action) => action.type === 'CURATE_SIMILAR_PRODUCTS' && action.canExecute);
+      if (curateAction) {
+        const limit = schedulerConfig.safeMode ? 3 : 5;
+        const result = await this.executeAction(userId, { actionType: 'CURATE_SIMILAR_PRODUCTS', limit });
+        log('optimization', n((result as any).unpublished) > 0 ? 'success' : 'info', 'Curacion de duplicados/similares ejecutada', {
+          unpublished: n((result as any).unpublished),
+          failed: n((result as any).failed),
+          reviewedGroups: n((result as any).reviewedGroups),
+        });
+        cycle.unpublished += n((result as any).unpublished);
+        cycle.errors += n((result as any).failed);
+        dashboard = await this.dashboard(userId);
+      } else {
+        log('optimization', 'info', 'Sin duplicados visuales ni familias similares ejecutables');
+      }
+
       // ── Auto-cleanup: deduplicate and rotate stale products ──────────────
       const cleanupAction = dashboard.actions.find((action) => action.type === 'RUN_COMMERCIAL_CLEANUP' && action.canExecute);
-      if (cleanupAction || (dashboard.cleanup?.totals.rotate ?? 0) > 0 || (dashboard.catalog?.duplicateExactGroups?.length ?? 0) > 0) {
+      if (
+        cleanupAction ||
+        (dashboard.cleanup?.totals.rotate ?? 0) > 0 ||
+        (dashboard.catalog?.duplicateExactGroups?.length ?? 0) > 0 ||
+        (dashboard.catalog?.duplicateVisualGroups?.length ?? 0) > 0
+      ) {
         try {
           const result = await this.executeAction(userId, { actionType: 'RUN_COMMERCIAL_CLEANUP', limit: 5 });
           log('optimization', n((result as any).fixed) > 0 ? 'success' : 'info', 'Higiene comercial ejecutada: deduplicacion y rotacion', {
@@ -2478,6 +2636,7 @@ export const cjShopifyUsaSalesAgentService = {
             failed: n((result as any).failed),
             rotate: dashboard.cleanup?.totals.rotate ?? 0,
             duplicateGroups: dashboard.catalog?.duplicateExactGroups?.length ?? 0,
+            visualDuplicateGroups: dashboard.catalog?.duplicateVisualGroups?.length ?? 0,
           });
           cycle.errors += n((result as any).failed);
           dashboard = await this.dashboard(userId);
