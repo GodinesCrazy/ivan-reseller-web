@@ -62,7 +62,7 @@
    cd backend
    npm run prisma:migrate:deploy
    ```
-   En Railway el deploy debe ejecutar automaticamente `node scripts/railway-migrate-deploy.js` como `preDeployCommand`, con `connection_limit=1` y reintentos ante `too many clients`.
+   En Railway el deploy ejecuta automaticamente `node scripts/railway-migrate-deploy.js` como `preDeployCommand`, con `connection_limit=1` y reintentos ante `too many clients`. Si Postgres sigue saturado tras todos los reintentos, el deploy continua para no dejar la app bloqueada; luego se debe aplicar la migracion manualmente cuando haya conexiones libres.
 
 2. Configurar variables mínimas:
    ```bash

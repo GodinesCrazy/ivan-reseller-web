@@ -3,7 +3,10 @@
  * Railway preDeploy: prisma migrate deploy with retries only when Postgres rejects
  * new connections (too many clients). Typical during rolling deploy.
  *
- * Env: MIGRATE_MAX_ATTEMPTS (default 18), MIGRATE_RETRY_DELAY_SEC (default 20)
+ * Env:
+ *   MIGRATE_MAX_ATTEMPTS (default 18)
+ *   MIGRATE_RETRY_DELAY_SEC (default 20)
+ *   MIGRATE_FAIL_ON_SATURATION=true to fail deploy if all retries hit only saturation
  */
 const { spawnSync } = require('child_process');
 
@@ -25,6 +28,7 @@ function isConnectionSaturated(text) {
 
 const maxAttempts = Math.max(1, Number(process.env.MIGRATE_MAX_ATTEMPTS || 18));
 const delaySec = Math.max(5, Number(process.env.MIGRATE_RETRY_DELAY_SEC || 20));
+const failOnSaturation = String(process.env.MIGRATE_FAIL_ON_SATURATION || '').toLowerCase() === 'true';
 
 const env = {
   ...process.env,
@@ -46,8 +50,23 @@ async function main() {
     }
 
     const combined = (result.stdout || '') + (result.stderr || '');
-    if (!isConnectionSaturated(combined) || attempt >= maxAttempts) {
+    if (!isConnectionSaturated(combined)) {
       process.exit(result.status ?? 1);
+    }
+
+    if (attempt >= maxAttempts) {
+      console.error(
+        '[railway-migrate-deploy] Postgres siguio saturado tras todos los reintentos. ' +
+          'No se aplicaron migraciones en preDeploy.'
+      );
+      if (failOnSaturation) {
+        process.exit(result.status ?? 1);
+      }
+      console.error(
+        '[railway-migrate-deploy] Continuando deploy para no dejar bloqueada la app. ' +
+          'Aplica migraciones luego con: npm run prisma:migrate:deploy o node scripts/railway-migrate-deploy.js'
+      );
+      process.exit(0);
     }
 
     console.error(
