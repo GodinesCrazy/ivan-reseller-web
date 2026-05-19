@@ -57,6 +57,8 @@
 
 ## Runbook de activación PICO en Railway
 
+Guia operativa detallada: `docs/PICO_ACTIVACION_OPERATIVA.md`.
+
 1. Aplicar migración:
    ```bash
    cd backend
