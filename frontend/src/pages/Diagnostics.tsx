@@ -17,7 +17,7 @@ import {
   BarChart3,
   Info,
 } from 'lucide-react';
-import { getDiagnosticsInfo, API_BASE_URL } from '@/config/runtime';
+import { getDiagnosticsInfo, API_BASE_URL, API_BASE_HAS_SUFFIX } from '@/config/runtime';
 import api from '@/services/api';
 import PageHeader from '@/components/ui/PageHeader';
 
@@ -106,17 +106,18 @@ export default function Diagnostics() {
     });
 
     try {
-      const r = await api.get('/health');
+      const r = await api.get('/api/connectivity');
+      const ok = r.status === 200 && r.data?.ok === true;
       newResults.push({
-        name: 'Health check',
+        name: 'Backend real',
         group: 'Sistema',
-        status: 'success',
-        message: `Estado: ${r.data?.status || 'ok'}`,
+        status: ok ? 'success' : 'error',
+        message: ok ? 'Backend Railway alcanzable' : `Respuesta inesperada: HTTP ${r.status}`,
         data: r.data,
       });
     } catch (e: unknown) {
       newResults.push({
-        name: 'Health check',
+        name: 'Backend real',
         group: 'Sistema',
         status: 'error',
         message: `Error: ${(e as Error).message}`,
@@ -168,7 +169,8 @@ export default function Diagnostics() {
 
     // ── SEGURIDAD ────────────────────────────────────────────
     try {
-      const corsResponse = await fetch(`${API_BASE_URL}/health`, {
+      const apiRoutePrefix = API_BASE_HAS_SUFFIX ? '' : '/api';
+      const corsResponse = await fetch(`${API_BASE_URL}${apiRoutePrefix}/connectivity`, {
         method: 'OPTIONS',
         credentials: 'include',
         headers: { Origin: window.location.origin },

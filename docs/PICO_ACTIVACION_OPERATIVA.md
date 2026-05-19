@@ -9,6 +9,27 @@ Estado del codigo al cierre de esta guia:
 - Blog SEO y SEO evolutivo funcionan si existe `OPENAI_API_KEY` y Shopify esta conectado.
 - Video funciona en dos etapas: render en Creatomate y publicacion en TikTok/Instagram.
 - Pinterest esta integrado como promocion organica de producto/Pin, no como publicacion de video PICO.
+- Actualizacion 2026-05-19: el catalogo Shopify fue auditado y limpiado; quedaron 413 productos activos publicados, sin duplicados exactos por titulo, sin grupos duplicados por primera imagen, sin productos sin imagen y sin productos sin inventario.
+- Actualizacion 2026-05-19: el software fue endurecido para bloquear nuevos duplicados visuales por primera imagen y para que la curacion del agente considere duplicados por titulo, duplicados visuales y familias saturadas.
+- Bloqueo operativo 2026-05-19: el dominio publico `https://ivan-reseller-backend-production.up.railway.app` responde `Application not found`, y las rutas reales como `/api/cj-shopify-usa/sales-agent` y `/api/cj-shopify-usa/pico/status` no estan alcanzables. Mientras esto siga asi, la UI puede cargar, pero los botones del agente no son confiables en produccion.
+- Nota de fidelidad UI: `/api/health` en Vercel pertenece al `ml-bridge`, no al backend Railway. Para comprobar el backend real usar `/api/connectivity`, `/api/version`, `/ready` o rutas del modulo `cj-shopify-usa`.
+
+## 0. Bloqueo actual antes de activar PICO
+
+Antes de probar PICO con botones reales, corregir el despliegue del backend:
+
+1. Entrar a Railway y revisar el servicio `ivan-reseller-backend`.
+2. Confirmar que el servicio tenga dominio activo y que el healthcheck `/health` devuelva 200.
+3. Redeployar el servicio backend desde el commit mas reciente.
+4. Verificar estas URLs:
+   ```text
+   https://ivan-reseller-backend-production.up.railway.app/health
+   https://ivan-reseller-backend-production.up.railway.app/api/connectivity
+   https://www.ivanreseller.com/api/cj-shopify-usa/pico/status
+   ```
+5. Si Railway regenero otro dominio, actualizar `vercel.json`, `PICO_API_BASE_URL`, `API_URL`, `BACKEND_URL` y cualquier redirect/OAuth que apunte al dominio viejo.
+
+No activar `autoPromoteViaVideo=true` hasta que el backend real responda y el primer video manual quede trazado.
 
 ## 1. Variables obligatorias para PICO core
 

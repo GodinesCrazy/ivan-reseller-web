@@ -164,8 +164,9 @@ export default function Dashboard() {
         }),
         // Estado del sistema (business diagnostics - ventas/listings por usuario y entorno)
         api.get('/api/system/business-diagnostics', { params: { environment } }).catch(() => ({ data: null })),
-        // Backend health
-        api.get('/api/health').then((r) => ({ ok: r.status === 200 })).catch(() => ({ ok: false })),
+        // Backend real reachability. Do not use /api/health here: Vercel owns that
+        // path for the ML bridge, so it can be green while Railway is down.
+        api.get('/api/connectivity').then((r) => ({ ok: r.status === 200 && r.data?.ok === true })).catch(() => ({ ok: false })),
         // Ingresos plataforma (solo admin)
         isAdmin ? api.get('/api/admin/platform-revenue').catch(() => ({ data: null })) : Promise.resolve({ data: null }),
         // Canonical operations truth

@@ -47,11 +47,14 @@
 ## 🚀 Fase 4: Despliegue en Producción (Railway)
 **Estado:** `[Desplegado / falta activar credenciales Creatomate-sociales y primer ciclo supervisado]`
 
+**Actualizacion 2026-05-19:** el codigo y la limpieza de catalogo estan listos, pero el backend publico de Railway responde `Application not found` en `ivan-reseller-backend-production.up.railway.app`. Antes del primer ciclo supervisado hay que restaurar/redeployar el servicio backend o actualizar el dominio usado por Vercel.
+
 - [x] 4.1 **Actualización de variables `.env`**: `.env.example` incluye `OPENAI_API_KEY`, `CREATOMATE_API_KEY`, `TIKTOK_ACCESS_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `PINTEREST_ACCESS_TOKEN`, `PINTEREST_BOARD_ID`.
 - [x] 4.2 **Sincronización al `SalesAgent`**: Módulo *PICO* conectado al ciclo del Sales Agent y al procesamiento de backlog de video.
 - [x] 4.3 **Monitoreo en Vivo**: Endpoint `GET /api/cj-shopify-usa/pico/status`, acción `POST /api/cj-shopify-usa/pico/video/process-backlog`, panel UI y script `npm run pico:status`.
 - [x] 4.4 **Migración producción:** `backend/prisma/migrations/20260517120000_pico_organic_growth/migration.sql` aplicada; `npm run pico:status:db` confirma `lastSeoUpdate`, `cj_shopify_usa_blog_entries` y `cj_shopify_usa_video_posts`.
 - [ ] 4.5 **Primer ciclo supervisado:** Ejecutar una acción manual PICO desde el Agente Vendedor y verificar trazas recientes.
+- [ ] 4.6 **Restaurar backend publico:** `GET /health`, `GET /api/connectivity`, `GET /api/cj-shopify-usa/sales-agent` y `GET /api/cj-shopify-usa/pico/status` deben responder desde Vercel/produccion antes de confiar en la UI.
 
 ---
 
