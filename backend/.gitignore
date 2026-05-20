@@ -3,6 +3,11 @@ run-automation.mjs
 start-automation.mjs
 sync-db-shopify.mjs
 
+# Local credential/token caches and diagnostic dumps
+.aliexpress-token.json
+d.json
+*.json.log
+
 # Scripts with hardcoded credentials
 create-blog-posts.mjs
 create-more-content.mjs

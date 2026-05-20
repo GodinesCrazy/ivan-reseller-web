@@ -73,6 +73,10 @@ docs/RAILWAY_URL.local
 .vercel
 
 # Local credential dumps & agent scratch (never commit)
+.aliexpress-token.json
+**/.aliexpress-token.json
+d.json
+*.json.log
 backend/creds.json
 backend/creds2.txt
 backend/creds_summary.json
