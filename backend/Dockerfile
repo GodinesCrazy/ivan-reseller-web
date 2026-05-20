@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS build
+FROM node:20-bookworm-slim AS source
 WORKDIR /app
 
 # Railway services have historically used both `backend` and `/backend` as
@@ -10,14 +10,27 @@ RUN if [ -f /src/backend/package.json ]; then \
     else \
       cp -a /src/. /app/; \
     fi
+
+FROM node:20-bookworm-slim AS build
+WORKDIR /app
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     npm_config_audit=false \
     npm_config_fund=false
-RUN npm ci --ignore-scripts
+COPY --from=source /app /app
+RUN npm ci --ignore-scripts --omit=optional
 
 RUN npm run build
-RUN npm prune --omit=dev --ignore-scripts && npm cache clean --force
+
+FROM node:20-bookworm-slim AS prod-deps
+WORKDIR /app
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    npm_config_audit=false \
+    npm_config_fund=false
+COPY --from=source /app/package.json /app/package-lock.json ./
+COPY --from=source /app/prisma ./prisma
+RUN npm ci --omit=dev --ignore-scripts && npx prisma generate && npm cache clean --force
 
 FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
@@ -61,7 +74,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   wget \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /app /app
+COPY --from=source /app/package.json /app/package-lock.json ./
+COPY --from=source /app/prisma ./prisma
+COPY --from=source /app/scripts ./scripts
+COPY --from=build /app/dist ./dist
+COPY --from=prod-deps /app/node_modules ./node_modules
 
 # Must listen on PORT (Railway injects it) and 0.0.0.0
 ENV NODE_ENV=production
