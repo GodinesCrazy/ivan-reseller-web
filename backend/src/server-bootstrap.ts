@@ -62,21 +62,35 @@ process.on('unhandledRejection', (reason) => {
   console.error('[BOOT] Unhandled rejection (keeping /health alive):', reason);
 });
 
-const server = http.createServer(handler);
-server.on('error', (err: NodeJS.ErrnoException) => {
-  console.error('[BOOT] HTTP server error (cannot bind / health will fail):', err.code, err.message);
-  process.exit(1);
-});
-server.listen(PORT, '0.0.0.0', () => {
-  console.log('[BOOT] Health listening on port', PORT, '(env PORT=', rawPort ?? 'unset', ')');
-  (global as any).__earlyHttpServer = server;
-  (global as any).__earlyPort = PORT;
-  // Load full server in next tick so /health can be served immediately (Railway healthcheck)
-  setImmediate(() => {
-    try {
-      require('./server'); // eslint-disable-line
-    } catch (err: any) {
-      console.error('[BOOT] Server load failed (/health still works):', err?.message || err);
-    }
+function createEarlyServer(port: number, fatal: boolean): http.Server {
+  const earlyServer = http.createServer(handler);
+  earlyServer.on('error', (err: NodeJS.ErrnoException) => {
+    console.error('[BOOT] HTTP server error:', { port, code: err.code, message: err.message, fatal });
+    if (fatal) process.exit(1);
   });
+  earlyServer.listen(port, '0.0.0.0', () => {
+    console.log('[BOOT] Health listening on port', port, '(env PORT=', rawPort ?? 'unset', ')');
+  });
+  return earlyServer;
+}
+
+const server = createEarlyServer(PORT, true);
+(global as any).__earlyHttpServer = server;
+(global as any).__earlyPort = PORT;
+
+// Some legacy Railway service instances route to targetPort=3000 while not
+// injecting PORT. Keep a lightweight health listener there too so duplicate
+// services do not fail deployment during platform recovery. The main backend
+// service still uses the primary PORT above.
+if (PORT !== 3000 && Object.keys(process.env).some((key) => key.startsWith('RAILWAY_'))) {
+  createEarlyServer(3000, false);
+}
+
+// Load full server in next tick so /health can be served immediately (Railway healthcheck)
+setImmediate(() => {
+  try {
+    require('./server'); // eslint-disable-line
+  } catch (err: any) {
+    console.error('[BOOT] Server load failed (/health still works):', err?.message || err);
+  }
 });
