@@ -39,12 +39,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   wget \
   && rm -rf /var/lib/apt/lists/*
 
-# Solo package*.json primero → npm ci en capa en caché (postinstall prisma generate se hace en build)
-COPY package.json package-lock.json ./
+# Railway services have historically used both `backend` and `/backend` as
+# rootDirectory values. Normalize the source tree so this image builds with
+# either a backend-root context or a repository-root context.
+COPY . /src
+RUN if [ -f /src/backend/package.json ]; then \
+      cp -a /src/backend/. /app/; \
+    else \
+      cp -a /src/. /app/; \
+    fi
 RUN npm ci --ignore-scripts
 
-# Código y build (prisma generate + tsc; invalida al cambiar código)
-COPY . .
+# Código y build (prisma generate + tsc)
 RUN npm run build
 # Must listen on PORT (Railway injects it) and 0.0.0.0
 ENV NODE_ENV=production
