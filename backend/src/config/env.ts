@@ -373,6 +373,13 @@ const envSchema = z.object({
   PAYPAL_ENVIRONMENT: z.enum(['sandbox', 'production']).default('sandbox'),
   PAYPAL_ENV: z.enum(['sandbox', 'live']).optional(), // Alias for PAYPAL_ENVIRONMENT (live = production)
   GROQ_API_KEY: z.string().optional(),
+  GROQ_MODEL: z.string().optional(),
+  OPENAI_MODEL: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().optional(),
+  GEMINI_IMAGE_MODEL: z.string().optional(),
+  GEMINI_REVIEW_MODEL: z.string().optional(),
+  PICO_AI_PROVIDER_ORDER: z.string().optional(),
   SCRAPERAPI_KEY: z.string().optional(),
   
   // ✅ FASE 1: API Health Check Feature Flags

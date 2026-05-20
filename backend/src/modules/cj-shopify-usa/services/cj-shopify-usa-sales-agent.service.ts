@@ -13,6 +13,7 @@ import { cjShopifyUsaOperationLockService } from './cj-shopify-usa-operation-loc
 import { buildDraftTitle, buildDraftDescription } from './cj-shopify-usa-title-builder.service';
 import { cjShopifyUsaCleanupService } from './cj-shopify-usa-cleanup.service';
 import { cjShopifyUsaSalesIntelligenceService } from './cj-shopify-usa-sales-intelligence.service';
+import { cjShopifyUsaContentService } from './cj-shopify-usa-content.service';
 import { cjShopifyUsaPicoService } from './cj-shopify-usa-pico.service';
 
 type SalesAgentPriority = 'critical' | 'high' | 'medium' | 'low';
@@ -1481,6 +1482,7 @@ export const cjShopifyUsaSalesAgentService = {
     const blogCandidates = await cjShopifyUsaPicoService.getBlogCandidates(userId, 8);
     const stagnantSeoCandidates = await cjShopifyUsaPicoService.getStagnantCandidates(userId, 8);
     const videoCandidates = await cjShopifyUsaPicoService.getVideoCandidates(userId, 8);
+    const picoAiReadiness = await cjShopifyUsaContentService.getAiReadiness(userId);
 
     const funnelMeta = safeMeta(latestFunnel?.meta);
     const visitors = n(funnelMeta.visitors);
@@ -1628,7 +1630,7 @@ export const cjShopifyUsaSalesAgentService = {
       });
     }
 
-    if (blogCandidates.length > 0 && process.env.OPENAI_API_KEY) {
+    if (blogCandidates.length > 0 && picoAiReadiness.aiContent) {
       actions.push({
         id: 'promote-via-blog',
         type: 'PROMOTE_VIA_BLOG',
@@ -1638,7 +1640,7 @@ export const cjShopifyUsaSalesAgentService = {
         expectedImpact: 'Tráfico organico educativo desde Google hacia productos con mejor score comercial.',
         risk: 'safe',
         canExecute: true,
-        guardrails: ['Un articulo por producto', 'Requiere OPENAI_API_KEY', 'Publica en blog principal', 'Registra keyword y articleId'],
+        guardrails: ['Un articulo por producto', 'Usa OpenAI/Groq/Gemini con fallback local', 'Publica en blog principal', 'Registra keyword y articleId'],
         payload: { limit: Math.min(2, blogCandidates.length), candidates: blogCandidates.slice(0, 5) },
       });
     }
@@ -1658,7 +1660,7 @@ export const cjShopifyUsaSalesAgentService = {
       });
     }
 
-    if (stagnantSeoCandidates.length > 0 && process.env.OPENAI_API_KEY) {
+    if (stagnantSeoCandidates.length > 0 && picoAiReadiness.aiContent) {
       actions.push({
         id: 'evaluate-stagnant-listings',
         type: 'EVALUATE_STAGNANT_LISTINGS',
@@ -1811,7 +1813,7 @@ export const cjShopifyUsaSalesAgentService = {
       blog: blogCandidates,
       stagnant: stagnantSeoCandidates,
       video: videoCandidates,
-    });
+    }, schedulerStatus);
 
     const morningBrief = buildMorningBrief({
       actions: actionsWithExecution,
@@ -2719,7 +2721,9 @@ export const cjShopifyUsaSalesAgentService = {
         log('marketing', 'info', 'PICO video omitido: CREATOMATE_API_KEY no configurada');
       }
 
-      if (schedulerConfig.autoPromoteViaBlog && process.env.OPENAI_API_KEY && dashboard.blogCandidates.length > 0) {
+      const picoAiReadiness = await cjShopifyUsaContentService.getAiReadiness(userId);
+
+      if (schedulerConfig.autoPromoteViaBlog && picoAiReadiness.aiContent && dashboard.blogCandidates.length > 0) {
         const limit = schedulerConfig.safeMode
           ? Math.min(schedulerConfig.maxBlogPostsPerCycle, 1)
           : schedulerConfig.maxBlogPostsPerCycle;
@@ -2730,11 +2734,11 @@ export const cjShopifyUsaSalesAgentService = {
             failed: n((result as { failed?: number }).failed),
           });
         }
-      } else if (!process.env.OPENAI_API_KEY) {
-        log('marketing', 'info', 'PICO blog omitido: OPENAI_API_KEY no configurada');
+      } else if (!picoAiReadiness.aiContent) {
+        log('marketing', 'info', 'PICO blog omitido: no hay proveedor IA configurado (OpenAI/Groq/Gemini)');
       }
 
-      if (schedulerConfig.autoEvaluateStagnantSeo && process.env.OPENAI_API_KEY && dashboard.stagnantSeoCandidates.length > 0) {
+      if (schedulerConfig.autoEvaluateStagnantSeo && picoAiReadiness.aiContent && dashboard.stagnantSeoCandidates.length > 0) {
         const limit = schedulerConfig.safeMode
           ? Math.min(schedulerConfig.maxSeoUpdatesPerCycle, 2)
           : schedulerConfig.maxSeoUpdatesPerCycle;

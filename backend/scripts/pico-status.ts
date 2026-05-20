@@ -22,7 +22,7 @@ config({ path: path.join(process.cwd(), '.env'), override: true });
 type PicoStatusResponse = {
   ok?: boolean;
   generatedAt?: string;
-  readiness?: Record<string, boolean>;
+  readiness?: Record<string, unknown>;
   stats?: Record<string, number>;
   candidates?: Record<string, number>;
   candidatesDetail?: Record<string, unknown[]>;
@@ -113,7 +113,11 @@ async function main(): Promise<void> {
   console.log(`  backend: ${API_BASE_URL}`);
   console.log(`  generatedAt: ${data.generatedAt ?? 'n/a'}`);
 
-  printBoolMap('Readiness', data.readiness);
+  const readiness = data.readiness ?? {};
+  printBoolMap('Readiness', Object.fromEntries(Object.entries(readiness).filter(([, value]) => typeof value === 'boolean')) as Record<string, boolean>);
+  if (typeof readiness.activeAiProvider === 'string') {
+    console.log(`  activeAiProvider: ${readiness.activeAiProvider}`);
+  }
   printNumberMap('Stats', data.stats);
   printNumberMap('Candidates', data.candidates);
 
@@ -127,8 +131,9 @@ async function main(): Promise<void> {
     }
   }
 
-  const requiredForPhase4 = ['openai', 'creatomate'];
-  const missingCore = requiredForPhase4.filter((key) => data.readiness?.[key] !== true);
+  const aiReady = readiness.aiContent === true || readiness.openai === true || readiness.groq === true || readiness.gemini === true;
+  const requiredForPhase4 = ['aiContent', 'creatomate'];
+  const missingCore = requiredForPhase4.filter((key) => (key === 'aiContent' ? !aiReady : readiness[key] !== true));
   if (missingCore.length > 0) {
     console.log(`\nPICO core not fully ready: missing ${missingCore.join(', ')}.`);
     process.exit(2);

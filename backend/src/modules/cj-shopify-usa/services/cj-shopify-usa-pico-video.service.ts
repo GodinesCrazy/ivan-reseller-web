@@ -241,6 +241,7 @@ async function prepareRenderGroup(input: {
   const renderGroupId = randomUUID();
 
   const copy = await cjShopifyUsaContentService.generateVideoSocialCopy({
+    userId: input.userId,
     title: input.title,
     priceUsd: input.priceUsd,
     handle: input.handle,

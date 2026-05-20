@@ -111,7 +111,8 @@ router.get('/pico/status', async (req: Request, res: Response, next: NextFunctio
       cjShopifyUsaPicoService.getStagnantCandidates(userId, 8),
       cjShopifyUsaPicoService.getVideoCandidates(userId, 8),
     ]);
-    const summary = await cjShopifyUsaPicoService.getDashboardSummary(userId, { blog, stagnant, video });
+    const scheduler = await cjShopifyUsaSalesAgentService.getSchedulerStatus(userId, false);
+    const summary = await cjShopifyUsaPicoService.getDashboardSummary(userId, { blog, stagnant, video }, scheduler);
     res.json({ ok: true, ...summary, candidatesDetail: { blog, stagnant, video } });
   } catch (error) {
     next(error);

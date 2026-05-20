@@ -281,6 +281,7 @@ router.post('/analytics/social-autopilot/generate-caption', async (req: Request,
     const { cjShopifyUsaContentService } = await import('../services/cj-shopify-usa-content.service');
     
     const caption = await cjShopifyUsaContentService.generateSocialCaption({
+      userId,
       title: String(title),
       priceUsd: Number(priceUsd),
       handle: String(handle),
@@ -315,6 +316,7 @@ router.post('/analytics/seo-optimizer/run', async (req: Request, res: Response, 
     for (const listing of listings) {
       // Create an engaging description/caption
       const rawHtml = await cjShopifyUsaContentService.generateSocialCaption({
+        userId,
         title: listing.product.title,
         priceUsd: Number(listing.listedPriceUsd ?? 0),
         handle: listing.shopifyHandle ?? '',

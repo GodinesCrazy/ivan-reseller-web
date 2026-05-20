@@ -129,7 +129,13 @@ async function main(): Promise<void> {
     cjShopifyUsaPicoService.getDashboardSummary(userId, { blog, stagnant, video }),
   );
 
-  printBoolMap('Readiness', summary.readiness);
+  printBoolMap(
+    'Readiness',
+    Object.fromEntries(Object.entries(summary.readiness).filter(([, value]) => typeof value === 'boolean')) as Record<string, boolean>,
+  );
+  if (typeof summary.readiness.activeAiProvider === 'string') {
+    console.log(`  activeAiProvider: ${summary.readiness.activeAiProvider}`);
+  }
   printNumberMap('Stats', summary.stats);
   printNumberMap('Candidates', summary.candidates);
 
@@ -142,7 +148,14 @@ async function main(): Promise<void> {
     }
   }
 
-  const missingCore = ['openai', 'creatomate'].filter((key) => summary.readiness[key as keyof typeof summary.readiness] !== true);
+  const aiReady =
+    summary.readiness.aiContent === true ||
+    summary.readiness.openai === true ||
+    summary.readiness.aiProviders?.groq === true ||
+    summary.readiness.aiProviders?.gemini === true;
+  const missingCore = ['aiContent', 'creatomate'].filter((key) =>
+    key === 'aiContent' ? !aiReady : summary.readiness[key as keyof typeof summary.readiness] !== true,
+  );
   if (missingCore.length > 0) {
     console.log(`\nPICO core not fully ready: missing ${missingCore.join(', ')}.`);
     process.exit(3);

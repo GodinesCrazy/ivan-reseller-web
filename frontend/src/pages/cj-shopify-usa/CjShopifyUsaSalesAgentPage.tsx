@@ -7,8 +7,11 @@ import {
   CheckCircle2,
   Clock3,
   CircleDollarSign,
+  ExternalLink,
+  Film,
   ListChecks,
   Megaphone,
+  Newspaper,
   Pause,
   Play,
   RefreshCw,
@@ -349,21 +352,77 @@ type SalesAgentDashboard = {
     generatedAt: string;
     readiness: {
       openai: boolean;
+      aiContent?: boolean;
+      activeAiProvider?: 'openai' | 'groq' | 'gemini' | 'heuristic';
+      aiProviders?: Record<'openai' | 'groq' | 'gemini' | 'heuristic', boolean>;
       creatomate: boolean;
       tiktok: boolean;
       instagram: boolean;
       pinterest: boolean;
     };
+    automation?: {
+      state: string;
+      currentCycle: SalesAgentScheduler['currentCycle'] | null;
+      lastRunAt: string | null;
+      nextRunAt: string | null;
+      config: Pick<
+        SalesAgentScheduler['config'],
+        | 'enabled'
+        | 'safeMode'
+        | 'intervalHours'
+        | 'autoPromoteViaBlog'
+        | 'autoEvaluateStagnantSeo'
+        | 'autoPromoteViaVideo'
+        | 'maxBlogPostsPerCycle'
+        | 'maxSeoUpdatesPerCycle'
+        | 'maxVideoRendersPerCycle'
+      >;
+    } | null;
+    blockers?: Array<{ key: string; severity: 'critical' | 'warning' | 'info'; title: string; detail: string }>;
     stats: {
       blogsPublished: number;
       blogsFailed: number;
       videosPublished: number;
       videosFailed: number;
+      videosRendered?: number;
       videosInProgress: number;
+      videosPublishing?: number;
       listingsSeoRefreshed: number;
     };
     candidates: { blog: number; stagnantSeo: number; video: number };
     recentActivity: Array<{ id: string; message: string; createdAt: string }>;
+    activity?: Array<{ id: string; message: string; title: string; detail: string; tone: 'success' | 'warning' | 'error' | 'info'; createdAt: string }>;
+    videoPosts?: Array<{
+      id: number;
+      listingId: number;
+      productTitle: string;
+      handle: string | null;
+      platform: string;
+      status: string;
+      title: string;
+      caption: string | null;
+      hashtags: string | null;
+      videoUrl: string | null;
+      publishUrl: string | null;
+      errorMsg: string | null;
+      attempts: number;
+      publishedAt: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+    blogEntries?: Array<{
+      id: number;
+      productId: number;
+      productTitle: string;
+      shopifyArticleId: string | null;
+      keyword: string;
+      title: string;
+      status: string;
+      publishedAt: string | null;
+      error: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
   };
   publishableDrafts: Array<{ listingId: number; title: string; priceUsd: number; marginPct: number }>;
   unsafeUnpublishCandidates: Array<{
@@ -696,7 +755,15 @@ function picoReadinessSummary(data: SalesAgentDashboard): { label: string; detai
       className: 'border-slate-700 bg-slate-900 text-slate-300',
     };
   }
-  const missing = Object.entries(data.pico.readiness)
+  const readiness = data.pico.readiness;
+  const aiContentReady = readiness.aiContent ?? readiness.openai;
+  const missing = Object.entries({
+    aiContent: aiContentReady,
+    creatomate: readiness.creatomate,
+    tiktok: readiness.tiktok,
+    instagram: readiness.instagram,
+    pinterest: readiness.pinterest,
+  })
     .filter(([, ready]) => !ready)
     .map(([name]) => name);
   if (missing.length === 0) {
@@ -706,14 +773,56 @@ function picoReadinessSummary(data: SalesAgentDashboard): { label: string; detai
       className: 'border-emerald-500/40 bg-emerald-950/25 text-emerald-100',
     };
   }
-  const coreMissing = missing.filter((name) => name === 'openai' || name === 'creatomate');
+  const labels: Record<string, string> = {
+    aiContent: 'IA de contenido',
+    creatomate: 'Creatomate',
+    tiktok: 'TikTok',
+    instagram: 'Instagram',
+    pinterest: 'Pinterest',
+  };
+  const coreMissing = missing.filter((name) => name === 'aiContent' || name === 'creatomate');
   return {
     label: coreMissing.length ? 'PICO parcialmente bloqueado' : 'PICO sin publishers sociales',
-    detail: `Falta configurar: ${missing.join(', ')}.`,
+    detail: `Falta configurar: ${missing.map((name) => labels[name] ?? name).join(', ')}.`,
     className: coreMissing.length
       ? 'border-amber-500/45 bg-amber-950/25 text-amber-100'
       : 'border-cyan-500/35 bg-cyan-950/20 text-cyan-100',
   };
+}
+
+function picoStateCopy(data: SalesAgentDashboard): { label: string; detail: string; className: string } {
+  const pico = data.pico;
+  if (!pico) {
+    return { label: 'PICO sin lectura', detail: 'No hay datos de crecimiento organico en esta respuesta.', className: 'border-slate-700 bg-slate-900 text-slate-300' };
+  }
+  const critical = (pico.blockers ?? []).filter((item) => item.severity === 'critical');
+  const automation = pico.automation;
+  if (automation?.currentCycle?.status === 'RUNNING') {
+    return { label: 'PICO trabajando ahora', detail: 'Hay un ciclo activo ejecutando acciones permitidas con guardrails.', className: 'border-cyan-500/40 bg-cyan-950/25 text-cyan-100' };
+  }
+  if (critical.length > 0) {
+    return { label: 'PICO parcialmente bloqueado', detail: critical[0].detail, className: 'border-amber-500/45 bg-amber-950/25 text-amber-100' };
+  }
+  if (automation?.config.enabled) {
+    return { label: 'PICO automatico activo', detail: `Proximo ciclo: ${dateTime(automation.nextRunAt)}.`, className: 'border-emerald-500/40 bg-emerald-950/25 text-emerald-100' };
+  }
+  return { label: 'PICO en modo manual', detail: 'Las acciones organicas existen, pero el piloto automatico esta apagado.', className: 'border-slate-700 bg-slate-900 text-slate-300' };
+}
+
+function statusPillClass(status: string): string {
+  const s = status.toUpperCase();
+  if (s === 'SUCCESS' || s === 'PUBLISHED') return 'border-emerald-500/35 bg-emerald-500/15 text-emerald-200';
+  if (s === 'RENDERED') return 'border-cyan-500/35 bg-cyan-500/15 text-cyan-200';
+  if (s === 'FAILED') return 'border-red-500/35 bg-red-500/15 text-red-200';
+  if (s === 'PUBLISHING' || s === 'RETRYING' || s === 'RENDERING' || s === 'GENERATING') return 'border-amber-500/35 bg-amber-500/15 text-amber-200';
+  return 'border-slate-700 bg-slate-900 text-slate-300';
+}
+
+function activityToneClass(tone: 'success' | 'warning' | 'error' | 'info'): string {
+  if (tone === 'success') return 'border-emerald-500/35 bg-emerald-950/20 text-emerald-100';
+  if (tone === 'warning') return 'border-amber-500/35 bg-amber-950/20 text-amber-100';
+  if (tone === 'error') return 'border-red-500/35 bg-red-950/20 text-red-100';
+  return 'border-cyan-500/35 bg-cyan-950/20 text-cyan-100';
 }
 
 function feedbackClass(tone: CommandFeedback['tone']): string {
@@ -725,7 +834,7 @@ function feedbackClass(tone: CommandFeedback['tone']): string {
 
 export default function CjShopifyUsaSalesAgentPage() {
   const [data, setData] = useState<SalesAgentDashboard | null>(null);
-  const [commandTab, setCommandTab] = useState<'ahora' | 'escalar' | 'corregir' | 'proteger' | 'aprendizaje'>('ahora');
+  const [commandTab, setCommandTab] = useState<'ahora' | 'escalar' | 'corregir' | 'proteger' | 'organico' | 'aprendizaje'>('ahora');
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -737,6 +846,7 @@ export default function CjShopifyUsaSalesAgentPage() {
   const schedulerCopy = data ? schedulerStatusCopy(scheduler) : null;
   const dataTruth = data ? dataTruthSummary(data) : null;
   const picoTruth = data ? picoReadinessSummary(data) : null;
+  const organicTruth = data ? picoStateCopy(data) : null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -861,6 +971,54 @@ export default function CjShopifyUsaSalesAgentPage() {
         title: 'No se pudo controlar el agente',
         detail: msg,
       });
+    } finally {
+      setRunning(null);
+    }
+  };
+
+  const picoCommand = async (command: 'video-test' | 'process-backlog' | 'run-organic-cycle') => {
+    setRunning(`pico-${command}`);
+    setError(null);
+    setMessage(null);
+    const labels = {
+      'video-test': 'Generando video de prueba',
+      'process-backlog': 'Procesando backlog PICO',
+      'run-organic-cycle': 'Ejecutando ciclo organico',
+    };
+    setFeedback({
+      tone: 'info',
+      title: labels[command],
+      detail: 'PICO esta trabajando con limites seguros y dejara trazabilidad visible en la actividad.',
+    });
+    try {
+      if (command === 'video-test') {
+        const res = await api.post('/api/cj-shopify-usa/sales-agent/actions', {
+          actionType: 'PROMOTE_VIA_VIDEO',
+          limit: 1,
+        });
+        const result = (res.data ?? {}) as ActionExecutionResult;
+        setFeedback({
+          tone: result.ok === false ? 'warning' : 'success',
+          title: result.ok === false ? 'Video no completado' : 'Video de prueba solicitado',
+          detail: String(result.message || 'PICO preparo un render controlado.'),
+          metrics: actionResultMetrics(result),
+        });
+      } else if (command === 'process-backlog') {
+        const res = await api.post('/api/cj-shopify-usa/pico/video/process-backlog', { limit: 8 });
+        setFeedback({
+          tone: Number(res.data?.processed ?? 0) > 0 ? 'success' : 'warning',
+          title: 'Backlog procesado',
+          detail: `${Number(res.data?.processed ?? 0)} publicaciones de video revisadas.`,
+        });
+      } else {
+        await schedulerCommand('run-now');
+        return;
+      }
+      await load();
+    } catch (e) {
+      const msg = axiosMsg(e, 'No se pudo ejecutar la accion PICO.');
+      setError(msg);
+      setFeedback({ tone: 'error', title: 'Fallo PICO', detail: msg });
     } finally {
       setRunning(null);
     }
@@ -1022,11 +1180,12 @@ export default function CjShopifyUsaSalesAgentPage() {
           { value: 'escalar', label: 'Escalar', count: data?.salesIntelligence?.totals.scale ?? data?.commercialScores.top.length ?? 0, tone: 'emerald' },
           { value: 'corregir', label: 'Corregir', count: data?.salesIntelligence?.totals.optimize ?? data?.commercialScores.needsWork.length ?? 0, tone: 'amber' },
           { value: 'proteger', label: 'Proteger', count: (data?.salesIntelligence?.totals.protect ?? 0) + (data?.profitGuard.reviewRequired ?? 0), tone: 'rose' },
+          { value: 'organico', label: 'Crecimiento', count: (data?.pico?.candidates.video ?? 0) + (data?.pico?.stats.videosInProgress ?? 0), tone: 'violet' },
           { value: 'aprendizaje', label: 'Aprendizaje', count: data?.learning.recentActions.length ?? 0, tone: 'violet' },
         ]}
       />
 
-      {commandTab !== 'ahora' && (
+      {commandTab !== 'ahora' && commandTab !== 'organico' && (
         <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
           <div className="mb-3">
             <p className="text-[11px] font-bold uppercase tracking-wide text-cyan-300">Vista premium filtrada</p>
@@ -2214,55 +2373,175 @@ export default function CjShopifyUsaSalesAgentPage() {
           </section>
           )}
 
-          {commandTab === 'proteger' && data.pico && (
-          <section className="mb-4 rounded-lg border border-violet-500/30 bg-violet-950/10 p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <h3 className="flex items-center gap-2 text-base font-semibold text-violet-100">
-                  <Sparkles className="h-4 w-4 text-violet-300" />
-                  PICO - crecimiento organico autonomo
-                </h3>
-                <p className="mt-1 max-w-3xl text-sm text-violet-100/80">
-                  PICO publica blog SEO, refresca fichas estancadas y prepara video. Si una credencial falta, esa parte se omite sin romper el ciclo.
-                </p>
+          {commandTab === 'organico' && data.pico && (
+          <section className="space-y-4">
+            <div className={`rounded-lg border p-4 ${organicTruth?.className ?? 'border-slate-700 bg-slate-900 text-slate-300'}`}>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide opacity-80">Centro de mando PICO</p>
+                  <h2 className="mt-1 flex items-center gap-2 text-xl font-bold text-white">
+                    <Sparkles className="h-5 w-5 text-violet-300" />
+                    {organicTruth?.label}
+                  </h2>
+                  <p className="mt-1 max-w-3xl text-sm opacity-90">{organicTruth?.detail}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                  <span className="rounded bg-black/20 px-3 py-2">Ultimo ciclo<br /><b>{dateTime(data.pico.automation?.lastRunAt ?? scheduler?.lastRunAt)}</b></span>
+                  <span className="rounded bg-black/20 px-3 py-2">Proximo ciclo<br /><b>{dateTime(data.pico.automation?.nextRunAt ?? scheduler?.nextRunAt)}</b></span>
+                  <span className="rounded bg-black/20 px-3 py-2">Modo<br /><b>{data.pico.automation?.config.safeMode ? 'Seguro' : 'Normal'}</b></span>
+                </div>
               </div>
-              <span className={`rounded-lg border px-3 py-2 text-xs font-bold ${picoTruth?.className ?? 'border-slate-700 bg-slate-900 text-slate-300'}`}>
-                {picoTruth?.label}
-              </span>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
-              {(
-                [
-                  ['OpenAI', data.pico.readiness.openai, 'Blog SEO y captions'],
-                  ['Creatomate', data.pico.readiness.creatomate, 'Render de video'],
-                  ['TikTok', data.pico.readiness.tiktok, 'Publicacion video'],
-                  ['Instagram', data.pico.readiness.instagram, 'Publicacion reel'],
-                  ['Pinterest', data.pico.readiness.pinterest, 'Promocion organica'],
-                ] as const
-              ).map(([label, ready, detail]) => (
-                <span
-                  key={label}
-                  className={`rounded border px-2 py-2 text-center font-semibold ${ready ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200' : 'border-amber-500/25 bg-amber-950/20 text-amber-100'}`}
-                  title={detail}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={!!running}
+                  onClick={() => void picoCommand('video-test')}
+                  className="inline-flex items-center gap-2 rounded-lg border border-violet-500/35 bg-violet-500/15 px-3 py-2 text-xs font-bold text-violet-100 disabled:opacity-50"
                 >
-                  <span className="block">{label}</span>
-                  <span className="mt-1 block text-[11px] font-normal opacity-80">{ready ? 'activo' : 'falta credencial'}</span>
-                </span>
-              ))}
+                  <Film className="h-3.5 w-3.5" />
+                  {running === 'pico-video-test' ? 'Generando...' : 'Generar 1 video de prueba'}
+                </button>
+                <button
+                  type="button"
+                  disabled={!!running}
+                  onClick={() => void picoCommand('process-backlog')}
+                  className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/35 bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-100 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${running === 'pico-process-backlog' ? 'animate-spin' : ''}`} />
+                  Procesar backlog de videos
+                </button>
+                <button
+                  type="button"
+                  disabled={!!running}
+                  onClick={() => void picoCommand('run-organic-cycle')}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/35 bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-100 disabled:opacity-50"
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  Ejecutar ciclo organico ahora
+                </button>
+              </div>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-300 sm:grid-cols-4">
-              <span className="rounded bg-black/20 p-2">Blogs: {data.pico.stats.blogsPublished} publicados</span>
-              <span className="rounded bg-black/20 p-2">Videos: {data.pico.stats.videosPublished} · {data.pico.stats.videosInProgress} en curso</span>
-              <span className="rounded bg-black/20 p-2">SEO refresh: {data.pico.stats.listingsSeoRefreshed}</span>
-              <span className="rounded bg-black/20 p-2">
-                Listos: {data.pico.candidates.blog} blog · {data.pico.candidates.stagnantSeo} SEO · {data.pico.candidates.video} video
-              </span>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <CommercialMetricCard label="Videos" value={data.pico.stats.videosPublished} detail={`${data.pico.stats.videosRendered ?? 0} renderizados · ${data.pico.stats.videosInProgress} en curso`} tone="violet" />
+              <CommercialMetricCard label="Blog SEO" value={data.pico.stats.blogsPublished} detail={`${data.pico.stats.blogsFailed} fallidos · ${data.pico.candidates.blog} candidatos`} tone="emerald" />
+              <CommercialMetricCard label="SEO 30d" value={data.pico.stats.listingsSeoRefreshed} detail={`${data.pico.candidates.stagnantSeo} candidatos estancados`} tone="cyan" />
+              <CommercialMetricCard label="Bloqueos" value={data.pico.blockers?.length ?? 0} detail={(data.pico.blockers?.[0]?.title ?? 'sin bloqueos criticos')} tone={data.pico.blockers?.some((b) => b.severity === 'critical') ? 'amber' : 'emerald'} />
             </div>
-            <div className="mt-3 rounded-lg border border-violet-500/20 bg-black/20 p-3 text-xs text-violet-100/85">
-              <p className="font-bold">Que hace solo cuando esta activado</p>
-              <p className="mt-1">
-                Blog y SEO se ejecutan por ciclo si sus toggles estan activos. Video necesita Creatomate; publicar en redes necesita tokens OAuth. Las acciones manuales siguen disponibles solo para forzar una ejecucion puntual.
-              </p>
+
+            <div className="grid gap-4 xl:grid-cols-3">
+              <div className="rounded-lg border border-slate-800 bg-slate-950 p-4 xl:col-span-2">
+                <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                  <Film className="h-4 w-4 text-violet-300" />
+                  Videos y publicaciones sociales
+                </h3>
+                <div className="mt-3 space-y-2">
+                  {(data.pico.videoPosts ?? []).slice(0, 8).map((post) => (
+                    <div key={post.id} className="rounded-lg border border-slate-800 bg-slate-900/80 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <p className="line-clamp-1 text-sm font-semibold text-slate-100">{post.productTitle}</p>
+                          <p className="mt-1 text-xs text-slate-400">{post.platform} · intentos {post.attempts} · actualizado {dateTime(post.updatedAt)}</p>
+                          {post.caption && <p className="mt-2 line-clamp-2 text-xs text-slate-300">{post.caption}</p>}
+                          {post.errorMsg && <p className="mt-2 rounded border border-amber-500/25 bg-amber-950/20 px-2 py-1 text-xs text-amber-100">{post.errorMsg}</p>}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <span className={`rounded-full border px-2 py-1 text-[11px] font-bold ${statusPillClass(post.status)}`}>{post.status}</span>
+                          {post.videoUrl && (
+                            <a href={post.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded border border-cyan-500/30 px-2 py-1 text-[11px] font-bold text-cyan-200">
+                              Video <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {post.publishUrl && (
+                            <a href={post.publishUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded border border-emerald-500/30 px-2 py-1 text-[11px] font-bold text-emerald-200">
+                              Post <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {(data.pico.videoPosts ?? []).length === 0 && (
+                    <p className="rounded-lg border border-slate-800 bg-slate-900 p-4 text-sm text-slate-400">Aun no hay videos PICO generados.</p>
+                  )}
+                </div>
+              </div>
+
+              <aside className="space-y-4">
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                  <h3 className="text-base font-semibold text-slate-100">Que corre solo</h3>
+                  <div className="mt-3 space-y-2 text-xs">
+                    {[
+                      ['Blog SEO', data.pico.automation?.config.autoPromoteViaBlog],
+                      ['SEO 30 dias', data.pico.automation?.config.autoEvaluateStagnantSeo],
+                      ['Video TikTok/IG', data.pico.automation?.config.autoPromoteViaVideo],
+                    ].map(([label, on]) => (
+                      <div key={String(label)} className="flex items-center justify-between rounded bg-slate-900 px-3 py-2">
+                        <span className="text-slate-300">{label}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${on ? 'bg-emerald-500/15 text-emerald-200' : 'bg-slate-800 text-slate-400'}`}>{on ? 'ON' : 'OFF'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                  <h3 className="text-base font-semibold text-slate-100">Accion humana pendiente</h3>
+                  <div className="mt-3 space-y-2">
+                    {(data.pico.blockers ?? []).slice(0, 5).map((blocker) => (
+                      <div key={blocker.key} className={`rounded border px-3 py-2 text-xs ${blocker.severity === 'critical' ? 'border-amber-500/30 bg-amber-950/20 text-amber-100' : blocker.severity === 'warning' ? 'border-cyan-500/30 bg-cyan-950/20 text-cyan-100' : 'border-slate-700 bg-slate-900 text-slate-300'}`}>
+                        <p className="font-bold">{blocker.title}</p>
+                        <p className="mt-1 opacity-85">{blocker.detail}</p>
+                      </div>
+                    ))}
+                    {(data.pico.blockers ?? []).length === 0 && <p className="text-sm text-slate-400">No hay bloqueos humanos visibles.</p>}
+                  </div>
+                </div>
+              </aside>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                  <Clock3 className="h-4 w-4 text-cyan-300" />
+                  Actividad reciente
+                </h3>
+                <div className="mt-3 space-y-2">
+                  {(data.pico.activity ?? []).slice(0, 8).map((item) => (
+                    <div key={item.id} className={`rounded-lg border px-3 py-2 text-xs ${activityToneClass(item.tone)}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold">{item.title}</p>
+                          <p className="mt-1 opacity-85">{item.detail}</p>
+                        </div>
+                        <span className="shrink-0 text-[11px] opacity-70">{dateTime(item.createdAt)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {(data.pico.activity ?? []).length === 0 && <p className="text-sm text-slate-400">Sin actividad PICO reciente.</p>}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100">
+                  <Newspaper className="h-4 w-4 text-emerald-300" />
+                  Blog SEO y refrescos
+                </h3>
+                <div className="mt-3 space-y-2">
+                  {(data.pico.blogEntries ?? []).slice(0, 6).map((entry) => (
+                    <div key={entry.id} className="rounded-lg border border-slate-800 bg-slate-900/80 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="line-clamp-1 text-sm font-semibold text-slate-100">{entry.title || entry.productTitle}</p>
+                          <p className="mt-1 text-xs text-slate-400">{entry.keyword} · {dateTime(entry.updatedAt)}</p>
+                          {entry.error && <p className="mt-2 rounded border border-red-500/25 bg-red-950/20 px-2 py-1 text-xs text-red-100">{entry.error}</p>}
+                        </div>
+                        <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-bold ${statusPillClass(entry.status)}`}>{entry.status}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {(data.pico.blogEntries ?? []).length === 0 && <p className="text-sm text-slate-400">Aun no hay articulos PICO registrados.</p>}
+                </div>
+              </div>
             </div>
           </section>
           )}
