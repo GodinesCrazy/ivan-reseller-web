@@ -377,6 +377,106 @@ export const cjShopifyUsaPicoVideoService = {
     }
   },
 
+  async renderVideoOnly(userId: number, limit = 1) {
+    if (!cjShopifyUsaCreatomateService.isConfigured()) {
+      await safeTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.PICO_VIDEO_ERROR, 'pico.video.skipped', {
+        reason: 'CREATOMATE_API_KEY not configured',
+        mode: 'render_only',
+      } as Prisma.InputJsonValue);
+      return {
+        ok: false,
+        executed: false,
+        skipped: true,
+        rendered: 0,
+        failed: 0,
+        results: [],
+        message: 'Video PICO render-only omitido: CREATOMATE_API_KEY no configurada.',
+      };
+    }
+
+    const candidates = await this.getVideoCandidates(userId, Math.max(1, Math.min(1, limit)));
+    const results: Array<{
+      listingId: number;
+      ok: boolean;
+      title: string;
+      renderGroupId?: string;
+      videoUrl?: string;
+      error?: string;
+    }> = [];
+
+    for (const candidate of candidates) {
+      try {
+        const listing = await prisma.cjShopifyUsaListing.findFirst({
+          where: { userId, id: candidate.listingId },
+          include: { product: true },
+        });
+        if (!listing) throw new Error(`Listing ${candidate.listingId} not found.`);
+
+        const renderGroupId = await prepareRenderGroup({
+          userId,
+          listingId: candidate.listingId,
+          title: candidate.title,
+          priceUsd: n(listing.listedPriceUsd),
+          handle: candidate.handle,
+        });
+
+        await safeTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.PICO_VIDEO_START, 'pico.video.pipeline.start', {
+          listingId: candidate.listingId,
+          renderGroupId,
+          mode: 'render_only',
+        } as Prisma.InputJsonValue);
+
+        const videoUrl = await ensureSharedRender({
+          userId,
+          renderGroupId,
+          listing,
+        });
+
+        results.push({
+          listingId: candidate.listingId,
+          ok: true,
+          title: candidate.title,
+          renderGroupId,
+          videoUrl,
+        });
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        results.push({
+          listingId: candidate.listingId,
+          ok: false,
+          title: candidate.title,
+          error: errorMsg,
+        });
+        await safeTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.PICO_VIDEO_ERROR, 'pico.video.render.error', {
+          listingId: candidate.listingId,
+          mode: 'render_only',
+          error: errorMsg,
+        } as Prisma.InputJsonValue);
+      }
+    }
+
+    const rendered = results.filter((row) => row.ok).length;
+    const failed = results.filter((row) => !row.ok).length;
+
+    await safeTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.SALES_AGENT_ACTION, 'pico.video.controlled_render', {
+      ok: rendered > 0,
+      requested: candidates.length,
+      rendered,
+      failed,
+      results,
+    } as Prisma.InputJsonValue);
+
+    return {
+      ok: rendered > 0,
+      executed: candidates.length > 0,
+      skipped: false,
+      rendered,
+      failed,
+      results,
+      message: `Video PICO controlado: ${rendered} renderizado(s), ${failed} fallido(s), sin publicacion social automatica.`,
+    };
+  },
+
   async promoteViaVideo(userId: number, limit = 1) {
     if (!cjShopifyUsaCreatomateService.isConfigured()) {
       await safeTrace(userId, CJ_SHOPIFY_USA_TRACE_STEP.PICO_VIDEO_ERROR, 'pico.video.skipped', {

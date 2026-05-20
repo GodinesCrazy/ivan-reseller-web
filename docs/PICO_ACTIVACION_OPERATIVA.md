@@ -249,11 +249,12 @@ Orden sugerido:
 4. Probar video sin activar automatizacion masiva:
    - Cargar `CREATOMATE_API_KEY`.
    - Cargar tokens TikTok/Instagram si ya existen.
-   - Ejecutar `PROMOTE_VIA_VIDEO` con limite 1.
+   - Ejecutar primero `npm run pico:video:controlled` para renderizar 1 video sin publicacion social.
+   - Luego, solo si los tokens sociales estan listos, ejecutar `PROMOTE_VIA_VIDEO` con limite 1.
    - Verificar:
      - render en Creatomate
      - rows en `cj_shopify_usa_video_posts`
-     - estado `SUCCESS`, `RETRYING` o `FAILED`
+     - estado `RENDERED` para la prueba controlada, o `SUCCESS`, `RETRYING`/`FAILED` cuando se pruebe publicacion social
      - trazas `pico.video.*`
 
 5. Activar automatizacion gradual:
