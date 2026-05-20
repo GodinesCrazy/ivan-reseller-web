@@ -7,6 +7,9 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const repoRoot = path.resolve(process.cwd(), '..');
 const fileName = process.env.TIKTOK_VERIFY_FILE || 'tiktokHPFpPmV3SjlM5fOGdhhZyBQNVNiHi3pE.txt';
+const policyPath = (process.env.TIKTOK_VERIFY_POLICY_PATH || '/policies/terms-of-service')
+  .replace(/^\/?/, '/')
+  .replace(/\/+$/, '');
 const filePath = path.join(repoRoot, fileName);
 const apiVersion = process.env.SHOPIFY_API_VERSION || '2026-04';
 const shop = String(process.env.SHOPIFY_SHOP || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
@@ -67,7 +70,7 @@ async function main() {
   const content = fs.readFileSync(filePath, 'utf8').trim() + '\n';
   const token = await getShopifyAccessToken();
 
-  const redirectPath = `/policies/terms-of-service/${fileName}`;
+  const redirectPath = `${policyPath}/${fileName}`;
   let redirectTarget = externalTarget;
   let assetUrl: string | null = null;
   let mainTheme: { id: number; name: string } | null = null;
