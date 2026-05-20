@@ -11,6 +11,12 @@
  */
 const { spawnSync } = require('child_process');
 
+const railwayServiceName = String(process.env.RAILWAY_SERVICE_NAME || process.env.RAILWAY_SERVICE || '');
+if (railwayServiceName === 'ivan-reseller-web') {
+  console.log('[railway-migrate-deploy] Skipping Prisma migrate for ivan-reseller-web duplicate service.');
+  process.exit(0);
+}
+
 function withConnectionLimit(url, limit) {
   if (!url || !limit) return url;
   if (/connection_limit=/i.test(url)) return url;
