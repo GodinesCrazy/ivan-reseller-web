@@ -9,15 +9,19 @@ import path from 'path';
 import http from 'http';
 
 dotenv.config();
-dotenv.config({ path: path.join(process.cwd(), '.env.local'), override: true });
+dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 
 const rawPort = process.env.PORT;
 const PORT = Number(rawPort) || 4000;
+const railwayServiceName = String(process.env.RAILWAY_SERVICE_NAME || process.env.RAILWAY_SERVICE || '');
+const isRetiredRailwayWebDuplicate = railwayServiceName === 'ivan-reseller-web';
 console.error('[BOOT] server-bootstrap', {
   cwd: process.cwd(),
   NODE_ENV: process.env.NODE_ENV,
+  RAILWAY_SERVICE_NAME: railwayServiceName || undefined,
   PORT_env: rawPort,
   PORT_effective: PORT,
+  retiredDuplicate: isRetiredRailwayWebDuplicate,
 });
 if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
   console.error('Invalid PORT:', process.env.PORT);
@@ -45,7 +49,25 @@ const handler = (req: http.IncomingMessage, res: http.ServerResponse) => {
       return;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+    res.end(
+      JSON.stringify({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        retiredDuplicate: isRetiredRailwayWebDuplicate || undefined,
+      }),
+    );
+    return;
+  }
+  if (isRetiredRailwayWebDuplicate) {
+    res.writeHead(410, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        status: 'retired',
+        service: 'ivan-reseller-web',
+        message:
+          'This Railway duplicate is intentionally disabled. Use Vercel for the web and ivan-reseller-backend for the API.',
+      }),
+    );
     return;
   }
   const app = (global as any).__expressApp;
@@ -88,6 +110,10 @@ if (PORT !== 3000 && Object.keys(process.env).some((key) => key.startsWith('RAIL
 
 // Load full server in next tick so /health can be served immediately (Railway healthcheck)
 setImmediate(() => {
+  if (isRetiredRailwayWebDuplicate) {
+    console.log('[BOOT] Retired Railway duplicate service detected; full backend startup skipped.');
+    return;
+  }
   try {
     require('./server'); // eslint-disable-line
   } catch (err: any) {

@@ -1,7 +1,29 @@
-FROM node:20
+FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
-# Dependencias del sistema (Puppeteer/Chromium) — capa en caché si no cambia
+# Railway services have historically used both `backend` and `/backend` as
+# rootDirectory values. Normalize the source tree so this image builds with
+# either a backend-root context or a repository-root context.
+COPY . /src
+RUN if [ -f /src/backend/package.json ]; then \
+      cp -a /src/backend/. /app/; \
+    else \
+      cp -a /src/. /app/; \
+    fi
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    npm_config_audit=false \
+    npm_config_fund=false
+RUN npm ci --ignore-scripts
+
+RUN npm run build
+RUN npm prune --omit=dev --ignore-scripts && npm cache clean --force
+
+FROM node:20-bookworm-slim AS runtime
+WORKDIR /app
+
+# Runtime libraries used by Puppeteer/Chromium-compatible flows. Keeping them
+# out of the build stage avoids Railway builder ENOSPC during `prisma generate`.
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   fonts-liberation \
@@ -39,19 +61,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   wget \
   && rm -rf /var/lib/apt/lists/*
 
-# Railway services have historically used both `backend` and `/backend` as
-# rootDirectory values. Normalize the source tree so this image builds with
-# either a backend-root context or a repository-root context.
-COPY . /src
-RUN if [ -f /src/backend/package.json ]; then \
-      cp -a /src/backend/. /app/; \
-    else \
-      cp -a /src/. /app/; \
-    fi
-RUN npm ci --ignore-scripts
+COPY --from=build /app /app
 
-# Código y build (prisma generate + tsc)
-RUN npm run build
 # Must listen on PORT (Railway injects it) and 0.0.0.0
 ENV NODE_ENV=production
 EXPOSE 4000
