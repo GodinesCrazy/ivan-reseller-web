@@ -9,11 +9,11 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "https://ivan-reseller-backend-production.up.railway.app/api/$1"
+      "dest": "https://ivan-reseller-web-production.up.railway.app/api/$1"
     },
     {
       "src": "/aliexpress/callback",
-      "dest": "https://ivan-reseller-backend-production.up.railway.app/aliexpress/callback"
+      "dest": "https://ivan-reseller-web-production.up.railway.app/aliexpress/callback"
     },
     {
       "src": "/(.*)",
