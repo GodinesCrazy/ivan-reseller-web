@@ -6,6 +6,8 @@
 # Migraciones: Release Command → node scripts/railway-migrate-deploy.js (desde /app en la imagen).
 
 [build]
+builder = "DOCKERFILE"
+dockerfilePath = "/backend/Dockerfile"
 buildCommand = "npm ci && npm run build"
 
 [deploy]
