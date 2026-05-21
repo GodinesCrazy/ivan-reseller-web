@@ -17,23 +17,55 @@ type CreatomateRenderResponse = {
   error_message?: string;
 };
 
+function cleanTitle(text: string): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= 62) return normalized;
+  return `${normalized.slice(0, 59).trim()}...`;
+}
+
+function useTemplateRender(): boolean {
+  const mode = String(process.env.PICO_VIDEO_RENDER_MODE || 'source').trim().toLowerCase();
+  return mode === 'template' && Boolean(process.env.CREATOMATE_TEMPLATE_ID?.trim());
+}
+
 function buildSlideshowSource(imageUrls: string[], overlayText: string) {
-  const imageElements = imageUrls.map((source, index) => ({
-    type: 'image',
-    source,
-    time: index * SLIDE_DURATION_SEC,
-    duration: SLIDE_DURATION_SEC,
-    fit: 'cover',
-    width: '100%',
-    height: '100%',
-  }));
+  const duration = Math.max(1, imageUrls.length) * SLIDE_DURATION_SEC;
+  const title = cleanTitle(overlayText);
+  const imageElements = imageUrls.flatMap((source, index) => {
+    const time = index * SLIDE_DURATION_SEC;
+    return [
+      {
+        type: 'image',
+        source,
+        time,
+        duration: SLIDE_DURATION_SEC,
+        fit: 'cover',
+        width: '100%',
+        height: '100%',
+        opacity: '22%',
+      },
+      {
+        type: 'image',
+        source,
+        time,
+        duration: SLIDE_DURATION_SEC,
+        fit: 'contain',
+        width: '92%',
+        height: '72%',
+        x: '50%',
+        y: '42%',
+        x_alignment: '50%',
+        y_alignment: '50%',
+      },
+    ];
+  });
 
   return {
     output_format: 'mp4',
     width: 1080,
     height: 1920,
-    duration: imageUrls.length * SLIDE_DURATION_SEC,
-    fill_color: '#1a1a2e',
+    duration,
+    fill_color: '#060912',
     elements: [
       {
         type: 'composition',
@@ -42,18 +74,35 @@ function buildSlideshowSource(imageUrls: string[], overlayText: string) {
       },
       {
         type: 'text',
-        text: overlayText.slice(0, 80),
+        text: title,
         time: 0,
-        duration: imageUrls.length * SLIDE_DURATION_SEC,
-        y: '88%',
-        width: '92%',
+        duration,
+        x: '50%',
+        y: '83%',
+        width: '88%',
         x_alignment: '50%',
+        y_alignment: '50%',
         font_family: 'Montserrat',
         font_weight: '700',
-        font_size: '5 vmin',
+        font_size: '4.2 vmin',
         fill_color: '#ffffff',
         stroke_color: '#000000',
-        stroke_width: '0.3 vmin',
+        stroke_width: '0.25 vmin',
+      },
+      {
+        type: 'text',
+        text: 'PawVault pick',
+        time: 0,
+        duration,
+        x: '50%',
+        y: '90%',
+        width: '70%',
+        x_alignment: '50%',
+        y_alignment: '50%',
+        font_family: 'Montserrat',
+        font_weight: '600',
+        font_size: '2.7 vmin',
+        fill_color: '#c8fff4',
       },
     ],
   };
@@ -71,7 +120,7 @@ export const cjShopifyUsaCreatomateService = {
     const apiKey = process.env.CREATOMATE_API_KEY?.trim();
     if (!apiKey) throw new Error('CREATOMATE_API_KEY is not configured');
 
-    const templateId = process.env.CREATOMATE_TEMPLATE_ID?.trim();
+    const templateId = useTemplateRender() ? process.env.CREATOMATE_TEMPLATE_ID?.trim() : '';
     const body = templateId
       ? {
           template_id: templateId,
@@ -101,6 +150,23 @@ export const cjShopifyUsaCreatomateService = {
     const render = Array.isArray(data) ? data[0] : data;
     if (!render?.id) throw new Error('Creatomate did not return a render id');
     return { renderId: render.id };
+  },
+
+  async getRenderUrl(renderId: string): Promise<string> {
+    const apiKey = process.env.CREATOMATE_API_KEY?.trim();
+    if (!apiKey) throw new Error('CREATOMATE_API_KEY is not configured');
+
+    const res = await fetch(`${CREATOMATE_API}/renders/${encodeURIComponent(renderId)}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    const data = (await res.json().catch(() => ({}))) as CreatomateRenderResponse;
+    if (!res.ok) {
+      throw new Error(`Creatomate render lookup ${res.status}: ${JSON.stringify(data).slice(0, 300)}`);
+    }
+
+    if (data.status === 'succeeded' && data.url) return data.url;
+    if (data.status === 'failed') throw new Error(data.error_message || 'Creatomate render failed');
+    throw new Error(`Creatomate render is not ready yet: ${data.status || 'unknown'}`);
   },
 
   async waitForRender(renderId: string): Promise<string> {

@@ -402,6 +402,7 @@ type SalesAgentDashboard = {
       title: string;
       caption: string | null;
       hashtags: string | null;
+      renderId: string | null;
       videoUrl: string | null;
       publishUrl: string | null;
       errorMsg: string | null;
@@ -2447,8 +2448,8 @@ export default function CjShopifyUsaSalesAgentPage() {
                         </div>
                         <div className="flex shrink-0 flex-wrap gap-2">
                           <span className={`rounded-full border px-2 py-1 text-[11px] font-bold ${statusPillClass(post.status)}`}>{post.status}</span>
-                          {post.videoUrl && (
-                            <a href={post.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded border border-cyan-500/30 px-2 py-1 text-[11px] font-bold text-cyan-200">
+                          {(post.videoUrl || post.renderId) && (
+                            <a href={`/api/cj-shopify-usa/pico/video-posts/${post.id}/video`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded border border-cyan-500/30 px-2 py-1 text-[11px] font-bold text-cyan-200">
                               Video <ExternalLink className="h-3 w-3" />
                             </a>
                           )}

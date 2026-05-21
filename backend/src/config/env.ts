@@ -380,6 +380,7 @@ const envSchema = z.object({
   GEMINI_IMAGE_MODEL: z.string().optional(),
   GEMINI_REVIEW_MODEL: z.string().optional(),
   PICO_AI_PROVIDER_ORDER: z.string().optional(),
+  PICO_VIDEO_RENDER_MODE: z.enum(['source', 'template']).default('source'),
   SCRAPERAPI_KEY: z.string().optional(),
   
   // ✅ FASE 1: API Health Check Feature Flags

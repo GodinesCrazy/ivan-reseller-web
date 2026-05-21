@@ -407,6 +407,34 @@ export const cjShopifyUsaPicoService = {
     return cjShopifyUsaPicoVideoService.processBacklog(userId, limit);
   },
 
+  async getVideoPostPlaybackUrl(userId: number, postId: number): Promise<string> {
+    const post = await prisma.cjShopifyUsaVideoPost.findFirst({
+      where: { id: postId, userId },
+      select: { id: true, renderId: true, videoUrl: true },
+    });
+
+    if (!post) throw new Error('VIDEO_POST_NOT_FOUND');
+
+    if (post.renderId) {
+      try {
+        const freshUrl = await cjShopifyUsaCreatomateService.getRenderUrl(post.renderId);
+        if (freshUrl && freshUrl !== post.videoUrl) {
+          await prisma.cjShopifyUsaVideoPost.update({
+            where: { id: post.id },
+            data: { videoUrl: freshUrl },
+          });
+        }
+        return freshUrl;
+      } catch (error) {
+        if (post.videoUrl) return post.videoUrl;
+        throw error;
+      }
+    }
+
+    if (post.videoUrl) return post.videoUrl;
+    throw new Error('VIDEO_POST_HAS_NO_URL');
+  },
+
   async getDashboardSummary(
     userId: number,
     candidates: {

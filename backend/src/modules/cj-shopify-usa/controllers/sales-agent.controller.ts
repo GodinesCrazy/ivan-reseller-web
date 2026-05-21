@@ -130,4 +130,20 @@ router.post('/pico/video/process-backlog', async (req: Request, res: Response, n
   }
 });
 
+router.get('/pico/video-posts/:postId/video', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const postId = Number(req.params.postId);
+    if (!Number.isInteger(postId) || postId <= 0) {
+      res.status(400).json({ ok: false, error: 'INVALID_VIDEO_POST_ID' });
+      return;
+    }
+
+    const userId = req.user!.userId;
+    const videoUrl = await cjShopifyUsaPicoService.getVideoPostPlaybackUrl(userId, postId);
+    res.redirect(302, videoUrl);
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
